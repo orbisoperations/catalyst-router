@@ -60,6 +60,7 @@ The core message for advertising and withdrawing routes.
     - `NEXT_HOP`: The Node ID to forward traffic to.
     - `LOCAL_PREF`: (iBGP only) Preferred exit point.
     - `COMMUNITIES`: Tags for policy control (e.g., "production", "latency-sensitive").
+    - `ORIGIN_SIGNATURE`: Cryptographic signature of the route payload using the Origin Node's private key.
 - **Network Layer Reachability Information (NLRI)**: The service prefixes being advertised (e.g., `users.dc01.orbis`).
 
 ### 4. NOTIFICATION
@@ -168,5 +169,7 @@ interface ServiceRoute {
   path: number[]; // AS_PATH: [100, 200]
   nextHop: string; // Node ID of the peer
   attributes: Record<string, any>;
+  signature: string; // Cryptographic signature by the origin
+  timestamp: number; // Unix timestamp of route creation (Replay Protection)
 }
 ```

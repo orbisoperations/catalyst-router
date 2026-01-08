@@ -8,4 +8,5 @@ export default defineConfig({
     sourcemap: true,
     clean: true,
     noExternal: [/(.*)/], // Bundle all dependencies
+
 });

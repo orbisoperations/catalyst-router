@@ -9,6 +9,7 @@ As this is a library/server, the CLI is typically accessed via the package scrip
 ## Logic Flow
 
 ```mermaid
+
 graph TD
     CLI[catalystd command]
     CheckConfig{Config flag?}
