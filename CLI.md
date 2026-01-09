@@ -45,6 +45,9 @@ The basic command to start the server is:
 
 ```bash
 catalystd [options]
+
+# Or via Docker Compose (Recommended)
+docker-compose up
 ```
 
 ### Options

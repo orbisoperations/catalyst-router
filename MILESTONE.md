@@ -24,14 +24,29 @@ This table maps legacy `catalyst` capabilities to the specific Milestone that de
 *   **Legacy: Organization**: Establishes the Organization boundary.
 *   **Legacy: Data Channel**: Establishes local services as "Data Channels".
 
-## Phase 1: Basic Node & GraphQL Federation
-**Goal**: A standalone node running a local GraphQL federation with testable configuration.
+## Milestone 0.5: Containerization & xDS
+**Goal**: Establish the "Core Pod" architecture where the Node Orchestrator configures Envoy dynamically via xDS and manages sidecar containers.
 
 ### Implementation Goals
-*   **Configuration**: Load settings (ports, service lists) via JSON file OR CLI flags.
-*   **Federation**: Spin up a GraphQL federation server (using **Hono + Yoga** or Apollo).
-*   **Services**: Integrate two local example services (from `packages/sdk` examples).
-*   **Proxy**: Run a basic Envoy proxy instance (static config).
+*   **Infrastructure**:
+    *   Create `docker-compose.yml` defining the 5-container pod.
+    *   Verify inter-container networking.
+*   **Orchestrator**:
+    *   Implement **xDS Server** (REST) in the Node Control Plane.
+    *   Implement **RPC Clients** to talk to sidecars.
+*   **Sidecars**:
+    *   **GraphQL Gateway**: Create TypeScript container with RPC control loop.
+    *   **Auth Service**: Create TypeScript container for JWKS/Signer.
+*   **Success Criteria**: Orchestrator starts, pushes config to Envoy, and Envoy successfully routes traffic to the GraphQL sidecar.
+
+## Phase 1: Basic Node & GraphQL Federation
+**Goal**: A standalone "Core Pod" running a local GraphQL federation with testable configuration.
+
+### Implementation Goals
+*   **Configuration**: Load settings via JSON/CLI in the Orchestrator.
+*   **Federation**: Orchestrator sends config to **GraphQL Sidecar** via RPC.
+*   **Registration**: Local services register via Config (`catalyst.json`) or API.
+*   **Transport**: Services use `Envoy (localhost)` to reach the Gateway provided by the Core Pod.
 
 ### Testing Strategy
 *   **Unit**: Vitest tests in the `node` directory using different config methods.
@@ -40,64 +55,40 @@ This table maps legacy `catalyst` capabilities to the specific Milestone that de
 ### Architecture Reference (Stage 1A)
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                 STAGE 1A: SINGLE CATALYST NODE (Milestone 0 (M0))            │
+│                 STAGE 1A: CORE POD ARCHITECTURE (Milestone 0)                │
 │                                                                              │
 │                               ┌─────────────────┐                            │
 │                               │     CLIENT      │                            │
 │                               └────────┬────────┘                            │
-│                                        │                                     │
-│                                        │ HTTPS + JWT                         │
+│                                        │ HTTPS                               │
 │                                        ▼                                     │
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                           CATALYST NODE                                │  │
+│  │                           CATALYST CORE POD                            │  │
 │  │                                                                        │  │
-│  │  ┌─────────────┐    ┌─────────────┐    ┌───────────────────────────┐   │  │
-│  │  │ Hypertext   │    │  GraphQL    │    │       Auth Layer          │   │  │
-│  │  │ Transfer    │───►│   Yoga      │───►│  ┌───────────────────┐    │   │  │
-│  │  │ Protocol    │    │             │    │  │                   │    │   │  │
-│  │  │   Server    │    │  + Stitch   │    │  │  JWKS Loader      │    │   │  │
-│  │  └─────────────┘    └──────┬──────┘    │  │  (file-based)     │    │   │  │
-│  │                            │           │  └───────────────────┘    │   │  │
-│  │                            │           │  ┌───────────────────┐    │   │  │
-│  │                            │           │  │  JWT Validator    │    │   │  │
-│  │                            │           │  │  (jose)           │    │   │  │
-│  │                            │           │  └───────────────────┘    │   │  │
-│  │                            │           └───────────────────────────┘   │  │
-│  │                            ▼                                           │  │
-│  │  ┌──────────────────────────────────────────────────────────────────┐  │  │
-│  │  │                        LOCAL SERVICES                            │  │  │
-│  │  │  ┌──────────┐   ┌──────────┐   ┌──────────┐                      │  │  │
-│  │  │  │Service A │   │Service B │   │Service C │                      │  │  │
-│  │  │  │ (local)  │   │ (local)  │   │ (local)  │                      │  │  │
-│  │  │  └────┬─────┘   └────┬─────┘   └────┬─────┘                      │  │  │
-│  │  │       │              │              │                            │  │  │
-│  │  └───────┼──────────────┼──────────────┼────────────────────────────┘  │  │
-│  │          │              │              │                               │  │
-│  └──────────┼──────────────┼──────────────┼───────────────────────────────┘  │
-│             │              │              │                                  │
-│             ▼              ▼              ▼                                  │
-│      ┌──────────┐   ┌──────────┐   ┌──────────┐                              │
-│      │ Service  │   │ Service  │   │ Service  │                              │
-│      │    A     │   │    B     │   │    C     │                              │
-│      └──────────┘   └──────────┘   └──────────┘                              │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │  CONFIG (whatever.json)                                                |  │
-│  │  {                                                                     │  │
-│  │    "node": { "id": "node-1", "port": 4000 },                           │  │
-│  │    "jwks": { "source": "file", "path": "./keys/jwks.json" },           │  │
-│  │    "services": [                                                       │  │
-│  │      { "id": "svc-a", "endpoint": "http://localhost:5001/graphql" }    │  │
-│  │    ]                                                                   │  │
-│  │  }                                                                     │  │
+│  │   ┌─────────────┐       xDS       ┌────────────────────────────────┐   │  │
+│  │   │ Orchestrator│────────────────►│          Envoy Proxy           │   │  │
+│  │   │ (Node.js)   │                 │          (Data Plane)          │   │  │
+│  │   └──────┬──────┘                 └───────────────┬────────────────┘   │  │
+│  │          │                                        │                    │  │
+│  │          │RPC                                     │                    │  │
+│  │          ├───(Config)─────┐                       │                    │  │
+│  │          ▼ (Signer)       ▼                       ▼                    │  │
+│  │   ┌─────────────┐   ┌─────────────┐       ┌─────────────┐              │  │
+│  │   │ Auth Service│   │ GraphQL GW  │       │ OTEL Col.   │◄──Push────┐  │  │
+│  │   │ (Sidecar)   │   │ (Sidecar)   │       │ (Sidecar)   │           │  │  │
+│  │   └─────────────┘   └──────┬──────┘       └─────────────┘           │  │  │
+│  │                            │                                        │  │  │
+│  │                            ▼                                        │  │  │
+│  │                     ┌─────────────┐                                 │  │  │
+│  │                     │ Local Svcs  │─────────────────────────────────┘  │  │
+│  │                     └─────────────┘                                    │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
 │  PROVIDES:                            DOES NOT PROVIDE:                      │
-│  ✓ JWT validation                     ✗ Node-to-node                         │
-│  ✓ GraphQL federation                 ✗ Cross-org trust                      │
-│  ✓ Schema stitching                   ✗ Encrypted transport (beyond          │
-│                                         Transport Layer Security (TLS))      │
-│  ✓ Config-based services              ✗ Network isolation                    │
+│  ✓ Containerized Isolation            ✗ Node-to-node                         │
+│  ✓ xDS Dynamic Config                 ✗ Cross-org trust                      │
+│  ✓ Polyglot Sidecars                  ✗ Encrypted transport (beyond TLS)     │
+│  ✓ Centralized Auth/Observability     ✗ Network isolation                    │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -125,30 +116,37 @@ This table maps legacy `catalyst` capabilities to the specific Milestone that de
 ### Architecture Diagram
 ```mermaid
 graph LR
-    subgraph NodeA [Catalyst Node A]
-        CA[Control Plane<br/>Node.js]
-        DA[Data Plane<br/>Envoy Proxy]
-        GA[GraphQL Gateway<br/>Yoga]
+    subgraph PodA [Core Pod A]
+        OrchA[Orchestrator]
+        EnvoyA[Envoy Proxy]
+        GQLA[GraphQL GW]
     end
-    subgraph NodeB [Catalyst Node B]
-        CB[Control Plane<br/>Node.js]
-        DB[Data Plane<br/>Envoy Proxy]
-        SB[Local Service<br/>Service B]
+    subgraph PodB [Core Pod B]
+        OrchB[Orchestrator]
+        EnvoyB[Envoy Proxy]
+        SvcB[Local Service]
     end
     
-    Client[Client] ==>|Query| DA
+    Client[Client] ==>|Query| EnvoyA
     
-    CA <-->|Peering RPC| CB
-    DA ==>|Internal Traffic| DB
-    DA --> GA
-    GA -.->|Federation| DB
-    DB --> SB
+    OrchA <-->|Peering RPC| OrchB
+    OrchA --xDS--> EnvoyA
+    EnvoyA ==>|Internal Traffic| EnvoyB
+    EnvoyA --> GQLA
+    GQLA -.->|Federation| EnvoyB
+    EnvoyB --> SvcB
 ```
 
 ## Phase 3: Internal Trust (Shared Auth)
 **Goal**: Enforce authentication on the Internal Peering topology using Shared JWKS.
 
 ### Implementation Goals
+*   **Auth Strategy**: Implement **Strategy 2 (Root Authority)**.
+*   **Root Authority**: The first node initialized becomes the **Root CA** for the AS.
+*   **Domain**: Root node declares the domain (e.g., `*.catalyst.internal`).
+*   **Registration**: New nodes register with Root to receive:
+    *   **JWKS**: The keyset for verifying tokens.
+    *   **Signing Service Address**: Where to go to sign their own JWTs.
 *   **Auth Configuration**: Define a `jwks.json` path via config.
 *   **Envoy Filter**: Configure Envoy to validate incoming JWTs against the local JWKS.
 *   **Verification**: Requests *without* a valid JWT (signed by the shared key) must be rejected by Envoy.
@@ -163,76 +161,31 @@ graph LR
 │                               ┌─────────────────┐                            │
 │                               │     CLIENT      │                            │
 │                               └────────┬────────┘                            │
-│                                        │                                     │
 │                                        │ HTTPS + JWT                         │
 │                                        ▼                                     │
 │                                                                              │
 │  ┌───────────────────────────────┐        ┌───────────────────────────────┐  │
 │  │       CATALYST NODE A         │        │       CATALYST NODE B         │  │
-│  │         (port 4000)           │        │         (port 4001)           │  │
-│  │                               │        │                               │  │
-│  │  ┌─────────────────────────┐  │        │  ┌─────────────────────────┐  │  │
-│  │  │      GraphQL Yoga       │  │        │  │      GraphQL Yoga       │  │  │
-│  │  │      + Stitching        │  │        │  │      + Stitching        │  │  │
-│  │  └───────────┬─────────────┘  │        │  └───────────┬─────────────┘  │  │
-│  │              │                │        │              │                │  │
-│  │  ┌───────────┴─────────────┐  │        │  ┌───────────┴─────────────┐  │  │
-│  │  │    Peer Federation      │◄─┼────────┼─►│    Peer Federation      │  │  │
-│  │  │  ┌───────────────────┐  │  │ HTTPS  │  │  ┌───────────────────┐  │  │  │
-│  │  │  │ Peer: node-b      │  │  │ Token  │  │  │ Peer: node-a      │  │  │  │
-│  │  │  │ endpoint: :4001   │  │  │ Pass-  │  │  │ endpoint: :4000   │  │  │  │
-│  │  │  │ trust: internal   │  │  │through │  │  │ trust: internal   │  │  │  │
-│  │  │  └───────────────────┘  │  │        │  │  └───────────────────┘  │  │  │
-│  │  └─────────────────────────┘  │        │  └─────────────────────────┘  │  ****│
-│  │              │                │        │              │                │  │
-│  │  ┌───────────┴─────────────┐  │        │  ┌───────────┴─────────────┐  │  │
-│  │  │      Auth Layer         │  │        │  │      Auth Layer         │  │  │
-│  │  │  ┌───────────────────┐  │  │        │  │  ┌───────────────────┐  │  │  │
-│  │  │  │   SHARED JWKS     │  │  │        │  │  │   SHARED JWKS     │  │  │  │
-│  │  │  │./shared/jwks.json │  │  │        │  │  │./shared/jwks.json │  │  │  │
-│  │  │  └───────────────────┘  │  │        │  │  └───────────────────┘  │  │  │
-│  │  └─────────────────────────┘  │        │  └─────────────────────────┘  │  │
-│  │              │                │        │              │                │  │
-│  │              ▼                │        │              ▼                │  │
-│  │  ┌─────────────────────────┐  │        │  ┌─────────────────────────┐  │  │
-│  │  │     Local Services      │  │        │  │     Local Services      │  │  │
-│  │  │  ┌───────┐ ┌───────┐    │  │        │  │  ┌───────┐ ┌───────┐    │  │  │
-│  │  │  │ Svc A │ │ Svc B │    │  │        │  │  │ Svc C │ │ Svc D │    │  │  │
-│  │  │  └───────┘ └───────┘    │  │        │  │  └───────┘ └───────┘    │  │  │
-│  │  └─────────────────────────┘  │        │  └─────────────────────────┘  │  │
+│  │       (Core Pod A)            │        │       (Core Pod B)            │  │
+│  │  ┌─────────┐    ┌──────────┐  │        │  ┌─────────┐    ┌──────────┐  │  │
+│  │  │ Orch A  │───►│ Envoy A  │  │        │  │ Orch B  │───►│ Envoy B  │  │  │
+│  │  └────┬────┘    └────┬─────┘  │        │  └────┬────┘    └────┬─────┘  │  │
+│  │       │RPC           │        │        │       │RPC           │        │  │
+│  │  ┌────▼────┐    ┌────▼─────┐  │  RPCSign (CP)  │              │        │  │
+│  │  │ Auth A  │◄───┼─────────────┼────────────────┤              │        │  │
+│  │  └─────────┘    │  GQL A   │  │                │              │        │  │
+│  │                 └────┬─────┘  │                │              │        │  │
+│  │                      │        │                │              │        │  │
+│  │      (Auth           │        │                │     (No Auth │        │  │
+│  │      Authority)      ▼        │                │      Service)▼        │  │
+│  │                 ┌───────────┐  │        │                ┌───────────┐  │  │
+│  │                 │ Federation│◄─┼────────┼───────────────►│ Federation│  │  │
+│  │                 └───────────┘  │ HTTPS  │                └───────────┘  │  │
 │  │                               │        │                               │  │
 │  └───────────────────────────────┘        └───────────────────────────────┘  │
 │                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │  TRUST MODEL: SHARED JWKS                                              │  │
-│  │                                                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────────┐  │  │
-│  │  │                     Same Organization                            │  │  │
-│  │  │                                                                  │  │  │
-│  │  │  Node A        ◄────── SHARED JWKS ──────►   Node B               │  │  │
-│  │  │       │              (same keys)              │                  │  │  │
-│  │  │       │                                       │                  │  │  │
-│  │  │       └──── Token valid at both ──────────────┘                  │  │  │
-│  │  │                                                                  │  │  │
-│  │  └──────────────────────────────────────────────────────────────────┘  │  │
-│  │  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  QUERY FLOW:                                                                 │
-│  ────────────────────────────────────────────────────────────────────────-───│
-│  1. Client → Node A: query { localData, remoteData }                         │
-│  2. Node A validates JWT against shared JWKS                                 │
-│  3. Node A fetches localData from local services                             │
-│  4. Node A forwards query to Node B (with same JWT)                          │
-│  5. Node B validates JWT against shared JWKS (same keys!)                    │
-│  6. Node B returns remoteData                                                │
-│  7. Node A stitches responses, returns to client                             │
-│                                                                              │
-│  PROVIDES:                          DOES NOT PROVIDE:                        │
-│  ✓ Cross-node federation            ✗ Org isolation (shared keys)            │
-│  ✓ Token passthrough                ✗ Encrypted transport beyond TLS         │
-│  ✓ Combined schema                  ✗ Network isolation                      │
-│  ✓ Simple trust model               ✗ Fine-grained peer auth                 │
-│                                                                              │
+│  TRUST MODEL: CENTRALIZED (Option 2)                                         │
+│  Node A acts as the Identity Authority. Node B signs tokens via RPC to A.    │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -636,15 +589,19 @@ graph LR
 
 ```mermaid
 graph TD
-    subgraph Node
-        CP[Control Plane]
-        DP[Envoy]
-        SDK[(Service SDK)]
+    subgraph CorePod [Core Pod]
+        Orch[Orchestrator]
+        Envoy[Envoy Proxy]
+        GQL[GraphQL GW]
+        Auth[Auth Service]
+        OTEL[OTEL Collector]
     end
     
-    SDK --"Metrics Push"--> CP
-    CP -.->|Scrape? / Push?| Upstream[Metrics Store<br/>TBD]
-    DP -.->|Scrape| Upstream
+    GQL --Push--> OTEL
+    Auth --Push--> OTEL
+    Envoy --Push--> OTEL
+    
+    OTEL -.->|Export| Upstream[Metrics Store]
 ```
 
 ## Phase 10: Mutual TLS (mTLS)

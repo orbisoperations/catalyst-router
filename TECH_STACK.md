@@ -22,19 +22,16 @@
 *   **Proxy Engine**: **[Envoy Proxy](https://github.com/envoyproxy/envoy)**.
     *   *Rationale*: Industry standard for high-performance sidecar/edge proxying.
     *   *Integration*:
-        *   **Future**: xDS (gRPC) for dynamic streaming configuration.
+        *   **Current**: xDS (REST) for dynamic streaming configuration.
 
 ## Build, Delivery & Containers
-*   **Strategy**: **Docker-First**.
-    *   **Rationale**: Simplifies the complex toolchain required for custom OpenSSL/Envoy builds and ensures consistency across macOS (dev) and Linux (prod).
-*   **Base Image**: Custom Alpine/Debian image with **OpenSSL (TLS 1.3 + Kyber)**.
-*   **Artifacts**:
-    *   **Build Container**: Contains Bazel, compilers, and PQC libraries.
-    *   **Runtime Container**: Minimal image containing the Node.js Control Plane and the custom Envoy binary.
-*   **Architectures**: Multi-arch images (standard `docker buildx` pipeline) for `linux/amd64` and `linux/arm64`.
+*   **Strategy**: **Core Pod (Docker Compose)**.
+    *   **Rationale**: Decomposes the monolith into specialized containers (Orchestrator, Gateway, Auth, OTEL).
+*   **Base Image**: Custom minimal images for each service.
+*   **Architectures**: Multi-arch images for `linux/amd64` and `linux/arm64`.
 
-## Plugin System
-An extensible interface allows the core router to be customized. Plugins interact via:
-1.  **Route Table Updates**: Reacting to incoming advertisements.
-2.  **Local Service Configuration**: Managing local processes (e.g., spawning a WireGuard tunnel or GraphQL server).
-3.  **Propagation Events**: Controlling what routes are advertised to peers.
+## Extension System (Sidecars)
+The system is extended via **Sidecar Containers** managed by the Orchestrator via RPC:
+1.  **GraphQL Gateway**: Handles federation logic.
+2.  **Auth Service**: Handles crypto operations.
+3.  **Custom Sidecars**: Users can bring their own containers that register via the SDK.
