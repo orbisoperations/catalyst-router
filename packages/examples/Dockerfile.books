@@ -1,0 +1,19 @@
+FROM oven/bun:1
+
+WORKDIR /app
+
+# Copy root package.json and lockfile (to utilize cache if possible, though overly simple here)
+# For simplicity in this monorepo context without complex pruning, we'll assume we can copy the packages/examples dir
+# Setup workspace context usually requires more, but for an isolated example container:
+
+# Copy the examples workspace
+COPY . .
+
+# Install dependencies (frozen-lockfile might fail if unrelated packages are missing, so we just install)
+RUN bun install
+
+# Expose port
+ENV PORT=8080
+EXPOSE 8080
+
+CMD ["bun", "run", "src/books/index.ts"]
