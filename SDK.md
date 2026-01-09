@@ -6,8 +6,8 @@ The **Catalyst SDK** (`@catalyst/sdk`) is a TypeScript-based framework designed 
 ## Features
 
 ### 1. Observability (Metrics)
-The SDK provides a zero-config wrapper for pushing metrics to the local Catalyst Node (Router).
-- **Architecture**: Push-based (Push -> Local Router).
+The SDK provides a zero-config wrapper for pushing metrics to the **OTEL Collector Sidecar**.
+- **Architecture**: OTLP Push.
 - **Usage**:
   ```typescript
   import { Metric } from '@catalyst/sdk';
@@ -37,7 +37,7 @@ const server = createGqlServer({
 
 ### 3. Service Registry (RPC)
 Services automatically register themselves with the local Catalyst Router upon startup using **Cap'n Web** RPC.
-- **Mechanism**: The SDK acts as an RPC Client connecting to the Router's Unix Socket (`/tmp/catalyst.sock`).
+- **Mechanism**: The SDK acts as an RPC Client connecting to the Orchestrator via TCP (Host: `orchestrator`, Port: `RPC_PORT`).
 - **Registration**: Sends metadata (Name, Version, Port, Health Check URL) to the Router.
 - **Health Checks**: The Router uses this registration to monitor the service's availability.
 

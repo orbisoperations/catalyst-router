@@ -14,19 +14,22 @@ Traditional service meshes (like Istio/Linkerd) excel at managing traffic *withi
 
 ## Core Architecture
 
-Catalyst Node consists of two primary components operating in tandem:
+Catalyst Node runs as a **Core Pod** containing 5 specialized containers:
 
-### 1. Control Plane (The Router)
+### 1. Control Plane (The Orchestrator)
 The "brain" of the node.
-*   **Function**: Handles service discovery, peering, and route propagation.
-*   **Model**: Acts like a BGP router for application services. It builds routing tables based on advertisements from peers and local configurations.
-*   **Transport**: Uses efficient, websocket-based RPC (`capnweb`) for communicating updates with other nodes.
+*   **Function**: Handles BGP peering, xDS configuration generation, and sidecar management.
+*   **Transport**: Uses `capnweb` RPC to coordinate with sidecars and other nodes.
 
-### 2. Data Plane (The Gateway)
+### 2. Data Plane (Envoy Proxy)
 The "muscle" of the node.
-*   **Function**: Handles actual network traffic transport.
-*   **Engine**: Powered by **Envoy Proxy**.
-*   **Operation**: dynamically configured by the Control Plane based on the current routing table.
+*   **Function**: High-performance edge router terminating TLS.
+*   **Operation**: Configured dynamically via **xDS** (REST) by the Orchestrator.
+
+### 3. Sidecars (Specialized Functions)
+*   **GraphQL Gateway**: TypeScript-based federation engine.
+*   **Auth Service**: Handles Key signing and JWKS.
+*   **OTEL Collector**: Central metrics sink for the pod.
 
 ## Key Features
 

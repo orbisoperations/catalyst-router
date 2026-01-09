@@ -1,29 +1,72 @@
 # Architecture
 
-## System Overview
+## System Overview: The Core Pod
 
-Catalyst Node operates as a two-part system:
-1.  **Control Plane (Node.js)**: Manages state, handles peering RPC, runs the plugin pipeline, and generates configuration.
-2.  **Data Plane (Envoy)**: Handles the raw TCP/HTTP traffic based on configuration provided by the control plane.
+Catalyst Node runs as a cohesive set of containers ("The Core Pod") orchestrated by the main **Catalyst Node** process.
 
 ```mermaid
 graph TD
-    subgraph Node[Catalyst Node]
-        CP[Control Plane / Node.js]
-        DP[Data Plane / Envoy]
-        
-        CP -- "Generates Config (Hot Reload)" --> DP
-        DP -- "Traffic Stats / Logs (future)" --> CP
+    subgraph DataPlane [Data Plane]
+        Envoy[Envoy Proxy <br/>(Container)]
     end
-    
-    subgraph Network
-        PeerA[Peer A]
-        PeerB[Peer B]
+
+    subgraph ControlPlane [Control Plane Pod]
+        Orchestrator[Catalyst Node <br/>(Orchestrator)]
+        GQL[GraphQL Gateway <br/>(Sidecar)]
+        Auth[Auth Service <br/>(Sidecar)]
+        OTEL[OTEL Collector <br/>(Sidecar)]
     end
-    
-    PeerA <== "Capnweb RPC (WebSockets)" ==> CP
-    CP <== "Capnweb RPC (WebSockets)" ==> PeerB
+
+    %% xDS Configuration
+    Orchestrator --"xDS (REST)"--> Envoy
+
+    %% RPC Coordination
+    Orchestrator <--"Capnweb RPC"--> GQL
+    Orchestrator <--"Capnweb RPC"--> Auth
+
+    %% Metrics
+    GQL --"Push"--> OTEL
+    Auth --"Push"--> OTEL
+    Envoy --"Push"--> OTEL
+
+    %% Public Traffic
+    Client[Client] --> Envoy
+    Envoy --> GQL
+    Envoy -.-> Auth
 ```
+
+### Components
+
+#### 1. Catalyst Node (The Orchestrator)
+- **Role**: Central Brain.
+- **Responsibilities**:
+    - **BGP/Peering**: Handles inter-node discovery and route exchange.
+    - **xDS Server**: Generates dynamic configuration for Envoy.
+    - **Sidecar Management**: Configures GraphQL and Auth services via RPC.
+
+#### 2. Envoy Proxy (Data Plane)
+- **Role**: High-performance Edge Router & Local Service Transport.
+- **Config**: Fully dynamic via xDS (LDS/CDS/RDS/EDS) served by the Orchestrator.
+- **Traffic**: 
+    - **Peer-to-Peer**: Handles all ingress/egress, terminating TLS.
+    - **Local-to-Gateway**: Acts as the local transport for services to reach the GraphQL Gateway (e.g., `http://localhost:10000/graphql` -> Envoy -> Gateway).
+
+#### 3. GraphQL Gateway (Sidecar)
+- **Role**: TypeScript-based Federation Engine (Apollo/Yoga).
+- **Control**: Receives federation config (supergraph) from Orchestrator via RPC.
+- **Data**: Executes queries, delegating to local services or remote peers.
+
+#### 4. Auth Service (Sidecar)
+- **Role**: Identity & Crypto Engine.
+- **Responsibilities**:
+    - **Key Generation**: Creates/Rotates AS keys.
+    - **JWKS Hosting**: Serves public keys.
+    - **Signing**: Signs JWTs upon request (via RPC from Orchestrator/CLI).
+
+#### 5. OTEL Collector (Sidecar)
+- **Role**: Universal Metrics Sink.
+- **Input**: Receives OTLP/StatsD from all other containers.
+- **Output**: Exporters configured by the user (DataDog, Prometheus, etc.).
 
 ## Control Plane Internals
 
@@ -73,11 +116,15 @@ The system is extensible via three primary interfaces.
 *   **Outputs**: Updated Route Entries (Add/Remove routes).
 *   **Example**: "Received 'Add Service X' from Peer A -> Add Entry X via Peer A to Table."
 
-#### B. Local Service Configurator (`ILocalServicePlugin`)
-*   **Responsibility**: Manages local resources that *are* the services.
-*   **Inputs**: Configuration triggers, Health check ticks.
-*   **Outputs**: Process management (Spawn/Kill), Local Service Registration.
-*   **Example**: "Config says 'Start VPN' -> Spawn Wireguard Process -> Register 'VPN Service' in Local Table."
+#### B. Service Registry & Configurator (`IServicePlugin`)
+*   **Responsibility**: Manages the registry of known services.
+*   **Inputs**:
+    *   **Local Registration**: Services registering via Config (`catalyst.json`) or Admin API.
+    *   **Health Checks**: Periodic liveness probes.
+*   **Actions**:
+    *   **Federation Update**: Triggers an RPC call to the **GraphQL Gateway** to federate the new service endpoint.
+    *   **Envoy Config**: Updates xDS (CDS/RDS) to allow traffic to/from the service.
+*   **Example**: "API registers 'Inventory Service' on port 5001 -> Orchestrator updates GraphQL Gateway to stitch `http://localhost:5001/graphql`."
 
 #### C. Propagation Configurator (`IPropagationPlugin`)
 *   **Responsibility**: Decides what to tell neighbors.
@@ -85,20 +132,43 @@ The system is extensible via three primary interfaces.
 *   **Outputs**: Outbound RPC Messages.
 *   **Example**: "Route Table changed -> Send standard Route Update to all Peers."
 
-## Data Plane Integration
+## Data Plane Integration (xDS)
 
-Currently, the Data Plane integration follows a simple Hot Reload model.
+We utilize Envoy's **xDS Protocol** (Discovery Service) for zero-downtime reconfiguration.
 
-1.  **State Change**: The Control Plane detects a change in the Route Table (e.g., a new peer service is available).
-2.  **Config Generation**: A Renderer function maps the internal Route Table to an Envoy v3 configuration JSON/YAML.
-    *   *Peers* become **Clusters**.
-    *   *Services* become **Listeners/Routes**.
-3.  **Persist**: The config is written to disk (e.g., `envoy.yaml`).
-4.  **Reload**: The Control Plane signals Envoy (via admin endpoint or SIGHUP) to hot-reload the configuration.
+1.  **Transport**: REST-based State of the World (SotW) or Delta (future).
+2.  **Resources**:
+    *   **LDS (Listeners)**: API Ports, Peering Ports.
+    *   **RDS (Routes)**: Routing logic for "/graphql", "/.well-known/jwks.json", and Peer prefixes.
+    *   **CDS (Clusters)**: Upstream definitions (Local Sidecars, Remote Peers).
+    *   **EDS (Endpoints)**: Specific IP:Port assignments.
 
-```mermaid
-graph LR
-    RT[Route Table] -- "Map to Envoy Concepts" --> Gen[Config Generator]
-    Gen -- "Write File" --> File[envoy.yaml]
-    File -- "Hot Restart" --> Envoy[Envoy Process]
-```
+The Orchestrator implements a lightweight xDS Control Plane that pushes JSON updates to Envoy whenever the internal Route Table changes.
+
+## Identity & API Management
+
+Catalyst Node supports three strategies for API Key management and service authentication.
+
+### Option 1: Completely External Service
+*   **Description**: Identity is handled entirely outside the Catalyst mesh.
+*   **Flow**:
+    1.  Client gets token from External Auth Provider (Auth0, Okta, etc.).
+    2.  Client sends token to Catalyst Node.
+    3.  Envoy/Auth Service validates the token signature against absolute external JWKS.
+*   **Use Case**: Enterprise integration where Identity is already solved.
+
+### Option 2: Centralized API Service (Single Node)
+*   **Description**: One specific Catalyst Node acts as the "Identity Authority" for the cluster.
+*   **Flow**:
+    1.  Admin generates API Keys/Tokens on the Leader Node.
+    2.  Other Nodes are configured to delegate auth decisions or sync JWKS from the Leader.
+    3.  **Core Pod B** trusts **Core Pod A** (Leader) as the issuer.
+*   **Use Case**: Small-to-medium clusters (Stage 1B) where simplicity is preferred over HA.
+
+### Option 3: Decentralized PKI (Hierarchical)
+*   **Description**: Each Node manages its own Service Accounts, rooted in a shared PKI.
+*   **Flow**:
+    1.  **Root CA** issues intermediate certs to each Node.
+    2.  Each Node mints its own API Keys for its local services.
+    3.  Validation works via trust chain; no central online authority required for steady state.
+*   **Use Case**: Large scale, high-availability, multi-region deployments.
