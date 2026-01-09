@@ -24,71 +24,78 @@ This table maps legacy `catalyst` capabilities to the specific Milestone that de
 *   **Legacy: Organization**: Establishes the Organization boundary.
 *   **Legacy: Data Channel**: Establishes local services as "Data Channels".
 
-## Milestone 0.5: Containerization & xDS
-**Goal**: Establish the "Core Pod" architecture where the Node Orchestrator configures Envoy dynamically via xDS and manages sidecar containers.
-
+## Subphase 1: GraphQL Gateway (RPC Config)
+**Goal**: A standalone GraphQL Gateway container that can be configured via RPC.
 ### Implementation Goals
-*   **Infrastructure**:
-    *   Create `docker-compose.yml` defining the 5-container pod.
-    *   Verify inter-container networking.
-*   **Orchestrator**:
-    *   Implement **xDS Server** (REST) in the Node Control Plane.
-    *   Implement **RPC Clients** to talk to sidecars.
-*   **Sidecars**:
-    *   **GraphQL Gateway**: Create TypeScript container with RPC control loop.
-    *   **Auth Service**: Create TypeScript container for JWKS/Signer.
-*   **Success Criteria**: Orchestrator starts, pushes config to Envoy, and Envoy successfully routes traffic to the GraphQL sidecar.
+*   **Container**: TypeScript container running GraphQL Yoga.
+*   **RPC Server**: Implement RPC mechanism to receive configuration (schemas, services).
+*   **Config Loop**: Gateway applies config changes without restart.
 
-## Phase 1: Basic Node & GraphQL Federation
-**Goal**: A standalone "Core Pod" running a local GraphQL federation with testable configuration.
-
+## Subphase 2: Orchestrator (RPC for GraphQL)
+**Goal**: The Control Plane (Orchestrator) manages the GraphQL Gateway.
 ### Implementation Goals
-*   **Configuration**: Load settings via JSON/CLI in the Orchestrator.
-*   **Federation**: Orchestrator sends config to **GraphQL Sidecar** via RPC.
-*   **Registration**: Local services register via Config (`catalyst.json`) or API.
-*   **Transport**: Services use `Envoy (localhost)` to reach the Gateway provided by the Core Pod.
+*   **Orchestrator**: Node.js process acting as the control plane.
+*   **RPC Client**: Connects to the GraphQL Gateway sidecar.
+*   **Config Loading**: Load identifying config (ports, etc) and push to Gateway.
+*   **CLI**: Implement command to generate API Keys for access to backed services.
 
-### Testing Strategy
-*   **Unit**: Vitest tests in the `node` directory using different config methods.
-*   **Manual**: Documented "Demo Run" where a user can query the federation.
+## Subphase 3: Orchestrator (xDS for Envoy)
+**Goal**: Orchestrator configures the Data Plane (Envoy) dynamically.
+### Implementation Goals
+*   **xDS Server**: Implement a minimal xDS server (ADS/LDS/CDS/RDS) in the Orchestrator.
+*   **Envoy Boot**: Envoy starts with dynamic configuration pointing to Orchestrator.
+*   **Route Sync**: Orchestrator pushes routes to Envoy.
+
+## Subphase 4: Example GraphQL Services
+**Goal**: Verify federation with actual services.
+### Implementation Goals
+*   **Service A & B**: Two simple GraphQL services (e.g., Products, Reviews).
+*   **Registration**: Services register with the Orchestrator (or are statically defined in Orchestrator config for M0).
+
+## Subphase 5: Client Connection (End-to-End)
+**Goal**: Full verification of the request path.
+### Implementation Goals
+*   **Path**: Client -> Envoy -> GraphQL Gateway -> Service A/B.
+*   **Verification**: Query succeeds.
 
 ### Architecture Reference (Stage 1A)
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                 STAGE 1A: CORE POD ARCHITECTURE (Milestone 0)                │
 │                                                                              │
-│                               ┌─────────────────┐                            │
-│                               │     CLIENT      │                            │
-│                               └────────┬────────┘                            │
-│                                        │ HTTPS                               │
-│                                        ▼                                     │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                           CATALYST CORE POD                            │  │
+│                                                   ┌─────────────────┐        │
+│                                                   │     CLIENT      │        │
+│                                                   └────────┬────────┘        │
+│                                                            │ HTTPS           │
+│  ┌─────────────────────────────────────────────────────────┼──────────────┐  │
+│  │                           CATALYST CORE POD             ▼              │  │
 │  │                                                                        │  │
 │  │   ┌─────────────┐       xDS       ┌────────────────────────────────┐   │  │
 │  │   │ Orchestrator│────────────────►│          Envoy Proxy           │   │  │
 │  │   │ (Node.js)   │                 │          (Data Plane)          │   │  │
 │  │   └──────┬──────┘                 └───────────────┬────────────────┘   │  │
-│  │          │                                        │                    │  │
-│  │          │RPC                                     │                    │  │
+│  │          │                                        │ TCP                │  │
+│  │          │RPC                                     │ Proxy              │  │
 │  │          ├───(Config)─────┐                       │                    │  │
 │  │          ▼ (Signer)       ▼                       ▼                    │  │
-│  │   ┌─────────────┐   ┌─────────────┐       ┌─────────────┐              │  │
-│  │   │ Auth Service│   │ GraphQL GW  │       │ OTEL Col.   │◄──Push────┐  │  │
-│  │   │ (Sidecar)   │   │ (Sidecar)   │       │ (Sidecar)   │           │  │  │
-│  │   └─────────────┘   └──────┬──────┘       └─────────────┘           │  │  │
-│  │                            │                                        │  │  │
-│  │                            ▼                                        │  │  │
-│  │                     ┌─────────────┐                                 │  │  │
-│  │                     │ Local Svcs  │─────────────────────────────────┘  │  │
-│  │                     └─────────────┘                                    │  │
+│  │   ┌─────────────┐   ┌─────────────┐                                    │  │
+│  │   │ Auth Service│   │ GraphQL GW  │                                    │  │
+│  │   │ (Sidecar)   │   │ (Sidecar)   │                                    │  │
+│  │   └─────────────┘   └──────┬─┬────┘                                    │  │
+│  │                            │ │ Federation                              │  │
+│  │                   ┌────────┘ └────────┐                                │  │
+│  │                   ▼                   ▼                                │  │
+│  │            ┌─────────────┐     ┌─────────────┐                         │  │
+│  │            │ Example Svc │     │ Example Svc │                         │  │
+│  │            │      A      │     │      B      │                         │  │
+│  │            └─────────────┘     └─────────────┘                         │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
 │  PROVIDES:                            DOES NOT PROVIDE:                      │
 │  ✓ Containerized Isolation            ✗ Node-to-node                         │
 │  ✓ xDS Dynamic Config                 ✗ Cross-org trust                      │
 │  ✓ Polyglot Sidecars                  ✗ Encrypted transport (beyond TLS)     │
-│  ✓ Centralized Auth/Observability     ✗ Network isolation                    │
+│  ✓ Centralized Auth                   ✗ Network isolation                    │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
