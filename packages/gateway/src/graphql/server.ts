@@ -25,6 +25,9 @@ export class GatewayGraphqlServer {
         try {
             const subschemas = await Promise.all(
                 config.services.map(async (service) => {
+                    // Check if the service exposes an SDL
+                    await this.validateServiceSdl(service.url, service.token);
+
                     const executor = this.createRemoteExecutor(service.url, service.token);
                     const schema = await this.fetchRemoteSchema(executor);
                     return {
@@ -108,6 +111,36 @@ export class GatewayGraphqlServer {
             throw new Error(result.errors.map((e: any) => e.message).join('\n'));
         }
         return buildClientSchema(result.data);
+    }
+
+    private async validateServiceSdl(url: string, token?: string) {
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ query: 'query { _sdl }' })
+            });
+
+            if (!res.ok) {
+                throw new Error(`Service returned status ${res.status}`);
+            }
+
+            const result = await res.json() as any;
+            if (result.errors) {
+                throw new Error(result.errors.map((e: any) => e.message).join(', '));
+            }
+
+            const sdl = result.data?._sdl;
+            if (!sdl || typeof sdl !== 'string' || sdl.trim().length === 0) {
+                throw new Error('Service returned empty or invalid SDL');
+            }
+        } catch (error: any) {
+            throw new Error(`Service validation failed for ${url}: ${error.message}`);
+        }
     }
 }
 

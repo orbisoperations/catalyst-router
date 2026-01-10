@@ -1,8 +1,13 @@
 import { Hono } from 'hono';
-import { createYoga, createSchema } from 'graphql-yoga';
+import { createYoga } from 'graphql-yoga';
+import { makeExecutableSchema } from '@graphql-tools/schema';
+import { stitchingDirectives } from '@graphql-tools/stitching-directives';
 
-const schema = createSchema({
-    typeDefs: `
+const { allStitchingDirectivesTypeDefs, stitchingDirectivesValidator } = stitchingDirectives();
+
+const typeDefs = `
+    ${allStitchingDirectivesTypeDefs}
+    
     type Movie {
       id: ID!
       title: String!
@@ -11,18 +16,25 @@ const schema = createSchema({
 
     type Query {
       movies: [Movie!]!
+      _sdl: String!
     }
-  `,
-    resolvers: {
-        Query: {
-            movies: () => [
-                { id: '1', title: 'The Lord of the Rings: The Fellowship of the Ring', director: 'Peter Jackson' },
-                { id: '2', title: 'Super Mario Bros.', director: 'Rocky Morton, Annabel Jankel' },
-                { id: '3', title: 'Pride & Prejudice', director: 'Joe Wright' },
-            ],
-        },
+`;
+
+const resolvers = {
+    Query: {
+        movies: () => [
+            { id: '1', title: 'The Lord of the Rings: The Fellowship of the Ring', director: 'Peter Jackson' },
+            { id: '2', title: 'Super Mario Bros.', director: 'Rocky Morton, Annabel Jankel' },
+            { id: '3', title: 'Pride & Prejudice', director: 'Joe Wright' },
+        ],
+        _sdl: () => typeDefs,
     },
-});
+};
+
+const schema = stitchingDirectivesValidator(makeExecutableSchema({
+    typeDefs,
+    resolvers,
+}));
 
 const app = new Hono();
 const yoga = createYoga({
