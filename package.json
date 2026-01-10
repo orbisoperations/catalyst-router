@@ -4,5 +4,8 @@
   "packageManager": "pnpm@10.0.0",
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "resolutions": {
+    "graphql": "16.12.0"
+  }
 }

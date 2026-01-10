@@ -1,8 +1,13 @@
 import { Hono } from 'hono';
-import { createYoga, createSchema } from 'graphql-yoga';
+import { createYoga } from 'graphql-yoga';
+import { makeExecutableSchema } from '@graphql-tools/schema';
+import { stitchingDirectives } from '@graphql-tools/stitching-directives';
 
-const schema = createSchema({
-    typeDefs: `
+const { allStitchingDirectivesTypeDefs, stitchingDirectivesValidator } = stitchingDirectives();
+
+const typeDefs = `
+    ${allStitchingDirectivesTypeDefs}
+    
     type Book {
       id: ID!
       title: String!
@@ -11,18 +16,25 @@ const schema = createSchema({
 
     type Query {
       books: [Book!]!
+      _sdl: String!
     }
-  `,
-    resolvers: {
-        Query: {
-            books: () => [
-                { id: '1', title: 'The Lord of the Rings', author: 'J.R.R. Tolkien' },
-                { id: '2', title: 'Pride and Prejudice', author: 'Jane Austen' },
-                { id: '3', title: 'The Hobbit', author: 'J.R.R. Tolkien' },
-            ],
-        },
+`;
+
+const resolvers = {
+    Query: {
+        books: () => [
+            { id: '1', title: 'The Lord of the Rings', author: 'J.R.R. Tolkien' },
+            { id: '2', title: 'Pride and Prejudice', author: 'Jane Austen' },
+            { id: '3', title: 'The Hobbit', author: 'J.R.R. Tolkien' },
+        ],
+        _sdl: () => typeDefs,
     },
-});
+};
+
+const schema = stitchingDirectivesValidator(makeExecutableSchema({
+    typeDefs,
+    resolvers,
+}));
 
 const app = new Hono();
 const yoga = createYoga({
