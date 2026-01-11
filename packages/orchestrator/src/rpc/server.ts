@@ -18,22 +18,32 @@ import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { RouteTablePlugin } from '../plugins/implementations/routing.js';
 import { RouteAnnouncerPlugin } from '../plugins/implementations/announcer.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
+import { DirectProxyRouteTablePlugin } from '../plugins/implementations/proxy-route.js';
+import { getConfig, OrchestratorConfig } from '../config.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
     private pipeline: PluginPipeline;
 
     constructor() {
         super();
-        // Initialize Pipeline
-        this.pipeline = new PluginPipeline([
-            new AuthPlugin(),
-            new LoggerPlugin(),
-            new StatePersistencePlugin(),
-            new RouteTablePlugin(),
-            new RouteAnnouncerPlugin(),
-            new GatewayIntegrationPlugin()
-        ]);
+        const config = getConfig();
 
+        // Initialize Plugins
+        const plugins: any[] = [
+            // new AuthPlugin(),
+            new LoggerPlugin(),
+            // new StatePersistencePlugin(),
+            new RouteTablePlugin(),
+            new DirectProxyRouteTablePlugin(),
+            // new RouteAnnouncerPlugin(),
+        ];
+
+        // Conditionally add Gateway Plugin
+        if (config.gqlGatewayConfig) {
+            plugins.push(new GatewayIntegrationPlugin(config.gqlGatewayConfig));
+        }
+
+        this.pipeline = new PluginPipeline(plugins);
     }
 
     async applyAction(action: Action): Promise<AddDataChannelResult> {
