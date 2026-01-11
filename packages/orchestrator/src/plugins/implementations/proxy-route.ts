@@ -2,25 +2,26 @@
 import { BasePlugin } from '../base.js';
 import { PluginContext, PluginResult } from '../types.js';
 
-export class RouteTablePlugin extends BasePlugin {
-    name = 'RouteTablePlugin';
+export class DirectProxyRouteTablePlugin extends BasePlugin {
+    name = 'DirectProxyRouteTablePlugin';
 
     async apply(context: PluginContext): Promise<PluginResult> {
         const { action, state } = context;
 
-        // Apply logic based on action
+        // This plugin specifically handles 'proxied' routes if we were distinguishing them.
+
         if (action.resource === 'dataChannel') {
             if (action.action === 'create') {
-                // Mutate the state (RouteTable) - Internal by default for this plugin
-                const id = state.addInternalRoute({
+                console.log(`[DirectProxyRouteTablePlugin] Processing route for ${action.data.name}`);
+
+                // Add to Routes as Proxied
+                state.addProxiedRoute({
                     name: action.data.name,
                     endpoint: action.data.endpoint!,
                     protocol: action.data.protocol,
                     region: action.data.region
                 });
-                context.result = { ...context.result, id };
             }
-            // Handle update/delete in future
         }
 
         return { success: true, ctx: context };
