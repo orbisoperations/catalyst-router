@@ -1,0 +1,3 @@
+[test]
+# Exclude e2e tests (run via playwright test instead)
+ignore = ["**/e2e/**", "**/node_modules/**"]
