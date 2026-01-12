@@ -14,13 +14,16 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
             if (action.action === 'create') {
                 console.log(`[DirectProxyRouteTablePlugin] Processing route for ${action.data.name}`);
 
-                // Add to Routes as Proxied
-                state.addProxiedRoute({
-                    name: action.data.name,
-                    endpoint: action.data.endpoint!,
-                    protocol: action.data.protocol,
-                    region: action.data.region
-                });
+                // Add to Routes as Proxied - Only if protocol matches
+                const protocol = action.data.protocol;
+                if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
+                    state.addProxiedRoute({
+                        name: action.data.name,
+                        endpoint: action.data.endpoint!,
+                        protocol: action.data.protocol,
+                        region: action.data.region
+                    });
+                }
             }
         }
 

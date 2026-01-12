@@ -12,6 +12,12 @@ export class RouteTablePlugin extends BasePlugin {
         if (action.resource === 'dataChannel') {
             if (action.action === 'create') {
                 // Mutate the state (RouteTable) - Internal by default for this plugin
+                // Ignore Proxy protocols handled by DirectProxyRouteTablePlugin
+                const protocol = action.data.protocol;
+                if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
+                    return { success: true, ctx: context };
+                }
+
                 const id = state.addInternalRoute({
                     name: action.data.name,
                     endpoint: action.data.endpoint!,

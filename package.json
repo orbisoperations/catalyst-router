@@ -2,7 +2,8 @@
   "name": "catalyst-monorepo",
   "private": true,
   "scripts": {
-    "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build"
+    "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
+    "cli": "bun packages/cli/src/index.ts"
   },
   "packageManager": "pnpm@10.0.0",
   "workspaces": [
