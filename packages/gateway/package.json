@@ -1,31 +1,31 @@
 {
-    "name": "@catalyst/gateway",
-    "version": "0.0.0",
-    "type": "module",
-    "private": true,
-    "scripts": {
-        "dev": "tsx watch src/index.ts",
-        "build": "tsc",
-        "test": "bun test",
-        "test:rpc": "bun run scripts/test-rpc.ts"
-    },
-    "dependencies": {
-        "@graphql-tools/delegate": "^12.0.4",
-        "@graphql-tools/stitch": "^10.1.8",
-        "@graphql-tools/utils": "^11.0.0",
-        "@graphql-tools/wrap": "^11.1.4",
-        "@hono/capnweb": "^0.1.0",
-        "capnweb": "^0.4.0",
-        "graphql": "^16.12.0",
-        "graphql-yoga": "^5.1.1",
-        "hono": "^4.0.0",
-        "zod": "^3.22.4"
-    },
-    "devDependencies": {
-        "@types/bun": "^1.3.5",
-        "@types/node": "^20.11.0",
-        "testcontainers": "^11.11.0",
-        "typescript": "^5.3.3",
-        "vitest": "^1.2.1"
-    }
+  "name": "@catalyst/gateway",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "bun test",
+    "test:rpc": "bun run scripts/test-rpc.ts"
+  },
+  "dependencies": {
+    "@graphql-tools/delegate": "catalog:",
+    "@graphql-tools/stitch": "catalog:",
+    "@graphql-tools/utils": "catalog:",
+    "@graphql-tools/wrap": "catalog:",
+    "@hono/capnweb": "catalog:",
+    "capnweb": "catalog:",
+    "graphql": "catalog:",
+    "graphql-yoga": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "testcontainers": "catalog:testing",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
+  }
 }
