@@ -18,20 +18,20 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
-    "@types/node": "^25.0.3",
-    "@vitest/coverage-v8": "^4.0.16",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "@playwright/test": "catalog:testing",
+    "@types/node": "catalog:dev",
+    "@vitest/coverage-v8": "catalog:testing",
+    "tsup": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.7",
-    "capnweb": "^0.4.0",
-    "commander": "^14.0.2",
-    "graphql": "^16.12.0",
-    "graphql-yoga": "^5.18.0",
-    "hono": "^4.11.3",
+    "@hono/node-server": "catalog:",
+    "capnweb": "catalog:",
+    "commander": "catalog:",
+    "graphql": "catalog:",
+    "graphql-yoga": "catalog:",
+    "hono": "catalog:",
     "ip": "^2.0.1"
   }
 }
