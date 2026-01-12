@@ -1,0 +1,25 @@
+{
+  "name": "@catalyst/auth",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "tsc",
+    "test": "bun test",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@hono/capnweb": "catalog:",
+    "capnweb": "catalog:",
+    "hono": "catalog:",
+    "jose": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
+  }
+}
