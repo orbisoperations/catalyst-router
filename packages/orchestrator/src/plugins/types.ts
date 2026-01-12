@@ -14,11 +14,11 @@ export const PluginContextSchema = z.object({
     action: ActionSchema,
     state: z.instanceof(RouteTable),
     authxContext: AuthContextSchema,
-    result: z.record(z.any()).optional(),
+    result: z.record(z.string(), z.any()).optional(),
 });
 export type PluginContext = z.infer<typeof PluginContextSchema>;
 
-export const PluginResultSchema = z.discriminatedUnion('success', [
+export const PluginResultSchema = z.union([
     z.object({
         success: z.literal(true),
         ctx: PluginContextSchema,

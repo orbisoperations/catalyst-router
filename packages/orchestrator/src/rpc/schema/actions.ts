@@ -20,10 +20,20 @@ export const DataChannelDeleteActionSchema = z.object({
     data: z.object({ id: z.string() }),
 });
 
+export const PeerCreateActionSchema = z.object({
+    resource: z.literal('peer'),
+    action: z.literal('create'),
+    data: z.object({
+        address: z.string(),
+        secret: z.string(),
+    }),
+});
+
 export const ActionSchema = z.union([
     DataChannelCreateActionSchema,
     DataChannelUpdateActionSchema,
-    DataChannelDeleteActionSchema
+    DataChannelDeleteActionSchema,
+    PeerCreateActionSchema
 ]);
 export type Action = z.infer<typeof ActionSchema>;
 

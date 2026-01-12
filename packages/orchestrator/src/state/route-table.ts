@@ -1,12 +1,14 @@
 
 import { ServiceDefinition, LocalRoute, DataChannelMetrics } from '../rpc/schema/index.js';
+import { Peer } from '../peering/peer.js';
 
 export class RouteTable {
     constructor(
         private proxiedRoutes: Map<string, LocalRoute> = new Map(),
         private internalRoutes: Map<string, LocalRoute> = new Map(),
         private externalRoutes: Map<string, LocalRoute> = new Map(),
-        private metrics: Map<string, DataChannelMetrics> = new Map()
+        private metrics: Map<string, DataChannelMetrics> = new Map(),
+        private peers: Map<string, Peer> = new Map()
     ) { }
 
     private createId(service: ServiceDefinition): string {
@@ -18,13 +20,15 @@ export class RouteTable {
         proxiedRoutes?: Map<string, LocalRoute>,
         internalRoutes?: Map<string, LocalRoute>,
         externalRoutes?: Map<string, LocalRoute>,
-        metrics?: Map<string, DataChannelMetrics>
+        metrics?: Map<string, DataChannelMetrics>,
+        peers?: Map<string, Peer>
     }): RouteTable {
         return new RouteTable(
             updates.proxiedRoutes ?? this.proxiedRoutes,
             updates.internalRoutes ?? this.internalRoutes,
             updates.externalRoutes ?? this.externalRoutes,
-            updates.metrics ?? this.metrics
+            updates.metrics ?? this.metrics,
+            updates.peers ?? this.peers
         );
     }
 
@@ -206,6 +210,27 @@ export class RouteTable {
                 proxiedRoutes: newProxied,
                 externalRoutes: newExternal
             });
+        }
+        return this;
+    }
+
+    addPeer(peer: Peer): RouteTable {
+        const newPeers = new Map(this.peers);
+        newPeers.set(peer.id, peer);
+        return this.clone({ peers: newPeers });
+    }
+
+    getPeers(): Peer[] {
+        return Array.from(this.peers.values());
+    }
+
+    removePeer(id: string): RouteTable {
+        const peer = this.peers.get(id);
+        if (peer) {
+            peer.disconnect();
+            const newPeers = new Map(this.peers);
+            newPeers.delete(id);
+            return this.clone({ peers: newPeers });
         }
         return this;
     }

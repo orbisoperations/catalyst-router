@@ -25,7 +25,9 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
 
         const result = await plugin.apply(context);
 
-        expect(result.success).toBe(true);
+        if (!result.success) {
+            throw new Error(JSON.stringify(result.error));
+        }
         const newState = result.ctx.state;
         const proxied = newState.getProxiedRoutes();
         expect(proxied).toHaveLength(1);

@@ -4,6 +4,7 @@ import { ServiceDefinitionSchema } from './direct.js';
 
 export * from './direct.js';
 export * from './actions.js';
+export * from './peering.js';
 
 export const DataChannelMetricsSchema = z.object({
     id: z.string(),

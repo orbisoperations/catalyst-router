@@ -18,6 +18,9 @@ import { RouteTablePlugin } from '../plugins/implementations/routing.js';
 import { RouteAnnouncerPlugin } from '../plugins/implementations/announcer.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { DirectProxyRouteTablePlugin } from '../plugins/implementations/proxy-route.js';
+import { InternalPeeringPlugin } from '../plugins/implementations/internal-peering.js';
+import { PeeringService } from '../peering/service.js';
+import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
@@ -39,6 +42,7 @@ export class OrchestratorRpcServer extends RpcTarget {
             new RouteTablePlugin(),
             new DirectProxyRouteTablePlugin(),
             // new RouteAnnouncerPlugin(),
+            new InternalPeeringPlugin(),
         ];
 
         // Conditionally add Gateway Plugin
@@ -66,7 +70,7 @@ export class OrchestratorRpcServer extends RpcTarget {
 
             return {
                 success: true,
-                id: result.ctx.result?.id
+                id: result.ctx.result?.['id'] as string | undefined
             };
         } catch (e: any) {
             return { success: false, error: e.message };
@@ -82,5 +86,34 @@ export class OrchestratorRpcServer extends RpcTarget {
     async listMetrics(): Promise<ListMetricsResult> {
         const metrics = this.state.getMetrics();
         return { metrics };
+    }
+
+    // ----------------------------------------------------------------
+    // Peer Public API Implementation
+    // ----------------------------------------------------------------
+
+    authenticate(secret: string): AuthorizedPeer {
+        const service = new PeeringService(
+            () => this.state,
+            (s) => { this.state = s; }
+        );
+        return service.authenticate(secret);
+    }
+
+    async listPeers(): Promise<ListPeersResult> {
+        const peers = this.state.getPeers().map(p => ({
+            id: p.id,
+            as: 100, // TODO: Store AS on Peer object properly
+            endpoint: p.address
+        }));
+        return { peers };
+    }
+
+    async ping(): Promise<string> {
+        const service = new PeeringService(
+            () => this.state,
+            (s) => { this.state = s; }
+        );
+        return service.ping();
     }
 }
