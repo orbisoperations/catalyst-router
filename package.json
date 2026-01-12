@@ -1,9 +1,6 @@
 {
   "name": "catalyst-monorepo",
   "private": true,
-  "scripts": {
-    "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build"
-  },
   "packageManager": "pnpm@10.0.0",
   "workspaces": [
     "packages/*"
@@ -28,6 +25,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
+    "cli": "bun packages/cli/src/index.ts"
   }
 }
