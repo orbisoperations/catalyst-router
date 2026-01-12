@@ -36,3 +36,11 @@ The "muscle" of the node.
 *   **Decentralized**: No single point of failure or control.
 *   **Plugin-Driven**: Extensible architecture for defining custom behaviors for routing, local services, and propagation.
 *   **Local Services**: Easily spin up and advertise local resources (e.g., VPN clients, GraphQL federations) as network services.
+
+## Development
+
+Run the full stack locally with Podman:
+
+```bash
+podman compose -f docker-compose/example.m0p2.compose.yaml up --build
+```
