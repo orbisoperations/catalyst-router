@@ -1,18 +1,20 @@
+# Build from monorepo root context to resolve catalog references
 FROM oven/bun:1
 
 WORKDIR /app
 
-# Copy root package.json and lockfile (to utilize cache if possible, though overly simple here)
-# For simplicity in this monorepo context without complex pruning, we'll assume we can copy the packages/examples dir
-# Setup workspace context usually requires more, but for an isolated example container:
+# Copy workspace config files (catalog definitions are in root package.json)
+COPY package.json bun.lockb ./
+COPY packages/examples/package.json ./packages/examples/
 
-# Copy the examples workspace
-COPY . .
+# Install from workspace root - bun resolves catalogs from root package.json
+RUN bun install --omit dev
 
-# Install dependencies (frozen-lockfile might fail if unrelated packages are missing, so we just install)
-RUN bun install
+# Copy source code
+COPY packages/examples/src ./packages/examples/src
 
-# Expose port
+WORKDIR /app/packages/examples
+
 ENV PORT=8080
 EXPOSE 8080
 

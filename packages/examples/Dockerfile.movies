@@ -1,10 +1,19 @@
+# Build from monorepo root context to resolve catalog references
 FROM oven/bun:1
 
 WORKDIR /app
 
-COPY . .
+# Copy workspace config files (catalog definitions are in root package.json)
+COPY package.json bun.lockb ./
+COPY packages/examples/package.json ./packages/examples/
 
-RUN bun install
+# Install from workspace root - bun resolves catalogs from root package.json
+RUN bun install --omit dev
+
+# Copy source code
+COPY packages/examples/src ./packages/examples/src
+
+WORKDIR /app/packages/examples
 
 ENV PORT=8080
 EXPOSE 8080
