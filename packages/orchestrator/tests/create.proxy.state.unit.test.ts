@@ -6,9 +6,10 @@ import { ServiceDefinition } from '../src/rpc/schema/index.js';
 describe('Proxy State - Create', () => {
     const service: ServiceDefinition = {
         name: 'test-create-proxy',
+        fqdn: 'test.svc',
         protocol: 'tcp:graphql',
         endpoint: 'localhost:8081',
-        region: 'us-east-1'
+        region: 'us-west-1'
     };
 
     it('should add a proxied route immutably', () => {
@@ -18,7 +19,7 @@ describe('Proxy State - Create', () => {
         expect(table1.getProxiedRoutes()).toHaveLength(0);
         expect(table2.getProxiedRoutes()).toHaveLength(1);
         expect(table2.getProxiedRoutes()[0].service).toEqual(service);
-        expect(id).toBe(`${service.name}:${service.protocol}`);
+        expect(id).toBe(service.fqdn);
 
         // Correct bucket check
         expect(table2.getInternalRoutes()).toHaveLength(0);

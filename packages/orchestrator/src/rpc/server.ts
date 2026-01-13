@@ -14,7 +14,8 @@ import { PluginPipeline } from '../plugins/pipeline.js';
 import { AuthPlugin } from '../plugins/implementations/auth.js';
 import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
-import { RouteTablePlugin } from '../plugins/implementations/routing.js';
+import { InternalRouteTablePlugin } from '../plugins/implementations/internal-routing.js';
+import { ExternalRouteTablePlugin } from '../plugins/implementations/external-routing.js';
 import { RouteAnnouncerPlugin } from '../plugins/implementations/announcer.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { DirectProxyRouteTablePlugin } from '../plugins/implementations/proxy-route.js';
@@ -39,7 +40,8 @@ export class OrchestratorRpcServer extends RpcTarget {
             // new AuthPlugin(),
             new LoggerPlugin(),
             // new StatePersistencePlugin(),
-            new RouteTablePlugin(),
+            new InternalRouteTablePlugin(),
+            new ExternalRouteTablePlugin(),
             new DirectProxyRouteTablePlugin(),
             // new RouteAnnouncerPlugin(),
             new InternalPeeringPlugin(),
@@ -103,8 +105,9 @@ export class OrchestratorRpcServer extends RpcTarget {
     async listPeers(): Promise<ListPeersResult> {
         const peers = this.state.getPeers().map(p => ({
             id: p.id,
-            as: 100, // TODO: Store AS on Peer object properly
-            endpoint: p.address
+            as: p.as,
+            endpoint: p.address,
+            domains: p.domains
         }));
         return { peers };
     }

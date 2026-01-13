@@ -1,15 +1,21 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { newWebSocketRpcSession } from 'capnweb';
-import app from '../src/index.js';
 
 describe('Orchestrator RPC', () => {
     let server: any;
     let rpc: any;
     let ws: WebSocket;
     const port = 4017;
+    let app: any;
 
     beforeAll(async () => {
+        process.env.CATALYST_DOMAINS = 'internal';
+
+        // Dynamic import to ensure ENV is set before config loads
+        const module = await import('../src/index.js');
+        app = module.default;
+
         server = Bun.serve({
             port,
             fetch: app.fetch,
@@ -38,6 +44,7 @@ describe('Orchestrator RPC', () => {
             action: 'create',
             data: {
                 name: 'test-service',
+                fqdn: 'test.internal',
                 endpoint: 'http://127.0.0.1:8080',
                 protocol: 'tcp:graphql',
                 region: 'us-west-1'
@@ -46,14 +53,14 @@ describe('Orchestrator RPC', () => {
 
         const result = await rpc.applyAction(action);
         expect(result.success).toBe(true);
-        expect(result.id).toBe('test-service:tcp:graphql');
+        expect(result.id).toBe('test.internal');
     });
 
     it('should list local routes', async () => {
         const result = await rpc.listLocalRoutes();
         expect(result.routes).toBeInstanceOf(Array);
         expect(result.routes.length).toBeGreaterThan(0);
-        const route = result.routes.find((r: any) => r.id === 'test-service:tcp:graphql');
+        const route = result.routes.find((r: any) => r.id === 'test.internal');
         expect(route).toBeDefined();
         expect(route.service.name).toBe('test-service');
     });
@@ -61,7 +68,7 @@ describe('Orchestrator RPC', () => {
     it('should list metrics', async () => {
         const result = await rpc.listMetrics();
         expect(result.metrics).toBeInstanceOf(Array);
-        const metric = result.metrics.find((m: any) => m.id === 'test-service:tcp:graphql');
+        const metric = result.metrics.find((m: any) => m.id === 'test.internal');
         expect(metric).toBeDefined();
         expect(metric.connectionCount).toBe(0);
     });

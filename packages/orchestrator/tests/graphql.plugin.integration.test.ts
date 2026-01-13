@@ -7,9 +7,19 @@ import { RouteTable } from '../src/state/route-table.js';
 import { join, resolve } from 'path';
 
 // Increase timeout for builds
-const TIMEOUT = 180_000;
+const TEST_TIMEOUT = 120000;
 
-describe('GraphQL Plugin E2E with Containers', () => {
+describe('GraphQLGatewayPlugin Integration Tests', () => {
+    // Mock environment
+    const originalEnv = process.env;
+
+    beforeAll(() => {
+        process.env.CATALYST_DOMAINS = 'books.svc,authors.svc';
+    });
+    afterAll(() => {
+        process.env = originalEnv;
+    });
+
     let network: StartedNetwork;
     let gatewayContainer: StartedTestContainer;
     let booksContainer: StartedTestContainer;
@@ -96,7 +106,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         gatewayPort = gatewayContainer.getMappedPort(4000);
         console.log(`Gateway started on port ${gatewayPort}`);
 
-    }, TIMEOUT);
+    }, TEST_TIMEOUT);
 
     afterAll(async () => {
         await moviesContainer?.stop();
@@ -157,6 +167,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         console.log('--- Scenario 2: Add Books ---');
         let updateResult = state.addProxiedRoute({
             name: 'books',
+            fqdn: 'books.svc',
             endpoint: booksUri,
             protocol: 'tcp:graphql'
         });
@@ -175,6 +186,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         console.log('--- Scenario 2b: Add Movies ---');
         updateResult = state.addProxiedRoute({
             name: 'movies',
+            fqdn: 'movies.svc',
             endpoint: moviesUri,
             protocol: 'tcp:graphql'
         });
@@ -204,7 +216,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         // Or if the test assumes simple ID usage, we must fix how we call remove.
         // Let's use the ID we presumably got or construct it.
 
-        const booksId = 'books:tcp:graphql';
+        const booksId = 'books.svc';
         state = state.removeRoute(booksId);
         context.state = state;
         await triggerUpdate();
@@ -218,7 +230,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
 
         // --- Scenario 4: Deleting both shows unconfigured ---
         console.log('--- Scenario 4: Delete Movies (Empty) ---');
-        const moviesId = 'movies:tcp:graphql';
+        const moviesId = 'movies.svc';
         state = state.removeRoute(moviesId);
         context.state = state;
         await triggerUpdate();
@@ -232,6 +244,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
 
         updateResult = state.addProxiedRoute({
             name: 'dynamic_service',
+            fqdn: 'dynamic.svc',
             endpoint: booksUri,
             protocol: 'tcp:graphql'
         });
@@ -246,6 +259,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         // updateProxiedRoute is used.
         const updateRes = state.updateProxiedRoute({
             name: 'dynamic_service',
+            fqdn: 'dynamic.svc',
             endpoint: moviesUri,
             protocol: 'tcp:graphql'
         });
@@ -265,5 +279,5 @@ describe('GraphQL Plugin E2E with Containers', () => {
         expect(res6c.json.errors).toBeDefined();
         console.log('Verified Service Swapped successfully.');
 
-    }, 60_000);
+    }, TEST_TIMEOUT);
 });

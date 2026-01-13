@@ -6,6 +6,7 @@ import { ServiceDefinition } from '../src/rpc/schema/index.js';
 describe('Proxy State - Update', () => {
     const service: ServiceDefinition = {
         name: 'test-update-proxy',
+        fqdn: 'test.svc',
         protocol: 'tcp:graphql',
         endpoint: 'localhost:8082',
         region: 'us-east-2'
@@ -24,7 +25,7 @@ describe('Proxy State - Update', () => {
         expect(table2.getProxiedRoutes()[0].service.endpoint).toBe('localhost:8082');
         expect(table3.getProxiedRoutes()).toHaveLength(1);
         expect(table3.getProxiedRoutes()[0].service.endpoint).toBe('localhost:9092');
-        expect(id).toBe(`${service.name}:${service.protocol}`);
+        expect(id).toBe(service.fqdn);
     });
 
     it('should return null if route does not exist to update', () => {

@@ -12,7 +12,7 @@ export class RouteTable {
     ) { }
 
     private createId(service: ServiceDefinition): string {
-        return `${service.name}:${service.protocol}`;
+        return service.fqdn;
     }
 
     // Helper to create a new instance with updated fields
@@ -214,10 +214,13 @@ export class RouteTable {
         return this;
     }
 
-    addPeer(peer: Peer): RouteTable {
+    addPeer(peer: Peer): { state: RouteTable, peer: Peer } {
         const newPeers = new Map(this.peers);
         newPeers.set(peer.id, peer);
-        return this.clone({ peers: newPeers });
+        return {
+            state: this.clone({ peers: newPeers }),
+            peer
+        };
     }
 
     getPeers(): Peer[] {

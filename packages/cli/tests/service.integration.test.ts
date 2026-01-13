@@ -29,24 +29,24 @@ describe('CLI E2E with Containers', () => {
         console.log('Building Docker images...');
 
         const buildBooks = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'books-service:test', '-f', 'Dockerfile.books', '.'], {
-                cwd: examplesDir,
+            await Bun.spawn(['docker', 'build', '-t', 'books-service:test', '-f', 'packages/examples/Dockerfile.books', '.'], {
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit'
             }).exited;
         };
 
         const buildMovies = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'movies-service:test', '-f', 'Dockerfile.movies', '.'], {
-                cwd: examplesDir,
+            await Bun.spawn(['docker', 'build', '-t', 'movies-service:test', '-f', 'packages/examples/Dockerfile.movies', '.'], {
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit'
             }).exited;
         };
 
         const buildGateway = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'gateway-service:test', '.'], {
-                cwd: gatewayDir,
+            await Bun.spawn(['docker', 'build', '-t', 'gateway-service:test', '-f', 'packages/gateway/Dockerfile', '.'], {
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit'
             }).exited;
@@ -54,8 +54,8 @@ describe('CLI E2E with Containers', () => {
 
         // We build orchestrator manually instead of using existing image to ensure fresh code
         const buildOrchestrator = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'orchestrator-service:test', '.'], {
-                cwd: orchestratorDir,
+            await Bun.spawn(['docker', 'build', '-t', 'orchestrator-service:test', '-f', 'packages/orchestrator/Dockerfile', '.'], {
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit'
             }).exited;

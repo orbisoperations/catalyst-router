@@ -1,6 +1,5 @@
 import { newWebSocketRpcSession, RpcTarget } from 'capnweb';
 // import WebSocket from 'ws'; // Use global WebSocket available in Bun/Browser
-// import WebSocket from 'ws'; // Use global WebSocket available in Bun/Browser
 import {
     PeerPublicApi,
     AuthorizedPeer,
@@ -9,7 +8,6 @@ import {
     UpdateMessage,
     PeerSessionState
 } from '../rpc/schema/peering.js';
-import { GlobalRouteTable } from '../state/route-table.js';
 
 class PeerClientStub extends RpcTarget implements PeerClient {
     constructor(private peer: Peer) { super(); }
@@ -33,24 +31,37 @@ export class Peer implements PeerClient {
     public isConnected: boolean = false;
     public lastKeepAlive: number = 0;
 
+    public domains: string[] = [];
+    public as: number = 0;
+
     private session: any; // return type of newWebSocketRpcSession
     private remote: AuthorizedPeer | PeerClient | null = null;
     private keepAliveInterval: any | null = null; // Timer type issue in Bun vs Node
     public localInfo: PeerInfo;
     private clientStub: PeerClientStub;
+    private onDisconnect?: () => void;
 
-    constructor(address: string, localInfo: PeerInfo) {
+    constructor(address: string, localInfo: PeerInfo, onDisconnect?: () => void) {
         this.address = address;
         this.id = address; // temporary ID until handshake? or provided in constructor
         this.localInfo = localInfo;
         this.clientStub = new PeerClientStub(this);
+        this.onDisconnect = onDisconnect;
+    }
+
+    setRemoteInfo(info: PeerInfo) {
+        this.id = info.id;
+        this.domains = info.domains;
+        this.as = info.as;
+        // Address might be different from endpoint if behind NAT, but use endpoint for now
+        // this.address = info.endpoint; 
     }
 
     // Called when WE accept a connection from THEM
-    async accept(remoteStub: PeerClient, remoteInfo: PeerInfo) {
+    async accept(remoteInfo: PeerInfo, remoteStub: PeerClient) {
         this.remote = remoteStub;
-        this.id = remoteInfo.id;
-        this.address = remoteInfo.endpoint;
+        this.setRemoteInfo(remoteInfo);
+
         this.isConnected = true;
         this.lastKeepAlive = Date.now();
         console.log(`[Peer ${this.address}] Accepted connection from ${this.id}`);
@@ -108,9 +119,18 @@ export class Peer implements PeerClient {
         // Await the result to confirm connection established
         const state = await statePromise;
 
+        if (!state.accepted) {
+            console.warn(`[Peer ${this.address}] Valid authentication but connection rejected by peer.`);
+            return; // Failed to connect
+        }
+
+        if (state.domains) {
+            this.domains = state.domains;
+        }
+
         this.isConnected = true;
         this.lastKeepAlive = Date.now();
-        console.log(`[Peer ${this.address}] Connected! Authorized: ${state.accepted}`);
+        console.log(`[Peer ${this.address}] Connected! Authorized: ${state.accepted} Domains: ${this.domains.join(',')}`);
 
         // Start KeepAlive loop
         this.startKeepAlive();
@@ -157,7 +177,9 @@ export class Peer implements PeerClient {
 
         // Remove from GlobalRouteTable? 
         // If we are the one initiating disconnect, we should probably remove ourselves or the peer from the table.
-        GlobalRouteTable.removePeer(this.id);
+        if (this.onDisconnect) {
+            this.onDisconnect();
+        }
         console.log(`[Peer ${this.address}] Disconnected`);
     }
 

@@ -6,6 +6,7 @@ import { ServiceDefinition } from '../src/rpc/schema/index.js';
 describe('Proxy State - Delete', () => {
     const service: ServiceDefinition = {
         name: 'test-delete-proxy',
+        fqdn: 'test.svc',
         protocol: 'tcp:graphql',
         endpoint: 'localhost:8083',
         region: 'eu-west-1'

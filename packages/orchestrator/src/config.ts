@@ -5,6 +5,10 @@ export const OrchestratorConfigSchema = z.object({
     gqlGatewayConfig: z.object({
         endpoint: z.string().url(),
     }).optional(),
+    peering: z.object({
+        as: z.number().default(100),
+        domains: z.array(z.string()).default([]),
+    }).default({}),
 });
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>;
@@ -22,6 +26,18 @@ export function getConfig(): OrchestratorConfig {
     } else {
         console.log('[Config] No CATALYST_GQL_GATEWAY_ENDPOINT found. GraphQL Gateway integration disabled.');
     }
+
+    // Peering Config
+    const asNumber = process.env.CATALYST_AS ? parseInt(process.env.CATALYST_AS, 10) : undefined;
+    const domains = process.env.CATALYST_DOMAINS ? process.env.CATALYST_DOMAINS.split(',').map(d => d.trim()) : undefined;
+
+    if (asNumber || domains) {
+        config.peering = {
+            as: asNumber ?? 100,
+            domains: domains ?? []
+        };
+    }
+
 
     // Validate the config
     try {

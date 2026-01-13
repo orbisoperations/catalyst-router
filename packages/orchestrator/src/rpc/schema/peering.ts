@@ -20,6 +20,7 @@ export const PeerInfoSchema = z.object({
     id: z.string(),
     as: z.number(),
     endpoint: z.string().url(),
+    domains: z.array(z.string()),
     // Capabilities etc.
 });
 export type PeerInfo = z.infer<typeof PeerInfoSchema>;
@@ -34,6 +35,7 @@ export type UpdateMessage = z.infer<typeof UpdateMessageSchema>;
 export const PeerSessionStateSchema = z.object({
     accepted: z.boolean(),
     peers: z.array(PeerInfoSchema),
+    domains: z.array(z.string()),
     authEndpoint: z.string().optional(),
     jwks: z.any().optional(), // TODO: Define JWKS schema
 });

@@ -33,7 +33,12 @@ export const ActionSchema = z.union([
     DataChannelCreateActionSchema,
     DataChannelUpdateActionSchema,
     DataChannelDeleteActionSchema,
-    PeerCreateActionSchema
+    PeerCreateActionSchema,
+    z.object({
+        resource: z.literal('externalRoute'),
+        action: z.literal('create'),
+        data: ServiceDefinitionSchema
+    })
 ]);
 export type Action = z.infer<typeof ActionSchema>;
 

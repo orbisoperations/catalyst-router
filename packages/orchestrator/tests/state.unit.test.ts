@@ -6,6 +6,7 @@ import { ServiceDefinition } from '../src/rpc/schema/index.js';
 describe('RouteTable', () => {
     const service: ServiceDefinition = {
         name: 'test-service',
+        fqdn: 'test.svc',
         protocol: 'tcp:http',
         endpoint: 'localhost:8080',
         region: 'us-west-1'
@@ -18,7 +19,7 @@ describe('RouteTable', () => {
         expect(table1.getRoutes()).toHaveLength(0);
         expect(table2.getRoutes()).toHaveLength(1);
         expect(table2.getInternalRoutes()[0].service).toEqual(service);
-        expect(id).toBe(`${service.name}:${service.protocol}`);
+        expect(id).toBe(service.fqdn);
     });
 
     it('should be immutable on addProxiedRoute', () => {
@@ -62,5 +63,25 @@ describe('RouteTable', () => {
 
         expect(table2.getMetrics()[0].connectionCount).toBe(0);
         expect(table3.getMetrics()[0].connectionCount).toBe(1);
+    });
+    it('should aggregate all routes correctly', () => {
+        const t1 = new RouteTable();
+        const { state: t2 } = t1.addInternalRoute({ name: 'r1', fqdn: 'r1.svc', endpoint: '...', protocol: 'tcp:http' });
+        const { state: t3 } = t2.addProxiedRoute({ name: 'r2', fqdn: 'r2.svc', endpoint: '...', protocol: 'tcp:http' });
+
+        expect(t3.getRoutes()).toHaveLength(2);
+    });
+
+    it('should remove routes from any category', () => {
+        const t1 = new RouteTable();
+        const { state: t2, id: id1 } = t1.addInternalRoute({ name: 'internal', fqdn: 'int.svc', endpoint: '...', protocol: 'tcp:http' });
+        const { state: t3, id: id2 } = t2.addProxiedRoute({ name: 'proxied', fqdn: 'proxy.svc', endpoint: '...', protocol: 'tcp:http' });
+
+        const t4 = t3.removeRoute(id1);
+        expect(t4.getRoutes()).toHaveLength(1);
+        expect(t4.getInternalRoutes()).toHaveLength(0);
+
+        const t5 = t4.removeRoute(id2);
+        expect(t5.getRoutes()).toHaveLength(0);
     });
 });

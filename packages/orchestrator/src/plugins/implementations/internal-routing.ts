@@ -1,9 +1,9 @@
-
 import { BasePlugin } from '../base.js';
 import { PluginContext, PluginResult } from '../types.js';
+import { getConfig } from '../../config.js';
 
-export class RouteTablePlugin extends BasePlugin {
-    name = 'RouteTablePlugin';
+export class InternalRouteTablePlugin extends BasePlugin {
+    name = 'InternalRouteTablePlugin';
 
     async apply(context: PluginContext): Promise<PluginResult> {
         const { action, state } = context;
@@ -18,11 +18,29 @@ export class RouteTablePlugin extends BasePlugin {
                     return { success: true, ctx: context };
                 }
 
+                // Validate FQDN against configured domains
+                const config = getConfig();
+                const isValidDomain = config.peering.domains.some(d => action.data.fqdn.endsWith(d));
+
+                if (!isValidDomain) {
+                    console.warn(`[InternalRouteTablePlugin] Rejected route ${action.data.name}: FQDN ${action.data.fqdn} does not match hosted domains (${config.peering.domains.join(', ')})`);
+                    return {
+                        success: false,
+                        error: {
+                            pluginName: this.name,
+                            message: `FQDN ${action.data.fqdn} is not authorized for this node.`
+                        },
+                        ctx: context
+                    } as PluginResult;
+                }
+
                 const { state: newState, id } = state.addInternalRoute({
                     name: action.data.name,
+                    fqdn: action.data.fqdn,
                     endpoint: action.data.endpoint!,
                     protocol: action.data.protocol,
-                    region: action.data.region
+                    region: action.data.region,
+                    authEndpoint: action.data.authEndpoint
                 });
 
                 context.state = newState;
@@ -36,6 +54,7 @@ export class RouteTablePlugin extends BasePlugin {
 
                 const result = state.updateInternalRoute({
                     name: action.data.name,
+                    fqdn: action.data.fqdn,
                     endpoint: action.data.endpoint!,
                     protocol: action.data.protocol,
                     region: action.data.region

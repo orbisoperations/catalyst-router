@@ -1,6 +1,12 @@
 
 import { BasePlugin } from '../base.js';
+import {
+    Action,
+    ServiceDefinition,
+    AddDataChannelResult
+} from '../../rpc/schema/index.js';
 import { PluginContext, PluginResult } from '../types.js';
+import { getConfig } from '../../config.js';
 
 export class DirectProxyRouteTablePlugin extends BasePlugin {
     name = 'DirectProxyRouteTablePlugin';
@@ -17,14 +23,33 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
                 // Add to Routes as Proxied - Only if protocol matches
                 const protocol = action.data.protocol;
                 if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
-                    const { state: newState, id } = state.addProxiedRoute({
-                        name: action.data.name,
-                        endpoint: action.data.endpoint!,
-                        protocol: action.data.protocol,
-                        region: action.data.region
-                    });
+                    const { name, endpoint, region, fqdn } = action.data;
 
-                    // Update context with new state
+                    // Validate FQDN against configured domains
+                    const config = getConfig();
+                    const isValidDomain = config.peering.domains.some(d => fqdn?.endsWith(d));
+
+                    if (fqdn && !isValidDomain) {
+                        console.warn(`[DirectProxyRouteTablePlugin] Rejected route ${name}: FQDN ${fqdn} does not match hosted domains (${config.peering.domains.join(', ')})`);
+                        return {
+                            success: false,
+                            error: {
+                                pluginName: this.name,
+                                message: `FQDN ${fqdn} is not authorized for this node.`
+                            },
+                        } as PluginResult;
+                    }
+
+                    const serviceDef: ServiceDefinition = {
+                        name,
+                        fqdn: fqdn || `${name}.internal`,
+                        endpoint: endpoint!,
+                        protocol,
+                        region
+                    };
+
+                    const { state: newState, id } = state.addProxiedRoute(serviceDef);
+
                     context.state = newState;
                     context.result = { ...context.result, id };
                 }
@@ -34,12 +59,32 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
                 if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
                     console.log(`[DirectProxyRouteTablePlugin] Updating route for ${action.data.name}`);
 
-                    const result = state.updateProxiedRoute({
-                        name: action.data.name,
-                        endpoint: action.data.endpoint!,
-                        protocol: action.data.protocol,
-                        region: action.data.region
-                    });
+                    const { name, endpoint, region, fqdn } = action.data;
+
+                    // Validate FQDN against configured domains
+                    const config = getConfig();
+                    const isValidDomain = config.peering.domains.some(d => fqdn?.endsWith(d));
+
+                    if (fqdn && !isValidDomain) {
+                        console.warn(`[DirectProxyRouteTablePlugin] Rejected update for route ${name}: FQDN ${fqdn} does not match hosted domains (${config.peering.domains.join(', ')})`);
+                        return {
+                            success: false,
+                            error: {
+                                pluginName: this.name,
+                                message: `FQDN ${fqdn} is not authorized for this node.`
+                            },
+                        } as PluginResult;
+                    }
+
+                    const serviceDef: ServiceDefinition = {
+                        name,
+                        fqdn: fqdn || `${name}.internal`,
+                        endpoint: endpoint!,
+                        protocol,
+                        region
+                    };
+
+                    const result = state.updateProxiedRoute(serviceDef);
 
                     if (result) {
                         const { state: newState, id } = result;

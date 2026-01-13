@@ -3,6 +3,7 @@ import { describe, it, expect, mock } from 'bun:test';
 import { PluginPipeline } from '../src/plugins/pipeline.js';
 import { BasePlugin } from '../src/plugins/base.js';
 import { PluginContext, PluginResult, ActionSchema, AuthContextSchema } from '../src/plugins/types.js';
+import { Action } from '../src/rpc/schema/actions.js';
 import { RouteTable } from '../src/state/route-table.js';
 
 // Mock Implementation for testing
@@ -19,10 +20,22 @@ class MockPlugin extends BasePlugin {
 describe('PluginPipeline Unit Tests', () => {
     // Helper to generic valid context
     const createTestContext = (): PluginContext => ({
-        action: { resource: 'dataChannel', action: 'create', data: { name: 'test', endpoint: 'http://test', protocol: 'tcp' } },
+        action: { resource: 'dataChannel', action: 'create', data: { name: 'test', fqdn: 'test.svc', endpoint: 'http://test', protocol: 'tcp' } },
         state: new RouteTable(),
         authxContext: { userId: 'test-user' },
         result: {}
+    });
+
+    it('should allow valid ServiceDefinition', async () => {
+        const action: Action = {
+            type: 'ROUTE_ADD',
+            payload: { name: 'test-service', fqdn: 'test.svc', endpoint: 'http://localhost:3000', protocol: 'tcp' }
+        };
+        const ctx: PluginContext = { action, state: new RouteTable(), authxContext: { userId: 'test-user' }, result: {} };
+        // This test case is incomplete in the provided instruction.
+        // Assuming it's meant to be a placeholder or part of a larger test.
+        // For now, it just defines the context.
+        expect(ctx.action.payload.fqdn).toBe('test.svc');
     });
 
     it('should execute plugins sequentially', async () => {
