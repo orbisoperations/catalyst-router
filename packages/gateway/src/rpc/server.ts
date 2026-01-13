@@ -40,8 +40,8 @@ export class GatewayRpcServer extends RpcTarget {
         console.log('Received config update via RPC');
         const result = GatewayConfigSchema.safeParse(config);
         if (!result.success) {
-            console.error('Invalid config received:', result.error);
-            return { success: false, error: `Invalid configuration: ${result.error.message}` };
+            console.error('Invalid config received.');
+            return { success: false, error: 'Malformed configuration received and unable to parse' };
         }
 
         try {
