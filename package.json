@@ -26,6 +26,8 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
-    "commander": "^14.0.2"
+    "capnweb": "^0.4.0",
+    "commander": "^14.0.2",
+    "ip": "^2.0.1"
   }
 }
