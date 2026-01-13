@@ -1,0 +1,15 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "rootDir": ".",
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
+        "types": [
+            "bun"
+        ]
+    },
+    "include": [
+        "src/**/*",
+        "tests/**/*"
+    ]
+}
