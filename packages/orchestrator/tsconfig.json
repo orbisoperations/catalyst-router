@@ -6,10 +6,12 @@
         "strict": true,
         "skipLibCheck": true,
         "outDir": "./dist",
-        "rootDir": ".",
+        "rootDir": "../../",
         "types": [
             "bun-types"
-        ]
+        ],
+        "allowImportingTsExtensions": true,
+        "noEmit": true
     },
     "include": [
         "src/**/*",

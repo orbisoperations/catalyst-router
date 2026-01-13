@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ActionSchema } from '../rpc/schema/index.js';
+export { ActionSchema };
 import { RouteTable } from '../state/route-table.js';
 
 export const AuthContextSchema = z.object({
