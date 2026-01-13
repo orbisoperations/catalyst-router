@@ -11,8 +11,8 @@ const MAX_LIFETIME_SECONDS = 52 * 7 * 24 * 60 * 60;
 // Default issuer
 const DEFAULT_ISSUER = process.env.CATALYST_AUTH_ISSUER || 'catalyst-auth';
 
-// Clock tolerance for verification (seconds) - handles distributed system clock skew
-const CLOCK_TOLERANCE = 30;
+/** Clock tolerance for verification (seconds) - handles distributed system clock skew */
+export const CLOCK_TOLERANCE = 30;
 
 // Reserved JWT claims that cannot be overridden via custom claims
 const RESERVED_CLAIMS = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'] as const;

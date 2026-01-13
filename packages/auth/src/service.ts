@@ -8,16 +8,21 @@ import {
     VerifyResponse,
     RotateRequestSchema,
     RotateResponse,
-    JwksResponse
+    JwksResponse,
+    RevokeRequestSchema,
+    RevokeResponse,
 } from './rpc-schema.js';
+import { type RevocationStore, revokeToken } from './revocation.js';
 
 export class JwtService extends RpcTarget {
     private keyManager: KeyManager;
+    private revocationStore?: RevocationStore;
 
-    constructor(keyManager?: KeyManager) {
+    constructor(keyManager?: KeyManager, revocationStore?: RevocationStore) {
         super();
         // Allow injection for testing, default to FileSystemKeyManager
         this.keyManager = keyManager || new FileSystemKeyManager();
+        this.revocationStore = revocationStore;
         this.init();
     }
 
@@ -47,7 +52,17 @@ export class JwtService extends RpcTarget {
     async verify(req: unknown): Promise<VerifyResponse> {
         const { token } = VerifyRequestSchema.parse(req);
 
-        return await this.keyManager.verify(token);
+        const result = await this.keyManager.verify(token);
+
+        // Check revocation if enabled and token is valid
+        if (result.valid && this.revocationStore) {
+            const jti = result.payload?.jti;
+            if (typeof jti === 'string' && this.revocationStore.isRevoked(jti)) {
+                return { valid: false, error: 'Token revoked' };
+            }
+        }
+
+        return result;
     }
 
     async rotate(req: unknown): Promise<RotateResponse> {
@@ -55,5 +70,17 @@ export class JwtService extends RpcTarget {
 
         await this.keyManager.rotate(immediate);
         return { success: true };
+    }
+
+    async revoke(req: unknown): Promise<RevokeResponse> {
+        const { token, authToken } = RevokeRequestSchema.parse(req);
+
+        if (!this.revocationStore) {
+            return { success: false, error: 'Revocation not enabled' };
+        }
+
+        // Get current key for verification
+        const keyPair = await this.keyManager.getCurrentKeyPair();
+        return revokeToken({ store: this.revocationStore, keyPair, token, authToken });
     }
 }
