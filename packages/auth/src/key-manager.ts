@@ -42,6 +42,11 @@ export abstract class KeyManager {
      * Verifies a token against managed keys.
      */
     abstract verify(token: string): Promise<{ valid: boolean; payload?: any; error?: string }>;
+
+    /**
+     * Returns the current keypair (for revocation verification).
+     */
+    abstract getCurrentKeyPair(): Promise<KeyPair>;
 }
 
 export class FileSystemKeyManager extends KeyManager {
@@ -192,5 +197,10 @@ export class FileSystemKeyManager extends KeyManager {
         }
 
         return res;
+    }
+
+    async getCurrentKeyPair(): Promise<KeyPair> {
+        if (!this.currentKey) await this.init();
+        return this.currentKey!;
     }
 }

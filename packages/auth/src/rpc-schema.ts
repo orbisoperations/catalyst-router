@@ -49,3 +49,17 @@ export const RotateResponseSchema = z.object({
     success: z.boolean(),
 });
 export type RotateResponse = z.infer<typeof RotateResponseSchema>;
+
+// Request for revoke()
+export const RevokeRequestSchema = z.object({
+    token: z.string().min(1, 'Token is required'),
+    authToken: z.string().min(1, 'Auth token is required'),
+});
+export type RevokeRequest = z.infer<typeof RevokeRequestSchema>;
+
+// Response for revoke()
+export const RevokeResponseSchema = z.discriminatedUnion('success', [
+    z.object({ success: z.literal(true) }),
+    z.object({ success: z.literal(false), error: z.string() }),
+]);
+export type RevokeResponse = z.infer<typeof RevokeResponseSchema>;
