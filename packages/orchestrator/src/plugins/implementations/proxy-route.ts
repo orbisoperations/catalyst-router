@@ -23,6 +23,18 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
                         protocol: action.data.protocol,
                         region: action.data.region
                     });
+
+                    if (id) {
+                        context.result = { ...context.result, id };
+                    } else {
+                        return {
+                            success: false,
+                            error: {
+                                pluginName: this.name,
+                                message: `Route not found for update: ${action.data.name}:${action.data.protocol}`
+                            }
+                        };
+                    }
                 }
             }
         }
