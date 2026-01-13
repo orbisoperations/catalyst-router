@@ -1,6 +1,24 @@
-# Implementation Phases
+# Implementation Phases & Milestone Deviation Analysis
 
-This document outlines the step-by-step implementation strategy for **Catalyst Node**.
+This document outlines the step-by-step implementation strategy for **Catalyst Node**, derived from the `MILESTONE.md` architecture but adapted for our specific rollout strategy.
+
+## Milestone Deviation Summary
+
+We are aligning with the `MILESTONE.md` vision but have made specific deviations to support our iterative engineering approach:
+
+1.  **Tech Stack Flexibility**:
+    *   *Milestone*: Specifies Hono + GraphQL Yoga.
+    *   *Implementation*: We treat the GraphQL engine as a "Protocol Handler". We will use Hono/Yoga where appropriate but remain loosely coupled to allow other engines (Apollo, Mercurius) if needed.
+2.  **Authentication Timing**:
+    *   *Milestone*: Enforces Authentication (Shared JWKS) immediately in the "Internal Trust" stage.
+    *   *Implementation*: We add a **precursor phase** (Phase 2) for "Internal Peering (No Auth)" to validate connectivity *before* enforcing security (Phase 3).
+3.  **Token Flow (Cross-Org)**:
+    *   *Milestone*: Suggests a "Token Exchange" (Minting a new token signed by the Gateway).
+    *   *Implementation*: We prioritize **Federated Verification**. We will fetch and cache the *Peer's JWKS* to validate the original token directly, rather than masquerading/minting a new one. This preserves the original identity chain.
+4.  **Granularity**:
+    *   We have broken down "Policy" into distinct **Online** vs **Offline** implementation phases.
+
+---
 
 > **Note on Configuration**: For all phases below, configuration is considered **a priori** (static at startup). We must verify that the node can be fully configured via both **JSON config file** and **CLI arguments/flags**. Dynamic configuration is out of scope for these initial phases.
 
@@ -19,26 +37,24 @@ graph TD
 
 *   **Capabilities**:
     *   **Configuration**: Load settings (ports, service lists) via JSON file OR CLI flags.
-    *   Spin up a GraphQL federation server (using Apollo Gateway or similar).
+    *   Spin up a GraphQL federation server (using **Hono + Yoga** or Apollo).
     *   Integrate two local example services (from `packages/sdk` examples).
     *   Run a basic Envoy proxy instance (static config).
 *   **Testing**:
     *   **Unit**: Vitest tests in the `node` directory using different config methods.
     *   **Manual**: Documented "Demo Run" where a user can query the federation.
-*   **Artifacts**:
-    *   `packages/node`: Core server logic.
-    *   `packages/sdk`: Example services.
-    *   `demo/phase1.md`: Instructions for running the demo.
 
-## Phase 2: Internal Peering (No Auth)
-**Goal**: Two nodes exchanging routes for local services within a trusted boundary.
+## Phase 2: Internal Peering (Connectivity Check)
+**Goal**: Two nodes exchanging routes for local services to verify the BGP-style plumbing.
+
+> **Deviation**: `MILESTONE.md` skips this and goes straight to Auth. We perform this first to isolate networking issues from security issues.
 
 ```mermaid
 graph LR
     subgraph NodeA [Node A]
         CA[Control Plane<br/>Node.js]
         DA[Data Plane<br/>Envoy Proxy]
-        GA[GraphQL Gateway<br/>Apollo]
+        GA[GraphQL Gateway<br/>Yoga]
     end
     subgraph NodeB [Node B]
         CB[Control Plane<br/>Node.js]
@@ -59,15 +75,21 @@ graph LR
     *   **Configuration**: Define peers and protocol settings via JSON/CLI.
     *   **Peering**: Establish a connection between Node A and Node B.
     *   **Route Exchange**: Share routes with `protocol: "graphql"`.
-    *   **Data Plane**:
-        *   Each node runs a GraphQL Gateway behind Envoy.
-        *   Envoy is configured to route traffic to the peer's Envoy/Service.
-    *   **Client**: A GraphQL client on Node A queries the federation, resolving fields served by Node B.
-*   **Constraint**: No authentication or encryption on the peering link yet.
-*   **Key Concept**: "Internal" route table usage.
+    *   **Data Plane**: Envoy routes traffic to the peer's Envoy/Service.
+*   **Constraint**: **NO AUTH**. Pure connectivity test.
 
-## Phase 3: External Peering
-**Goal**: Cross-domain service discovery and routing.
+## Phase 3: Internal Trust (Shared Auth)
+**Goal**: Enforce authentication on the Internal Peering topology using Shared JWKS.
+
+> **Alignment**: This matches `MILESTONE.md` Stage 1B (Internal Trust).
+
+*   **Capabilities**:
+    *   **Auth Configuration**: Define a `jwks.json` path via config.
+    *   **Envoy Filter**: Configure Envoy to validate incoming JWTs against the local JWKS.
+    *   **Verification**: Requests *without* a valid JWT (signed by the shared key) must be rejected by Envoy.
+
+## Phase 4: External Peering (Cross-Org Routing)
+**Goal**: Exchange routes across a logical trust boundary.
 
 ```mermaid
 graph LR
@@ -94,14 +116,51 @@ graph LR
 ```
 
 *   **Capabilities**:
-    *   **Configuration**: Define Export/Import policies via JSON/CLI.
-    *   Separate **Internal** (Trusted) vs **External** (Untrusted) Route Tables.
-    *   **Export Policies**: Define which internal routes are advertised to external peers.
-    *   **Import Policies**: Define how external routes are mapped into the local mesh.
-*   **Scenario**: Node A (Org 1) shares a specific service with Node B (Org 2).
-*   **Differentiation**: Simulates crossing a trust boundary (internet/cloud implementation).
+    *   **Tables**: Separate **Internal** (Trusted) vs **External** (Untrusted) Route Tables.
+    *   **Policies**: Export/Import policies (JSON/CLI) to control advertisement.
+    *   **Scenario**: Node A queries Node B. Node B only exposes specific "public" services.
 
-## Phase 4: Observability & Metrics
+## Phase 5: Edge Routing & VPN
+**Goal**: Encrypt the network transport between disjoint organizations using a Tunnel.
+
+> **Alignment**: Matches `MILESTONE.md` "Cross-Deployment Query Flow" (WireGuard).
+
+*   **Capabilities**:
+    *   **Tunneling**: Integrate a VPN provider (e.g., WireGuard) or Tunnel interface.
+    *   **Routing**: Configure Envoy/OS to route "External" traffic through the Tunnel interface.
+    *   **Verification**: Traceroute shows traffic passing through the encrypted tunnel.
+
+## Phase 6: Identity Infrastructure & Validation
+**Goal**: Build the comprehensive Identity machinery required for complex auth.
+
+> **Deviation**: We prefer **Peer JWKS Fetching** over Token Exchange/Minting.
+
+*   **Capabilities**:
+    *   **Minting Service**: Optional capability for a Node to issue tokens for its own Services.
+    *   **Envoy Token Handlers**: Specialized filters for handling JWTs at the edge.
+    *   **SDK Update**: Services connecting to the Node receive a "bundle" of Trusted Peer JWKS.
+        *   *Benefit*: Services can independently validate tokens from peered organizations if they choose.
+
+## Phase 7: Online Policy Management
+**Goal**: Dynamic policy enforcement while connected.
+
+*   **Capabilities**:
+    *   **Policy Engine**: Basic logic to Allow/Deny requests based on attributes (Principal, Resource, Action).
+    *   **Config**: Load Policy Rules from JSON/CLI.
+    *   **Enforcement Point**: Envoy ExtAuthz or Internal Middleware checks policy before routing.
+
+## Phase 8: Offline Policy Enforcement
+**Goal**: Durable policy enforcement resilient to network partitions.
+
+> **Alignment**: Matches `MILESTONE.md` "Offline Policy Enforcement".
+
+*   **Capabilities**:
+    *   **Bundles**: Signed Policy Bundles (containing rules + expiry).
+    *   **Caching**: Node caches the bundle.
+    *   **Offline Mode**: If Control Plane is unreachable, Node enforces using the cached bundle (respecting grace periods).
+    *   **Crypto**: Validate signature of the bundle (ensure it wasn't tampered with).
+
+## Phase 9: Observability & Metrics
 **Goal**: Visibility into the control and data planes.
 
 ```mermaid
@@ -118,33 +177,11 @@ graph TD
 ```
 
 *   **Capabilities**:
-    *   **Configuration**: Configurable metrics endpoints and scraping intervals via JSON/CLI.
     *   **SDK Metrics**: Instrumentation for local services.
-    *   **Node Metrics**: Control plane stats (peer count, route updates).
-    *   **Envoy Metrics**: Scrape and expose Envoy stats.
-*   **Integration**: Prometheus/OpenTelemetry compatible endpoint.
+    *   **Node/Envoy Metrics**: Scrape and expose stats.
 
-## Phase 5: Authentication (JWT & JWKS)
-**Goal**: Secure service-to-service communication.
-
-```mermaid
-graph TD
-    Client ==>|"JWT Token"| DP[Envoy Ingress]
-    DP -->|Validate| Auth[Auth Filter]
-    Auth --> Svc[Service]
-    JWKS[JWKS Provider] -.->|Key Fetch| DP
-```
-
-*   **Capabilities**:
-    *   **Configuration**: Define JWKS URLs and Auth policies via JSON/CLI.
-    *   **Identity**: Integrate JWT validation in Envoy.
-    *   **Key Discovery**: Implement JWKS endpoint or distribution mechanism.
-    *   **Topology**: Combine Phase 2 & 3 scenarios with enforced auth.
-        *   Internal traffic: Validated.
-        *   External traffic: Strict token validation at the ingress.
-
-## Phase 6: Mutual TLS (mTLS)
-**Goal**: Encrypted and authenticated transport layer.
+## Phase 10: Mutual TLS (mTLS)
+**Goal**: Encrypted and authenticated transport layer (Zero Trust).
 
 ```mermaid
 graph LR
@@ -165,7 +202,5 @@ graph LR
 
 *   **Capabilities**:
     *   **Configuration**: Paths to certs/keys defined via JSON/CLI.
-    *   Integrate the PKI/CA solution (defined in RFI).
     *   **Control Plane**: mTLS for Capnweb/RPC connections.
     *   **Data Plane**: mTLS between Envoys.
-*   **Validation**: Verify encryption and identity assertion for all hops.
