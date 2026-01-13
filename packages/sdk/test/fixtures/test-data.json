@@ -1,0 +1,1 @@
+{"stringField":"test string","intField":42,"floatField":3.14,"boolField":true,"listField":["a","b","c"],"nestedField":{"subField":"nested"}}
