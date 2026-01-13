@@ -55,13 +55,56 @@ Verified during the exchange of the `OPEN` message.
     - Session enters `ESTABLISHED` state.
     - `KEEPALIVE` messages begin.
 
-## 3. Route Origin Security (PKI & Route Signing)
+## 3. JWT Signing Strategies
+
+We support three models for Identity and JWT signing. **Strategy 2 (Root Authority)** is the current implementation for Milestones 1 & 2.
+
+### Strategy 2: Root Node Authority (Current Implementation)
+**Mechanism**:
+- The **Root Node** acts as the centralized Signing Authority.
+- It holds the AS Private Key.
+- All other nodes proxy signing requests to the Root Node (or receive delegated keys in a simplified manner).
+- **Pros**: Simple key management, single source of truth.
+- **Cons**: Root node is a single point of failure (SPOF) for signing (but not validation, as JWKS is cached).
+
+---
+
+### Future / Alternative Strategies
+
+#### Strategy 1: External Signing (OIDC / OAuth2)
+**Mechanism**:
+- An external Identity Provider (IdP) or dedicated signing service handles all key operations.
+- The Catalyst Node is configured with a `jwks_uri` pointing to this external service.
+- **Use Case**: Integrating with existing corporate SSO (Okta, Auth0) or Cloud KMS.
+
+#### Strategy 3: Distributed PKI (Mesh Identity)
+**Mechanism**:
+- Each Node generates its own Key Pair.
+- The Node's Certificate is signed by the AS Root CA (during registration).
+- **Minting**: Any authorized node can mint JWTs for the AS, signed with its *own* private key.
+- **Validation**: Peers validate the JWT signature against the Node's public key, and verify the Node's Cert chain against the Root CA.
+- **Pros**: No SPOF, high availability, effectively "Mesh Identity".
+
+## 4. Route Origin Security (PKI & Route Signing)
+
 
 To mitigate BGP hijacking and route spoofing, we implement a PKI-based Route Origin Authorization mechanism. This ensures that only authorized nodes can announce services for a given Autonomous System.
 
 ### Key Infrastructure (PKI)
-1.  **Root Authority**: The Root Peer (or Internal AS) operates a Certificate Authority (CA).
-2.  **Node Keys**:
+1.  **Root Authority (Root Node)**:
+    - The first node in an Autonomous System (AS) initializes as the **Root Authority**.
+    - It generates the **Root CA Certificate** and Private Key.
+    - It defines the **Root Domain** (e.g., `*.example.internal`).
+    - *Future*: Users can supply their own Root CA material.
+
+2.  **Node Registration & Hierarchical Trust**:
+    - New nodes MUST register with the Root Node to join the mesh.
+    - **Response Payload**: The Root Node responds with:
+        - `jwks`: The current public key set for validation.
+        - `signing_service`: The address (URL) of the node responsible for signing JWTs (initially the Root Node itself, later a distributed service).
+        - `ca_cert`: The public CA certificate for verifying mTLS.
+
+3.  **Node Keys**:
     - As **Internal Peers** come online, they generate a specific private/public key pair for route signing.
     - The **Root Peer** signs these public keys, establishing a chain of trust.
     - Each internal peer AS effectively maintains a CA infrastructure anchored by the Root Peer.
