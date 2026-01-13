@@ -7,6 +7,11 @@
     *   *Usage*: The core event loop and state transitions will be modeled as pure functions to ensure predictability and testability.
 *   **Concurrency**: Event-driven, non-blocking I/O.
 
+
+## CLI & Interface
+*   **Framework**: **[Commander.js](https://github.com/tj/commander.js)**.
+*   **Rationale**: Robust argument parsing, auto-generated help, and standard POSIX-style flags make for a developer-friendly CLI.
+
 ## Control Plane (Communications)
 *   **RPC / Transport**: **[Capnweb](https://github.com/cloudflare/capnweb)**.
     *   *Technology*: WebSockets + Cap'n Proto.
