@@ -24,15 +24,17 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
         };
 
         const result = await plugin.apply(context);
-
-        expect(result.success).toBe(true);
-        const proxied = state.getProxiedRoutes();
+        if (!result.success) {
+            throw new Error('Plugin failed');
+        }
+        const newState = result.ctx.state;
+        const proxied = newState.getProxiedRoutes();
         expect(proxied).toHaveLength(1);
         expect(proxied[0].service.name).toBe('test-proxy-service');
         expect(proxied[0].service.endpoint).toBe('http://proxy-target');
 
         // Ensure it didn't leak to internal
-        expect(state.getInternalRoutes()).toHaveLength(0);
+        expect(newState.getInternalRoutes()).toHaveLength(0);
     });
 
     it('should ignore non-dataChannel actions', async () => {
@@ -45,7 +47,9 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
         };
 
         const result = await plugin.apply(context);
-        expect(result.success).toBe(true);
+        if (!result.success) {
+            throw new Error('Plugin failed');
+        }
         expect(state.getAllRoutes()).toHaveLength(0);
     });
 });

@@ -18,12 +18,14 @@ export class RouteTablePlugin extends BasePlugin {
                     return { success: true, ctx: context };
                 }
 
-                const id = state.addInternalRoute({
+                const { state: newState, id } = state.addInternalRoute({
                     name: action.data.name,
                     endpoint: action.data.endpoint!,
                     protocol: action.data.protocol,
                     region: action.data.region
                 });
+
+                context.state = newState;
                 context.result = { ...context.result, id };
             } else if (action.action === 'update') {
                 // Ignore Proxy protocols handled by DirectProxyRouteTablePlugin
@@ -32,14 +34,16 @@ export class RouteTablePlugin extends BasePlugin {
                     return { success: true, ctx: context };
                 }
 
-                const id = state.updateInternalRoute({
+                const result = state.updateInternalRoute({
                     name: action.data.name,
                     endpoint: action.data.endpoint!,
                     protocol: action.data.protocol,
                     region: action.data.region
                 });
 
-                if (id) {
+                if (result) {
+                    const { state: newState, id } = result;
+                    context.state = newState;
                     context.result = { ...context.result, id };
                 } else {
                     return {
@@ -53,7 +57,8 @@ export class RouteTablePlugin extends BasePlugin {
             } else if (action.action === 'delete') {
                 // Delete works for all route types - removeRoute checks all maps
                 const id = action.data.id;
-                state.removeRoute(id);
+                const newState = state.removeRoute(id);
+                context.state = newState;
                 context.result = { ...context.result, id };
             }
         }

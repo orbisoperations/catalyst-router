@@ -2,58 +2,83 @@
 import { ServiceDefinition, LocalRoute, DataChannelMetrics } from '../rpc/schema/index.js';
 
 export class RouteTable {
-    private proxiedRoutes: Map<string, LocalRoute> = new Map();
-    private internalRoutes: Map<string, LocalRoute> = new Map();
-    private externalRoutes: Map<string, LocalRoute> = new Map();
-
-    private metrics: Map<string, DataChannelMetrics> = new Map();
-
-    constructor() { }
+    constructor(
+        private proxiedRoutes: Map<string, LocalRoute> = new Map(),
+        private internalRoutes: Map<string, LocalRoute> = new Map(),
+        private externalRoutes: Map<string, LocalRoute> = new Map(),
+        private metrics: Map<string, DataChannelMetrics> = new Map()
+    ) { }
 
     private createId(service: ServiceDefinition): string {
         return `${service.name}:${service.protocol}`;
     }
 
-    private addRouteToMap(map: Map<string, LocalRoute>, service: ServiceDefinition): string {
+    // Helper to create a new instance with updated fields
+    private clone(updates: {
+        proxiedRoutes?: Map<string, LocalRoute>,
+        internalRoutes?: Map<string, LocalRoute>,
+        externalRoutes?: Map<string, LocalRoute>,
+        metrics?: Map<string, DataChannelMetrics>
+    }): RouteTable {
+        return new RouteTable(
+            updates.proxiedRoutes ?? this.proxiedRoutes,
+            updates.internalRoutes ?? this.internalRoutes,
+            updates.externalRoutes ?? this.externalRoutes,
+            updates.metrics ?? this.metrics
+        );
+    }
+
+    private addRouteToMap(
+        currentMap: Map<string, LocalRoute>,
+        service: ServiceDefinition
+    ): { map: Map<string, LocalRoute>, metrics: Map<string, DataChannelMetrics>, id: string } {
         const id = this.createId(service);
-        map.set(id, {
+        const newMap = new Map(currentMap);
+        newMap.set(id, {
             id,
             service,
         });
-        this.initMetrics(id);
-        return id;
-    }
 
-    private initMetrics(id: string) {
-        if (!this.metrics.has(id)) {
-            this.metrics.set(id, {
+        const newMetrics = new Map(this.metrics);
+        if (!newMetrics.has(id)) {
+            newMetrics.set(id, {
                 id,
                 createdAt: Date.now(),
                 connectionCount: 0,
             });
         }
+
+        return { map: newMap, metrics: newMetrics, id };
     }
 
-    // Generic add is deprecated in favor of specific methods, but keeping for compatibility if needed.
-    // For now, let's map it to internal by default or throw? 
-    // The plan said specific methods. Let's redirect generic calls to internal for backward compat with simple tests.
-    addRoute(service: ServiceDefinition): string {
+    addRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
         return this.addInternalRoute(service);
     }
 
-    addInternalRoute(service: ServiceDefinition): string {
-        return this.addRouteToMap(this.internalRoutes, service);
+    addInternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.internalRoutes, service);
+        return {
+            state: this.clone({ internalRoutes: map, metrics }),
+            id
+        };
     }
 
-    addProxiedRoute(service: ServiceDefinition): string {
-        return this.addRouteToMap(this.proxiedRoutes, service);
+    addProxiedRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.proxiedRoutes, service);
+        return {
+            state: this.clone({ proxiedRoutes: map, metrics }),
+            id
+        };
     }
 
-    addExternalRoute(service: ServiceDefinition): string {
-        return this.addRouteToMap(this.externalRoutes, service);
+    addExternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.externalRoutes, service);
+        return {
+            state: this.clone({ externalRoutes: map, metrics }),
+            id
+        };
     }
 
-    // Returns ALL routes
     getAllRoutes(): LocalRoute[] {
         return [
             ...this.internalRoutes.values(),
@@ -74,7 +99,6 @@ export class RouteTable {
         return Array.from(this.externalRoutes.values());
     }
 
-    // Alias for existing tests using getRoutes
     getRoutes(): LocalRoute[] {
         return this.getAllRoutes();
     }
@@ -83,61 +107,107 @@ export class RouteTable {
         return Array.from(this.metrics.values());
     }
 
-    recordConnection(id: string) {
+    recordConnection(id: string): RouteTable {
         const metric = this.metrics.get(id);
         if (metric) {
-            metric.lastConnected = Date.now();
-            metric.connectionCount++;
-            this.metrics.set(id, metric);
+            const newMetrics = new Map(this.metrics);
+            newMetrics.set(id, {
+                ...metric,
+                lastConnected: Date.now(),
+                connectionCount: metric.connectionCount + 1
+            });
+            return this.clone({ metrics: newMetrics });
         }
+        return this;
     }
 
-    private updateRouteInMap(map: Map<string, LocalRoute>, service: ServiceDefinition): string | null {
+    private updateRouteInMap(
+        currentMap: Map<string, LocalRoute>,
+        service: ServiceDefinition
+    ): { map: Map<string, LocalRoute>, id: string } | null {
         const id = this.createId(service);
-        if (map.has(id)) {
-            map.set(id, {
+        if (currentMap.has(id)) {
+            const newMap = new Map(currentMap);
+            newMap.set(id, {
                 id,
                 service,
             });
-            this.initMetrics(id);
-            return id;
+            // Init metrics if missing (safety check)
+            // But usually update happens after add.
+            // For immutability, we assume metrics exist or we don't touch them here unless needed.
+            return { map: newMap, id };
         }
         return null;
     }
 
-    updateInternalRoute(service: ServiceDefinition): string | null {
-        return this.updateRouteInMap(this.internalRoutes, service);
+    updateInternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } | null {
+        const result = this.updateRouteInMap(this.internalRoutes, service);
+        if (result) {
+            return { state: this.clone({ internalRoutes: result.map }), id: result.id };
+        }
+        return null;
     }
 
-    updateProxiedRoute(service: ServiceDefinition): string | null {
-        return this.updateRouteInMap(this.proxiedRoutes, service);
+    updateProxiedRoute(service: ServiceDefinition): { state: RouteTable, id: string } | null {
+        const result = this.updateRouteInMap(this.proxiedRoutes, service);
+        if (result) {
+            return { state: this.clone({ proxiedRoutes: result.map }), id: result.id };
+        }
+        return null;
     }
 
-    updateExternalRoute(service: ServiceDefinition): string | null {
-        return this.updateRouteInMap(this.externalRoutes, service);
+    updateExternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } | null {
+        const result = this.updateRouteInMap(this.externalRoutes, service);
+        if (result) {
+            return { state: this.clone({ externalRoutes: result.map }), id: result.id };
+        }
+        return null;
     }
 
-    updateRoute(service: ServiceDefinition): string | null {
+    updateRoute(service: ServiceDefinition): { state: RouteTable, id: string } | null {
         // Try updating in each map, return the first successful update
-        const internalId = this.updateInternalRoute(service);
-        if (internalId) return internalId;
+        const internalRes = this.updateInternalRoute(service);
+        if (internalRes) return internalRes;
 
-        const proxiedId = this.updateProxiedRoute(service);
-        if (proxiedId) return proxiedId;
+        const proxiedRes = this.updateProxiedRoute(service);
+        if (proxiedRes) return proxiedRes;
 
-        const externalId = this.updateExternalRoute(service);
-        if (externalId) return externalId;
+        const externalRes = this.updateExternalRoute(service);
+        if (externalRes) return externalRes;
 
         return null;
     }
 
-    removeRoute(id: string) {
-        // Try removing from all maps
-        this.internalRoutes.delete(id);
-        this.proxiedRoutes.delete(id);
-        this.externalRoutes.delete(id);
-        // Metrics remain for historical reasons or can be removed too?
-        // Typically metrics persist for a bit, but for now we leave them.
+    removeRoute(id: string): RouteTable {
+        let changed = false;
+        let newInternal = this.internalRoutes;
+        let newProxied = this.proxiedRoutes;
+        let newExternal = this.externalRoutes;
+
+        if (newInternal.has(id)) {
+            newInternal = new Map(newInternal);
+            newInternal.delete(id);
+            changed = true;
+        }
+        if (newProxied.has(id)) {
+            newProxied = new Map(newProxied);
+            newProxied.delete(id);
+            changed = true;
+        }
+        if (newExternal.has(id)) {
+            newExternal = new Map(newExternal);
+            newExternal.delete(id);
+            changed = true;
+        }
+
+        if (changed) {
+            return this.clone({
+                internalRoutes: newInternal,
+                proxiedRoutes: newProxied,
+                externalRoutes: newExternal
+            });
+        }
+        return this;
     }
 }
 

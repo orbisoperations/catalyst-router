@@ -2,11 +2,18 @@ FROM oven/bun:1
 
 WORKDIR /app
 
-COPY . .
+# Copy root config
+COPY package.json bun.lockb ./
 
+# Copy examples package
+COPY packages/examples packages/examples
+RUN rm -rf packages/examples/node_modules
+
+# Install dependencies from root to handle workspace hoisting correctly
+WORKDIR /app
 RUN bun install
 
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["bun", "run", "src/movies/index.ts"]
+CMD ["bun", "run", "packages/examples/src/movies/index.ts"]
