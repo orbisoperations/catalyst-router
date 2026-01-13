@@ -17,12 +17,15 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
                 // Add to Routes as Proxied - Only if protocol matches
                 const protocol = action.data.protocol;
                 if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
-                    const id = state.addProxiedRoute({
+                    const { state: newState, id } = state.addProxiedRoute({
                         name: action.data.name,
                         endpoint: action.data.endpoint!,
                         protocol: action.data.protocol,
                         region: action.data.region
                     });
+
+                    // Update context with new state
+                    context.state = newState;
                     context.result = { ...context.result, id };
                 }
             } else if (action.action === 'update') {
@@ -31,14 +34,16 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
                 if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
                     console.log(`[DirectProxyRouteTablePlugin] Updating route for ${action.data.name}`);
 
-                    const id = state.updateProxiedRoute({
+                    const result = state.updateProxiedRoute({
                         name: action.data.name,
                         endpoint: action.data.endpoint!,
                         protocol: action.data.protocol,
                         region: action.data.region
                     });
 
-                    if (id) {
+                    if (result) {
+                        const { state: newState, id } = result;
+                        context.state = newState;
                         context.result = { ...context.result, id };
                     } else {
                         return {
@@ -53,7 +58,9 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
             } else if (action.action === 'delete') {
                 // Delete works for all route types - removeRoute checks all maps
                 const id = action.data.id;
-                state.removeRoute(id);
+                // removeRoute returns the new state regardless of whether it found the route (idempotent-ish for delete logic here)
+                const newState = state.removeRoute(id);
+                context.state = newState;
                 context.result = { ...context.result, id };
             }
         }

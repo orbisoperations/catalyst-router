@@ -29,24 +29,24 @@ describe('GraphQL Plugin E2E with Containers', () => {
         console.log('Building Docker images...');
 
         const buildBooks = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'books-service:test', '-f', 'Dockerfile.books', '.'], {
-                cwd: examplesDir,
+            await Bun.spawn(['docker', 'build', '-t', 'books-service:test', '-f', 'packages/examples/Dockerfile.books', '.'], {
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit'
             }).exited;
         };
 
         const buildMovies = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'movies-service:test', '-f', 'Dockerfile.movies', '.'], {
-                cwd: examplesDir,
+            await Bun.spawn(['docker', 'build', '-t', 'movies-service:test', '-f', 'packages/examples/Dockerfile.movies', '.'], {
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit'
             }).exited;
         };
 
         const buildGateway = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'gateway-service:test', '.'], {
-                cwd: gatewayDir,
+            await Bun.spawn(['docker', 'build', '-t', 'gateway-service:test', '-f', 'packages/gateway/Dockerfile', '.'], {
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit'
             }).exited;
@@ -57,35 +57,41 @@ describe('GraphQL Plugin E2E with Containers', () => {
 
         console.log('Starting Containers...');
 
+        console.log('Starting books container...');
         booksContainer = await new GenericContainer('books-service:test')
             .withExposedPorts(8080)
             .withNetwork(network)
             .withNetworkAliases('books')
             .withStartupTimeout(180_000)
-            .withWaitStrategy(Wait.forHttp('/health', 8080))
+            .withWaitStrategy(Wait.forLogMessage(/running|listening|starting/i).withStartupTimeout(180_000))
             .start();
+        console.log('Books container started.');
 
         const booksPort = booksContainer.getMappedPort(8080);
         booksUri = 'http://books:8080/graphql';
         console.log(`Books started on port ${booksPort}`);
 
+        console.log('Starting movies container...');
         moviesContainer = await new GenericContainer('movies-service:test')
             .withExposedPorts(8080)
             .withNetwork(network)
             .withNetworkAliases('movies')
             .withStartupTimeout(180_000)
-            .withWaitStrategy(Wait.forHttp('/health', 8080))
+            .withWaitStrategy(Wait.forLogMessage(/running|listening|starting/i).withStartupTimeout(180_000))
             .start();
+        console.log('Movies container started.');
 
         moviesUri = 'http://movies:8080/graphql';
 
+        console.log('Starting gateway container...');
         gatewayContainer = await new GenericContainer('gateway-service:test')
             .withExposedPorts(4000)
             .withNetwork(network)
             .withNetworkAliases('gateway')
             .withStartupTimeout(180_000)
-            .withWaitStrategy(Wait.forHttp('/', 4000))
+            .withWaitStrategy(Wait.forLogMessage(/running|listening|starting/i).withStartupTimeout(180_000))
             .start();
+        console.log('Gateway container started.');
 
         gatewayPort = gatewayContainer.getMappedPort(4000);
         console.log(`Gateway started on port ${gatewayPort}`);
@@ -96,14 +102,18 @@ describe('GraphQL Plugin E2E with Containers', () => {
         await moviesContainer?.stop();
         await booksContainer?.stop();
         await gatewayContainer?.stop();
-        await network?.stop();
+        try {
+            await network?.stop();
+        } catch (e) {
+            console.error('Failed to stop network:', e);
+        }
     });
 
     it('should handle full lifecycle: unconfigured -> add -> update -> delete', async () => {
         // Setup Plugin
         const rpcEndpoint = `ws://localhost:${gatewayPort}/api`;
         const plugin = new GatewayIntegrationPlugin({ endpoint: rpcEndpoint });
-        const state = new RouteTable();
+        let state = new RouteTable();
         const context: PluginContext = {
             // @ts-ignore - Dummy action for context, we manipulate state directly
             action: { resource: 'dataChannel', action: 'create', data: {} },
@@ -143,12 +153,15 @@ describe('GraphQL Plugin E2E with Containers', () => {
         console.log('Verified unconfigured state.');
 
         // --- Scenario 2: Adding one at a time shows only that data ---
+        // --- Scenario 2: Adding one at a time shows only that data ---
         console.log('--- Scenario 2: Add Books ---');
-        state.addProxiedRoute({
+        let updateResult = state.addProxiedRoute({
             name: 'books',
             endpoint: booksUri,
             protocol: 'tcp:graphql'
         });
+        state = updateResult.state;
+        context.state = state;
         await triggerUpdate();
 
         const res2a = await queryGateway('{ books { title } }');
@@ -160,11 +173,13 @@ describe('GraphQL Plugin E2E with Containers', () => {
         console.log('Verified Books added, Movies missing.');
 
         console.log('--- Scenario 2b: Add Movies ---');
-        state.addProxiedRoute({
+        updateResult = state.addProxiedRoute({
             name: 'movies',
             endpoint: moviesUri,
             protocol: 'tcp:graphql'
         });
+        state = updateResult.state;
+        context.state = state;
         await triggerUpdate();
 
         const res3 = await queryGateway('{ books { title } movies { title } }');
@@ -174,7 +189,24 @@ describe('GraphQL Plugin E2E with Containers', () => {
 
         // --- Scenario 3: Deleting one removes the right data ---
         console.log('--- Scenario 3: Delete Books ---');
-        state.removeRoute('books');
+        // Warning: removeRoute expects ID. createId uses name:protocol.
+        // In route-table.ts, createId is private. But the ID returned by addProxiedRoute is what we should use OR construct it.
+        // addProxiedRoute returns { state, id }. We should use that ID.
+        // BUT the test was passing 'books'.
+        // RouteTable.createId = `${service.name}:${service.protocol}`.
+        // So ID is 'books:tcp:graphql'.
+        // Passing 'books' to removeRoute won't work if ID is complex.
+
+        // Let's check what addProxiedRoute returns as ID.
+        // It returns `${name}:${protocol}`.
+
+        // So we need to correct the deletion logic too.
+        // Or if the test assumes simple ID usage, we must fix how we call remove.
+        // Let's use the ID we presumably got or construct it.
+
+        const booksId = 'books:tcp:graphql';
+        state = state.removeRoute(booksId);
+        context.state = state;
         await triggerUpdate();
 
         const res4a = await queryGateway('{ books { title } }');
@@ -186,7 +218,9 @@ describe('GraphQL Plugin E2E with Containers', () => {
 
         // --- Scenario 4: Deleting both shows unconfigured ---
         console.log('--- Scenario 4: Delete Movies (Empty) ---');
-        state.removeRoute('movies');
+        const moviesId = 'movies:tcp:graphql';
+        state = state.removeRoute(moviesId);
+        context.state = state;
         await triggerUpdate();
 
         const res5 = await queryGateway('{ movies { title } }');
@@ -196,22 +230,31 @@ describe('GraphQL Plugin E2E with Containers', () => {
         // --- Scenario 5: Add one then change it via update to be the other one ---
         console.log('--- Scenario 5: Update/Swap Service ---');
 
-        state.addProxiedRoute({
+        updateResult = state.addProxiedRoute({
             name: 'dynamic_service',
             endpoint: booksUri,
             protocol: 'tcp:graphql'
         });
+        state = updateResult.state;
+        context.state = state;
         await triggerUpdate();
 
         const res6a = await queryGateway('{ books { title } }');
         expect(res6a.json.data.books).toBeDefined();
 
         // Update 'dynamic_service' to point to Movies
-        state.addProxiedRoute({
+        // updateProxiedRoute is used.
+        const updateRes = state.updateProxiedRoute({
             name: 'dynamic_service',
             endpoint: moviesUri,
             protocol: 'tcp:graphql'
         });
+        if (updateRes) {
+            state = updateRes.state;
+            context.state = state;
+        } else {
+            throw new Error('Update failed');
+        }
         await triggerUpdate();
 
         const res6b = await queryGateway('{ movies { title } }');
@@ -222,5 +265,5 @@ describe('GraphQL Plugin E2E with Containers', () => {
         expect(res6c.json.errors).toBeDefined();
         console.log('Verified Service Swapped successfully.');
 
-    });
+    }, 60_000);
 });

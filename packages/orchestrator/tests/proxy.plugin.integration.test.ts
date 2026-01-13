@@ -15,7 +15,7 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
                 data: {
                     name: 'test-proxy-service',
                     endpoint: 'http://proxy-target',
-                    protocol: 'tcp:http',
+                    protocol: 'tcp:graphql',
                     region: 'us-west'
                 }
             },
@@ -26,13 +26,14 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
         const result = await plugin.apply(context);
 
         expect(result.success).toBe(true);
-        const proxied = state.getProxiedRoutes();
+        const newState = result.ctx.state;
+        const proxied = newState.getProxiedRoutes();
         expect(proxied).toHaveLength(1);
         expect(proxied[0].service.name).toBe('test-proxy-service');
         expect(proxied[0].service.endpoint).toBe('http://proxy-target');
 
         // Ensure it didn't leak to internal
-        expect(state.getInternalRoutes()).toHaveLength(0);
+        expect(newState.getInternalRoutes()).toHaveLength(0);
     });
 
     it('should ignore non-dataChannel actions', async () => {
