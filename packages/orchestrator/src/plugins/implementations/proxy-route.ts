@@ -50,6 +50,11 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
                         };
                     }
                 }
+            } else if (action.action === 'delete') {
+                // Delete works for all route types - removeRoute checks all maps
+                const id = action.data.id;
+                state.removeRoute(id);
+                context.result = { ...context.result, id };
             }
         }
 
