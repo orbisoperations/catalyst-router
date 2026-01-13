@@ -39,14 +39,14 @@ describe('Orchestrator RPC', () => {
             data: {
                 name: 'test-service',
                 endpoint: 'http://127.0.0.1:8080',
-                protocol: 'tcp:graphql',
+                protocol: 'http:graphql',
                 region: 'us-west-1'
             }
         };
 
         const result = await rpc.applyAction(action);
         expect(result.success).toBe(true);
-        expect(result.id).toBe('test-service:tcp:graphql');
+        expect(result.id).toBe('test-service:http:graphql');
     });
 
     it('should list local routes', async () => {

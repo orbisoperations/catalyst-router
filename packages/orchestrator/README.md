@@ -114,7 +114,7 @@ Use the Catalyst CLI or an RPC client to register your GraphQL service:
   "data": {
     "name": "books",
     "endpoint": "http://books-service:8080/graphql",
-    "protocol": "tcp:graphql"
+    "protocol": "http:graphql" // or 'http:gql'
   }
 }
 ```

@@ -143,7 +143,7 @@ describe('CLI E2E with Containers', () => {
         const addRes1 = await addService({
             name: 'books',
             endpoint: booksUri,
-            protocol: 'tcp:graphql'
+            protocol: 'http:graphql'
         });
         expect(addRes1.success).toBe(true);
 
@@ -162,7 +162,7 @@ describe('CLI E2E with Containers', () => {
         const addRes2 = await addService({
             name: 'movies',
             endpoint: moviesUri,
-            protocol: 'tcp:graphql'
+            protocol: 'http:graphql'
         });
         expect(addRes2.success).toBe(true);
 

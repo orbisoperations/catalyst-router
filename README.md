@@ -36,3 +36,17 @@ The "muscle" of the node.
 *   **Decentralized**: No single point of failure or control.
 *   **Plugin-Driven**: Extensible architecture for defining custom behaviors for routing, local services, and propagation.
 *   **Local Services**: Easily spin up and advertise local resources (e.g., VPN clients, GraphQL federations) as network services.
+
+## Protocol Support
+
+We support a variety of protocols for service definitions. Currently, **GraphQL** receives first-class support for federation.
+
+| Protocol | Status | Notes |
+| :--- | :--- | :--- |
+| `tcp` | ✅ Stabilized | Generic TCP tunneling |
+| `udp` | ✅ Stabilized | Generic UDP tunneling |
+| `http` | 🚧 Beta | Generic HTTP proxying |
+| `http:graphql` | ✅ Live | Fully federated GraphQL support |
+| `http:gql` | ✅ Live | Alias for `http:graphql` |
+| `http:grpc` | 🗓️ Planned | gRPC transcoding and routing |
+

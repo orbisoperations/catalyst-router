@@ -15,7 +15,7 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
                 data: {
                     name: 'test-proxy-service',
                     endpoint: 'http://proxy-target',
-                    protocol: 'tcp:http',
+                    protocol: 'http:graphql',
                     region: 'us-west'
                 }
             },
