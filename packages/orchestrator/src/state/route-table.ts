@@ -91,6 +91,46 @@ export class RouteTable {
             this.metrics.set(id, metric);
         }
     }
+
+    private updateRouteInMap(map: Map<string, LocalRoute>, service: ServiceDefinition): string | null {
+        const id = this.createId(service);
+        if (map.has(id)) {
+            map.set(id, {
+                id,
+                service,
+            });
+            this.initMetrics(id);
+            return id;
+        }
+        return null;
+    }
+
+    updateInternalRoute(service: ServiceDefinition): string | null {
+        return this.updateRouteInMap(this.internalRoutes, service);
+    }
+
+    updateProxiedRoute(service: ServiceDefinition): string | null {
+        return this.updateRouteInMap(this.proxiedRoutes, service);
+    }
+
+    updateExternalRoute(service: ServiceDefinition): string | null {
+        return this.updateRouteInMap(this.externalRoutes, service);
+    }
+
+    updateRoute(service: ServiceDefinition): string | null {
+        // Try updating in each map, return the first successful update
+        const internalId = this.updateInternalRoute(service);
+        if (internalId) return internalId;
+
+        const proxiedId = this.updateProxiedRoute(service);
+        if (proxiedId) return proxiedId;
+
+        const externalId = this.updateExternalRoute(service);
+        if (externalId) return externalId;
+
+        return null;
+    }
+
     removeRoute(id: string) {
         // Try removing from all maps
         this.internalRoutes.delete(id);

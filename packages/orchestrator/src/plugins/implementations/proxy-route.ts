@@ -17,12 +17,38 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
                 // Add to Routes as Proxied - Only if protocol matches
                 const protocol = action.data.protocol;
                 if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
-                    state.addProxiedRoute({
+                    const id = state.addProxiedRoute({
                         name: action.data.name,
                         endpoint: action.data.endpoint!,
                         protocol: action.data.protocol,
                         region: action.data.region
                     });
+                    context.result = { ...context.result, id };
+                }
+            } else if (action.action === 'update') {
+                // Update Routes as Proxied - Only if protocol matches
+                const protocol = action.data.protocol;
+                if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
+                    console.log(`[DirectProxyRouteTablePlugin] Updating route for ${action.data.name}`);
+
+                    const id = state.updateProxiedRoute({
+                        name: action.data.name,
+                        endpoint: action.data.endpoint!,
+                        protocol: action.data.protocol,
+                        region: action.data.region
+                    });
+
+                    if (id) {
+                        context.result = { ...context.result, id };
+                    } else {
+                        return {
+                            success: false,
+                            error: {
+                                pluginName: this.name,
+                                message: `Route not found for update: ${action.data.name}:${action.data.protocol}`
+                            }
+                        };
+                    }
                 }
             }
         }

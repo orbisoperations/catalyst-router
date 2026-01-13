@@ -25,8 +25,32 @@ export class RouteTablePlugin extends BasePlugin {
                     region: action.data.region
                 });
                 context.result = { ...context.result, id };
+            } else if (action.action === 'update') {
+                // Ignore Proxy protocols handled by DirectProxyRouteTablePlugin
+                const protocol = action.data.protocol;
+                if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
+                    return { success: true, ctx: context };
+                }
+
+                const id = state.updateInternalRoute({
+                    name: action.data.name,
+                    endpoint: action.data.endpoint!,
+                    protocol: action.data.protocol,
+                    region: action.data.region
+                });
+
+                if (id) {
+                    context.result = { ...context.result, id };
+                } else {
+                    return {
+                        success: false,
+                        error: {
+                            pluginName: this.name,
+                            message: `Route not found for update: ${action.data.name}:${action.data.protocol}`
+                        }
+                    };
+                }
             }
-            // Handle update/delete in future
         }
 
         return { success: true, ctx: context };
