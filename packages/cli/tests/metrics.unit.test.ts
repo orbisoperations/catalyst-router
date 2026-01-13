@@ -6,7 +6,8 @@ const mockListMetrics = mock(() => Promise.resolve({ uptime: 100 }));
 mock.module('../src/client.js', () => {
     return {
         createClient: async () => ({
-            listMetrics: mockListMetrics
+            listMetrics: mockListMetrics,
+            [Symbol.asyncDispose]: async () => { }
         })
     };
 });

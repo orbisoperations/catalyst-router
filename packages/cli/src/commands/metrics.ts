@@ -6,7 +6,7 @@ type CliResult<T> = { success: true; data: T } | { success: false; error: string
 
 export async function fetchMetrics(): Promise<CliResult<any>> {
     try {
-        const root = await createClient() as any;
+        await using root = await createClient();
         const result = await root.listMetrics();
         return { success: true, data: result };
     } catch (err: any) {

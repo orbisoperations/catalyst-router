@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { upgradeWebSocket, websocket } from 'hono/bun';
 import { newRpcResponse } from '@hono/capnweb';
 import { OrchestratorRpcServer } from './rpc/server.js';
+export * from './rpc/schema/index.js';
 
 const app = new Hono();
 const rpcServer = new OrchestratorRpcServer();
