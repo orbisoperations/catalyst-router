@@ -1,8 +1,9 @@
 import { Command } from 'commander';
 import { createClient } from '../client.js';
 import chalk from 'chalk';
+import type { CliResult } from '../types.js';
 
-type CliResult<T> = { success: true; data: T } | { success: false; error: string };
+
 
 export async function fetchMetrics(): Promise<CliResult<any>> {
     try {

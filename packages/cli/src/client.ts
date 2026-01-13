@@ -17,60 +17,56 @@ export interface OrchestratorRpc {
     listMetrics(): Promise<ListMetricsResult>;
 }
 
-export type DisposableOrchestratorRpc = OrchestratorRpc & AsyncDisposable;
+export class CliClient implements OrchestratorRpc, AsyncDisposable {
+    private ws: WebSocket | null = null;
+    private rpc: OrchestratorRpc;
 
-export async function createClient(url: string = 'ws://localhost:3000/rpc'): Promise<DisposableOrchestratorRpc> {
-    // In Node, we need to provide a WebSocket implementation usually.
-    // However, capnweb 0.4.x might expect a browser-like WebSocket.
-    // Let's assume global WebSocket or pass it if the API supports it.
+    constructor(url: string = 'ws://localhost:3000/rpc') {
+        const connectionUrl = process.env.CATALYST_ORCHESTRATOR_URL || url;
 
-    // Quick hack for global WebSocket in Node if not present
-    if (!globalThis.WebSocket) {
-        // @ts-ignore
-        globalThis.WebSocket = WebSocket;
+        // Quick hack for global WebSocket in Node if not present
+        if (!globalThis.WebSocket) {
+            // @ts-ignore
+            globalThis.WebSocket = WebSocket;
+        }
+
+        let capturedWs: any = null;
+        // Proxy WebSocket constructor to capture the instance so we can close it later
+        const WebSocketProxy = new Proxy(WebSocket, {
+            construct(target, args) {
+                const instance = new (target as any)(...args);
+                capturedWs = instance;
+                return instance;
+            }
+        });
+
+        this.rpc = newWebSocketRpcSession<OrchestratorRpc>(connectionUrl, {
+            WebSocket: WebSocketProxy as any
+        });
+        this.ws = capturedWs;
     }
 
-    const connectionUrl = process.env.CATALYST_ORCHESTRATOR_URL || url;
+    async applyAction(action: Action): Promise<AddDataChannelResult> {
+        return this.rpc.applyAction(action);
+    }
 
-    // Manually create WebSocket so we can close it
-    const ws = new WebSocket(connectionUrl);
+    async listLocalRoutes(): Promise<ListLocalRoutesResult> {
+        return this.rpc.listLocalRoutes();
+    }
 
-    // Wait for open? capnweb usually handles this, but sticking to existing pattern for now.
-    // Actually capnweb `newWebSocketRpcSession` takes a URL or a WebSocket factory/instance?
-    // Looking at previous code: `newWebSocketRpcSession(connectionUrl, { WebSocket: WebSocket as any })`
-    // It seems it takes the Class.
-    // Let's see if we can pass the instance. The types might not allow it easily without checking docs.
-    // If we pass the URL, capnweb creates the socket. We can't easily get it back to close it.
-    // EXCEPT, if we provide a custom factory that captures it.
+    async listMetrics(): Promise<ListMetricsResult> {
+        return this.rpc.listMetrics();
+    }
 
-    let capturedWs: any = null;
-    const WebSocketProxy = new Proxy(WebSocket, {
-        construct(target, args) {
-            const instance = new (target as any)(...args);
-            capturedWs = instance;
-            return instance;
+    async [Symbol.asyncDispose]() {
+        if (this.ws) {
+            this.ws.close();
         }
-    });
-
-    const clientStub = newWebSocketRpcSession<OrchestratorRpc>(connectionUrl, {
-        WebSocket: WebSocketProxy as any
-    });
-
-    // Return a proxy that implements AsyncDisposable
-    const proxy = new Proxy(clientStub, {
-        get(target, prop, receiver) {
-            if (prop === Symbol.asyncDispose) {
-                return async () => {
-                    if (capturedWs) {
-                        capturedWs.close();
-                    }
-                };
-            }
-            return Reflect.get(target, prop, receiver);
-        }
-    });
-
-    return proxy as unknown as DisposableOrchestratorRpc;
+    }
 }
 
-export type RpcClient = DisposableOrchestratorRpc;
+export async function createClient(url?: string): Promise<CliClient> {
+    return new CliClient(url);
+}
+
+export type RpcClient = CliClient;
