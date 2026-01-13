@@ -114,7 +114,7 @@ export class GatewayGraphqlServer {
 export function createGatewayHandler(gateway?: GatewayGraphqlServer): { app: Hono; server: GatewayGraphqlServer } {
     const server = gateway || new GatewayGraphqlServer();
     const app = new Hono();
-    app.all('/', (c) => server.fetch(c.req.raw, c.env, {}));
     app.all('/*', (c) => server.fetch(c.req.raw, c.env, {}));
     return { app, server };
 }
+
