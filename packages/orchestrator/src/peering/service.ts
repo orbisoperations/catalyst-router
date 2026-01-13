@@ -6,13 +6,16 @@ import {
     UpdateMessage,
     PeerSessionState
 } from '../rpc/schema/peering.js';
-
-// The Privileged Stub returned after authentication
-import { GlobalRouteTable } from '../state/route-table.js';
-import { Peer } from './peer.js';
-import { getConfig } from '../config.js';
-
+import { Action } from '../rpc/schema/actions.js';
 import { RpcTarget } from 'capnweb';
+import { Peer } from './peer.js'; // Ensure we import Peer if needed for types or logic
+
+export interface PeeringConfig {
+    as: number;
+    domains: string[];
+    localId: string;
+    endpoint: string;
+}
 
 // The Privileged Stub returned after authentication
 class AuthorizedPeerStub extends RpcTarget implements AuthorizedPeer {
@@ -21,18 +24,16 @@ class AuthorizedPeerStub extends RpcTarget implements AuthorizedPeer {
 
     constructor(
         private secret: string,
-        private getState: () => any, // RouteTable (circular dependency issues might arise if explicit type used)
-        private setState: (s: any) => void
+        private config: PeeringConfig,
+        private dispatchAction: (action: Action) => Promise<any>
     ) {
         super();
-        console.log('[AuthorizedPeerStub] Created');
     }
 
     async open(info: PeerInfo, clientStub: PeerClient): Promise<PeerSessionState> {
         console.log(`[PeeringService] Open request from ${info.id} (${info.endpoint}) AS:${info.as}`);
 
-        const config = getConfig();
-        const localAs = config.peering.as;
+        const localAs = this.config.as;
 
         if (info.as !== localAs) {
             console.warn(`[PeeringService] Rejected peer ${info.id}: AS mismatch (Remote: ${info.as}, Local: ${localAs})`);
@@ -47,74 +48,94 @@ class AuthorizedPeerStub extends RpcTarget implements AuthorizedPeer {
         this.client = clientStub;
         this.peerId = info.id;
 
-        // Register Peer
-        const localInfo: PeerInfo = {
-            id: 'local-node', // TODO: Identifier from config/keys
-            as: localAs,
-            endpoint: 'tcp://localhost:4015', // TODO: Discovery endpoint
-            domains: config.peering.domains,
-        };
-
-        // We initialize Peer with the remote info
-        const peer = new Peer(info.endpoint, localInfo, () => {
-            const s = this.getState();
-            const newS = s.removePeer(info.id);
-            this.setState(newS);
+        // Dispatch 'internal-peering-protocol:open' to pipeline
+        // This will eventually update the RouteTable via InternalPeeringPlugin
+        await this.dispatchAction({
+            resource: 'internal-peering-protocol',
+            action: 'open',
+            data: {
+                peerId: info.id,
+                info: info,
+                jwks: {},
+                clientStub: clientStub
+            }
         });
-        // Set remote info including domains
-        peer.setRemoteInfo(info);
 
-        await peer.accept(info, clientStub);
-
-        // Update State
-        const currentState = this.getState();
-        const { state: newState } = currentState.addPeer(peer);
-        this.setState(newState);
+        // We assume the plugin handles validation and state updates. 
+        // We return success here if action succeeded.
+        // TODO: Action result might be needed here? 
+        // For now, assuming dispatch success means accepted.
 
         return {
             accepted: true,
-            peers: [], // pending implementation of peer store
-            domains: config.peering.domains,
+            peers: [],
+            domains: this.config.domains,
             jwks: {},
             authEndpoint: 'http://auth.internal'
         };
     }
 
     async keepAlive(): Promise<void> {
+        if (this.peerId) {
+            await this.dispatchAction({
+                resource: 'internal-peering-protocol',
+                action: 'keepalive',
+                data: { peerId: this.peerId }
+            });
+        }
     }
 
     async updateRoute(msg: UpdateMessage): Promise<void> {
-        console.log('[PeeringService] Received Route Update:', msg);
+        if (this.peerId) {
+            await this.dispatchAction({
+                resource: 'internal-peering-protocol',
+                action: 'update',
+                data: {
+                    peerId: this.peerId,
+                    update: msg
+                }
+            });
+        }
     }
 
     async close(): Promise<void> {
-        console.log(`[PeeringService] Peer ${this.peerId} requested close`);
         if (this.peerId) {
-            const currentState = this.getState();
-            const newState = currentState.removePeer(this.peerId);
-            this.setState(newState);
+            await this.dispatchAction({
+                resource: 'internal-peering-protocol',
+                action: 'notification',
+                data: {
+                    peerId: this.peerId,
+                    code: 'CEASE',
+                    message: 'Peer closed connection'
+                }
+            });
         }
     }
 }
 
 // The Public Service exposed on /rpc
 export class PeeringService implements PeerPublicApi {
+    private config: PeeringConfig;
+
     constructor(
-        private getState: () => any, // RouteTable
-        private setState: (s: any) => void
-    ) { }
+        private dispatchAction: (action: Action) => Promise<any>,
+        config?: Partial<PeeringConfig>
+    ) {
+        this.config = {
+            as: 65000,
+            domains: [],
+            localId: 'unknown',
+            endpoint: 'http://localhost',
+            ...config
+        };
+    }
 
     authenticate(secret: string): AuthorizedPeer {
-        console.log(`[PeeringService] Authenticating with secret: ${secret}`);
-        if (secret !== 'valid-secret') {
-            console.warn('[PeeringService] Invalid secret used');
-        }
-
-        return new AuthorizedPeerStub(secret, this.getState, this.setState);
+        console.log(`[PeeringService] Authenticating with secret: ${secret} AS:${this.config.as}`);
+        return new AuthorizedPeerStub(secret, this.config, this.dispatchAction);
     }
 
     async ping(): Promise<string> {
-        console.log('[PeeringService] Ping received');
         return 'pong';
     }
 }

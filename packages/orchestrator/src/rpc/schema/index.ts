@@ -24,6 +24,7 @@ export type AddDataChannelResult = z.infer<typeof AddDataChannelResultSchema>;
 export const LocalRouteSchema = z.object({
     id: z.string(),
     service: ServiceDefinitionSchema,
+    sourcePeerId: z.string().optional(),
 });
 export type LocalRoute = z.infer<typeof LocalRouteSchema>;
 

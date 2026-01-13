@@ -8,6 +8,7 @@ export const OrchestratorConfigSchema = z.object({
     peering: z.object({
         as: z.number().default(100),
         domains: z.array(z.string()).default([]),
+        localId: z.string().optional(),
     }).default({}),
 });
 
@@ -16,7 +17,7 @@ export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>;
 export function getConfig(): OrchestratorConfig {
     const gatewayEndpoint = process.env.CATALYST_GQL_GATEWAY_ENDPOINT;
 
-    const config: OrchestratorConfig = {};
+    const config: Partial<OrchestratorConfig> = {};
 
     if (gatewayEndpoint) {
         console.log(`[Config] Found CATALYST_GQL_GATEWAY_ENDPOINT: ${gatewayEndpoint}`);
@@ -30,11 +31,13 @@ export function getConfig(): OrchestratorConfig {
     // Peering Config
     const asNumber = process.env.CATALYST_AS ? parseInt(process.env.CATALYST_AS, 10) : undefined;
     const domains = process.env.CATALYST_DOMAINS ? process.env.CATALYST_DOMAINS.split(',').map(d => d.trim()) : undefined;
+    const localId = process.env.CATALYST_NODE_ID;
 
-    if (asNumber || domains) {
+    if (asNumber || domains || localId) {
         config.peering = {
             as: asNumber ?? 100,
-            domains: domains ?? []
+            domains: domains ?? [],
+            localId: localId
         };
     }
 

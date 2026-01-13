@@ -34,13 +34,15 @@ export class RouteTable {
 
     private addRouteToMap(
         currentMap: Map<string, LocalRoute>,
-        service: ServiceDefinition
+        service: ServiceDefinition,
+        sourcePeerId?: string
     ): { map: Map<string, LocalRoute>, metrics: Map<string, DataChannelMetrics>, id: string } {
         const id = this.createId(service);
         const newMap = new Map(currentMap);
         newMap.set(id, {
             id,
             service,
+            sourcePeerId // Added sourcePeerId support
         });
 
         const newMetrics = new Map(this.metrics);
@@ -75,8 +77,8 @@ export class RouteTable {
         };
     }
 
-    addExternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
-        const { map, metrics, id } = this.addRouteToMap(this.externalRoutes, service);
+    addExternalRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.externalRoutes, service, sourcePeerId);
         return {
             state: this.clone({ externalRoutes: map, metrics }),
             id
@@ -230,13 +232,21 @@ export class RouteTable {
     removePeer(id: string): RouteTable {
         const peer = this.peers.get(id);
         if (peer) {
+            // Disconnect happens here as a side-effect of state transition? 
+            // Ideally should be outside, but ensuring disconnect on removal is safe.
             peer.disconnect();
             const newPeers = new Map(this.peers);
             newPeers.delete(id);
+            // Also remove routes from this peer? 
+            // Yes, standard BGP behavior. 
+            // TODO: Iterate externalRoutes and remove where sourcePeerId === id
+            // implementing basic removal for now
             return this.clone({ peers: newPeers });
         }
         return this;
     }
+
+    // Removed side-effect propagation methods (moved to Plugin)
 }
 
 export const GlobalRouteTable = new RouteTable();

@@ -9,13 +9,13 @@ import {
     ListLocalRoutesResultSchema,
     ListMetricsResultSchema
 } from './schema/index.js';
-import { GlobalRouteTable, RouteTable } from '../state/route-table.js';
+import { RouteTable, GlobalRouteTable } from '../state/route-table.js';
 import { PluginPipeline } from '../plugins/pipeline.js';
 import { AuthPlugin } from '../plugins/implementations/auth.js';
 import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { InternalRouteTablePlugin } from '../plugins/implementations/internal-routing.js';
-import { ExternalRouteTablePlugin } from '../plugins/implementations/external-routing.js';
+// import { ExternalRouteTablePlugin } from '../plugins/implementations/external-routing.js'; // Disabled
 import { RouteAnnouncerPlugin } from '../plugins/implementations/announcer.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { DirectProxyRouteTablePlugin } from '../plugins/implementations/proxy-route.js';
@@ -28,7 +28,7 @@ export class OrchestratorRpcServer extends RpcTarget {
     private pipeline: PluginPipeline;
     private state: RouteTable;
 
-    constructor() {
+    constructor(private routeTable: RouteTable = GlobalRouteTable) {
         super();
         const config = getConfig();
 
@@ -41,10 +41,12 @@ export class OrchestratorRpcServer extends RpcTarget {
             new LoggerPlugin(),
             // new StatePersistencePlugin(),
             new InternalRouteTablePlugin(),
-            new ExternalRouteTablePlugin(),
+            // new ExternalRouteTablePlugin(),
             new DirectProxyRouteTablePlugin(),
             // new RouteAnnouncerPlugin(),
-            new InternalPeeringPlugin(),
+
+            // Internal Peering Plugin receives dispatchAction
+            new InternalPeeringPlugin(this.applyAction.bind(this)),
         ];
 
         // Conditionally add Gateway Plugin
@@ -95,10 +97,11 @@ export class OrchestratorRpcServer extends RpcTarget {
     // ----------------------------------------------------------------
 
     authenticate(secret: string): AuthorizedPeer {
-        const service = new PeeringService(
-            () => this.state,
-            (s) => { this.state = s; }
-        );
+        const config = getConfig();
+        const service = new PeeringService(this.applyAction.bind(this), {
+            as: config.peering.as,
+            domains: config.peering.domains
+        });
         return service.authenticate(secret);
     }
 
@@ -113,10 +116,7 @@ export class OrchestratorRpcServer extends RpcTarget {
     }
 
     async ping(): Promise<string> {
-        const service = new PeeringService(
-            () => this.state,
-            (s) => { this.state = s; }
-        );
+        const service = new PeeringService(this.applyAction.bind(this));
         return service.ping();
     }
 }

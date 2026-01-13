@@ -19,10 +19,16 @@ export async function createClient(url: string = 'ws://localhost:3000/rpc') {
 
     const connectionUrl = process.env.CATALYST_ORCHESTRATOR_URL || url;
 
-    // newWebSocketRpcSession in 0.4.x returns the client proxy directly
-    const clientStub = newWebSocketRpcSession(connectionUrl, {
-        WebSocket: WebSocket as any
+    // Manually create WebSocket
+    const ws = new WebSocket(connectionUrl);
+
+    await new Promise<void>((resolve, reject) => {
+        ws.addEventListener('open', () => resolve());
+        ws.addEventListener('error', (e) => reject(e));
     });
+
+    // newWebSocketRpcSession in 0.4.x returns the client proxy directly
+    const clientStub = newWebSocketRpcSession(ws as any);
 
     return clientStub;
 }

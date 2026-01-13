@@ -222,4 +222,72 @@ class InternalPeeringPlugin extends BasePlugin {
 ```
 
 **Step 4: Connection & Sync**
-The `Peer` instance connects, exchanges OPEN messages, and synchronizes the initial state. The node is now part of the internal mesh.
+The `Peer` instance connects, exchanges OPEN messages, and synchronizes the initial state. 
+## Topology Test Cases
+
+We will verify the peering implementation using the following topology scenarios. Each case will be implemented as a standalone integration test.
+
+### Case 1: Direct Peering (A -> B)
+**File**: `packages/orchestrator/tests/topology/direct-peering.test.ts`
+**Goal**: Verify basic service visibility between two directly connected peers.
+
+**Topology**:
+- **Node A**: Hosts service `service-a.internal`.
+- **Node B**: Hosts service `service-b.internal`.
+- **Link**: A peers with B.
+
+```mermaid
+graph LR
+    A[Node A] -- Peers with --> B[Node B]
+    SvcA[Service A] -- Registers with --> A
+    SvcB[Service B] -- Registers with --> B
+```
+
+**Expected Outcome**:
+- Node B receives route `service-a.internal` from A.
+- Node A receives route `service-b.internal` from B.
+
+### Case 2: Transit Peering (A -> B -> C)
+**File**: `packages/orchestrator/tests/topology/transit-peering.test.ts`
+**Goal**: Verify that Node B propagates routes learned from A to Node C (Transit/Reflection).
+
+**Topology**:
+- **Node A**: Hosts service `service-a.internal`.
+- **Node B**: The "Transit" node. No local services.
+- **Node C**: Client node.
+- **Link**: A peers with B. C peers with B. (C does NOT peer with A).
+
+```mermaid
+graph LR
+    A[Node A] -- Peers with --> B[Node B]
+    C[Node C] -- Peers with --> B
+    SvcA[Service A] -- Registers with --> A
+```
+
+**Expected Outcome**:
+- Node B learns `service-a.internal` from A.
+- Node B advertises `service-a.internal` to C.
+- Node C sees `service-a.internal` (via B).
+
+### Case 3: Star Peering (Center B)
+**File**: `packages/orchestrator/tests/topology/star-peering.test.ts`
+**Goal**: Verify a central hub can aggregate and redistribute routes from multiple spokes.
+
+**Topology**:
+- **Node B (Center)**: Hosts `service-b.internal`.
+- **Node A (Spoke)**: Peers with B. Hosts `service-a.internal`.
+- **Node C (Spoke)**: Peers with B. Hosts `service-c.internal`.
+
+```mermaid
+graph TD
+    A[Node A] -- Peers --> B[Node B]
+    C[Node C] -- Peers --> B
+    SvcA[Service A] --> A
+    SvcB[Service B] --> B
+    SvcC[Service C] --> C
+```
+
+**Expected Outcome**:
+- Node A sees: `service-b.internal` (from B) and `service-c.internal` (via B).
+- Node C sees: `service-b.internal` (from B) and `service-a.internal` (via B).
+- Node B sees: `service-a.internal` (from A) and `service-c.internal` (from C).

@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import { serviceCommands } from './commands/service.js';
 import { metricsCommands } from './commands/metrics.js';
 import { peerCommands } from './commands/peers.js';
+import { routeCommands } from './commands/routes.js';
 
 const program = new Command();
 
@@ -15,5 +16,6 @@ program
 program.addCommand(serviceCommands());
 program.addCommand(metricsCommands());
 program.addCommand(peerCommands());
+program.addCommand(routeCommands());
 
 program.parse(process.argv);

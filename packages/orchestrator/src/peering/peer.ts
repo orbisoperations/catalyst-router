@@ -40,13 +40,20 @@ export class Peer implements PeerClient {
     public localInfo: PeerInfo;
     private clientStub: PeerClientStub;
     private onDisconnect?: () => void;
+    private onRouteUpdate?: (msg: UpdateMessage) => void;
 
-    constructor(address: string, localInfo: PeerInfo, onDisconnect?: () => void) {
+    constructor(
+        address: string,
+        localInfo: PeerInfo,
+        onDisconnect?: () => void,
+        onRouteUpdate?: (msg: UpdateMessage) => void
+    ) {
         this.address = address;
         this.id = address; // temporary ID until handshake? or provided in constructor
         this.localInfo = localInfo;
         this.clientStub = new PeerClientStub(this);
         this.onDisconnect = onDisconnect;
+        this.onRouteUpdate = onRouteUpdate;
     }
 
     setRemoteInfo(info: PeerInfo) {
@@ -68,32 +75,51 @@ export class Peer implements PeerClient {
         this.startKeepAlive();
     }
 
-    async connect(secret: string) {
+    async connect(secret: string, injectedPublicApi?: PeerPublicApi) {
         console.log(`[Peer ${this.address}] Connecting...`);
-        // TODO: Ensure URL format. Assuming address includes protocol or defaults to ws://
-        const url = this.address.startsWith('ws') ? this.address : `ws://${this.address}/rpc`;
 
-        // const url = this.address.startsWith('ws') ? this.address : `ws://${this.address}/rpc`;
+        let publicApi: PeerPublicApi;
 
-        // Use global WebSocket (Bun/Browser)
-        const ws = new WebSocket(url);
+        if (injectedPublicApi) {
+            publicApi = injectedPublicApi;
+        } else {
+            // Default WebSocket Logic
+            const url = this.address.startsWith('ws') ? this.address : `ws://${this.address}/rpc`;
+            const ws = new WebSocket(url);
 
-        await new Promise<void>((resolve, reject) => {
-            ws.addEventListener('open', () => resolve());
-            ws.addEventListener('error', (err) => reject(err));
-            ws.addEventListener('close', () => {
-                console.log(`[Peer ${this.address}] WebSocket connection closed`);
-                this.startDisconnectCleanup();
+            await new Promise<void>((resolve, reject) => {
+                const onOpen = () => {
+                    console.log(`[Peer ${this.address}] WebSocket Open`);
+                    cleanup();
+                    resolve();
+                };
+                const onError = (err: any) => {
+                    console.error(`[Peer ${this.address}] WebSocket Error:`, err);
+                    cleanup();
+                    reject(err);
+                };
+                const cleanup = () => {
+                    ws.removeEventListener('open', onOpen);
+                    ws.removeEventListener('error', onError);
+                };
+
+                ws.addEventListener('open', onOpen);
+                ws.addEventListener('error', onError);
+
+                // Close listener stays for the lifetime
+                ws.addEventListener('close', (evt: any) => {
+                    console.log(`[Peer ${this.address}] WebSocket Closed: ${evt.code} ${evt.reason}`);
+                    this.startDisconnectCleanup();
+                });
             });
-        });
 
-        // Initialize RPC Session
-        // We pass 'this.clientStub' as the local stub, enabling the server to call PeerClient methods on us
-        this.session = newWebSocketRpcSession(ws as any, this.clientStub);
+            // Initialize RPC Session
+            // We pass 'this.clientStub' as the local stub, enabling the server to call PeerClient methods on us
+            this.session = newWebSocketRpcSession(ws as any, this.clientStub);
+            publicApi = this.session as any as PeerPublicApi;
+        }
 
-        // The session IS the remote stub
-        const publicApi = this.session as PeerPublicApi;
-
+        // Pinging...
         console.log(`[Peer ${this.address}] Pinging...`);
         try {
             const pong = await publicApi.ping();
@@ -140,16 +166,21 @@ export class Peer implements PeerClient {
         if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
         this.keepAliveInterval = setInterval(() => {
             if (this.isConnected && this.remote) {
-                this.remote.keepAlive().catch(err => {
-                    console.error(`[Peer ${this.address}] KeepAlive failed:`, err);
-                    this.disconnect();
-                });
+                // Ensure remote is valid
+                if ('keepAlive' in this.remote) {
+                    this.remote.keepAlive().catch(err => {
+                        console.error(`[Peer ${this.address}] KeepAlive failed:`, err);
+                        this.disconnect();
+                    });
+                }
             }
         }, 10000); // 10s for now
     }
 
     async disconnect() {
-        if (this.remote && this.isConnected) {
+        if (!this.isConnected) return;
+
+        if (this.remote) {
             try {
                 // Determine if remote has close method (it might be PeerClient or AuthorizedPeer)
                 // AuthorizedPeer has close, PeerClient (as defined in schema) does NOT have close in interface currently?
@@ -161,7 +192,7 @@ export class Peer implements PeerClient {
                 // Or we should add close to PeerClient too?
 
                 // If we are the Initiator (AuthorizedPeer), we can call close().
-                if ('close' in this.remote) {
+                if (this.remote && 'close' in this.remote) {
                     await (this.remote as AuthorizedPeer).close();
                 }
             } catch (e) {
@@ -174,6 +205,15 @@ export class Peer implements PeerClient {
     private startDisconnectCleanup() {
         this.isConnected = false;
         if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
+
+        if (this.session) {
+            try {
+                this.session.close();
+            } catch (e) {
+                // Ignore close errors
+            }
+            this.session = null;
+        }
 
         // Remove from GlobalRouteTable? 
         // If we are the one initiating disconnect, we should probably remove ourselves or the peer from the table.
@@ -188,16 +228,27 @@ export class Peer implements PeerClient {
     // ----------------------------------------------------------------
 
     async keepAlive(): Promise<void> {
+        if (!this.isConnected) throw new Error('Peer disconnected');
         // Heartbeat received from server
         this.lastKeepAlive = Date.now();
         // console.log(`[Peer ${this.address}] Received Heartbeat`);
     }
 
     async updateRoute(msg: UpdateMessage): Promise<void> {
+        if (!this.isConnected) throw new Error('Peer disconnected');
         console.log(`[Peer ${this.address}] Received Update:`, msg);
-        // GlobalRouteTable.processUpdate(msg); // RouteTable update method implementation pending
-        // For now, valid placeholder
+        if (this.onRouteUpdate) {
+            this.onRouteUpdate(msg);
+        }
     }
+
+    // Called by RouteTable to Broadcast updates to this Peer
+    async sendUpdate(msg: UpdateMessage): Promise<void> {
+        if (this.remote && this.isConnected) {
+            return this.remote.updateRoute(msg);
+        }
+    }
+
 
     // Called when the REMOTE peer calls close() on us (Server -> Client)
     async remoteClosed(): Promise<void> {

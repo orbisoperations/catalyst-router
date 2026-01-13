@@ -8,6 +8,7 @@ type AddServiceParams = {
     name: string;
     endpoint: string;
     protocol: string;
+    fqdn: string;
 };
 
 export async function addService(params: AddServiceParams): Promise<CliResult<void>> {
@@ -32,15 +33,7 @@ export async function addService(params: AddServiceParams): Promise<CliResult<vo
     }
 }
 
-export async function listServices(): Promise<CliResult<any[]>> {
-    try {
-        const root = await createClient() as any;
-        const result = await root.listLocalRoutes();
-        return { success: true, data: result.routes || [] };
-    } catch (err: any) {
-        return { success: false, error: err.message || 'Connection error' };
-    }
-}
+// ... listServices ...
 
 export function serviceCommands() {
     const service = new Command('service').description('Manage services');
@@ -51,11 +44,14 @@ export function serviceCommands() {
         .argument('<name>', 'Service name')
         .argument('<endpoint>', 'Service endpoint URL')
         .option('-p, --protocol <protocol>', 'Service protocol', 'tcp:graphql')
+        .option('-f, --fqdn <fqdn>', 'Service FQDN')
         .action(async (name, endpoint, options) => {
-            const result = await addService({ name, endpoint, protocol: options.protocol });
+            const fqdn = options.fqdn || `${name}.internal`;
+            const result = await addService({ name, endpoint, protocol: options.protocol, fqdn });
 
             if (result.success) {
-                console.log(chalk.green(`Service '${name}' added successfully.`));
+                console.log(chalk.green(`Service '${name}' added successfully (FQDN: ${fqdn}).`));
+                process.exit(0);
             } else {
                 console.error(chalk.red(`Failed to add service:`), result.error);
                 process.exit(1);
@@ -78,6 +74,7 @@ export function serviceCommands() {
             } else {
                 console.log(chalk.yellow('No services found.'));
             }
+            process.exit(0);
         });
 
     return service;

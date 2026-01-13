@@ -49,6 +49,7 @@ export function peerCommands() {
 
             if (result.success) {
                 console.log(chalk.green(`Peer connection initiated to '${address}'.`));
+                process.exit(0);
             } else {
                 console.error(chalk.red(`Failed to add peer:`), result.error);
                 process.exit(1);
@@ -71,6 +72,7 @@ export function peerCommands() {
             } else {
                 console.log(chalk.yellow('No peers connected.'));
             }
+            process.exit(0);
         });
 
     // Alias for 'peers list' if user types 'catalyst-node peers list' instead of 'peer list'
