@@ -6,22 +6,18 @@ import type { CliResult } from '../types.js';
 
 
 
-type AddServiceParams = {
-    name: string;
-    endpoint: string;
-    protocol: string;
-};
+import { AddServiceInputSchema, ListServicesInputSchema, type AddServiceInput } from '../types.js';
 
-export async function addService(params: AddServiceParams): Promise<CliResult<void>> {
+export async function addService(params: AddServiceInput): Promise<CliResult<void>> {
     try {
-        // await using Declaration: This new syntax in JavaScript/TypeScript automatically calls the [Symbol.asyncDispose] method when the scope (e.g., function block) is exited, even if an error occurs.
-        await using root = await createClient();
+        await using root = await createClient(params.orchestratorUrl);
 
         const action = {
             resource: 'dataChannel',
             action: 'create',
             data: {
-                ...params,
+                name: params.name,
+                endpoint: params.endpoint,
                 protocol: params.protocol as ServiceProtocol
             }
         } as const;
@@ -38,9 +34,9 @@ export async function addService(params: AddServiceParams): Promise<CliResult<vo
     }
 }
 
-export async function listServices(): Promise<CliResult<any[]>> {
+export async function listServices(orchestratorUrl?: string): Promise<CliResult<any[]>> {
     try {
-        await using root = await createClient();
+        await using root = await createClient(orchestratorUrl);
         const result = await root.listLocalRoutes();
         return { success: true, data: result.routes || [] };
     } catch (err: any) {
@@ -57,8 +53,26 @@ export function serviceCommands() {
         .argument('<name>', 'Service name')
         .argument('<endpoint>', 'Service endpoint URL')
         .option('-p, --protocol <protocol>', 'Service protocol', 'http:graphql')
-        .action(async (name, endpoint, options) => {
-            const result = await addService({ name, endpoint, protocol: options.protocol });
+        .action(async (name, endpoint, options, cmd) => {
+            const globals = cmd.optsWithGlobals();
+            const input = {
+                name,
+                endpoint,
+                protocol: options.protocol,
+                orchestratorUrl: globals.orchestratorUrl,
+                logLevel: globals.logLevel
+            };
+            const validation = AddServiceInputSchema.safeParse(input);
+
+            if (!validation.success) {
+                console.error(chalk.red('Invalid input:'));
+                validation.error.issues.forEach((issue) => {
+                    console.error(chalk.yellow(`- ${issue.path.join('.')}: ${issue.message}`));
+                });
+                process.exit(1);
+            }
+
+            const result = await addService(validation.data);
 
             if (result.success) {
                 console.log(chalk.green(`Service '${name}' added successfully.`));
@@ -71,8 +85,31 @@ export function serviceCommands() {
     service
         .command('list')
         .description('List all registered services')
-        .action(async () => {
-            const result = await listServices();
+        .action(async (options, cmd) => {
+            // list has no args, so first arg might be options if no args defined?
+            // Command with no args: action(options, command)
+            // But wait, if I defined arguments earlier? No.
+            // Let's verify arguments for action with no args.
+            // It is usually (options, command).
+            const globals = (cmd || options).optsWithGlobals ? (cmd || options).optsWithGlobals() : options;
+            // In commander v7+, action is (args..., options, command)
+            // If no args, it is (options, command)
+
+            const input = {
+                orchestratorUrl: globals.orchestratorUrl,
+                logLevel: globals.logLevel
+            };
+
+            const validation = ListServicesInputSchema.safeParse(input);
+            if (!validation.success) {
+                console.error(chalk.red('Invalid input:'));
+                validation.error.issues.forEach((issue) => {
+                    console.error(chalk.yellow(`- ${issue.path.join('.')}: ${issue.message}`));
+                });
+                process.exit(1);
+            }
+
+            const result = await listServices(validation.data.orchestratorUrl);
 
             if (!result.success) {
                 console.error(chalk.red('Error listing services:'), result.error);
