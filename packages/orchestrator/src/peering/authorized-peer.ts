@@ -11,17 +11,21 @@ export interface PeerInfo {
 
 export interface PeerSessionState {
     accepted: boolean;
+    peerInfo?: PeerInfo; // Identity of the acceptor
     peers?: any[]; // Simplified for now
     jwks?: any;
 }
 
 export class AuthorizedPeerImpl extends RpcTarget {
+    private peerId?: string;
+
     constructor(private dispatch: (action: Action) => Promise<any>) {
         super();
     }
 
     async open(info: PeerInfo, clientStub: any): Promise<PeerSessionState> {
         console.log(`[AuthorizedPeer] Received OPEN from peer ${info.id} (AS ${info.as})`);
+        this.peerId = info.id;
 
         // Dispatch action to internal-as plugin to handle registration
         // We pass the stub in the data. Note: 'any' type in schema allows this.
@@ -35,13 +39,14 @@ export class AuthorizedPeerImpl extends RpcTarget {
             }
         });
 
-        // For now, return a successful session state stub
-        // In a real implementation, the plugin result would dictate this return value,
-        // but 'dispatch' usually returns Generic Result. We might need to query state or trust dispatch.
-        // Assuming dispatch success means accepted.
+        const localInfo: PeerInfo = {
+            id: process.env.CATALYST_NODE_ID || 'unknown-server',
+            as: parseInt(process.env.CATALYST_AS || '0')
+        };
 
         return {
             accepted: true,
+            peerInfo: localInfo,
             peers: [], // Populate with current peers if accessible
             jwks: {}
         };
@@ -54,5 +59,26 @@ export class AuthorizedPeerImpl extends RpcTarget {
             resourceAction: 'close',
             data: { peerId }
         });
+    }
+
+    async updateRoute(message: any): Promise<void> {
+        // Dispatch to plugin
+        // Message matches UpdateMessageSchema (roughly)
+        await this.dispatch({
+            resource: 'internalBGPRoute',
+            resourceAction: 'update',
+            data: message
+        });
+    }
+
+    async keepAlive(): Promise<void> {
+        // Dispatch to plugin to update lastSeen
+        if (this.peerId) {
+            await this.dispatch({
+                resource: 'internalPeerSession',
+                resourceAction: 'keepAlive',
+                data: { peerId: this.peerId }
+            });
+        }
     }
 }
