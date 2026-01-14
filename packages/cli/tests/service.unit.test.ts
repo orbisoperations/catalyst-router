@@ -34,7 +34,7 @@ describe('Service Commands', () => {
 
     describe('addService', () => {
         it('should add a service successfully', async () => {
-            const result = await addService({ name: 'test-service', endpoint: 'http://localhost:8080', protocol: 'tcp:graphql' });
+            const result = await addService({ name: 'test-service', endpoint: 'http://localhost:8080', protocol: 'http:graphql' });
             expect(result.success).toBe(true);
             expect(mockApplyAction).toHaveBeenCalled();
             const lastCall = mockApplyAction.mock.calls[0][0];
@@ -44,14 +44,14 @@ describe('Service Commands', () => {
                 data: {
                     name: 'test-service',
                     endpoint: 'http://localhost:8080',
-                    protocol: 'tcp:graphql'
+                    protocol: 'http:graphql'
                 }
             });
         });
 
         it('should handle failure when adding service', async () => {
             mockApplyAction.mockImplementationOnce(() => Promise.resolve({ success: false, error: 'Failed' }));
-            const result = await addService({ name: 'fail', endpoint: 'err', protocol: 'tcp:graphql' });
+            const result = await addService({ name: 'fail', endpoint: 'err', protocol: 'http:graphql' });
             expect(result.success).toBe(false);
             if (!result.success) { // logic check
                 expect(result.error).toBe('Failed');
@@ -60,7 +60,7 @@ describe('Service Commands', () => {
 
         it('should handle connection errors', async () => {
             mockCreateClient.mockRejectedValueOnce(new Error('Connect Error'));
-            const result = await addService({ name: 'fail', endpoint: 'err', protocol: 'tcp:graphql' });
+            const result = await addService({ name: 'fail', endpoint: 'err', protocol: 'http:graphql' });
             expect(result.success).toBe(false);
             if (!result.success) {
                 expect(result.error).toContain('Connect Error');

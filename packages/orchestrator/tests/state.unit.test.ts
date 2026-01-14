@@ -8,7 +8,7 @@ describe('RouteTable Unit Tests', () => {
         const id = state.addInternalRoute({
             name: 'internal-service',
             endpoint: 'http://internal',
-            protocol: 'tcp:http'
+            protocol: 'http'
         });
 
         expect(state.getInternalRoutes()).toHaveLength(1);
@@ -25,7 +25,7 @@ describe('RouteTable Unit Tests', () => {
         const id = state.addProxiedRoute({
             name: 'proxied-service',
             endpoint: 'http://proxied',
-            protocol: 'tcp:http'
+            protocol: 'http'
         });
 
         expect(state.getProxiedRoutes()).toHaveLength(1);
@@ -39,7 +39,7 @@ describe('RouteTable Unit Tests', () => {
         const id = state.addExternalRoute({
             name: 'external-service',
             endpoint: 'http://external',
-            protocol: 'tcp:http'
+            protocol: 'http'
         });
 
         expect(state.getExternalRoutes()).toHaveLength(1);

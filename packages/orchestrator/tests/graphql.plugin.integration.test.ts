@@ -147,7 +147,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         state.addProxiedRoute({
             name: 'books',
             endpoint: booksUri,
-            protocol: 'tcp:graphql'
+            protocol: 'http:graphql'
         });
         await triggerUpdate();
 
@@ -163,7 +163,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         state.addProxiedRoute({
             name: 'movies',
             endpoint: moviesUri,
-            protocol: 'tcp:graphql'
+            protocol: 'http:graphql'
         });
         await triggerUpdate();
 
@@ -199,7 +199,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         state.addProxiedRoute({
             name: 'dynamic_service',
             endpoint: booksUri,
-            protocol: 'tcp:graphql'
+            protocol: 'http:graphql'
         });
         await triggerUpdate();
 
@@ -210,7 +210,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         state.addProxiedRoute({
             name: 'dynamic_service',
             endpoint: moviesUri,
-            protocol: 'tcp:graphql'
+            protocol: 'http:graphql'
         });
         await triggerUpdate();
 

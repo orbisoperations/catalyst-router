@@ -25,7 +25,7 @@ export class GatewayIntegrationPlugin extends BasePlugin {
         const services = state.getAllRoutes()
             .map(r => r.service) // Extract ServiceDefinition
             // Filter strictly for GraphQL protocols.
-            .filter(s => s.endpoint && (s.protocol === 'tcp:graphql' || s.protocol === 'tcp:gql'))
+            .filter(s => s.endpoint && (s.protocol === 'http:graphql' || s.protocol === 'http:gql'))
             .map(s => ({
                 name: s.name,
                 url: s.endpoint!,

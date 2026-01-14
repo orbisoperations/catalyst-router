@@ -1,7 +1,7 @@
 
 import { z } from 'zod';
 
-export const ServiceProtocolSchema = z.enum(['tcp', 'tcp:http', 'tcp:graphql', 'tcp:gql', 'tcp:grpc', 'udp']);
+export const ServiceProtocolSchema = z.enum(['tcp', 'udp', 'http', 'http:graphql', 'http:gql', 'http:grpc']);
 export type ServiceProtocol = z.infer<typeof ServiceProtocolSchema>;
 
 export const ServiceDefinitionSchema = z.object({

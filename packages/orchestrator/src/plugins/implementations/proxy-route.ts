@@ -16,7 +16,7 @@ export class DirectProxyRouteTablePlugin extends BasePlugin {
 
                 // Add to Routes as Proxied - Only if protocol matches
                 const protocol = action.data.protocol;
-                if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
+                if (protocol === 'http:graphql' || protocol === 'http:gql') {
                     state.addProxiedRoute({
                         name: action.data.name,
                         endpoint: action.data.endpoint!,

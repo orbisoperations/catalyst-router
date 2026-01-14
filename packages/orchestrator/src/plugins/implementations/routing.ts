@@ -14,7 +14,7 @@ export class RouteTablePlugin extends BasePlugin {
                 // Mutate the state (RouteTable) - Internal by default for this plugin
                 // Ignore Proxy protocols handled by DirectProxyRouteTablePlugin
                 const protocol = action.data.protocol;
-                if (protocol === 'tcp:graphql' || protocol === 'tcp:gql') {
+                if (protocol === 'http:graphql' || protocol === 'http:gql') {
                     return { success: true, ctx: context };
                 }
 

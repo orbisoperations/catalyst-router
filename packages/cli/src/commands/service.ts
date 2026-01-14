@@ -55,7 +55,7 @@ export function serviceCommands() {
         .description('Register a new service')
         .argument('<name>', 'Service name')
         .argument('<endpoint>', 'Service endpoint URL')
-        .option('-p, --protocol <protocol>', 'Service protocol', 'tcp:graphql')
+        .option('-p, --protocol <protocol>', 'Service protocol', 'http:graphql')
         .action(async (name, endpoint, options) => {
             const result = await addService({ name, endpoint, protocol: options.protocol });
 
