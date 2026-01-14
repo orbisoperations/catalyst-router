@@ -48,6 +48,8 @@ export const peerCommands = () => {
                     // Extract ID from results if available (assuming first result has id)
                     const id = result.results?.[0]?.id || 'unknown';
                     console.log(chalk.green(`Peer added successfully. ID: ${id}`));
+                    await new Promise(r => setTimeout(r, 100));
+                    process.exit(0);
                 } else {
                     console.error(chalk.red(`Failed to add peer: ${result.error}`));
                     process.exit(1);
@@ -75,6 +77,34 @@ export const peerCommands = () => {
                         Endpoint: p.endpoint,
                         Domains: p.domains.join(', ')
                     })));
+                }
+                await new Promise(r => setTimeout(r, 100));
+                process.exit(0);
+            } catch (error: any) {
+                console.error(chalk.red(`Error: ${error.message}`));
+                process.exit(1);
+            }
+        });
+
+    peer.command('remove')
+        .description('Remove a peer connection')
+        .argument('<peerId>', 'ID of the peer to remove')
+        .action(async (peerId) => {
+            try {
+                const client = await createClient() as any;
+                const result = await client.applyAction({
+                    resource: 'internalPeerSession',
+                    resourceAction: 'close',
+                    data: {
+                        peerId
+                    }
+                });
+                if (result.success) {
+                    console.log(chalk.green(`Peer ${peerId} removed.`));
+                    process.exit(0);
+                } else {
+                    console.error(chalk.red(`Failed to remove peer: ${result.error}`));
+                    process.exit(1);
                 }
             } catch (error: any) {
                 console.error(chalk.red(`Error: ${error.message}`));

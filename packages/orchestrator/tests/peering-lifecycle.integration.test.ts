@@ -124,4 +124,62 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
         const routeGone = routesAfterDisconnect.routes.find(r => r.service.name === serviceName);
         expect(routeGone).toBeUndefined();
     });
+
+    it('should broadcast local route updates to connected peers', async () => {
+        const server = new OrchestratorRpcServer();
+
+        // 1. Mock a peer stub that captures updateRoute calls
+        const updates: any[] = [];
+        const mockStub = {
+            updateRoute: (msg: any) => {
+                updates.push(msg);
+            },
+            keepAlive: () => { }
+        };
+
+        // 2. Add Peer with this stub
+        await server.applyAction({
+            resource: 'internalPeerSession',
+            resourceAction: 'open',
+            data: {
+                peerInfo: { id: 'listener-peer', as: 400, endpoint: 'ws://p3', domains: [] },
+                clientStub: mockStub,
+                direction: 'inbound'
+            }
+        } as any);
+
+        // 3. Create a Local Route (simulating Service Add)
+        const serviceName = 'propagated-service';
+        await server.applyAction({
+            resource: 'localRoute',
+            resourceAction: 'create',
+            data: {
+                name: serviceName,
+                endpoint: 'http://local:3000',
+                protocol: 'tcp'
+            }
+        } as any);
+
+        // 4. Verify peer received UPDATE
+        expect(updates).toHaveLength(1);
+        expect(updates[0].type).toBe('add');
+        expect(updates[0].route.name).toBe(serviceName);
+
+        // 5. Delete Local Route
+        // Find ID first (mocking ID knowledge or implementation detail)
+        // Since create action usually returns ID but here we are using mocked server applyAction which returns generic result.
+        // We know the route plugin generates ID as `${name}:${protocol}`.
+        const routeId = `${serviceName}:tcp`;
+
+        await server.applyAction({
+            resource: 'localRoute',
+            resourceAction: 'delete',
+            data: { id: routeId }
+        } as any);
+
+        // 6. Verify peer received withdrawal
+        expect(updates).toHaveLength(2);
+        expect(updates[1].type).toBe('remove');
+        expect(updates[1].routeId).toBe(routeId);
+    });
 });

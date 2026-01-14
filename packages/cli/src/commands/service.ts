@@ -72,6 +72,7 @@ export function serviceCommands() {
 
             if (result.success) {
                 console.log(chalk.green(`Service '${name}' added successfully.`));
+                process.exit(0);
             } else {
                 console.error(chalk.red(`Failed to add service:`), result.error);
                 process.exit(1);
@@ -117,6 +118,7 @@ export function serviceCommands() {
             } else {
                 console.log(chalk.yellow('No services found.'));
             }
+            process.exit(0);
         });
 
     return service;
