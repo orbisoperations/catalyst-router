@@ -9,7 +9,7 @@ const program = new Command();
 program
     .name('catalyst')
     .description('Catalyst Node CLI')
-    .version('0.0.1');
+    .version(process.env.VERSION || '0.0.0-dev');
 
 program.addCommand(serviceCommands());
 program.addCommand(metricsCommands());

@@ -7,7 +7,8 @@ const mockListLocalRoutes = mock(() => Promise.resolve({ routes: [] as any[] }))
 
 const mockCreateClient = mock(() => Promise.resolve({
     applyAction: mockApplyAction,
-    listLocalRoutes: mockListLocalRoutes
+    listLocalRoutes: mockListLocalRoutes,
+    [Symbol.asyncDispose]: async () => { }
 } as any));
 
 mock.module('../src/client.js', () => {
@@ -26,7 +27,8 @@ describe('Service Commands', () => {
         // If a test changed implementation, we must reset it.
         mockCreateClient.mockImplementation(() => Promise.resolve({
             applyAction: mockApplyAction,
-            listLocalRoutes: mockListLocalRoutes
+            listLocalRoutes: mockListLocalRoutes,
+            [Symbol.asyncDispose]: async () => { }
         } as any));
     });
 

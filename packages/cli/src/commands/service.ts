@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { createClient } from '../client.js';
 import chalk from 'chalk';
+import type { ServiceProtocol } from '@catalyst/orchestrator';
 
 type CliResult<T> = { success: true; data?: T } | { success: false; error: string };
 
@@ -12,13 +13,17 @@ type AddServiceParams = {
 
 export async function addService(params: AddServiceParams): Promise<CliResult<void>> {
     try {
-        const root = await createClient() as any;
+        // await using Declaration: This new syntax in JavaScript/TypeScript automatically calls the [Symbol.asyncDispose] method when the scope (e.g., function block) is exited, even if an error occurs.
+        await using root = await createClient();
 
         const action = {
             resource: 'dataChannel',
             action: 'create',
-            data: params
-        };
+            data: {
+                ...params,
+                protocol: params.protocol as ServiceProtocol
+            }
+        } as const;
 
         const result = await root.applyAction(action);
 
@@ -34,7 +39,7 @@ export async function addService(params: AddServiceParams): Promise<CliResult<vo
 
 export async function listServices(): Promise<CliResult<any[]>> {
     try {
-        const root = await createClient() as any;
+        await using root = await createClient();
         const result = await root.listLocalRoutes();
         return { success: true, data: result.routes || [] };
     } catch (err: any) {
