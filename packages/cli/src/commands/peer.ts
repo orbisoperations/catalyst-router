@@ -13,7 +13,7 @@ export const peerCommands = () => {
         .requiredOption('--secret <secret>', 'Shared secret for authentication')
         .action(async (endpoint, options) => {
             try {
-                const client = await createClient();
+                const client = await createClient() as any;
                 // We need to cast client to any or extend the type to include 'applyAction' if it's generic
                 // The RpcTarget usually exposes `applyAction`?
                 // Wait, the client is a proxy for `OrchestratorRpcServer`.
@@ -36,8 +36,8 @@ export const peerCommands = () => {
                 // S0 yes, we can call `client.applyAction(...)`.
 
                 const result = await client.applyAction({
-                    resource: 'internal-peering-user',
-                    action: 'create',
+                    resource: 'create-peer:internal-config',
+                    // action: 'create', // removed
                     data: {
                         endpoint,
                         secret: options.secret
@@ -60,7 +60,7 @@ export const peerCommands = () => {
         .description('List all peers')
         .action(async () => {
             try {
-                const client = await createClient();
+                const client = await createClient() as any;
                 // Client has `listPeers` method
                 const result = await client.listPeers();
 

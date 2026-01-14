@@ -3,12 +3,22 @@ import { Hono } from 'hono';
 import { upgradeWebSocket, websocket } from 'hono/bun';
 import { newRpcResponse } from '@hono/capnweb';
 import { OrchestratorRpcServer } from './rpc/server.js';
+import { BGPPeeringServer } from './peering/rpc-server.js';
 
 const app = new Hono();
 const rpcServer = new OrchestratorRpcServer();
 
 app.get('/rpc', (c) => {
     return newRpcResponse(c, rpcServer, {
+        upgradeWebSocket,
+    });
+});
+
+const bgpServer = new BGPPeeringServer({
+    actionHandler: (action) => rpcServer.applyAction(action)
+});
+app.get('/ibgp', (c) => {
+    return newRpcResponse(c, bgpServer, {
         upgradeWebSocket,
     });
 });

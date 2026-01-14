@@ -20,6 +20,7 @@ import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js'
 import { DirectProxyRouteTablePlugin } from '../plugins/implementations/proxy-route.js';
 import { InternalPeeringPlugin } from '../plugins/implementations/internal-peering.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
+import { InternalAutonomousSystemPlugin } from '../plugins/implementations/internal-as.js';
 import { PeeringService } from '../peering/service.js';
 import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
@@ -57,8 +58,9 @@ export class OrchestratorRpcServer extends RpcTarget {
 
         // Initialize plugins
         const routingPlugin = new LocalRoutingTablePlugin();
+        const internalAsPlugin = new InternalAutonomousSystemPlugin();
 
-        this.pipeline = new PluginPipeline([routingPlugin, ...plugins], 'OrchestratorPipeline');
+        this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
     }
 
     async applyAction(action: Action): Promise<AddDataChannelResult> {
@@ -102,7 +104,7 @@ export class OrchestratorRpcServer extends RpcTarget {
 
     async authenticate(secret: string): Promise<any> {
         const config = getConfig();
-        const service = new PeeringService(this.applyAction.bind(this), {
+        const service = new PeeringService(this.applyAction.bind(this) as any, {
             as: config.peering.as,
             domains: config.peering.domains
         });
@@ -116,7 +118,7 @@ export class OrchestratorRpcServer extends RpcTarget {
 
     async ping(): Promise<string> {
         const config = getConfig();
-        const service = new PeeringService(this.applyAction.bind(this), {
+        const service = new PeeringService(this.applyAction.bind(this) as any, {
             as: config.peering.as,
             domains: config.peering.domains
         });
