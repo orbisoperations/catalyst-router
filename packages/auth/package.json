@@ -5,7 +5,11 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./rpc/schema": "./src/rpc/schema.ts"
+    "./rpc/schema": "./src/rpc/schema.ts",
+    "./rpc/server": "./src/rpc/server.ts",
+    "./key-manager": "./src/key-manager/index.ts",
+    "./keys": "./src/keys.ts",
+    "./jwt": "./src/jwt.ts"
   },
   "scripts": {
     "dev": "bun run --watch src/server.ts",
