@@ -63,5 +63,8 @@
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
     "typescript-eslint": "^8.52.0"
-  }
+  },
+  "trustedDependencies": [
+    "protobufjs"
+  ]
 }
