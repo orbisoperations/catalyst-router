@@ -17,7 +17,7 @@ import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
-import { InternalAutonomousSystemPlugin } from '../plugins/implementations/internal-as.js';
+import { InternalAutonomousSystemPlugin } from '../peering/plugins/InternalAutonomousSystem.js';
 import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
