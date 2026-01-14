@@ -33,13 +33,15 @@ export class RouteTable {
 
     private addRouteToMap(
         currentMap: Map<string, LocalRoute>,
-        service: ServiceDefinition
+        service: ServiceDefinition,
+        sourcePeerId?: string
     ): { map: Map<string, LocalRoute>, metrics: Map<string, DataChannelMetrics>, id: string } {
         const id = this.createId(service);
         const newMap = new Map(currentMap);
         newMap.set(id, {
             id,
             service,
+            sourcePeerId,
         });
 
         const newMetrics = new Map(this.metrics);
@@ -58,24 +60,24 @@ export class RouteTable {
         return this.addInternalRoute(service);
     }
 
-    addInternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
-        const { map, metrics, id } = this.addRouteToMap(this.internalRoutes, service);
+    addInternalRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.internalRoutes, service, sourcePeerId);
         return {
             state: this.clone({ internalRoutes: map, metrics }),
             id
         };
     }
 
-    addProxiedRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
-        const { map, metrics, id } = this.addRouteToMap(this.proxiedRoutes, service);
+    addProxiedRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.proxiedRoutes, service, sourcePeerId);
         return {
             state: this.clone({ proxiedRoutes: map, metrics }),
             id
         };
     }
 
-    addExternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } {
-        const { map, metrics, id } = this.addRouteToMap(this.externalRoutes, service);
+    addExternalRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.externalRoutes, service, sourcePeerId);
         return {
             state: this.clone({ externalRoutes: map, metrics }),
             id
@@ -126,14 +128,18 @@ export class RouteTable {
 
     private updateRouteInMap(
         currentMap: Map<string, LocalRoute>,
-        service: ServiceDefinition
+        service: ServiceDefinition,
+        sourcePeerId?: string
     ): { map: Map<string, LocalRoute>, id: string } | null {
         const id = this.createId(service);
         if (currentMap.has(id)) {
             const newMap = new Map(currentMap);
+            // Preserve existing sourcePeerId if not provided
+            const existing = newMap.get(id);
             newMap.set(id, {
                 id,
                 service,
+                sourcePeerId: sourcePeerId ?? existing?.sourcePeerId,
             });
             // Init metrics if missing (safety check)
             // But usually update happens after add.
@@ -143,24 +149,24 @@ export class RouteTable {
         return null;
     }
 
-    updateInternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } | null {
-        const result = this.updateRouteInMap(this.internalRoutes, service);
+    updateInternalRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } | null {
+        const result = this.updateRouteInMap(this.internalRoutes, service, sourcePeerId);
         if (result) {
             return { state: this.clone({ internalRoutes: result.map }), id: result.id };
         }
         return null;
     }
 
-    updateProxiedRoute(service: ServiceDefinition): { state: RouteTable, id: string } | null {
-        const result = this.updateRouteInMap(this.proxiedRoutes, service);
+    updateProxiedRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } | null {
+        const result = this.updateRouteInMap(this.proxiedRoutes, service, sourcePeerId);
         if (result) {
             return { state: this.clone({ proxiedRoutes: result.map }), id: result.id };
         }
         return null;
     }
 
-    updateExternalRoute(service: ServiceDefinition): { state: RouteTable, id: string } | null {
-        const result = this.updateRouteInMap(this.externalRoutes, service);
+    updateExternalRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } | null {
+        const result = this.updateRouteInMap(this.externalRoutes, service, sourcePeerId);
         if (result) {
             return { state: this.clone({ externalRoutes: result.map }), id: result.id };
         }
@@ -213,6 +219,33 @@ export class RouteTable {
         return this;
     }
 
+    removeRoutesFromPeer(peerId: string): RouteTable {
+        const filterMap = (map: Map<string, LocalRoute>) => {
+            let changed = false;
+            const newMap = new Map(map);
+            for (const [id, route] of map) {
+                if (route.sourcePeerId === peerId) {
+                    newMap.delete(id);
+                    changed = true;
+                }
+            }
+            return { map: newMap, changed };
+        };
+
+        const internalRes = filterMap(this.internalRoutes);
+        const proxiedRes = filterMap(this.proxiedRoutes);
+        const externalRes = filterMap(this.externalRoutes);
+
+        if (internalRes.changed || proxiedRes.changed || externalRes.changed) {
+            return this.clone({
+                internalRoutes: internalRes.map,
+                proxiedRoutes: proxiedRes.map,
+                externalRoutes: externalRes.map
+            });
+        }
+        return this;
+    }
+
     // Peering Management
     addPeer(peer: AuthorizedPeer): { state: RouteTable, id: string } {
         const newPeers = new Map(this.peers);
@@ -227,7 +260,8 @@ export class RouteTable {
         if (this.peers.has(id)) {
             const newPeers = new Map(this.peers);
             newPeers.delete(id);
-            return this.clone({ peers: newPeers });
+            // Also remove routes from this peer
+            return this.clone({ peers: newPeers }).removeRoutesFromPeer(id);
         }
         return this;
     }

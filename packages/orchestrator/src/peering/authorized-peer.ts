@@ -46,4 +46,13 @@ export class AuthorizedPeerImpl extends RpcTarget {
             jwks: {}
         };
     }
+
+    async close(peerId: string): Promise<void> {
+        console.log(`[AuthorizedPeer] Closing session for ${peerId}`);
+        await this.dispatch({
+            resource: 'internalPeerSession',
+            resourceAction: 'close',
+            data: { peerId }
+        });
+    }
 }
