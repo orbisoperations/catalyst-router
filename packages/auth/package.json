@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./rpc/schema": "./src/rpc/schema.ts"
+  },
   "scripts": {
     "dev": "bun run --watch src/server.ts",
     "build": "tsc",
