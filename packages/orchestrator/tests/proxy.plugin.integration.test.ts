@@ -10,8 +10,7 @@ describe('LocalRoutingTablePlugin Tests', () => {
         const state = new RouteTable();
         const context: PluginContext = {
             action: {
-                resource: 'local-routing',
-                action: 'create-datachannel',
+                resource: 'create-datachannel:local-routing',
                 data: {
                     name: 'test-proxy-service',
                     endpoint: 'http://proxy-target',
@@ -44,8 +43,7 @@ describe('LocalRoutingTablePlugin Tests', () => {
         const state = new RouteTable();
         const context: PluginContext = {
             action: {
-                resource: 'local-routing',
-                action: 'create-datachannel',
+                resource: 'create-datachannel:local-routing',
                 data: {
                     name: 'test-internal-service',
                     endpoint: 'tcp://localhost:9090',
