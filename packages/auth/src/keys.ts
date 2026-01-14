@@ -33,7 +33,9 @@ const SerializedKeyPairSchema = z.object({
 
 const DEFAULT_KEYS_DIR = process.env.CATALYST_AUTH_KEYS_DIR || '/data/keys';
 const KEYPAIR_FILE = 'keypair.json';
-const ALGORITHM = 'ES384' as const;
+
+/** ES384 (ECDSA using P-384 and SHA-384) - used for all JWT signing */
+export const ALGORITHM = 'ES384' as const;
 
 /**
  * Add standard metadata to a JWK (kid, alg, use)
@@ -85,9 +87,15 @@ export async function exportKeyPair(keyPair: KeyPair): Promise<SerializedKeyPair
 }
 
 /**
- * Import a keypair from JWK format
+ * Import a keypair from JWK format with integrity validation
  */
 export async function importKeyPair(serialized: SerializedKeyPair): Promise<KeyPair> {
+    // Verify kid matches JWK thumbprint to detect corruption/tampering
+    const computedKid = await jose.calculateJwkThumbprint(serialized.publicKeyJwk, 'sha256');
+    if (computedKid !== serialized.kid) {
+        throw new Error('Key ID does not match JWK thumbprint - file may be corrupted or tampered');
+    }
+
     const [privateKey, publicKey] = await Promise.all([
         jose.importJWK(serialized.privateKeyJwk, ALGORITHM),
         jose.importJWK(serialized.publicKeyJwk, ALGORITHM),
@@ -103,12 +111,12 @@ export async function importKeyPair(serialized: SerializedKeyPair): Promise<KeyP
 
 /**
  * Save a keypair to disk with secure permissions
- * Uses atomic write (temp file + rename) to prevent TOCTOU race conditions
+ * Uses atomic write (temp file + rename) to prevent corruption
  */
 export async function saveKeyPair(keyPair: KeyPair, keysDir: string = DEFAULT_KEYS_DIR): Promise<void> {
     const serialized = await exportKeyPair(keyPair);
     const filePath = join(keysDir, KEYPAIR_FILE);
-    const tempPath = join(keysDir, `.keypair.${process.pid}.tmp`);
+    const tempPath = join(keysDir, `.keypair.${process.pid}.${Date.now()}.tmp`);
 
     // Ensure directory exists with restricted permissions
     mkdirSync(keysDir, { recursive: true, mode: 0o700 });
@@ -120,7 +128,6 @@ export async function saveKeyPair(keyPair: KeyPair, keysDir: string = DEFAULT_KE
             mode: 0o600,
         });
 
-        
         renameSync(tempPath, filePath);
     } catch (err) {
         // Clean up temp file on failure
@@ -128,6 +135,33 @@ export async function saveKeyPair(keyPair: KeyPair, keysDir: string = DEFAULT_KE
             unlinkSync(tempPath);
         } catch {
             // Ignore cleanup errors
+        }
+        throw err;
+    }
+}
+
+/**
+ * Create a new keypair file only if it doesn't exist
+ * Returns true if file was created, false if it already existed
+ */
+async function tryCreateKeyPairFile(keyPair: KeyPair, keysDir: string): Promise<boolean> {
+    const serialized = await exportKeyPair(keyPair);
+    const filePath = join(keysDir, KEYPAIR_FILE);
+
+    // Ensure directory exists with restricted permissions
+    mkdirSync(keysDir, { recursive: true, mode: 0o700 });
+
+    try {
+        // flag 'wx' = O_CREAT | O_EXCL: fail if file exists
+        writeFileSync(filePath, JSON.stringify(serialized, null, 2), {
+            encoding: 'utf-8',
+            mode: 0o600,
+            flag: 'wx',
+        });
+        return true;
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+            return false;
         }
         throw err;
     }
@@ -175,23 +209,45 @@ export async function loadKeyPair(keysDir: string = DEFAULT_KEYS_DIR): Promise<K
  * Returns { keyPair, generated: boolean } so caller can log if needed
  */
 export async function loadOrGenerateKeyPair(keysDir: string = DEFAULT_KEYS_DIR): Promise<{ keyPair: KeyPair; generated: boolean }> {
+    // First, try to load existing keypair
     const existing = await loadKeyPair(keysDir);
-
     if (existing) {
         return { keyPair: existing, generated: false };
     }
 
+    // No existing keypair - generate a new one
     const keyPair = await generateKeyPair();
-    await saveKeyPair(keyPair, keysDir);
 
-    return { keyPair, generated: true };
+    // Atomically try to create the file (O_CREAT | O_EXCL)
+    // If another process created it first, this returns false
+    const created = await tryCreateKeyPairFile(keyPair, keysDir);
+
+    if (created) {
+        // We successfully created the file with our keypair
+        return { keyPair, generated: true };
+    }
+
+    // File was created by another process - load it
+    const existingKeyPair = await loadKeyPair(keysDir);
+    if (!existingKeyPair) {
+        throw new Error('Keypair file exists but cannot be loaded');
+    }
+
+    return { keyPair: existingKeyPair, generated: false };
 }
 
 /**
  * Get the public key in JWK format (for JWKS endpoint)
+ * Includes runtime check to prevent accidental private key exposure
  */
 export async function getPublicKeyJwk(keyPair: KeyPair): Promise<jose.JWK> {
     const jwk = await jose.exportJWK(keyPair.publicKey);
+
+    // Critical: ensure we never expose private key material
+    if ('d' in jwk) {
+        throw new Error('CRITICAL: Attempted to export private key material as public JWK');
+    }
+
     return decorateJwk(jwk, keyPair.kid);
 }
 
