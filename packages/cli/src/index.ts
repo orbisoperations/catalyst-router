@@ -9,7 +9,9 @@ const program = new Command();
 program
     .name('catalyst')
     .description('Catalyst Node CLI')
-    .version(process.env.VERSION || '0.0.0-dev');
+    .version(process.env.VERSION || '0.0.0-dev')
+    .option('--orchestrator-url <url>', 'Orchestrator RPC URL', 'ws://localhost:3000/rpc')
+    .option('--log-level <level>', 'Log level', 'info');
 
 program.addCommand(serviceCommands());
 program.addCommand(metricsCommands());
