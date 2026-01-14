@@ -1,19 +1,27 @@
-FROM oven/bun:1
-
+# Build from monorepo root context to resolve catalog references
+FROM oven/bun:1 AS builder
 WORKDIR /app
 
-# Copy root package.json and lockfile (to utilize cache if possible, though overly simple here)
-# For simplicity in this monorepo context without complex pruning, we'll assume we can copy the packages/examples dir
-# Setup workspace context usually requires more, but for an isolated example container:
+# Copy workspace config files (catalog definitions are in root package.json)
+COPY package.json bun.lockb ./
+COPY packages/examples/package.json ./packages/examples/
 
-# Copy the examples workspace
-COPY . .
+# Install from workspace root - bun resolves catalogs from root package.json
+RUN bun install --filter @catalyst/examples
 
-# Install dependencies (frozen-lockfile might fail if unrelated packages are missing, so we just install)
-RUN bun install
+# Copy source code
+COPY packages/examples/src ./packages/examples/src
+COPY packages/examples/tsconfig.json ./packages/examples/
 
-# Expose port
+# Runtime stage
+FROM oven/bun:1
+WORKDIR /app
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/examples ./packages/examples
+
+WORKDIR /app/packages/examples
+
 ENV PORT=8080
 EXPOSE 8080
-
 CMD ["bun", "run", "src/books/index.ts"]
