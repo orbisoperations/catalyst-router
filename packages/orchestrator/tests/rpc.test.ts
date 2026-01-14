@@ -34,7 +34,8 @@ describe('Orchestrator RPC', () => {
 
     it('should apply create data channel action', async () => {
         const action = {
-            resource: 'create-datachannel:local-routing',
+            resource: 'localRoute',
+            resourceAction: 'create',
             data: {
                 name: 'test-service',
                 endpoint: 'http://127.0.0.1:8080',

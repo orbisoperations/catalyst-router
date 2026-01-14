@@ -1,29 +1,31 @@
 
 import { BasePlugin } from '../base.js';
-import { PluginContext, PluginResult, PipelineAction } from '../types.js';
-import { DataChannel } from '../../types.js';
+import { PluginContext, PluginResult } from '../types.js';
 import { ServiceDefinitionSchema } from '../../rpc/schema/direct.js';
 import { z } from 'zod';
 
-export const LocalRoutingCreateDataChannelSchema = z.object({
-    resource: z.literal('create-datachannel:local-routing'),
+export const LocalRoutingCreateActionSchema = z.object({
+    resource: z.literal('localRoute'),
+    resourceAction: z.literal('create'),
     data: ServiceDefinitionSchema,
 });
 
-export const LocalRoutingUpdateDataChannelSchema = z.object({
-    resource: z.literal('update-datachannel:local-routing'),
+export const LocalRoutingUpdateActionSchema = z.object({
+    resource: z.literal('localRoute'),
+    resourceAction: z.literal('update'),
     data: ServiceDefinitionSchema,
 });
 
-export const LocalRoutingDeleteDataChannelSchema = z.object({
-    resource: z.literal('delete-datachannel:local-routing'),
+export const LocalRoutingDeleteActionSchema = z.object({
+    resource: z.literal('localRoute'),
+    resourceAction: z.literal('delete'),
     data: z.object({ id: z.string() }),
 });
 
 export const LocalRoutingActionsSchema = z.union([
-    LocalRoutingCreateDataChannelSchema,
-    LocalRoutingUpdateDataChannelSchema,
-    LocalRoutingDeleteDataChannelSchema,
+    LocalRoutingCreateActionSchema,
+    LocalRoutingUpdateActionSchema,
+    LocalRoutingDeleteActionSchema,
 ]);
 
 export type LocalRoutingAction = z.infer<typeof LocalRoutingActionsSchema>;
@@ -36,8 +38,12 @@ export class LocalRoutingTablePlugin extends BasePlugin {
 
 
 
-        if (action.resource === 'create-datachannel:local-routing') {
-            const data = action.data as DataChannel;
+        if (action.resource !== 'localRoute') {
+            return { success: true, ctx: context };
+        }
+
+        if (action.resourceAction === 'create') {
+            const data = action.data as z.infer<typeof ServiceDefinitionSchema>;
 
             // Logic: Distinguish by protocol
             if (data.protocol === 'tcp:graphql' || data.protocol === 'tcp:gql') {
@@ -53,6 +59,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 context.results.push({
                     plugin: this.name,
                     resource: action.resource,
+                    resourceAction: action.resourceAction,
                     id,
                     name: data.name,
                     protocol: data.protocol,
@@ -71,6 +78,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 context.results.push({
                     plugin: this.name,
                     resource: action.resource,
+                    resourceAction: action.resourceAction,
                     id,
                     name: data.name,
                     protocol: data.protocol,
@@ -78,8 +86,8 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 });
             }
 
-        } else if (action.resource === 'update-datachannel:local-routing') {
-            const data = action.data as DataChannel;
+        } else if (action.resourceAction === 'update') {
+            const data = action.data as z.infer<typeof ServiceDefinitionSchema>;
 
             if (data.protocol === 'tcp:graphql' || data.protocol === 'tcp:gql') {
                 // Proxy Route
@@ -95,6 +103,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                     context.results.push({
                         plugin: this.name,
                         resource: action.resource,
+                        resourceAction: action.resourceAction,
                         id: result.id,
                         name: data.name,
                         protocol: data.protocol,
@@ -123,6 +132,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                     context.results.push({
                         plugin: this.name,
                         resource: action.resource,
+                        resourceAction: action.resourceAction,
                         id: result.id,
                         name: data.name,
                         protocol: data.protocol,
@@ -139,7 +149,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 }
             }
 
-        } else if (action.resource === 'delete-datachannel:local-routing') {
+        } else if (action.resourceAction === 'delete') {
             const { id } = action.data as { id: string };
             // removeRoute works for both internal and proxied maps within RouteTable
             const newState = state.removeRoute(id);
@@ -147,6 +157,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
             context.results.push({
                 plugin: this.name,
                 resource: action.resource,
+                resourceAction: action.resourceAction,
                 id,
                 type: 'route-deleted'
             });

@@ -10,14 +10,16 @@ export const AuthContextSchema = z.object({
 });
 export type AuthContext = z.infer<typeof AuthContextSchema>;
 
-export interface PipelineAction {
-    resource: string;
-    action?: string;
-    data: any;
+export interface BaseAction<Resource extends string, Action extends string, Data> {
+    resource: Resource;
+    resourceAction: Action;
+    data: Data;
 }
 
+export type OrchestratorAction = BaseAction<string, string, any>;
+
 export const PluginContextSchema = z.object({
-    action: z.custom<PipelineAction>(),
+    action: z.custom<OrchestratorAction>(),
     state: z.instanceof(RouteTable),
     authxContext: AuthContextSchema,
     results: z.array(z.any()).default([]),
