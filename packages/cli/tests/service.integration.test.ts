@@ -130,6 +130,7 @@ describe('CLI E2E with Containers', () => {
     });
 
     it('should add services via CLI and reflect in list', async () => {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for server warmup
         // 1. Initial State: Empty
         console.log('--- Step 1: List Empty ---');
         const listRes1 = await listServices();
