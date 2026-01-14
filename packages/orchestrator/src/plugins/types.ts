@@ -12,7 +12,7 @@ export type AuthContext = z.infer<typeof AuthContextSchema>;
 
 export interface PipelineAction {
     resource: string;
-    action: string;
+    action?: string;
     data: any;
 }
 

@@ -13,14 +13,9 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
         await using root = await createClient(params.orchestratorUrl);
 
         const action = {
-            resource: 'dataChannel',
-            action: 'create',
-            data: {
-                name: params.name,
-                endpoint: params.endpoint,
-                protocol: params.protocol as ServiceProtocol
-            }
-        } as const;
+            resource: 'create-datachannel:local-routing',
+            data: params
+        };
 
         const result = await root.applyAction(action);
 
