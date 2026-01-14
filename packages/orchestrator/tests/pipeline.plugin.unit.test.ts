@@ -19,7 +19,7 @@ class MockPlugin extends BasePlugin {
 describe('PluginPipeline Unit Tests', () => {
     // Helper to generic valid context
     const createTestContext = (): PluginContext => ({
-        action: { resource: 'dataChannel', action: 'create', data: { name: 'test', endpoint: 'http://test', protocol: 'tcp' } },
+        action: { resource: 'local-routing', action: 'create-datachannel', data: { name: 'test', endpoint: 'http://test', protocol: 'tcp' } },
         state: new RouteTable(),
         authxContext: { userId: 'test-user' },
         result: {}
