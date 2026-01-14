@@ -24,7 +24,7 @@ describe('Gateway Container Integration', () => {
         // 1. Build & Start Books (Background)
         const startBooks = async () => {
             const imageName = 'books-service:test';
-            await Bun.spawn(['docker', 'build', '-t', imageName, '-f', 'Dockerfile.books', '.'], {
+            await Bun.spawn(['podman', 'build', '-t', imageName, '-f', 'Dockerfile.books', '.'], {
                 cwd: examplesDir, stdout: 'ignore', stderr: 'inherit'
             }).exited;
 
@@ -39,7 +39,7 @@ describe('Gateway Container Integration', () => {
         // 2. Build & Start Movies (Background)
         const startMovies = async () => {
             const imageName = 'movies-service:test';
-            await Bun.spawn(['docker', 'build', '-t', imageName, '-f', 'Dockerfile.movies', '.'], {
+            await Bun.spawn(['podman', 'build', '-t', imageName, '-f', 'Dockerfile.movies', '.'], {
                 cwd: examplesDir, stdout: 'ignore', stderr: 'inherit'
             }).exited;
 
@@ -54,7 +54,7 @@ describe('Gateway Container Integration', () => {
         // 3. Build & Start Gateway (Background)
         const startGateway = async () => {
             const imageName = 'gateway-service:test';
-            await Bun.spawn(['docker', 'build', '-t', imageName, '.'], {
+            await Bun.spawn(['podman', 'build', '-t', imageName, '.'], {
                 cwd: gatewayDir, stdout: 'ignore', stderr: 'inherit'
             }).exited;
 
@@ -116,7 +116,7 @@ describe('Gateway Container Integration', () => {
         const client = await getRpcClient();
         const config = {
             services: [
-                // Use the Docker network alias 'books'
+                // Use the container network alias 'books'
                 { name: 'books', url: 'http://books:8080/graphql' }
             ]
         };

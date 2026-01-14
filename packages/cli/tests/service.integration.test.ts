@@ -26,10 +26,10 @@ describe('CLI E2E with Containers', () => {
         const gatewayDir = join(repoRoot, 'packages/gateway');
         const orchestratorDir = join(repoRoot, 'packages/orchestrator');
 
-        console.log('Building Docker images...');
+        console.log('Building container images...');
 
         const buildBooks = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'books-service:test', '-f', 'Dockerfile.books', '.'], {
+            await Bun.spawn(['podman', 'build', '-t', 'books-service:test', '-f', 'Dockerfile.books', '.'], {
                 cwd: examplesDir,
                 stdout: 'ignore',
                 stderr: 'inherit'
@@ -37,7 +37,7 @@ describe('CLI E2E with Containers', () => {
         };
 
         const buildMovies = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'movies-service:test', '-f', 'Dockerfile.movies', '.'], {
+            await Bun.spawn(['podman', 'build', '-t', 'movies-service:test', '-f', 'Dockerfile.movies', '.'], {
                 cwd: examplesDir,
                 stdout: 'ignore',
                 stderr: 'inherit'
@@ -45,7 +45,7 @@ describe('CLI E2E with Containers', () => {
         };
 
         const buildGateway = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'gateway-service:test', '.'], {
+            await Bun.spawn(['podman', 'build', '-t', 'gateway-service:test', '.'], {
                 cwd: gatewayDir,
                 stdout: 'ignore',
                 stderr: 'inherit'
@@ -54,7 +54,7 @@ describe('CLI E2E with Containers', () => {
 
         // We build orchestrator manually instead of using existing image to ensure fresh code
         const buildOrchestrator = async () => {
-            await Bun.spawn(['docker', 'build', '-t', 'orchestrator-service:test', '.'], {
+            await Bun.spawn(['podman', 'build', '-t', 'orchestrator-service:test', '.'], {
                 cwd: orchestratorDir,
                 stdout: 'ignore',
                 stderr: 'inherit'
@@ -62,7 +62,7 @@ describe('CLI E2E with Containers', () => {
         }
 
         await Promise.all([buildBooks(), buildMovies(), buildGateway(), buildOrchestrator()]);
-        console.log('Docker images built successfully.');
+        console.log('Container images built successfully.');
 
         console.log('Starting Containers...');
 
@@ -75,7 +75,7 @@ describe('CLI E2E with Containers', () => {
             .start();
 
         const booksPort = booksContainer.getMappedPort(8080);
-        // Inside docker network, use alias
+        // Inside container network, use alias
         booksUri = 'http://books:8080/graphql';
         console.log(`Books started on port ${booksPort}`);
 
@@ -104,7 +104,7 @@ describe('CLI E2E with Containers', () => {
             .withExposedPorts(3000)
             .withNetwork(network)
             .withNetworkAliases('orchestrator')
-            // Tell Orchestrator where Gateway is (internal docker network alias)
+            // Tell Orchestrator where Gateway is (internal container network alias)
             .withEnvironment({
                 CATALYST_GQL_GATEWAY_ENDPOINT: 'ws://gateway:4000/api',
                 PORT: '3000'

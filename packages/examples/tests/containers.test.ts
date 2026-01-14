@@ -1,44 +1,57 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { GenericContainer, Wait, StartedTestContainer } from 'testcontainers';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import path from 'path';
+import { execSync, spawn } from 'child_process';
 
-describe('Example GraphQL Servers', () => {
-    // Increase timeout for image build
+// Skip rebuild if image exists (set REBUILD_IMAGES=true to force rebuild)
+const FORCE_REBUILD = process.env.REBUILD_IMAGES === 'true';
+
+function imageExists(imageName: string): boolean {
+    try {
+        const output = execSync(`podman images -q ${imageName}`, { encoding: 'utf-8' });
+        return output.trim().length > 0;
+    } catch {
+        return false;
+    }
+}
+
+function ensureImage(imageName: string, dockerfile: string, buildContext: string): void {
+    if (!FORCE_REBUILD && imageExists(imageName)) {
+        console.log(`Using existing image: ${imageName}`);
+        return;
+    }
+
+    console.log(`Building image: ${imageName}...`);
+    execSync(`podman build -t ${imageName} -f ${dockerfile} .`, {
+        cwd: buildContext,
+        stdio: 'inherit',
+    });
+}
+
+describe('Example GraphQL Servers (vitest + testcontainers)', () => {
     const TIMEOUT = 120000;
+    const buildContext = path.resolve(__dirname, '../../..');
 
     describe('Books Service', () => {
         let startedContainer: StartedTestContainer;
 
         beforeAll(async () => {
-            // Build and start the container
-            // context is packages/examples
-            const buildContext = path.resolve(__dirname, '..');
-
             const imageName = 'books-service:test';
-            const dockerfile = 'Dockerfile.books';
+            const dockerfile = 'packages/examples/Dockerfile.books';
 
-            // Workaround for Bun incompatibility with testcontainers' build strategy.
-            // GenericContainer.fromDockerfile() uses 'tar-stream' which fails in Bun with:
-            // "TypeError: The 'sourceEnd' argument must be of type number. Received undefined"
-            // This is likely due to differences in Buffer/Stream implementation in Bun vs Node.
-            // We manually build the image using the docker CLI instead.
-            const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: buildContext,
-                stdout: 'ignore',
-                stderr: 'inherit',
-            });
-            await proc.exited;
+            ensureImage(imageName, dockerfile, buildContext);
 
-            const container = await new GenericContainer(imageName)
-            startedContainer = await container
+            console.log('Starting container with testcontainers...');
+            startedContainer = await new GenericContainer(imageName)
                 .withExposedPorts(8080)
-                .withWaitStrategy(Wait.forHttp('/health', 8080))
                 .start();
+            
+            console.log(`Container started on port ${startedContainer.getMappedPort(8080)}`);
         }, TIMEOUT);
 
         afterAll(async () => {
             if (startedContainer) await startedContainer.stop();
-        });
+        }, TIMEOUT);
 
         it('should serve books', async () => {
             const port = startedContainer.getMappedPort(8080);
@@ -71,28 +84,22 @@ describe('Example GraphQL Servers', () => {
         let startedContainer: StartedTestContainer;
 
         beforeAll(async () => {
-            const buildContext = path.resolve(__dirname, '..');
-
             const imageName = 'movies-service:test';
-            const dockerfile = 'Dockerfile.movies';
+            const dockerfile = 'packages/examples/Dockerfile.movies';
 
-            const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: buildContext,
-                stdout: 'ignore',
-                stderr: 'inherit',
-            });
-            await proc.exited;
+            ensureImage(imageName, dockerfile, buildContext);
 
-            const container = await new GenericContainer(imageName)
-            startedContainer = await container
+            console.log('Starting container with testcontainers...');
+            startedContainer = await new GenericContainer(imageName)
                 .withExposedPorts(8080)
-                .withWaitStrategy(Wait.forHttp('/health', 8080))
                 .start();
+            
+            console.log(`Container started on port ${startedContainer.getMappedPort(8080)}`);
         }, TIMEOUT);
 
         afterAll(async () => {
             if (startedContainer) await startedContainer.stop();
-        });
+        }, TIMEOUT);
 
         it('should serve movies', async () => {
             const port = startedContainer.getMappedPort(8080);

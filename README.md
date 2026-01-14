@@ -50,3 +50,70 @@ We support a variety of protocols for service definitions. Currently, **GraphQL*
 | `http:gql` | ✅ Live | Alias for `http:graphql` |
 | `http:grpc` | 🗓️ Planned | gRPC transcoding and routing |
 
+## Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) - JavaScript runtime and package manager
+- [Podman](https://podman.io/) - Container runtime (Docker alternative)
+
+### Getting Started
+
+```bash
+# Install dependencies
+bun install
+
+# Start the example services with Podman Compose
+bun run start:m0p2
+```
+
+### Testing
+
+This project uses a **hybrid testing approach** due to a [known Bun incompatibility with testcontainers](https://github.com/oven-sh/bun/issues/21342):
+
+| Test Type | Command | Runtime | Description |
+|-----------|---------|---------|-------------|
+| Unit tests | `bun test` | Bun | Fast unit tests (excludes container tests) |
+| Container tests | `bun run test:containers` | Node.js (vitest) | Integration tests using testcontainers |
+
+#### Why Two Runtimes?
+
+Bun has a [stream handling bug](https://github.com/oven-sh/bun/issues/21342) that causes testcontainers to hang indefinitely when starting containers. The workaround is to run container tests with **vitest** (which uses Node.js) instead of `bun test`.
+
+```bash
+# Run all unit tests (fast, uses Bun)
+bun test
+
+# Run container integration tests (uses Node.js via vitest)
+bun run test:containers
+
+# Force rebuild container images
+REBUILD_IMAGES=true bun run test:containers
+```
+
+#### Container Test Configuration
+
+Container tests require proper Podman configuration for testcontainers:
+
+```bash
+# These are set automatically by the test:containers script
+export DOCKER_HOST="unix://$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}')"
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+export TESTCONTAINERS_RYUK_DISABLED=true  # Required for rootless Podman
+```
+
+See [Podman Desktop's testcontainers tutorial](https://podman-desktop.io/tutorial/testcontainers-with-podman) for more details.
+
+### Docker/Podman Build
+
+The Dockerfiles use **monorepo root as build context** to resolve Bun's catalog dependencies:
+
+```bash
+# Build from monorepo root (correct)
+podman build -t my-service -f packages/myservice/Dockerfile .
+
+# Build individual service via compose
+podman-compose -f docker-compose/example.m0p2.compose.yaml up --build
+```
+
+This is required because `package.json` files use `catalog:` references that are defined in the root `package.json`.
