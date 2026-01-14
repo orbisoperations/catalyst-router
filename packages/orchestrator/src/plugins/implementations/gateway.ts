@@ -6,17 +6,28 @@ import { OrchestratorConfig } from '../../config.js';
 export class GatewayIntegrationPlugin extends BasePlugin {
     name = 'GatewayIntegrationPlugin';
     private endpoint: string;
+    private triggers: string[];
 
-    constructor(config: OrchestratorConfig['gqlGatewayConfig']) {
+    constructor(
+        config: OrchestratorConfig['gqlGatewayConfig'],
+        options: { triggerOnResources?: string[] } = {}
+    ) {
         super();
         if (!config) {
             throw new Error('GatewayIntegrationPlugin requires gqlGatewayConfig');
         }
         this.endpoint = config.endpoint;
+        this.triggers = options.triggerOnResources || [];
     }
 
     async apply(context: PluginContext): Promise<PluginResult> {
-        const { state } = context;
+        const { action, state } = context;
+
+        // Check if action matches any trigger
+        if (!this.triggers.includes(action.resource)) {
+            return { success: true, ctx: context };
+        }
+
         console.log(`[GatewayIntegrationPlugin] Configuring Gateway at ${this.endpoint}`);
 
         // 1. Map RouteTable to GatewayConfig
