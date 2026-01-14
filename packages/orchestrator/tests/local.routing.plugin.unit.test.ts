@@ -18,6 +18,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
     const createCtx = (resource: string, data: any): PluginContext => ({
         action: { resource, data },
         state,
+        results: [],
         authxContext: {} as any
     });
 

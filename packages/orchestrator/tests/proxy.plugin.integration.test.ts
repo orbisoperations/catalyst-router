@@ -19,6 +19,7 @@ describe('LocalRoutingTablePlugin Tests', () => {
                 }
             },
             state,
+            results: [],
             authxContext: {} as any
         };
 
@@ -52,6 +53,7 @@ describe('LocalRoutingTablePlugin Tests', () => {
                 }
             },
             state,
+            results: [],
             authxContext: {} as any
         };
 
@@ -73,6 +75,7 @@ describe('LocalRoutingTablePlugin Tests', () => {
         const context: PluginContext = {
             action: { resource: 'unknown', action: 'create', data: {} } as any,
             state,
+            results: [],
             authxContext: {} as any
         };
 

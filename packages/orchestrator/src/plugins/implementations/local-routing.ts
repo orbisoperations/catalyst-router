@@ -50,7 +50,14 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                     region: data.region
                 });
                 context.state = newState;
-                context.result = { ...context.result, id };
+                context.results.push({
+                    plugin: this.name,
+                    resource: action.resource,
+                    id,
+                    name: data.name,
+                    protocol: data.protocol,
+                    type: 'proxy-route-created'
+                });
             } else {
                 // Internal Route
                 console.log(`[LocalRoutingTablePlugin] Adding INTERNAL route for ${data.name}`);
@@ -61,7 +68,14 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                     region: data.region
                 });
                 context.state = newState;
-                context.result = { ...context.result, id };
+                context.results.push({
+                    plugin: this.name,
+                    resource: action.resource,
+                    id,
+                    name: data.name,
+                    protocol: data.protocol,
+                    type: 'internal-route-created'
+                });
             }
 
         } else if (action.resource === 'update-datachannel:local-routing') {
@@ -78,7 +92,14 @@ export class LocalRoutingTablePlugin extends BasePlugin {
 
                 if (result) {
                     context.state = result.state;
-                    context.result = { ...context.result, id: result.id };
+                    context.results.push({
+                        plugin: this.name,
+                        resource: action.resource,
+                        id: result.id,
+                        name: data.name,
+                        protocol: data.protocol,
+                        type: 'proxy-route-updated'
+                    });
                 } else {
                     return {
                         success: false,
@@ -99,7 +120,14 @@ export class LocalRoutingTablePlugin extends BasePlugin {
 
                 if (result) {
                     context.state = result.state;
-                    context.result = { ...context.result, id: result.id };
+                    context.results.push({
+                        plugin: this.name,
+                        resource: action.resource,
+                        id: result.id,
+                        name: data.name,
+                        protocol: data.protocol,
+                        type: 'internal-route-updated'
+                    });
                 } else {
                     return {
                         success: false,
@@ -116,7 +144,12 @@ export class LocalRoutingTablePlugin extends BasePlugin {
             // removeRoute works for both internal and proxied maps within RouteTable
             const newState = state.removeRoute(id);
             context.state = newState;
-            context.result = { ...context.result, id };
+            context.results.push({
+                plugin: this.name,
+                resource: action.resource,
+                id,
+                type: 'route-deleted'
+            });
         }
 
         return { success: true, ctx: context };
