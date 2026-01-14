@@ -44,7 +44,7 @@ describe('Orchestrator RPC', () => {
             }
         };
 
-        const result = await rpc.applyAction(action);
+        const result = await rpc.applyAction({ action });
         expect(result.success).toBe(true);
         expect(result.id).toBe('test-service:tcp:graphql');
     });

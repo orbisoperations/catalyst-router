@@ -5,9 +5,11 @@ import { stitchSchemas } from '@graphql-tools/stitch';
 import { AsyncExecutor, Executor } from '@graphql-tools/utils';
 import { buildSchema, parse, print, GraphQLError, getIntrospectionQuery, buildClientSchema } from 'graphql';
 import { GatewayConfig } from '../rpc/server.js';
+import { createAuthMiddleware, clearJwksCache } from '../middleware/auth.js';
 
 export class GatewayGraphqlServer {
     private yoga: ReturnType<typeof createYoga> | null = null;
+    private authConfig: GatewayConfig['auth'] = undefined;
 
     constructor() {
         // Initialize with a default health check schema
@@ -21,6 +23,12 @@ export class GatewayGraphqlServer {
 
     async reload(config: GatewayConfig): Promise<{ success: true } | { success: false; error: string }> {
         console.log('Reloading gateway with new config...', config);
+
+        // Update auth config (clear cache if auth settings changed)
+        if (config.auth?.jwksUrl !== this.authConfig?.jwksUrl) {
+            clearJwksCache();
+        }
+        this.authConfig = config.auth;
 
         try {
             const subschemas = await Promise.all(
@@ -67,6 +75,10 @@ export class GatewayGraphqlServer {
             return new Response('Gateway not initialized', { status: 503 });
         }
         return this.yoga.fetch(request, env, ctx);
+    }
+
+    getAuthConfig(): GatewayConfig['auth'] {
+        return this.authConfig;
     }
 
     private createYogaInstance(schemaOrConfig: any) {
@@ -147,6 +159,17 @@ export class GatewayGraphqlServer {
 export function createGatewayHandler(gateway?: GatewayGraphqlServer): { app: Hono; server: GatewayGraphqlServer } {
     const server = gateway || new GatewayGraphqlServer();
     const app = new Hono();
+
+    // Dynamic auth middleware - checks server's auth config on each request
+    app.use('/*', async (c, next) => {
+        const authConfig = server.getAuthConfig();
+        if (authConfig) {
+            const middleware = createAuthMiddleware(authConfig);
+            return middleware(c, next);
+        }
+        return next();
+    });
+
     app.all('/*', (c) => server.fetch(c.req.raw, c.env, {}));
     return { app, server };
 }

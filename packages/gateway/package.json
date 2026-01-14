@@ -19,9 +19,11 @@
     "graphql": "catalog:",
     "graphql-yoga": "catalog:",
     "hono": "catalog:",
+    "jose": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@catalyst/auth": "workspace:*",
     "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing",
