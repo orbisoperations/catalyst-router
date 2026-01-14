@@ -16,10 +16,8 @@ import { AuthPlugin } from '../plugins/implementations/auth.js';
 import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
-import { InternalPeeringPlugin } from '../plugins/implementations/internal-peering.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
 import { InternalAutonomousSystemPlugin } from '../plugins/implementations/internal-as.js';
-import { PeeringService } from '../peering/service.js';
 import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
@@ -101,26 +99,8 @@ export class OrchestratorRpcServer extends RpcTarget {
     // Peer Public API Implementation
     // ----------------------------------------------------------------
 
-    async authenticate(secret: string): Promise<any> {
-        const config = getConfig();
-        const service = new PeeringService(this.applyAction.bind(this) as any, {
-            as: config.peering.as,
-            domains: config.peering.domains
-        });
-        return service.authenticate(secret);
-    }
-
     async listPeers(): Promise<ListPeersResult> {
         const peers = this.state.getPeers();
         return { peers };
-    }
-
-    async ping(): Promise<string> {
-        const config = getConfig();
-        const service = new PeeringService(this.applyAction.bind(this) as any, {
-            as: config.peering.as,
-            domains: config.peering.domains
-        });
-        return service.ping();
     }
 }
