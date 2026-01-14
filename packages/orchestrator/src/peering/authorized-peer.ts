@@ -26,7 +26,8 @@ export class AuthorizedPeerImpl extends RpcTarget {
         // Dispatch action to internal-as plugin to handle registration
         // We pass the stub in the data. Note: 'any' type in schema allows this.
         await this.dispatch({
-            resource: 'open:internal-as',
+            resource: 'internalPeerSession',
+            resourceAction: 'open',
             data: {
                 peerInfo: info,
                 clientStub,

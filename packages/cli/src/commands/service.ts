@@ -15,7 +15,8 @@ export async function addService(params: AddServiceParams): Promise<CliResult<vo
         const root = await createClient() as any;
 
         const action = {
-            resource: 'create-datachannel:local-routing',
+            resource: 'localRoute',
+            resourceAction: 'create',
             data: params
         };
 

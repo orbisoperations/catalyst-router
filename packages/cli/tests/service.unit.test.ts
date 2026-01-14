@@ -37,8 +37,8 @@ describe('Service Commands', () => {
             expect(mockApplyAction).toHaveBeenCalled();
             const lastCall = mockApplyAction.mock.calls[0][0];
             expect(lastCall).toEqual({
-                resource: 'dataChannel',
-                action: 'create',
+                resource: 'localRoute',
+                resourceAction: 'create',
                 data: {
                     name: 'test-service',
                     endpoint: 'http://localhost:8080',
