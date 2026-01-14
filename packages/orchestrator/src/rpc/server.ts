@@ -7,17 +7,15 @@ import {
     ListMetricsResult,
     AddDataChannelResultSchema,
     ListLocalRoutesResultSchema,
-    ListMetricsResultSchema
+    ListMetricsResultSchema,
+    ApplyActionResult
 } from './schema/index.js';
 import { GlobalRouteTable, RouteTable } from '../state/route-table.js';
 import { PluginPipeline } from '../plugins/pipeline.js';
 import { AuthPlugin } from '../plugins/implementations/auth.js';
 import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
-import { RouteTablePlugin } from '../plugins/implementations/routing.js';
-import { RouteAnnouncerPlugin } from '../plugins/implementations/announcer.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
-import { DirectProxyRouteTablePlugin } from '../plugins/implementations/proxy-route.js';
 import { InternalPeeringPlugin } from '../plugins/implementations/internal-peering.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
 import { InternalAutonomousSystemPlugin } from '../plugins/implementations/internal-as.js';
@@ -63,16 +61,17 @@ export class OrchestratorRpcServer extends RpcTarget {
         this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
     }
 
-    async applyAction(action: Action): Promise<AddDataChannelResult> {
+    async applyAction(action: Action): Promise<ApplyActionResult> {
         try {
             const result = await this.pipeline.apply({
                 action,
                 state: this.state,
-                authxContext: { userId: 'stub-user', roles: ['admin'] } // Stub auth context
+                authxContext: { userId: 'stub-user', roles: ['admin'] }, // Stub auth context
+                results: []
             });
 
             if (!result.success) {
-                return { success: false, error: result.error.message };
+                return { success: false, results: [], error: result.error.message };
             }
 
             // Update local state with the state returned from the pipeline
@@ -80,10 +79,10 @@ export class OrchestratorRpcServer extends RpcTarget {
 
             return {
                 success: true,
-                id: result.ctx.result?.id
+                results: result.ctx.results
             };
         } catch (e: any) {
-            return { success: false, error: e.message };
+            return { success: false, results: [], error: e.message };
         }
     }
 

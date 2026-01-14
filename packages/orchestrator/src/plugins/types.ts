@@ -20,7 +20,7 @@ export const PluginContextSchema = z.object({
     action: z.custom<PipelineAction>(),
     state: z.instanceof(RouteTable),
     authxContext: AuthContextSchema,
-    result: z.record(z.any()).optional(),
+    results: z.array(z.any()).default([]),
 });
 export type PluginContext = z.infer<typeof PluginContextSchema>;
 

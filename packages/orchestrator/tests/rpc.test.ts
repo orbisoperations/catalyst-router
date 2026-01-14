@@ -34,8 +34,7 @@ describe('Orchestrator RPC', () => {
 
     it('should apply create data channel action', async () => {
         const action = {
-            resource: 'local-routing',
-            action: 'create-datachannel',
+            resource: 'create-datachannel:local-routing',
             data: {
                 name: 'test-service',
                 endpoint: 'http://127.0.0.1:8080',
@@ -46,7 +45,7 @@ describe('Orchestrator RPC', () => {
 
         const result = await rpc.applyAction(action);
         expect(result.success).toBe(true);
-        expect(result.id).toBe('test-service:http:graphql');
+        expect(result.results[0].id).toBe('test-service:tcp:graphql');
     });
 
     it('should list local routes', async () => {

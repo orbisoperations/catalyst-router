@@ -45,7 +45,9 @@ export const peerCommands = () => {
                 });
 
                 if (result.success) {
-                    console.log(chalk.green(`Peer added successfully. ID: ${result.id}`));
+                    // Extract ID from results if available (assuming first result has id)
+                    const id = result.results?.[0]?.id || 'unknown';
+                    console.log(chalk.green(`Peer added successfully. ID: ${id}`));
                 } else {
                     console.error(chalk.red(`Failed to add peer: ${result.error}`));
                     process.exit(1);
