@@ -11,6 +11,7 @@
     "test": "bun test tests/*.unit.test.ts && bun test tests/*.integration.test.ts"
   },
   "dependencies": {
+    "@catalyst/auth": "workspace:*",
     "capnweb": "catalog:",
     "chalk": "^5.3.0",
     "commander": "catalog:",
@@ -19,6 +20,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/bun": "catalog:dev",
     "@types/inquirer": "^9.0.7",
     "@types/node": "catalog:dev",
     "@types/ws": "^8.18.1",

@@ -3,7 +3,7 @@ FROM oven/bun:1 AS builder
 WORKDIR /app
 
 # Copy workspace config files (catalog definitions are in root package.json)
-COPY package.json bun.lockb ./
+COPY package.json bun.lock ./
 COPY packages/auth/package.json ./packages/auth/
 
 # Install from workspace root
