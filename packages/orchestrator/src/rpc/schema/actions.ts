@@ -60,20 +60,17 @@ export const InternalPeeringProtocolUpdateActionSchema = z.object({
 // Redefining here to avoid circular dependencies if plugin imports from here.
 
 export const LocalRoutingCreateDataChannelSchema = z.object({
-    resource: z.literal('local-routing'),
-    action: z.literal('create-datachannel'),
+    resource: z.literal('create-datachannel:local-routing'),
     data: ServiceDefinitionSchema,
 });
 
 export const LocalRoutingUpdateDataChannelSchema = z.object({
-    resource: z.literal('local-routing'),
-    action: z.literal('update-datachannel'),
+    resource: z.literal('update-datachannel:local-routing'),
     data: ServiceDefinitionSchema,
 });
 
 export const LocalRoutingDeleteDataChannelSchema = z.object({
-    resource: z.literal('local-routing'),
-    action: z.literal('delete-datachannel'),
+    resource: z.literal('delete-datachannel:local-routing'),
     data: z.object({ id: z.string() }),
 });
 

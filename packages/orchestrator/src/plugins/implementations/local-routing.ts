@@ -6,20 +6,17 @@ import { ServiceDefinitionSchema } from '../../rpc/schema/direct.js';
 import { z } from 'zod';
 
 export const LocalRoutingCreateDataChannelSchema = z.object({
-    resource: z.literal('local-routing'),
-    action: z.literal('create-datachannel'),
+    resource: z.literal('create-datachannel:local-routing'),
     data: ServiceDefinitionSchema,
 });
 
 export const LocalRoutingUpdateDataChannelSchema = z.object({
-    resource: z.literal('local-routing'),
-    action: z.literal('update-datachannel'),
+    resource: z.literal('update-datachannel:local-routing'),
     data: ServiceDefinitionSchema,
 });
 
 export const LocalRoutingDeleteDataChannelSchema = z.object({
-    resource: z.literal('local-routing'),
-    action: z.literal('delete-datachannel'),
+    resource: z.literal('delete-datachannel:local-routing'),
     data: z.object({ id: z.string() }),
 });
 
@@ -37,12 +34,9 @@ export class LocalRoutingTablePlugin extends BasePlugin {
     async apply(context: PluginContext): Promise<PluginResult> {
         const { action, state } = context;
 
-        // Check if this is a local-routing action
-        if (action.resource !== 'local-routing') {
-            return { success: true, ctx: context };
-        }
 
-        if (action.action === 'create-datachannel') {
+
+        if (action.resource === 'create-datachannel:local-routing') {
             const data = action.data as DataChannel;
 
             // Logic: Distinguish by protocol
@@ -70,7 +64,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 context.result = { ...context.result, id };
             }
 
-        } else if (action.action === 'update-datachannel') {
+        } else if (action.resource === 'update-datachannel:local-routing') {
             const data = action.data as DataChannel;
 
             if (data.protocol === 'tcp:graphql' || data.protocol === 'tcp:gql') {
@@ -117,7 +111,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 }
             }
 
-        } else if (action.action === 'delete-datachannel') {
+        } else if (action.resource === 'delete-datachannel:local-routing') {
             const { id } = action.data as { id: string };
             // removeRoute works for both internal and proxied maps within RouteTable
             const newState = state.removeRoute(id);
