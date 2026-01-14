@@ -7,9 +7,11 @@ services:
       - "3000:3000"
     environment:
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway:4000/api
+      - CATALYST_AUTH_ENDPOINT=ws://auth:4020/rpc
       - PORT=3000
     depends_on:
       - gateway
+      - auth
 
   gateway:
     build:
@@ -40,3 +42,18 @@ services:
       - "8082:8080"
     environment:
       - PORT=8080
+
+  auth:
+    build:
+      context: ..
+      dockerfile: packages/auth/Dockerfile
+    ports:
+      - "4020:4020"
+    environment:
+      - PORT=4020
+      - CATALYST_AUTH_KEYS_DIR=/data/keys
+    volumes:
+      - auth-keys:/data/keys
+
+volumes:
+  auth-keys:
