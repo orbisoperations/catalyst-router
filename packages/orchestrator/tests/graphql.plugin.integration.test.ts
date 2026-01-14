@@ -116,7 +116,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         let state = new RouteTable();
         const context: PluginContext = {
             // @ts-ignore - Dummy action for context, we manipulate state directly
-            action: { resource: 'dataChannel', action: 'create', data: {} },
+            action: { resource: 'local-routing', action: 'create-datachannel', data: {} },
             state,
             authxContext: {} as any
         };
