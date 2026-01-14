@@ -74,13 +74,32 @@ export const LocalRoutingDeleteDataChannelSchema = z.object({
     data: z.object({ id: z.string() }),
 });
 
+export const InternalPeeringCreatePeerSchema = z.object({
+    resource: z.literal('create-peer:internal-config'),
+    data: z.object({
+        endpoint: z.string(),
+        secret: z.string()
+    })
+});
+
+export const InternalPeeringOpenSchema = z.object({
+    resource: z.literal('open:internal-as'),
+    data: z.object({
+        peerInfo: z.any(), // TODO: Define strict PeerInfo schema
+        clientStub: z.any(), // Validation handled at runtime/plugin level for stubs
+        direction: z.enum(['inbound', 'outbound']).optional()
+    })
+});
+
 export const ActionSchema = z.union([
     LocalRoutingCreateDataChannelSchema,
     LocalRoutingUpdateDataChannelSchema,
     LocalRoutingDeleteDataChannelSchema,
     InternalPeeringUserCreateActionSchema,
     InternalPeeringUserDeleteActionSchema,
-    InternalPeeringProtocolUpdateActionSchema
+    InternalPeeringProtocolUpdateActionSchema,
+    InternalPeeringCreatePeerSchema,
+    InternalPeeringOpenSchema
 ]);
 export type Action = z.infer<typeof ActionSchema>;
 
