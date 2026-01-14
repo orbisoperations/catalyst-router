@@ -5,7 +5,8 @@
   "scripts": {
     "start:books": "bun run src/books/index.ts",
     "start:movies": "bun run src/movies/index.ts",
-    "test": "bun test"
+    "test": "bun test --ignore '**/container*'",
+    "test:containers": "DOCKER_HOST=\"unix://$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}')\" TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock TESTCONTAINERS_RYUK_DISABLED=true vitest run containers"
   },
   "dependencies": {
     "@graphql-tools/schema": "catalog:",

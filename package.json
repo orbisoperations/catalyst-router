@@ -2,8 +2,12 @@
   "name": "catalyst-monorepo",
   "private": true,
   "scripts": {
-    "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
+    "start:m0p2": "podman compose -f docker-compose/example.m0p2.compose.yaml up --build",
     "cli": "bun packages/cli/src/index.ts",
+    "test": "bun test --ignore '**/container*'",
+    "test:containers": "bun run test:containers:examples && bun run test:containers:auth",
+    "test:containers:examples": "cd packages/examples && bun run test:containers",
+    "test:containers:auth": "cd packages/auth && bun run test:containers",
     "prepare": "husky",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
