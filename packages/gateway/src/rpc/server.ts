@@ -12,8 +12,15 @@ export const ServiceConfigSchema = z.object({
     token: z.string().optional(), // Optional auth token for the service
 });
 
+export const AuthConfigSchema = z.object({
+    jwksUrl: z.string().url(),
+    issuer: z.string().optional(),
+    audience: z.string().optional(),
+});
+
 export const GatewayConfigSchema = z.object({
     services: z.array(ServiceConfigSchema),
+    auth: AuthConfigSchema.optional(),
 });
 
 export type GatewayConfig = z.infer<typeof GatewayConfigSchema>;

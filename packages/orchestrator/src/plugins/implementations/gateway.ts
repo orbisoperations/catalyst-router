@@ -3,16 +3,20 @@ import { BasePlugin } from '../base.js';
 import { PluginContext, PluginResult } from '../types.js';
 import { OrchestratorConfig } from '../../config.js';
 
+export interface GatewayPluginConfig {
+    gatewayEndpoint: string;
+    authJwksUrl?: string;
+}
+
 export class GatewayIntegrationPlugin extends BasePlugin {
     name = 'GatewayIntegrationPlugin';
     private endpoint: string;
+    private authJwksUrl?: string;
 
-    constructor(config: OrchestratorConfig['gqlGatewayConfig']) {
+    constructor(config: GatewayPluginConfig) {
         super();
-        if (!config) {
-            throw new Error('GatewayIntegrationPlugin requires gqlGatewayConfig');
-        }
-        this.endpoint = config.endpoint;
+        this.endpoint = config.gatewayEndpoint;
+        this.authJwksUrl = config.authJwksUrl;
     }
 
     async apply(context: PluginContext): Promise<PluginResult> {
@@ -32,7 +36,12 @@ export class GatewayIntegrationPlugin extends BasePlugin {
                 token: undefined
             }));
 
-        const config = { services };
+        const config: { services: typeof services; auth?: { jwksUrl: string } } = { services };
+
+        // Include auth config if JWKS URL is available
+        if (this.authJwksUrl) {
+            config.auth = { jwksUrl: this.authJwksUrl };
+        }
 
         try {
             await this.sendConfigToGateway(config);
