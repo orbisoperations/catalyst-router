@@ -43,7 +43,8 @@ describe('Internal Peering Integration', () => {
 
         expect(result.accepted).toBe(true);
         expect(dispatchedAction).toBeDefined();
-        expect(dispatchedAction.resource).toBe('open:internal-as');
+        expect(dispatchedAction.resource).toBe('internalPeerSession');
+        expect(dispatchedAction.resourceAction).toBe('open');
         expect(dispatchedAction.data.peerInfo.id).toBe('test-node');
     });
 
@@ -51,7 +52,8 @@ describe('Internal Peering Integration', () => {
         const plugin = new InternalAutonomousSystemPlugin();
         const context: PluginContext = {
             action: {
-                resource: 'open:internal-as',
+                resource: 'internalPeerSession',
+                resourceAction: 'open',
                 data: {
                     peerInfo: { id: 'remote-1', as: 200 },
                     clientStub: {},

@@ -15,8 +15,8 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
     });
 
     // Helper to create context
-    const createCtx = (resource: string, data: any): PluginContext => ({
-        action: { resource, data },
+    const createCtx = (resource: string, resourceAction: string, data: any): PluginContext => ({
+        action: { resource, resourceAction, data },
         state,
         results: [],
         authxContext: {} as any
@@ -30,7 +30,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
                 protocol: 'tcp',
                 region: 'us-east-1'
             };
-            const ctx = createCtx('create-datachannel:local-routing', data);
+            const ctx = createCtx('localRoute', 'create', data);
 
             const result = await plugin.apply(ctx);
 
@@ -48,7 +48,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
                 protocol: 'tcp:graphql',
                 region: 'us-west-1'
             };
-            const ctx = createCtx('create-datachannel:local-routing', data);
+            const ctx = createCtx('localRoute', 'create', data);
 
             const result = await plugin.apply(ctx);
 
@@ -80,7 +80,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
                 region: 'updated-region'
             };
             // createCtx uses the updated 'state'
-            const ctx = createCtx('update-datachannel:local-routing', updateData);
+            const ctx = createCtx('localRoute', 'update', updateData);
 
             const result = await plugin.apply(ctx);
 
@@ -98,7 +98,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
                 endpoint: 'tcp://new:9090',
                 protocol: 'tcp'
             };
-            const ctx = createCtx('update-datachannel:local-routing', updateData);
+            const ctx = createCtx('localRoute', 'update', updateData);
 
             const result = await plugin.apply(ctx);
 
@@ -124,7 +124,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
                 endpoint: 'http://new.proxy',
                 protocol: 'tcp:graphql'
             };
-            const ctx = createCtx('update-datachannel:local-routing', updateData);
+            const ctx = createCtx('localRoute', 'update', updateData);
 
             const result = await plugin.apply(ctx);
 
@@ -145,7 +145,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
             const { state: stateWithRoute, id } = state.addInternalRoute(data);
             state = stateWithRoute;
 
-            const ctx = createCtx('delete-datachannel:local-routing', { id });
+            const ctx = createCtx('localRoute', 'delete', { id });
 
             const result = await plugin.apply(ctx);
 
@@ -154,7 +154,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
         });
 
         it('should handle deleting non-existent route gracefully (idempotent)', async () => {
-            const ctx = createCtx('delete-datachannel:local-routing', { id: 'missing-id' });
+            const ctx = createCtx('localRoute', 'delete', { id: 'missing-id' });
 
             const result = await plugin.apply(ctx);
 

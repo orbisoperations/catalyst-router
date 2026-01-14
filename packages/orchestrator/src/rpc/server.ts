@@ -45,9 +45,7 @@ export class OrchestratorRpcServer extends RpcTarget {
         if (config.gqlGatewayConfig) {
             plugins.push(new GatewayIntegrationPlugin(config.gqlGatewayConfig, {
                 triggerOnResources: [
-                    'create-datachannel:local-routing',
-                    'update-datachannel:local-routing',
-                    'delete-datachannel:local-routing'
+                    'localRoute'
                 ]
             }));
         }

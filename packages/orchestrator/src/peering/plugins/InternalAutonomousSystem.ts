@@ -1,6 +1,7 @@
 
 import { BasePlugin } from '../../plugins/base.js';
 import { PluginContext, PluginResult } from '../../plugins/types.js';
+import { z } from 'zod';
 
 export class InternalAutonomousSystemPlugin extends BasePlugin {
     name = 'InternalAutonomousSystemPlugin';
@@ -8,11 +9,11 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
     async apply(context: PluginContext): Promise<PluginResult> {
         const { action, state } = context;
 
-        if (action.resource === 'create-peer:internal-config') {
+        if (action.resource === 'internalPeerConfig' && action.resourceAction === 'create') {
             return this.handleCreatePeer(context);
         }
 
-        if (action.resource === 'open:internal-as') {
+        if (action.resource === 'internalPeerSession' && action.resourceAction === 'open') {
             return this.handleOpenPeer(context);
         }
 
@@ -94,3 +95,39 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
         return { success: true, ctx: context };
     }
 }
+
+export const InternalPeerConfigCreateSchema = z.object({
+    resource: z.literal('internalPeerConfig'),
+    resourceAction: z.literal('create'),
+    data: z.object({
+        endpoint: z.string(),
+        secret: z.string()
+    })
+});
+
+export const InternalPeerSessionOpenSchema = z.object({
+    resource: z.literal('internalPeerSession'),
+    resourceAction: z.literal('open'),
+    data: z.object({
+        peerInfo: z.any(),
+        clientStub: z.any(),
+        direction: z.enum(['inbound', 'outbound']).optional()
+    })
+});
+
+// BGP Update Message Structure
+export const InternalBGPRouteUpdateSchema = z.object({
+    resource: z.literal('internalBGPRoute'),
+    resourceAction: z.literal('update'),
+    data: z.object({
+        type: z.union([z.literal('add'), z.literal('remove')]),
+        route: z.any().optional(), // ServiceDefinitionSchema
+        routeId: z.string().optional()
+    })
+});
+
+export const InternalPeeringActionsSchema = z.union([
+    InternalPeerConfigCreateSchema,
+    InternalPeerSessionOpenSchema,
+    InternalBGPRouteUpdateSchema
+]);

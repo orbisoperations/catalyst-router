@@ -36,8 +36,8 @@ export const peerCommands = () => {
                 // S0 yes, we can call `client.applyAction(...)`.
 
                 const result = await client.applyAction({
-                    resource: 'create-peer:internal-config',
-                    // action: 'create', // removed
+                    resource: 'internalPeerConfig',
+                    resourceAction: 'create',
                     data: {
                         endpoint,
                         secret: options.secret
