@@ -34,8 +34,8 @@ describe('Orchestrator RPC', () => {
 
     it('should apply create data channel action', async () => {
         const action = {
-            resource: 'dataChannel',
-            action: 'create',
+            resource: 'local-routing',
+            action: 'create-datachannel',
             data: {
                 name: 'test-service',
                 endpoint: 'http://127.0.0.1:8080',
@@ -51,8 +51,8 @@ describe('Orchestrator RPC', () => {
 
     it('should list local routes', async () => {
         const action = {
-            resource: 'dataChannel',
-            action: 'create',
+            resource: 'local-routing',
+            action: 'create-datachannel',
             data: {
                 name: 'test-service',
                 endpoint: 'http://127.0.0.1:8080',
@@ -74,8 +74,8 @@ describe('Orchestrator RPC', () => {
 
     it('should list metrics', async () => {
         const action = {
-            resource: 'dataChannel',
-            action: 'create',
+            resource: 'local-routing',
+            action: 'create-datachannel',
             data: {
                 name: 'test-service',
                 endpoint: 'http://127.0.0.1:8080',
