@@ -1,6 +1,6 @@
 
-import { BasePlugin } from '../base.js';
-import { PluginContext, PluginResult } from '../types.js';
+import { BasePlugin } from '../../plugins/base.js';
+import { PluginContext, PluginResult } from '../../plugins/types.js';
 
 export class InternalAutonomousSystemPlugin extends BasePlugin {
     name = 'InternalAutonomousSystemPlugin';

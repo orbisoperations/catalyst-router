@@ -4,7 +4,7 @@ import { OrchestratorRpcServer } from '../src/rpc/server.js';
 import { BGPPeeringServer } from '../src/peering/rpc-server.js';
 import { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
-import { InternalAutonomousSystemPlugin } from '../src/plugins/implementations/internal-as.js';
+import { InternalAutonomousSystemPlugin } from '../src/peering/plugins/InternalAutonomousSystem.js';
 
 describe('Internal Peering Integration', () => {
 
@@ -59,6 +59,7 @@ describe('Internal Peering Integration', () => {
                 }
             },
             state: new RouteTable(),
+            results: [],
             authxContext: {} as any
         };
 
