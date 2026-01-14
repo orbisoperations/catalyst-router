@@ -5,6 +5,7 @@ import { newRpcResponse } from '@hono/capnweb';
 
 import type { IKeyManager } from '../key-manager/types.js';
 import { isAuthorizedToRevoke, type RevocationStore } from '../revocation.js';
+import { decodeToken, CLOCK_TOLERANCE } from '../jwt.js';
 import {
     SignTokenRequestSchema,
     VerifyTokenRequestSchema,
@@ -112,31 +113,36 @@ export class AuthRpcServer extends RpcTarget {
             return { success: false, error: 'Invalid auth token' };
         }
 
-        // Verify the token to be revoked
-        const tokenResult = await this.keyManager.verify(token);
-        if (!tokenResult.valid) {
-            return { success: false, error: 'Invalid token signature' };
+        // Just decode target token - no signature verification needed
+        // This allows revoking tokens signed with rotated-out keys
+        const decoded = decodeToken(token);
+        if (!decoded) {
+            return { success: false, error: 'Malformed token' };
         }
 
+        const tokenPayload = decoded.payload as Record<string, unknown>;
+
         // Authorization check
-        if (!isAuthorizedToRevoke(authResult.payload, tokenResult.payload)) {
+        if (!isAuthorizedToRevoke(authResult.payload, tokenPayload)) {
             return { success: false, error: 'Not authorized to revoke this token' };
         }
 
-        const { jti, exp } = tokenResult.payload;
+        const { jti, exp } = tokenPayload;
 
         if (typeof jti !== 'string' || jti === '') {
             return { success: false, error: 'Token missing jti claim' };
         }
-        if (typeof exp !== 'number' || exp <= 0) {
-            return { success: false, error: 'Token missing or invalid exp claim' };
+        if (typeof exp !== 'number') {
+            return { success: false, error: 'Token missing exp claim' };
         }
 
-        const added = this.revocationStore.revoke(jti, new Date(exp * 1000));
-        if (!added) {
-            return { success: false, error: 'Revocation store full' };
+        // Check if already expired
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        if (exp + CLOCK_TOLERANCE <= nowSeconds) {
+            return { success: false, error: 'Token already expired' };
         }
 
+        this.revocationStore.revoke(jti, new Date(exp * 1000));
         return { success: true };
     }
 
