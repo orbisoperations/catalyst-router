@@ -5,10 +5,13 @@ import {
     loadOrGenerateKeyPair,
     generateKeyPair,
     saveKeyPair,
+    loadKeyPair,
     getJwks,
     getPublicKeyJwk
 } from './keys.js';
 import { signToken, verifyToken, SignOptions } from './jwt.js';
+import { readdirSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
+import { join } from 'path';
 
 export abstract class KeyManager {
     /**
@@ -43,19 +46,70 @@ export abstract class KeyManager {
 
 export class FileSystemKeyManager extends KeyManager {
     private currentKey?: KeyPair;
-    private previousKey?: KeyPair;
-    private previousKeyExpiresAt?: number;
+    private previousKeys: { key: KeyPair; expiresAt: number }[] = [];
     private keysDir: string;
+    private archiveDir: string;
 
     constructor(keysDir?: string) {
         super();
         this.keysDir = keysDir || process.env.CATALYST_AUTH_KEYS_DIR || '/data/keys';
+        this.archiveDir = join(this.keysDir, 'archive');
     }
 
     async init() {
-        if (!this.currentKey) {
-            const { keyPair } = await loadOrGenerateKeyPair(this.keysDir);
-            this.currentKey = keyPair;
+        // Ensure archive directory exists
+        if (!existsSync(this.archiveDir)) {
+            mkdirSync(this.archiveDir, { recursive: true, mode: 0o700 });
+        }
+
+        // Load current key
+        const { keyPair } = await loadOrGenerateKeyPair(this.keysDir);
+        this.currentKey = keyPair;
+
+        // Load archived keys
+        await this.loadArchivedKeys();
+    }
+
+    private async loadArchivedKeys() {
+        this.previousKeys = [];
+        try {
+            const files = readdirSync(this.archiveDir).map(f => join(this.archiveDir, f));
+
+            for (const file of files) {
+                try {
+                    // Filename format: keypair.{expiresAt}.json
+                    // Check if valid filename
+                    const basename = file.split('/').pop()!;
+                    const match = basename.match(/^keypair\.(\d+)\.json$/);
+                    if (!match) continue;
+
+                    const expiresAt = parseInt(match[1], 10);
+                    if (Date.now() > expiresAt) {
+                        // Clean up expired key
+                        try { unlinkSync(file); } catch { }
+                        continue;
+                    }
+
+                    // Load key manually reusing load logic logic but custom path
+                    // We can't use loadKeyPair directly because it assumes KEYPAIR_FILE constant name usually
+                    // But we can check if we can reuse importKeyPair
+                    // Let's assume we read and parse manually for simplicity as we reuse schemas but not the file loader
+                    const fs = await import('fs');
+                    const data = fs.readFileSync(file, 'utf-8');
+                    const parsed = JSON.parse(data);
+                    // Reuse importKeyPair from keys.ts if exported valid format
+                    const { importKeyPair } = await import('./keys.js');
+                    // We need to cast or trust the persistent format matches
+                    const key = await importKeyPair(parsed as any);
+
+                    this.previousKeys.push({ key, expiresAt });
+
+                } catch (e) {
+                    console.warn(`Failed to load archived key ${file}:`, e);
+                }
+            }
+        } catch (e) {
+            // Archive dir might be empty or unreadable
         }
     }
 
@@ -67,18 +121,33 @@ export class FileSystemKeyManager extends KeyManager {
         const oldKey = this.currentKey!;
         const newKey = await generateKeyPair();
 
-        // Persist the new key (overwrites the file)
-        await saveKeyPair(newKey, this.keysDir);
+        // 1. Archive the old key
+        if (!immediate) {
+            const expiresAt = Date.now() + gracePeriodMs;
+            const archivePath = join(this.archiveDir, `keypair.${expiresAt}.json`);
 
-        this.currentKey = newKey;
+            // Move the current file to archive path
+            // We need to verify the current file on disk corresponds to oldKey... 
+            // safest is to just write oldKey to archivePath
+            const { saveKeyPair } = await import('./keys.js');
+            // We can't use saveKeyPair easily with custom path unless we modify it or implement custom write
+            // Implementing custom write here to keep keys.ts simple
+            const { exportKeyPair } = await import('./keys.js');
+            const serialized = await exportKeyPair(oldKey);
+            const fs = await import('fs');
+            fs.writeFileSync(archivePath, JSON.stringify(serialized, null, 2), { mode: 0o600 });
 
-        if (immediate) {
-            this.previousKey = undefined;
-            this.previousKeyExpiresAt = undefined;
+            this.previousKeys.push({ key: oldKey, expiresAt });
         } else {
-            this.previousKey = oldKey;
-            this.previousKeyExpiresAt = Date.now() + gracePeriodMs;
+            this.previousKeys = []; // Clear previous keys if immediate rotation (security decision? or just deprecate current?)
+            // If immediate, we probably want to clear archived keys too?
+            // "Discard immediately" implies invalidation. 
+            // We will wipe memory previous keys. File cleanup happens on next init/prune.
         }
+
+        // 2. Save new key as current (overwrites keypair.json)
+        await saveKeyPair(newKey, this.keysDir);
+        this.currentKey = newKey;
     }
 
     async sign(options: SignOptions): Promise<string> {
@@ -96,10 +165,12 @@ export class FileSystemKeyManager extends KeyManager {
         const currentJwk = await getPublicKeyJwk(this.currentKey!);
         keys.push(currentJwk);
 
-        // Previous key if valid
-        if (this.previousKey && this.previousKeyExpiresAt && Date.now() < this.previousKeyExpiresAt) {
-            const prevJwk = await getPublicKeyJwk(this.previousKey);
-            keys.push(prevJwk);
+        // Previous keys
+        for (const prev of this.previousKeys) {
+            if (Date.now() < prev.expiresAt) {
+                const prevJwk = await getPublicKeyJwk(prev.key);
+                keys.push(prevJwk);
+            }
         }
 
         return { keys };
@@ -112,12 +183,12 @@ export class FileSystemKeyManager extends KeyManager {
         const res = await verifyToken(this.currentKey!, token);
         if (res.valid) return res;
 
-        // Try previous key if valid and error wasn't just "expired" (though VerifyResult doesn't distinguish signature fail vs exp easily without error checks, jwt.ts verifyToken returns generic error for signature fail)
-        // Actually verifyToken checks logic.
-
-        if (this.previousKey && this.previousKeyExpiresAt && Date.now() < this.previousKeyExpiresAt) {
-            const prevRes = await verifyToken(this.previousKey, token);
-            if (prevRes.valid) return prevRes;
+        // Try previous keys
+        for (const prev of this.previousKeys) {
+            if (Date.now() < prev.expiresAt) {
+                const prevRes = await verifyToken(prev.key, token);
+                if (prevRes.valid) return prevRes;
+            }
         }
 
         return res;
