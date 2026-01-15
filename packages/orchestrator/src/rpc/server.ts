@@ -17,7 +17,7 @@ import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
-import { InternalAutonomousSystemPlugin } from '../peering/plugins/InternalAutonomousSystem.js';
+import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js';
 import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
@@ -52,16 +52,17 @@ export class OrchestratorRpcServer extends RpcTarget {
 
         // Initialize plugins
         const routingPlugin = new LocalRoutingTablePlugin();
-        const internalAsPlugin = new InternalAutonomousSystemPlugin();
+        const internalBgpPlugin = new InternalBGPPlugin();
 
-        this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
+        this.pipeline = new PluginPipeline([routingPlugin, internalBgpPlugin, ...plugins], 'OrchestratorPipeline');
     }
 
     async connectionFromManagementSDK(): Promise<ManagementScope> {
         return {
             applyAction: (action) => this.applyAction(action),
             listLocalRoutes: () => this.listLocalRoutes(),
-            listMetrics: () => this.listMetrics()
+            listMetrics: () => this.listMetrics(),
+            listPeers: () => this.listPeers()
         };
     }
 
@@ -151,6 +152,7 @@ export interface ManagementScope {
     applyAction(action: Action): Promise<ApplyActionResult>;
     listLocalRoutes(): Promise<ListLocalRoutesResult>;
     listMetrics(): Promise<ListMetricsResult>;
+    listPeers(): Promise<ListPeersResult>;
 }
 
 export interface PeerInfo {

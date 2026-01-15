@@ -111,14 +111,16 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
 
     it('should connect Peer A to Peer B', async () => {
         // Connect A to B (B is at peer-b:3000 inside network)
-        await runCli(['peer', 'add', 'ws://peer-b:3000/ibgp', '--secret', 'default-secret'], portA);
+        await runCli(['peer', 'add', 'http://peer-b:3000/rpc', '--secret', 'valid-secret'], portA);
 
         // Wait and verify
         let connected = false;
-        for (let i = 0; i < 15; i++) { // Increased retries
+        let lastOutput = '';
+        for (let i = 0; i < 30; i++) { // Increased retries
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const output = await runCli(['peer', 'list'], portA);
+                lastOutput = output;
                 if (output.includes('peer-b')) {
                     connected = true;
                     break;
@@ -126,6 +128,9 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             } catch (e) {
                 // Ignore transient CLI errors during polling
             }
+        }
+        if (!connected) {
+            console.error('Peer connection verification failed. Last Peer List Output:\n', lastOutput);
         }
         expect(connected).toBe(true);
     }, 30000); // Increased Timeout
