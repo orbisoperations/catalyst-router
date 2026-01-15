@@ -17,7 +17,7 @@ import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
-// import { InternalAutonomousSystemPlugin } from '../peering/plugins/InternalAutonomousSystem.js';
+import { InternalAutonomousSystemPlugin } from '../peering/plugins/InternalAutonomousSystem.js';
 import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
@@ -52,10 +52,9 @@ export class OrchestratorRpcServer extends RpcTarget {
 
         // Initialize plugins
         const routingPlugin = new LocalRoutingTablePlugin();
-        // const internalAsPlugin = new InternalAutonomousSystemPlugin();
+        const internalAsPlugin = new InternalAutonomousSystemPlugin();
 
-        // this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
-        this.pipeline = new PluginPipeline([routingPlugin, ...plugins], 'OrchestratorPipeline');
+        this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
     }
 
     async connectionFromManagementSDK(): Promise<ManagementScope> {
@@ -67,45 +66,37 @@ export class OrchestratorRpcServer extends RpcTarget {
     }
 
     async connectionFromIBGPPeer(secret: string): Promise<IBGPScope> {
-        // TODO: Validate secret against configured peers
-        // For now, allow any non-empty secret or match a dummy one
-        if (!secret) {
+        const config = getConfig();
+        if (secret !== config.peering.secret) {
             throw new Error('Invalid secret');
         }
 
         return {
-            open: async (callback) => {
-                // Return dummy PeerInfo for now
-                return {
-                    id: 'local-node',
-                    as: 100, // TODO: Get from config
-                    domains: [],
-                    services: []
-                };
-            },
-            update: async (routes) => {
-                // Delegate to applyAction
-                // Mapping internal routes to 'updateRoutes' or similar action
-                // For now, we just pass the action through if it matches our schema
-                // But typically update() takes a RouteTable or list of routes
-                // Let's assume the argument 'routes' IS the action payload for now for simplicity
-                // or wrap it.
-                // Based on diagram: BGP -> IBGPScope: update(...)
-                // IBGPScope -> API: applyAction(...)
+            open: async (peerInfo: PeerInfo) => {
+                console.log(`[iBGP] Peer connected: ${peerInfo.id} (AS ${peerInfo.as})`);
 
-                // We'll construct the action manually:
-                /*
+                // If new, register via pipeline
+                // The plugin will handle the reverse connection
                 const action: Action = {
-                   resource: 'routeTable', 
-                   resourceAction: 'update', 
-                   data: routes 
+                    resource: 'internalPeerSession',
+                    resourceAction: 'open',
+                    data: {
+                        peerInfo,
+                        clientStub: null,
+                        direction: 'inbound'
+                    }
                 };
-                */
-                // Since we don't have the exact types for 'routes' defined yet in this context,
-                // and plugins are disabled, we will just return a success stub.
-                return { success: true, results: [] };
-                // Actual delegation (commented out until types aligned):
-                // return this.applyAction({ resource: 'routeTable', action: 'update', data: routes });
+
+                await this.applyAction(action);
+            },
+            update: async (routes: any) => {
+                const action: Action = {
+                    resource: 'internalBGPRoute',
+                    resourceAction: 'update',
+                    data: routes
+                };
+
+                return this.applyAction(action);
             }
         };
     }
@@ -170,6 +161,6 @@ export interface PeerInfo {
 }
 
 export interface IBGPScope {
-    open(callback: any): Promise<PeerInfo>;
+    open(peerInfo: PeerInfo): Promise<void>;
     update(routes: any): Promise<ApplyActionResult>;
 }

@@ -6,13 +6,8 @@ import { z } from 'zod';
 export class InternalAutonomousSystemPlugin extends BasePlugin {
     name = 'InternalAutonomousSystemPlugin';
 
-    // Connection pool: Peer ID -> Connection State
-    private activePeers: Map<string, { stub: any, endpoint: string, secret: string }> = new Map();
-    // Keep references to sessions to prevent GC/Closure
-    private sessions: any[] = [];
-
     async apply(context: PluginContext): Promise<PluginResult> {
-        const { action, state } = context;
+        const { action } = context;
 
         if (action.resource === 'internalPeerConfig' && action.resourceAction === 'create') {
             return this.handleCreatePeer(context);
@@ -26,10 +21,6 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
             return this.handleClosePeer(context);
         }
 
-        if (action.resource === 'internalPeerSession' && action.resourceAction === 'keepAlive') {
-            return this.handleKeepAlive(context);
-        }
-
         if (action.resource === 'internalBGPRoute' && action.resourceAction === 'update') {
             return this.handleRouteUpdate(context);
         }
@@ -41,111 +32,57 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
         return { success: true, ctx: context };
     }
 
-    private updateLastSeen(peerId: string) {
-        this.peerTimers.set(peerId, Date.now());
-    }
-
-    private async handleKeepAlive(context: PluginContext): Promise<PluginResult> {
-        const { peerId } = context.action.data;
-        // console.log(`[InternalAS] Received KeepAlive from ${peerId}`);
-        this.updateLastSeen(peerId);
-        return { success: true, ctx: context };
-    }
-
-    // Track Last Seen
-    private peerTimers: Map<string, number> = new Map();
-    // Track Intervals
-    private peerIntervals: Map<string, Timer> = new Map();
-
-    private async connectPeer(endpoint: string, secret: string, context: PluginContext): Promise<void> {
-        console.log(`[InternalAS] Initiating connection to ${endpoint}`);
-        try {
-            const { newWebSocketRpcSession } = await import('capnweb');
-            const remoteServer = newWebSocketRpcSession(endpoint);
-            this.sessions.push(remoteServer);
-
-            // @ts-ignore
-            const authorizedPeer = await remoteServer.authorize(secret);
-
-            const localInfo = {
-                id: process.env.CATALYST_NODE_ID || 'unknown-node',
-                as: parseInt(process.env.CATALYST_AS || '0')
-            };
-
-            const localStub = {
-                keepAlive: async () => { console.log('[InternalAS] Received KeepAlive'); },
-                updateRoute: async (msg: any) => { console.log('[InternalAS] Received Update', msg); }
-            };
-
-            const sessionState = await authorizedPeer.open(localInfo, localStub);
-            console.log(`[InternalAS] Peer Connected! Accepted: ${sessionState.accepted}`);
-
-            const remotePeerId = sessionState.peerInfo?.id || sessionState.peerId || 'unknown-remote';
-
-            // Store with config for reconnection
-            this.activePeers.set(remotePeerId, { stub: authorizedPeer, endpoint, secret });
-
-            if (sessionState.peerInfo) {
-                const authorizedPeerData = {
-                    id: sessionState.peerInfo.id,
-                    as: sessionState.peerInfo.as,
-                    endpoint: endpoint,
-                    domains: [],
-                    _stub: authorizedPeer
-                };
-                const { state: newState } = context.state.addPeer(authorizedPeerData);
-                context.state = newState;
-                console.log(`[InternalAS] Outbound Peer ${remotePeerId} registered.`);
-            } else {
-                console.warn(`[InternalAS] Connected to ${endpoint} but received no Peer Info.`);
-            }
-
-        } catch (error: any) {
-            console.error(`[InternalAS] Connection failed to ${endpoint}:`, error);
-            throw error;
-        }
-    }
-
     private async handleCreatePeer(context: PluginContext): Promise<PluginResult> {
         const { data } = context.action;
-        const { endpoint, secret } = data;
+        const { endpoint } = data;
 
-        try {
-            await this.connectPeer(endpoint, secret, context);
-        } catch (error: any) {
-            return {
-                success: false,
-                error: {
-                    pluginName: this.name,
-                    message: `Failed to connect to peer: ${error.message}`,
-                    error
-                }
-            };
+        // Idempotency check: If endpoint already exists as a peer, skip
+        const existingPeers = context.state.getPeers();
+        if (existingPeers.some(p => p.endpoint === endpoint)) {
+            console.log(`[InternalAS] Peer at ${endpoint} already exists. Skipping.`);
+            return { success: true, ctx: context };
         }
+
+        console.log(`[InternalAS] Registering peer at ${endpoint}`);
+
+        // We add to state. Since it's stateless HTTP RPC, we don't "connect" here.
+        // We just record the intent/config so we can broadcast to it.
+        const peerData = {
+            id: `peer-${endpoint.replace(/[^a-zA-Z0-9]/g, '-')}`, // Temporary ID or wait for 'open'
+            as: 0,
+            endpoint: endpoint,
+            domains: []
+        };
+
+        const { state: newState } = context.state.addPeer(peerData);
+        context.state = newState;
+
         return { success: true, ctx: context };
     }
 
     private async handleOpenPeer(context: PluginContext): Promise<PluginResult> {
         const { data } = context.action;
-        const { peerInfo, clientStub, direction } = data;
+        const { peerInfo } = data;
 
-        console.log(`[InternalAS] Handling OPEN request from ${peerInfo.id} (${direction})`);
+        console.log(`[InternalAS] Handling OPEN request from ${peerInfo.id}`);
+
+        // Idempotency Check: If peer is already known in state, do nothing
+        if (context.state.getPeer(peerInfo.id)) {
+            console.log(`[InternalAS] Peer ${peerInfo.id} already exists in state. Skipping registration.`);
+            return { success: true, ctx: context };
+        }
 
         const authorizedPeer = {
             id: peerInfo.id,
             as: peerInfo.as,
             endpoint: peerInfo.endpoint || 'unknown',
-            domains: peerInfo.domains || [],
-            _stub: clientStub
+            domains: peerInfo.domains || []
         };
 
         const { state: newState } = context.state.addPeer(authorizedPeer);
         context.state = newState;
 
-        // Store stub (inbound connections don't have secret/endpoint for reconnection usually, unless we learn it)
-        this.activePeers.set(peerInfo.id, { stub: clientStub, endpoint: '', secret: '' });
-
-        console.log(`[InternalAS] Peer ${peerInfo.id} registered. Active Peers: ${this.activePeers.size}`);
+        console.log(`[InternalAS] Peer ${peerInfo.id} registered.`);
         return { success: true, ctx: context };
     }
 
@@ -153,20 +90,9 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
         const { data } = context.action;
         const { peerId } = data;
         console.log(`[InternalAS] Handling CLOSE request for ${peerId}`);
-        const peerRecord = this.activePeers.get(peerId);
-        if (peerRecord && peerRecord.stub) {
-            try {
-                const localId = process.env.CATALYST_NODE_ID || 'unknown-node';
-                console.log(`[InternalAS] Sending close to remote peer ${peerId}`);
-                await peerRecord.stub.close(localId);
-            } catch (e: any) {
-                console.warn(`[InternalAS] Failed to notify peer ${peerId} of close:`, e.message);
-            }
-        }
-        this.activePeers.delete(peerId);
+
         const newState = context.state.removePeer(peerId);
         context.state = newState;
-        console.log(`[InternalAS] Peer ${peerId} and its routes removed. Active Peers: ${this.activePeers.size}`);
         return { success: true, ctx: context };
     }
 
@@ -183,40 +109,32 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
             updateMsg.routeId = action.data.id;
         }
 
-        console.log(`[InternalAS] Broadcasting ${updateType} to ${this.activePeers.size} peers.`);
+        const peers = context.state.getPeers();
+        console.log(`[InternalAS] Broadcasting ${updateType} to ${peers.length} peers via Batch HTTP RPC.`);
 
-        const promises: Promise<void>[] = [];
-        for (const [peerId, record] of this.activePeers) {
-            const stub = record.stub;
+        const { newHttpBatchRpcSession } = await import('capnweb');
+        const { getConfig } = await import('../../config.js');
+        const config = getConfig();
+        const sharedSecret = config.peering.secret;
 
-            const p = (async () => {
-                try {
-                    // Try update
-                    if (stub && stub.updateRoute) {
-                        await stub.updateRoute(updateMsg);
-                    }
-                } catch (e: any) {
-                    // Check for "disposed" error (or any error suggesting disconnection)
-                    if (e.message?.includes('disposed') && record.endpoint) {
-                        console.warn(`[InternalAS] Peer ${peerId} disposed. Attempting reconnection...`);
-                        try {
-                            await this.connectPeer(record.endpoint, record.secret, context);
-                            // Retry update on NEW stub
-                            const newRecord = this.activePeers.get(peerId);
-                            if (newRecord && newRecord.stub && newRecord.stub.updateRoute) {
-                                await newRecord.stub.updateRoute(updateMsg);
-                                console.log(`[InternalAS] Reconnected and updated peer ${peerId}`);
-                            }
-                        } catch (reconnectErr: any) {
-                            console.error(`[InternalAS] Failed to reconnect to ${peerId}:`, reconnectErr.message);
-                        }
-                    } else {
-                        console.error(`[InternalAS] Failed to update peer ${peerId}:`, e.message);
-                    }
-                }
-            })();
-            promises.push(p);
-        }
+        const promises = peers.map(async (peer) => {
+            if (!peer.endpoint || peer.endpoint === 'unknown') return;
+
+            try {
+                // For Batch HTTP RPC, we usually call a bootstrap method to get a scope
+                // Consistent with server.ts: connectionFromIBGPPeer(secret)
+                const session: any = newHttpBatchRpcSession(peer.endpoint);
+
+                // Pipelined call: get scope and then update
+                const ibgpScope = session.connectionFromIBGPPeer(sharedSecret);
+
+                await ibgpScope.update(updateMsg);
+
+                console.log(`[InternalAS] Broadcast to ${peer.id} successful.`);
+            } catch (e: any) {
+                console.error(`[InternalAS] Failed to update peer ${peer.id} at ${peer.endpoint}:`, e.message);
+            }
+        });
 
         await Promise.all(promises);
         return { success: true, ctx: context };

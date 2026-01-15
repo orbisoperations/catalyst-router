@@ -1,12 +1,9 @@
-
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { newWebSocketRpcSession } from 'capnweb';
+import { newHttpBatchRpcSession } from 'capnweb';
 import app from '../src/index.js';
 
 describe('Orchestrator iBGP Progressive API', () => {
     let server: any;
-    let rpc: any;
-    let ws: WebSocket;
     const port = 4018;
 
     beforeAll(async () => {
@@ -18,58 +15,71 @@ describe('Orchestrator iBGP Progressive API', () => {
 
         // Give it a moment to start
         await new Promise(resolve => setTimeout(resolve, 100));
-
-        ws = new WebSocket(`ws://localhost:${port}/rpc`);
-        await new Promise<void>((resolve) => {
-            ws.addEventListener('open', () => resolve());
-        });
-
-        rpc = newWebSocketRpcSession(ws as any);
     });
 
     afterAll(() => {
-        if (ws) ws.close();
         server.stop();
     });
 
-    it('should successfully obtain IBGP scope with valid secret', async () => {
-        const secret = 'some-secret';
+    const getRpc = () => newHttpBatchRpcSession(`http://localhost:${port}/rpc`);
+
+    it('should successfully obtain IBGP scope with valid shared secret', async () => {
+        const rpc = getRpc();
+        const secret = 'valid-secret'; // Matches default in config.ts
         const ibgp = rpc.connectionFromIBGPPeer(secret);
         expect(ibgp).toBeDefined();
     });
 
-    it('should fail to obtain IBGP scope with empty secret', async () => {
+    it('should fail to obtain IBGP scope with incorrect secret', async () => {
+        const rpc = getRpc();
         try {
-            await rpc.connectionFromIBGPPeer('');
+            await rpc.connectionFromIBGPPeer('wrong-secret');
             throw new Error('Should have failed');
         } catch (e: any) {
             expect(e.message).toContain('Invalid secret');
         }
     });
 
-    it('should handle open session call', async () => {
+    it('should handle open session call and be idempotent', async () => {
+        const rpc = getRpc();
         const secret = 'valid-secret';
         const ibgp = rpc.connectionFromIBGPPeer(secret);
 
-        // Mock callback stub (client-side)
-        const callback = {
-            update: async (routes: any) => {
-                console.log('Received update:', routes);
-            }
+        const myPeerInfo = {
+            id: 'test-peer',
+            as: 200,
+            domains: ['test.com'],
+            services: [],
+            endpoint: 'http://localhost:9999/rpc' // Dummy endpoint
         };
 
-        const peerInfo = await ibgp.open(callback);
-        expect(peerInfo).toBeDefined();
-        expect(peerInfo.id).toBe('local-node');
-        expect(peerInfo.as).toBe(100);
+        // First call
+        await ibgp.open(myPeerInfo);
+
+        // Second call (should be idempotent)
+        // Refresh session for second batch if needed, or pipeline if possible
+        const rpc2 = getRpc();
+        const ibgp2 = rpc2.connectionFromIBGPPeer(secret);
+        await ibgp2.open(myPeerInfo);
     });
 
     it('should accept route updates', async () => {
+        const rpc = getRpc();
         const secret = 'valid-secret';
         const ibgp = rpc.connectionFromIBGPPeer(secret);
 
-        const dummyRoutes = [{ id: 'route-1' }];
-        const result = await ibgp.update(dummyRoutes);
+        const routeUpdate = {
+            type: 'add',
+            route: {
+                id: 'route-1',
+                service: {
+                    name: 'test-service',
+                    endpoint: 'http://localhost:8080/graphql',
+                    protocol: 'tcp:graphql'
+                }
+            }
+        };
+        const result = await ibgp.update(routeUpdate);
 
         expect(result.success).toBe(true);
     });
