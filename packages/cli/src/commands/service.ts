@@ -10,7 +10,12 @@ import { AddServiceInputSchema, ListServicesInputSchema, type AddServiceInput } 
 
 export async function addService(params: AddServiceInput): Promise<CliResult<void>> {
     try {
+<<<<<<< HEAD
         await using root = await createClient(params.orchestratorUrl);
+=======
+        const root = await createClient();
+        const api = root.connectionFromCli();
+>>>>>>> 9d03721 (chore: implements progressive api for cli)
 
         const action = {
             resource: 'localRoute',
@@ -18,7 +23,7 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
             data: params
         };
 
-        const result = await root.applyAction(action);
+        const result = await api.applyAction(action);
 
         if (result.success) {
             return { success: true };
@@ -32,8 +37,14 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
 
 export async function listServices(orchestratorUrl?: string): Promise<CliResult<any[]>> {
     try {
+<<<<<<< HEAD
         await using root = await createClient(orchestratorUrl);
         const result = await root.listLocalRoutes();
+=======
+        const root = await createClient();
+        const api = root.connectionFromCli();
+        const result = await api.listLocalRoutes();
+>>>>>>> 9d03721 (chore: implements progressive api for cli)
         return { success: true, data: result.routes || [] };
     } catch (err: any) {
         return { success: false, error: err.message || 'Connection error' };
