@@ -3,8 +3,8 @@ import { BasePlugin } from '../../plugins/base.js';
 import { PluginContext, PluginResult } from '../../plugins/types.js';
 import { z } from 'zod';
 
-export class InternalAutonomousSystemPlugin extends BasePlugin {
-    name = 'InternalAutonomousSystemPlugin';
+export class InternalBGPPlugin extends BasePlugin {
+    name = 'InternalBGPPlugin';
 
     async apply(context: PluginContext): Promise<PluginResult> {
         const { action } = context;

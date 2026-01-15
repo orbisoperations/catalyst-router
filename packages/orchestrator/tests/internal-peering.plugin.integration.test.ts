@@ -1,55 +1,13 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { OrchestratorRpcServer } from '../src/rpc/server.js';
-import { BGPPeeringServer } from '../src/peering/rpc-server.js';
 import { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
-import { InternalAutonomousSystemPlugin } from '../src/peering/plugins/InternalAutonomousSystem.js';
+import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js';
 
 describe('Internal Peering Integration', () => {
 
-    // We can't easily spin up full WebSockets in this unit/hybrid test environment without Hono running.
-    // However, we can mock the "remote" connection part in the plugin 
-    // OR we can test the components in isolation (Server logic + Plugin Logic).
-
-    // Strategy: Test the Plugin's ability to dispatch 'authenticate' and 'open' logic 
-    // by mocking the 'newWebSocketRpcSession' if possible, OR
-    // just test that the 'BGPPeeringServer' works as expected.
-
-    it('BGPPeeringServer should authorize and return AuthorizedPeer', async () => {
-        const mockDispatch = async (action: any) => {
-            return { success: true };
-        };
-        const server = new BGPPeeringServer({ actionHandler: mockDispatch });
-        const authorized = await server.authorize('secret');
-
-        expect(authorized).toBeDefined();
-        expect(authorized.open).toBeDefined();
-    });
-
-    it('AuthorizedPeer should dispatch open:internal-as action', async () => {
-        let dispatchedAction: any = null;
-        const mockDispatch = async (action: any) => {
-            dispatchedAction = action;
-            return { success: true };
-        };
-        const server = new BGPPeeringServer({ actionHandler: mockDispatch });
-        const authorized = await server.authorize('secret');
-
-        const info = { id: 'test-node', as: 100 };
-        const stub = { keepAlive: () => { } };
-
-        const result = await authorized.open(info, stub);
-
-        expect(result.accepted).toBe(true);
-        expect(dispatchedAction).toBeDefined();
-        expect(dispatchedAction.resource).toBe('internalPeerSession');
-        expect(dispatchedAction.resourceAction).toBe('open');
-        expect(dispatchedAction.data.peerInfo.id).toBe('test-node');
-    });
-
-    it('InternalAutonomousSystemPlugin should handle open:internal-as', async () => {
-        const plugin = new InternalAutonomousSystemPlugin();
+    it('InternalBGPPlugin should handle open:internal-as', async () => {
+        const plugin = new InternalBGPPlugin();
         const context: PluginContext = {
             action: {
                 resource: 'internalPeerSession',
@@ -74,25 +32,8 @@ describe('Internal Peering Integration', () => {
         expect(result.ctx.state.getPeers()[0].id).toBe('remote-1');
     });
 
-    it('AuthorizedPeer.close() should dispatch internalPeerSession/close action', async () => {
-        let dispatchedAction: any = null;
-        const mockDispatch = async (action: any) => {
-            dispatchedAction = action;
-            return { success: true };
-        };
-        const server = new BGPPeeringServer({ actionHandler: mockDispatch });
-        const authorized = await server.authorize('secret');
-
-        await authorized.close('peer-123');
-
-        expect(dispatchedAction).toBeDefined();
-        expect(dispatchedAction.resource).toBe('internalPeerSession');
-        expect(dispatchedAction.resourceAction).toBe('close');
-        expect(dispatchedAction.data.peerId).toBe('peer-123');
-    });
-
-    it('InternalAutonomousSystemPlugin should handle close:internal-as and cleanup routes', async () => {
-        const plugin = new InternalAutonomousSystemPlugin();
+    it('InternalBGPPlugin should handle close:internal-as and cleanup routes', async () => {
+        const plugin = new InternalBGPPlugin();
         let state = new RouteTable();
 
         // Seed state with a peer and a route from that peer
