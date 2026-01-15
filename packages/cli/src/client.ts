@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 import type {
     Action,
     AddDataChannelResult,
@@ -81,34 +82,36 @@ export async function createClient(url: string = 'ws://localhost:3000/rpc') {
     // In Node, we need to provide a WebSocket implementation usually.
     // However, capnweb 0.4.x might expect a browser-like WebSocket.
     // Let's assume global WebSocket or pass it if the API supports it.
+=======
+import { newHttpBatchRpcSession, RpcPromise } from 'capnweb';
 
-    // Quick hack for global WebSocket in Node if not present
-    if (!globalThis.WebSocket) {
-        // @ts-ignore
-        globalThis.WebSocket = WebSocket;
-    }
+export async function createClient(url: string = process.env.CATALYST_ORCHESTRATOR_URL || 'http://localhost:4015/rpc') {
+    // Ensure URL is http/https for batch RPC, not ws/wss
+    const connectionUrl = url.replace(/^ws/, 'http');
 
-    const connectionUrl = process.env.CATALYST_ORCHESTRATOR_URL || url;
+    // newHttpBatchRpcSession returns a proxy that automatically batches calls
+    const clientStub = newHttpBatchRpcSession<PublicApi>(connectionUrl, {
+        fetch: fetch as any
+    } as any);
+>>>>>>> 0f8156e (fix: rename from cli to management sdk)
 
-    // newWebSocketRpcSession in 0.4.x returns the client proxy directly
-    const clientStub = newWebSocketRpcSession(connectionUrl, {
-        WebSocket: WebSocket as any
-    });
-
-    return clientStub as unknown as PublicApi;
+    return clientStub;
 }
 
-export type RpcClient = PublicApi;
+export type RpcClient = RpcPromise<PublicApi>;
 
 export interface PublicApi {
-    connectionFromCli(): any;
+    connectionFromManagementSDK(): RpcPromise<ManagementScope>;
 }
 
-export interface CliScope {
-    applyAction(action: any): Promise<any>;
-    listLocalRoutes(): Promise<any>;
-    listMetrics(): Promise<any>;
-    listPeers(): Promise<any>;
+export interface ManagementScope {
+    applyAction(action: any): RpcPromise<any>;
+    listLocalRoutes(): RpcPromise<any>;
+    listMetrics(): RpcPromise<any>;
+    listPeers(): RpcPromise<any>;
 }
+<<<<<<< HEAD
 
 >>>>>>> 9d03721 (chore: implements progressive api for cli)
+=======
+>>>>>>> 0f8156e (fix: rename from cli to management sdk)

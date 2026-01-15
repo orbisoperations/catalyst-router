@@ -58,7 +58,7 @@ export class OrchestratorRpcServer extends RpcTarget {
         this.pipeline = new PluginPipeline([routingPlugin, ...plugins], 'OrchestratorPipeline');
     }
 
-    async connectionFromCli(): Promise<CliScope> {
+    async connectionFromManagementSDK(): Promise<ManagementScope> {
         return {
             applyAction: (action) => this.applyAction(action),
             listLocalRoutes: () => this.listLocalRoutes(),
@@ -156,7 +156,7 @@ export class OrchestratorRpcServer extends RpcTarget {
     }
 }
 
-export interface CliScope {
+export interface ManagementScope {
     applyAction(action: Action): Promise<ApplyActionResult>;
     listLocalRoutes(): Promise<ListLocalRoutesResult>;
     listMetrics(): Promise<ListMetricsResult>;

@@ -12,7 +12,7 @@ import { BGPPeeringServer } from './peering/rpc-server.js';
 const app = new Hono();
 const rpcServer = new OrchestratorRpcServer();
 
-app.get('/rpc', (c) => {
+app.all('/rpc', (c) => {
     return newRpcResponse(c, rpcServer, {
         upgradeWebSocket,
     });

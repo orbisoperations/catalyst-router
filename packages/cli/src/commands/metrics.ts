@@ -12,7 +12,7 @@ export async function fetchMetrics(): Promise<CliResult<any>> {
         const result = await root.listMetrics();
 =======
         const root = await createClient();
-        const api = root.connectionFromCli();
+        const api = root.connectionFromManagementSDK();
         const result = await api.listMetrics();
 >>>>>>> 9d03721 (chore: implements progressive api for cli)
         return { success: true, data: result };
