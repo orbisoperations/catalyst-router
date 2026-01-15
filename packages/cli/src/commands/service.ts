@@ -14,8 +14,12 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
         await using root = await createClient(params.orchestratorUrl);
 =======
         const root = await createClient();
+<<<<<<< HEAD
         const api = root.connectionFromCli();
 >>>>>>> 9d03721 (chore: implements progressive api for cli)
+=======
+        const api = root.connectionFromManagementSDK();
+>>>>>>> 0f8156e (fix: rename from cli to management sdk)
 
         const action = {
             resource: 'localRoute',
@@ -42,7 +46,7 @@ export async function listServices(orchestratorUrl?: string): Promise<CliResult<
         const result = await root.listLocalRoutes();
 =======
         const root = await createClient();
-        const api = root.connectionFromCli();
+        const api = root.connectionFromManagementSDK();
         const result = await api.listLocalRoutes();
 >>>>>>> 9d03721 (chore: implements progressive api for cli)
         return { success: true, data: result.routes || [] };

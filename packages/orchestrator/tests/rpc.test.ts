@@ -44,14 +44,14 @@ describe('Orchestrator RPC', () => {
             }
         };
 
-        const cli = rpc.connectionFromCli();
+        const cli = rpc.connectionFromManagementSDK();
         const result = await cli.applyAction(action);
         expect(result.success).toBe(true);
         expect(result.results[0].id).toBe('test-service:tcp:graphql');
     });
 
     it('should list local routes', async () => {
-        const cli = rpc.connectionFromCli();
+        const cli = rpc.connectionFromManagementSDK();
         const result = await cli.listLocalRoutes();
         expect(result.routes).toBeInstanceOf(Array);
         expect(result.routes.length).toBeGreaterThan(0);
@@ -61,7 +61,7 @@ describe('Orchestrator RPC', () => {
     });
 
     it('should list metrics', async () => {
-        const cli = rpc.connectionFromCli();
+        const cli = rpc.connectionFromManagementSDK();
         const result = await cli.listMetrics();
         expect(result.metrics).toBeInstanceOf(Array);
         const metric = result.metrics.find((m: any) => m.id === 'test-service:tcp:graphql');

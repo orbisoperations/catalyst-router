@@ -125,7 +125,7 @@ Use the Catalyst CLI or an RPC client to register your GraphQL service:
 
 We are maintaining the Orchestrator with the plugin pipeline structure. However, we are introducing new access methods for the `applyAction` handler to enable more efficient interactions.
 
-The Orchestrator now exposes a public method, `connectionFromCli`, which returns access to the `applyAction` handler. This utilizes the progressive API pattern (available via libraries like `capnweb`), allowing for pipelined RPC calls. Clients can issue multiple dependent calls without waiting for intermediate results, as the returned promises act as proxies for future values.
+The Orchestrator now exposes a public method, `connectionFromManagementSDK`, which returns access to the `applyAction` handler. This utilizes the progressive API pattern (available via libraries like `capnweb`), allowing for pipelined RPC calls. Clients can issue multiple dependent calls without waiting for intermediate results, as the returned promises act as proxies for future values.
 
 **Pattern Example:**
 
@@ -179,21 +179,21 @@ The following diagram illustrates how a CLI client interacts with the Orchestrat
 sequenceDiagram
     participant CLI
     participant Public as Orchestrator (Public API)
-    participant CliScope as Orchestrator (CLI Scope)
+    participant MgmtScope as Orchestrator (Management Scope)
     participant Private as Orchestrator (Internal)
 
     Note right of CLI: 1. Get Access
-    CLI->>Public: connectionFromCli()
-    Public-->>CLI: Returns Stub<CliScope> (Promise)
+    CLI->>Public: connectionFromManagementSDK()
+    Public-->>CLI: Returns Stub<ManagementScope> (Promise)
 
     Note right of CLI: 2. Pipelined Operation
-    CLI->>CliScope: applyAction(...)
+    CLI->>MgmtScope: applyAction(...)
     
-    Note over Public, CliScope: Request is pipelined immediately
+    Note over Public, MgmtScope: Request is pipelined immediately
 
-    CliScope->>Private: applyAction(...) (Run Plugins)
-    Private-->>CliScope: Result
-    CliScope-->>CLI: Result
+    MgmtScope->>Private: applyAction(...) (Run Plugins)
+    Private-->>MgmtScope: Result
+    MgmtScope-->>CLI: Result
 ```
 
 ### Internal Peering (iBGP) Flow
@@ -258,15 +258,15 @@ When a CLI creates a local service, the `LocalRoutingPlugin` records it, and the
 ```mermaid
 sequenceDiagram
     participant CLI
-    participant CLIScope as CLI Scope
+    participant MgmtScope as Management Scope
     participant API as Private API (applyAction)
     participant LocalPlugin as LocalRoutingPlugin
     participant BGPPlugin as InternalBGPPlugin
     participant Peer as Peer BGP Client
 
     Note right of CLI: 1. Create Service
-    CLI->>CLIScope: createLocalDataChannel(...)
-    CLIScope->>API: applyAction({ resource: 'dataChannel', action: 'create', ... })
+    CLI->>MgmtScope: createLocalDataChannel(...)
+    MgmtScope->>API: applyAction({ resource: 'dataChannel', action: 'create', ... })
 
     Note over API, LocalPlugin: 2. Update Local State
     API->>LocalPlugin: Process Action

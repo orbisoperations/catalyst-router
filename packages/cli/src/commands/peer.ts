@@ -14,7 +14,7 @@ export const peerCommands = () => {
         .action(async (endpoint, options) => {
             try {
                 const client = await createClient();
-                const api = client.connectionFromCli();
+                const api = client.connectionFromManagementSDK();
 
                 const result = await api.applyAction({
                     resource: 'internalPeerConfig',
@@ -46,7 +46,7 @@ export const peerCommands = () => {
         .action(async () => {
             try {
                 const client = await createClient();
-                const api = client.connectionFromCli();
+                const api = client.connectionFromManagementSDK();
                 const result = await api.listPeers();
 
                 if (result.peers.length === 0) {
@@ -73,7 +73,7 @@ export const peerCommands = () => {
         .action(async (peerId) => {
             try {
                 const client = await createClient();
-                const api = client.connectionFromCli();
+                const api = client.connectionFromManagementSDK();
                 const result = await api.applyAction({
                     resource: 'internalPeerSession',
                     resourceAction: 'close',
