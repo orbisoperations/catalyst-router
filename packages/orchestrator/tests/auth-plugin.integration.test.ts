@@ -1,169 +1,160 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { AuthPlugin } from '../src/plugins/implementations/auth.js';
-import { RouteTable } from '../src/state/route-table.js';
-import type { IAuthClient } from '../src/clients/auth.js';
-import type { PluginContext } from '../src/plugins/types.js';
-
-// Import real auth service components
-import { EphemeralKeyManager } from '@catalyst/auth/key-manager';
-import { AuthRpcServer } from '@catalyst/auth/rpc/server';
-import type { SignTokenResponse, VerifyTokenResponse, GetJwksResponse } from '@catalyst/auth/rpc/schema';
+import { describe, it, expect } from 'bun:test'
+import { AuthPlugin } from '../src/plugins/implementations/auth.js'
+import { RouteTable } from '../src/state/route-table.js'
+import type { PluginContext } from '../src/plugins/types.js'
 
 /**
- * Integration test client that calls AuthRpcServer directly.
- * Tests real JWT signing/verification without WebSocket transport.
+ * Tests for AuthPlugin RBAC permission checking.
+ *
+ * Architecture note: Token verification is done at connection time (session creation).
+ * AuthPlugin only checks if the authenticated user has permission to perform
+ * the requested action based on their roles.
+ *
+ * See: docs/AUTH_DESIGN_OPTIONS.md (Option 3: Session-based auth)
  */
-class DirectAuthClient implements IAuthClient {
-    constructor(private rpcServer: AuthRpcServer) {}
+describe('AuthPlugin RBAC', () => {
+  const plugin = new AuthPlugin()
 
-    async signToken(request: { subject: string; audience?: string; claims?: Record<string, unknown> }): Promise<SignTokenResponse> {
-        return this.rpcServer.signToken(request);
+  function createContext(
+    roles: string[] | undefined,
+    resource: string,
+    action: string,
+    userId = 'test-user'
+  ): PluginContext {
+    return {
+      action: { resource, action } as any,
+      state: new RouteTable(),
+      authxContext: { userId, roles },
     }
+  }
 
-    async verifyToken(token: string, audience?: string): Promise<VerifyTokenResponse> {
-        return this.rpcServer.verifyToken({ token, audience });
-    }
+  describe('admin role', () => {
+    it('should allow dataChannel:create', async () => {
+      const result = await plugin.apply(createContext(['admin'], 'dataChannel', 'create'))
+      expect(result.success).toBe(true)
+    })
 
-    async getJwks(): Promise<GetJwksResponse> {
-        return this.rpcServer.getJwks();
-    }
+    it('should allow dataChannel:delete', async () => {
+      const result = await plugin.apply(createContext(['admin'], 'dataChannel', 'delete'))
+      expect(result.success).toBe(true)
+    })
 
-    close(): void {
-        // No-op for direct client
-    }
-}
+    it('should allow arbitrary resource:action (wildcard)', async () => {
+      const result = await plugin.apply(createContext(['admin'], 'anyResource', 'anyAction'))
+      expect(result.success).toBe(true)
+    })
+  })
 
-describe('AuthPlugin integration', () => {
-    let keyManager: EphemeralKeyManager;
-    let rpcServer: AuthRpcServer;
-    let authClient: IAuthClient;
-    let plugin: AuthPlugin;
+  describe('operator role', () => {
+    it('should allow dataChannel:create', async () => {
+      const result = await plugin.apply(createContext(['operator'], 'dataChannel', 'create'))
+      expect(result.success).toBe(true)
+    })
 
-    beforeAll(async () => {
-        keyManager = new EphemeralKeyManager();
-        await keyManager.initialize();
-        rpcServer = new AuthRpcServer(keyManager);
-        authClient = new DirectAuthClient(rpcServer);
-        plugin = new AuthPlugin(authClient);
-    });
+    it('should allow dataChannel:update', async () => {
+      const result = await plugin.apply(createContext(['operator'], 'dataChannel', 'update'))
+      expect(result.success).toBe(true)
+    })
 
-    afterAll(async () => {
-        await keyManager.shutdown();
-    });
+    it('should allow dataChannel:delete', async () => {
+      const result = await plugin.apply(createContext(['operator'], 'dataChannel', 'delete'))
+      expect(result.success).toBe(true)
+    })
 
-    function createContext(authToken?: string): PluginContext {
-        const ctx: PluginContext & { authToken?: string } = {
-            action: { type: 'add', service: { name: 'test', url: 'http://test' } },
-            state: new RouteTable(),
-            authxContext: {},
-        };
-        if (authToken) {
-            ctx.authToken = authToken;
-        }
-        return ctx;
-    }
+    it('should deny actions outside its permissions', async () => {
+      const result = await plugin.apply(createContext(['operator'], 'system', 'shutdown'))
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.message).toContain('Permission denied')
+      }
+    })
 
-    it('should reject requests without token', async () => {
-        const result = await plugin.apply(createContext());
+    it('should deny dataChannel:read (not in operator permissions)', async () => {
+      const result = await plugin.apply(createContext(['operator'], 'dataChannel', 'read'))
+      expect(result.success).toBe(false)
+    })
+  })
 
-        expect(result.success).toBe(false);
-        if (!result.success) {
-            expect(result.error.message).toContain('required');
-        }
-    });
+  describe('viewer role', () => {
+    it('should deny dataChannel:create', async () => {
+      const result = await plugin.apply(createContext(['viewer'], 'dataChannel', 'create'))
+      expect(result.success).toBe(false)
+    })
 
-    it('should accept valid token and extract claims', async () => {
-        // Sign a real token
-        const signResult = await authClient.signToken({
-            subject: 'user-123',
-            claims: { role: 'admin', orgId: 'org-456' },
-        });
-        expect(signResult.success).toBe(true);
-        if (!signResult.success) return;
+    it('should deny dataChannel:delete', async () => {
+      const result = await plugin.apply(createContext(['viewer'], 'dataChannel', 'delete'))
+      expect(result.success).toBe(false)
+    })
 
-        // Verify through the plugin
-        const result = await plugin.apply(createContext(signResult.token));
+    it('should deny all actions (viewer has empty permissions)', async () => {
+      const result = await plugin.apply(createContext(['viewer'], 'anything', 'anything'))
+      expect(result.success).toBe(false)
+    })
+  })
 
-        expect(result.success).toBe(true);
-        if (result.success) {
-            expect(result.ctx.authxContext.userId).toBe('user-123');
-            expect(result.ctx.authxContext.roles).toEqual(['admin']);
-            expect(result.ctx.authxContext.orgId).toBe('org-456');
-        }
-    });
+  describe('no roles', () => {
+    it('should deny with empty roles array', async () => {
+      const result = await plugin.apply(createContext([], 'dataChannel', 'create'))
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.message).toContain('Permission denied')
+      }
+    })
 
-    it('should reject tampered token', async () => {
-        const signResult = await authClient.signToken({ subject: 'user-123' });
-        expect(signResult.success).toBe(true);
-        if (!signResult.success) return;
+    it('should deny with undefined roles', async () => {
+      const result = await plugin.apply(createContext(undefined, 'dataChannel', 'create'))
+      expect(result.success).toBe(false)
+    })
+  })
 
-        // Tamper with the token (flip a character in the signature)
-        const parts = signResult.token.split('.');
-        const sig = parts[2];
-        const tamperedSig = sig[0] === 'a' ? 'b' + sig.slice(1) : 'a' + sig.slice(1);
-        const tamperedToken = `${parts[0]}.${parts[1]}.${tamperedSig}`;
+  describe('multiple roles', () => {
+    it('should allow if any role has permission (viewer + operator)', async () => {
+      const result = await plugin.apply(
+        createContext(['viewer', 'operator'], 'dataChannel', 'create')
+      )
+      expect(result.success).toBe(true)
+    })
 
-        const result = await plugin.apply(createContext(tamperedToken));
+    it('should allow if any role has permission (viewer + admin)', async () => {
+      const result = await plugin.apply(createContext(['viewer', 'admin'], 'system', 'shutdown'))
+      expect(result.success).toBe(true)
+    })
 
-        expect(result.success).toBe(false);
-        if (!result.success) {
-            expect(result.error.message).toContain('Invalid');
-        }
-    });
+    it('should deny if no role has permission', async () => {
+      const result = await plugin.apply(createContext(['viewer', 'operator'], 'system', 'shutdown'))
+      expect(result.success).toBe(false)
+    })
+  })
 
-    it('should reject token with wrong audience', async () => {
-        const pluginWithAudience = new AuthPlugin(authClient, { audience: 'service-a' });
+  describe('unknown roles', () => {
+    it('should deny unknown role', async () => {
+      const result = await plugin.apply(createContext(['superuser'], 'dataChannel', 'create'))
+      expect(result.success).toBe(false)
+    })
 
-        // Sign token for different audience
-        const signResult = await authClient.signToken({
-            subject: 'user-123',
-            audience: 'service-b',
-        });
-        expect(signResult.success).toBe(true);
-        if (!signResult.success) return;
+    it('should deny mix of unknown roles', async () => {
+      const result = await plugin.apply(
+        createContext(['root', 'superuser', 'god'], 'dataChannel', 'create')
+      )
+      expect(result.success).toBe(false)
+    })
+  })
 
-        const result = await pluginWithAudience.apply(createContext(signResult.token));
+  describe('error messages', () => {
+    it('should include resource:action in error message', async () => {
+      const result = await plugin.apply(createContext(['viewer'], 'dataChannel', 'create'))
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.message).toContain('dataChannel:create')
+      }
+    })
 
-        expect(result.success).toBe(false);
-    });
-
-    it('should accept token with matching audience', async () => {
-        const pluginWithAudience = new AuthPlugin(authClient, { audience: 'service-a' });
-
-        const signResult = await authClient.signToken({
-            subject: 'user-123',
-            audience: 'service-a',
-        });
-        expect(signResult.success).toBe(true);
-        if (!signResult.success) return;
-
-        const result = await pluginWithAudience.apply(createContext(signResult.token));
-
-        expect(result.success).toBe(true);
-        if (result.success) {
-            expect(result.ctx.authxContext.userId).toBe('user-123');
-        }
-    });
-
-    it('should handle multiple roles', async () => {
-        const signResult = await authClient.signToken({
-            subject: 'user-123',
-            claims: { roles: ['admin', 'developer', 'viewer'] },
-        });
-        expect(signResult.success).toBe(true);
-        if (!signResult.success) return;
-
-        const result = await plugin.apply(createContext(signResult.token));
-
-        expect(result.success).toBe(true);
-        if (result.success) {
-            expect(result.ctx.authxContext.roles).toEqual(['admin', 'developer', 'viewer']);
-        }
-    });
-
-    it('should reject garbage token', async () => {
-        const result = await plugin.apply(createContext('not.a.jwt'));
-
-        expect(result.success).toBe(false);
-    });
-});
+    it('should identify AuthPlugin as error source', async () => {
+      const result = await plugin.apply(createContext(['viewer'], 'dataChannel', 'create'))
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.pluginName).toBe('AuthPlugin')
+      }
+    })
+  })
+})
