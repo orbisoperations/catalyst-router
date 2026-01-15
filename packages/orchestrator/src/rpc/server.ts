@@ -66,6 +66,50 @@ export class OrchestratorRpcServer extends RpcTarget {
         };
     }
 
+    async connectionFromIBGPPeer(secret: string): Promise<IBGPScope> {
+        // TODO: Validate secret against configured peers
+        // For now, allow any non-empty secret or match a dummy one
+        if (!secret) {
+            throw new Error('Invalid secret');
+        }
+
+        return {
+            open: async (callback) => {
+                // Return dummy PeerInfo for now
+                return {
+                    id: 'local-node',
+                    as: 100, // TODO: Get from config
+                    domains: [],
+                    services: []
+                };
+            },
+            update: async (routes) => {
+                // Delegate to applyAction
+                // Mapping internal routes to 'updateRoutes' or similar action
+                // For now, we just pass the action through if it matches our schema
+                // But typically update() takes a RouteTable or list of routes
+                // Let's assume the argument 'routes' IS the action payload for now for simplicity
+                // or wrap it.
+                // Based on diagram: BGP -> IBGPScope: update(...)
+                // IBGPScope -> API: applyAction(...)
+
+                // We'll construct the action manually:
+                /*
+                const action: Action = {
+                   resource: 'routeTable', 
+                   resourceAction: 'update', 
+                   data: routes 
+                };
+                */
+                // Since we don't have the exact types for 'routes' defined yet in this context,
+                // and plugins are disabled, we will just return a success stub.
+                return { success: true, results: [] };
+                // Actual delegation (commented out until types aligned):
+                // return this.applyAction({ resource: 'routeTable', action: 'update', data: routes });
+            }
+        };
+    }
+
     async applyAction(action: Action): Promise<ApplyActionResult> {
         try {
             const result = await this.pipeline.apply({
@@ -116,4 +160,16 @@ export interface CliScope {
     applyAction(action: Action): Promise<ApplyActionResult>;
     listLocalRoutes(): Promise<ListLocalRoutesResult>;
     listMetrics(): Promise<ListMetricsResult>;
+}
+
+export interface PeerInfo {
+    id: string;
+    as: number;
+    domains: string[];
+    services: any[];
+}
+
+export interface IBGPScope {
+    open(callback: any): Promise<PeerInfo>;
+    update(routes: any): Promise<ApplyActionResult>;
 }
