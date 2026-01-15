@@ -17,7 +17,7 @@ import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
-import { InternalAutonomousSystemPlugin } from '../peering/plugins/InternalAutonomousSystem.js';
+// import { InternalAutonomousSystemPlugin } from '../peering/plugins/InternalAutonomousSystem.js';
 import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
@@ -52,9 +52,18 @@ export class OrchestratorRpcServer extends RpcTarget {
 
         // Initialize plugins
         const routingPlugin = new LocalRoutingTablePlugin();
-        const internalAsPlugin = new InternalAutonomousSystemPlugin();
+        // const internalAsPlugin = new InternalAutonomousSystemPlugin();
 
-        this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
+        // this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
+        this.pipeline = new PluginPipeline([routingPlugin, ...plugins], 'OrchestratorPipeline');
+    }
+
+    async connectionFromCli(): Promise<CliScope> {
+        return {
+            applyAction: (action) => this.applyAction(action),
+            listLocalRoutes: () => this.listLocalRoutes(),
+            listMetrics: () => this.listMetrics()
+        };
     }
 
     async applyAction(action: Action): Promise<ApplyActionResult> {
@@ -101,4 +110,10 @@ export class OrchestratorRpcServer extends RpcTarget {
         const peers = this.state.getPeers();
         return { peers };
     }
+}
+
+export interface CliScope {
+    applyAction(action: Action): Promise<ApplyActionResult>;
+    listLocalRoutes(): Promise<ListLocalRoutesResult>;
+    listMetrics(): Promise<ListMetricsResult>;
 }
