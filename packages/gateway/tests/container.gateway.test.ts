@@ -18,14 +18,13 @@ describe('Gateway Container Integration', () => {
 
     beforeAll(async () => {
         network = await new Network().start();
-        const examplesDir = path.resolve(__dirname, '../../examples');
-        const gatewayDir = path.resolve(__dirname, '..');
+        const repoRoot = path.resolve(__dirname, '../../..');
 
         // 1. Build & Start Books (Background)
         const startBooks = async () => {
             const imageName = 'books-service:test';
-            await Bun.spawn(['docker', 'build', '-t', imageName, '-f', 'Dockerfile.books', '.'], {
-                cwd: examplesDir, stdout: 'ignore', stderr: 'inherit'
+            await Bun.spawn(['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.books', '.'], {
+                cwd: repoRoot, stdout: 'ignore', stderr: 'inherit'
             }).exited;
 
             booksContainer = await new GenericContainer(imageName)
@@ -39,8 +38,8 @@ describe('Gateway Container Integration', () => {
         // 2. Build & Start Movies (Background)
         const startMovies = async () => {
             const imageName = 'movies-service:test';
-            await Bun.spawn(['docker', 'build', '-t', imageName, '-f', 'Dockerfile.movies', '.'], {
-                cwd: examplesDir, stdout: 'ignore', stderr: 'inherit'
+            await Bun.spawn(['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.movies', '.'], {
+                cwd: repoRoot, stdout: 'ignore', stderr: 'inherit'
             }).exited;
 
             moviesContainer = await new GenericContainer(imageName)
@@ -54,8 +53,8 @@ describe('Gateway Container Integration', () => {
         // 3. Build & Start Gateway (Background)
         const startGateway = async () => {
             const imageName = 'gateway-service:test';
-            await Bun.spawn(['docker', 'build', '-t', imageName, '.'], {
-                cwd: gatewayDir, stdout: 'ignore', stderr: 'inherit'
+            await Bun.spawn(['docker', 'build', '-t', imageName, '-f', 'packages/gateway/Dockerfile', '.'], {
+                cwd: repoRoot, stdout: 'ignore', stderr: 'inherit'
             }).exited;
 
             gatewayContainer = await new GenericContainer(imageName)
