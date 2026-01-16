@@ -17,7 +17,7 @@ export const peerCommands = () => {
                 const api = client.connectionFromManagementSDK();
 
                 const result = await api.applyAction({
-                    resource: 'internalPeerConfig',
+                    resource: 'internalBGPConfig',
                     resourceAction: 'create',
                     data: {
                         endpoint,
@@ -75,7 +75,7 @@ export const peerCommands = () => {
                 const client = await createClient();
                 const api = client.connectionFromManagementSDK();
                 const result = await api.applyAction({
-                    resource: 'internalPeerSession',
+                    resource: 'internalBGP',
                     resourceAction: 'close',
                     data: {
                         peerId

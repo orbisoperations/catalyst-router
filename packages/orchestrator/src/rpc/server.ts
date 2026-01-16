@@ -1,24 +1,18 @@
+
 import { RpcTarget } from 'capnweb';
 import {
-    ServiceDefinitionSchema,
     Action,
-    AddDataChannelResult,
     ListLocalRoutesResult,
     ListMetricsResult,
-    AddDataChannelResultSchema,
-    ListLocalRoutesResultSchema,
-    ListMetricsResultSchema,
     ApplyActionResult
 } from './schema/index.js';
 import { GlobalRouteTable, RouteTable } from '../state/route-table.js';
 import { PluginPipeline } from '../plugins/pipeline.js';
-import { AuthPlugin } from '../plugins/implementations/auth.js';
 import { LoggerPlugin } from '../plugins/implementations/logger.js';
-import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
 import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js';
-import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
+import { AuthorizedPeer, IBGPProtocolResource, IBGPProtocolResourceAction, ListPeersResult, PeerInfo, UpdateMessage } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
@@ -34,11 +28,7 @@ export class OrchestratorRpcServer extends RpcTarget {
 
         // Initialize Plugins
         const plugins: any[] = [
-            // new AuthPlugin(),
             new LoggerPlugin(),
-            // new StatePersistencePlugin(),
-            // new RouteAnnouncerPlugin(),
-            // new InternalPeeringPlugin(this.applyAction.bind(this)),
         ];
 
         // Conditionally add Gateway Plugin
@@ -72,46 +62,40 @@ export class OrchestratorRpcServer extends RpcTarget {
             throw new Error('Invalid secret');
         }
 
-        let connectedPeerId: string | undefined;
-
         return {
             open: async (peerInfo: PeerInfo) => {
                 console.log(`[iBGP] Peer connected: ${peerInfo.id} (AS ${peerInfo.as})`);
-                connectedPeerId = peerInfo.id;
 
                 // If new, register via pipeline
                 // The plugin will handle the reverse connection
                 const action: Action = {
-                    resource: 'internalPeerSession',
-                    resourceAction: 'open',
+                    resource: IBGPProtocolResource.value,
+                    resourceAction: IBGPProtocolResourceAction.enum.open,
                     data: {
                         peerInfo,
-                        clientStub: null,
-                        direction: 'inbound'
                     }
                 };
 
                 return await this.applyAction(action);
             },
-            update: async (routes: any) => {
+            update: async (peerInfo: PeerInfo, routes: UpdateMessage[]) => {
                 const action: Action = {
-                    resource: 'internalBGPRoute',
-                    resourceAction: 'update',
+                    resource: IBGPProtocolResource.value,
+                    resourceAction: IBGPProtocolResourceAction.enum.update,
                     data: {
-                        ...routes,
-                        sourcePeerId: connectedPeerId
+                        peerInfo: peerInfo,
+                        updateMessages: routes
                     }
                 };
 
                 return this.applyAction(action);
             },
-            close: async () => {
+            close: async (peerInfo: Omit<PeerInfo, 'domains'>) => {
                 const action: Action = {
-                    resource: 'internalPeerSession',
-                    resourceAction: 'close',
+                    resource: IBGPProtocolResource.value,
+                    resourceAction: IBGPProtocolResourceAction.enum.close,
                     data: {
-                        peerId: connectedPeerId || 'unknown',
-                        skipNotify: true
+                        peerInfo: peerInfo as any,
                     }
                 };
 
@@ -133,7 +117,7 @@ export class OrchestratorRpcServer extends RpcTarget {
                 });
 
                 if (!result.success) {
-                    return { success: false, results: [], error: result.error.message };
+                    return { success: false, error: result.error?.message || 'Unknown error' } as any;
                 }
 
                 // Update local state with the state returned from the pipeline
@@ -142,9 +126,9 @@ export class OrchestratorRpcServer extends RpcTarget {
                 return {
                     success: true,
                     results: result.ctx.results
-                };
+                } as any;
             } catch (e: any) {
-                return { success: false, results: [], error: e.message };
+                return { success: false, error: e.message } as any;
             }
         });
 
@@ -180,15 +164,8 @@ export interface ManagementScope {
     listPeers(): Promise<ListPeersResult>;
 }
 
-export interface PeerInfo {
-    id: string;
-    as: number;
-    domains: string[];
-    services: any[];
-}
-
 export interface IBGPScope {
     open(peerInfo: PeerInfo): Promise<ApplyActionResult>;
-    update(routes: any): Promise<ApplyActionResult>;
-    close(): Promise<ApplyActionResult>;
+    update(peerInfo: PeerInfo, routes: UpdateMessage[]): Promise<ApplyActionResult>;
+    close(peerInfo: PeerInfo): Promise<ApplyActionResult>;
 }

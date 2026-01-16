@@ -3,17 +3,22 @@ import { z } from 'zod';
 
 
 import { LocalRoutingActionsSchema } from '../../plugins/implementations/local-routing.js';
-import { InternalPeeringActionsSchema } from '../../plugins/implementations/Internal-bgp.js';
+import { IBGPConfigSchema, IBGPProtocolSchema } from './peering.js';
 
 export const ActionSchema = z.union([
     LocalRoutingActionsSchema,
-    InternalPeeringActionsSchema
+    IBGPProtocolSchema,
+    IBGPConfigSchema
 ]);
 export type Action = z.infer<typeof ActionSchema>;
 
-export const ActionResultSchema = z.object({
-    success: z.boolean(),
-    id: z.string().optional(),
-    error: z.string().optional(),
-});
+export const ActionResultSchema = z.discriminatedUnion("success", [
+    z.object({
+        success: z.literal(true),
+    }),
+    z.object({
+        success: z.literal(false),
+        error: z.string(),
+    })
+]);
 export type ActionResult = z.infer<typeof ActionResultSchema>;
