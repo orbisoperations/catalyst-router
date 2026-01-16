@@ -72,9 +72,12 @@ export class OrchestratorRpcServer extends RpcTarget {
             throw new Error('Invalid secret');
         }
 
+        let connectedPeerId: string | undefined;
+
         return {
             open: async (peerInfo: PeerInfo) => {
                 console.log(`[iBGP] Peer connected: ${peerInfo.id} (AS ${peerInfo.as})`);
+                connectedPeerId = peerInfo.id;
 
                 // If new, register via pipeline
                 // The plugin will handle the reverse connection
@@ -94,7 +97,22 @@ export class OrchestratorRpcServer extends RpcTarget {
                 const action: Action = {
                     resource: 'internalBGPRoute',
                     resourceAction: 'update',
-                    data: routes
+                    data: {
+                        ...routes,
+                        sourcePeerId: connectedPeerId
+                    }
+                };
+
+                return this.applyAction(action);
+            },
+            close: async () => {
+                const action: Action = {
+                    resource: 'internalPeerSession',
+                    resourceAction: 'close',
+                    data: {
+                        peerId: connectedPeerId || 'unknown',
+                        skipNotify: true
+                    }
                 };
 
                 return this.applyAction(action);
@@ -102,29 +120,36 @@ export class OrchestratorRpcServer extends RpcTarget {
         };
     }
 
+    private actionLock: Promise<any> = Promise.resolve();
+
     async applyAction(action: Action): Promise<ApplyActionResult> {
-        try {
-            const result = await this.pipeline.apply({
-                action,
-                state: this.state,
-                authxContext: { userId: 'stub-user', roles: ['admin'] }, // Stub auth context
-                results: []
-            });
+        const resultPromise = this.actionLock.then(async () => {
+            try {
+                const result = await this.pipeline.apply({
+                    action,
+                    state: this.state,
+                    authxContext: { userId: 'stub-user', roles: ['admin'] }, // Stub auth context
+                    results: []
+                });
 
-            if (!result.success) {
-                return { success: false, results: [], error: result.error.message };
+                if (!result.success) {
+                    return { success: false, results: [], error: result.error.message };
+                }
+
+                // Update local state with the state returned from the pipeline
+                this.state = result.ctx.state;
+
+                return {
+                    success: true,
+                    results: result.ctx.results
+                };
+            } catch (e: any) {
+                return { success: false, results: [], error: e.message };
             }
+        });
 
-            // Update local state with the state returned from the pipeline
-            this.state = result.ctx.state;
-
-            return {
-                success: true,
-                results: result.ctx.results
-            };
-        } catch (e: any) {
-            return { success: false, results: [], error: e.message };
-        }
+        this.actionLock = resultPromise.catch(() => { }); // Continue chain even on error
+        return resultPromise;
     }
 
 
@@ -165,4 +190,5 @@ export interface PeerInfo {
 export interface IBGPScope {
     open(peerInfo: PeerInfo): Promise<void>;
     update(routes: any): Promise<ApplyActionResult>;
+    close(): Promise<ApplyActionResult>;
 }
