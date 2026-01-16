@@ -12,7 +12,7 @@ import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
 import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js';
-import { AuthorizedPeer, IBGPProtocolResource, IBGPProtocolResourceAction, ListPeersResult, PeerInfo, UpdateMessage, IBGPScope } from './schema/peering.js';
+import { AuthorizedPeer, IBGPProtocolResource, IBGPProtocolResourceAction, ListPeersResult, PeerInfo, UpdateMessage, IBGPScope, IBGPConfigResource, IBGPConfigResourceAction } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
@@ -52,8 +52,38 @@ export class OrchestratorRpcServer extends RpcTarget {
             applyAction: (action) => this.applyAction(action),
             listLocalRoutes: () => this.listLocalRoutes(),
             listMetrics: () => this.listMetrics(),
-            listPeers: () => this.listPeers()
+            listPeers: () => this.listPeers(),
+            createPeer: (endpoint, domains) => this.createPeer(endpoint, domains),
+            updatePeer: (peerId, endpoint, domains) => this.updatePeer(peerId, endpoint, domains),
+            deletePeer: (peerId) => this.deletePeer(peerId)
         };
+    }
+
+    async createPeer(endpoint: string, domains?: string[]): Promise<ApplyActionResult> {
+        const action: Action = {
+            resource: IBGPConfigResource.value,
+            resourceAction: IBGPConfigResourceAction.enum.create,
+            data: { endpoint, domains }
+        };
+        return this.applyAction(action);
+    }
+
+    async updatePeer(peerId: string, endpoint: string, domains?: string[]): Promise<ApplyActionResult> {
+        const action: Action = {
+            resource: IBGPConfigResource.value,
+            resourceAction: IBGPConfigResourceAction.enum.update,
+            data: { peerId, endpoint, domains }
+        };
+        return this.applyAction(action);
+    }
+
+    async deletePeer(peerId: string): Promise<ApplyActionResult> {
+        const action: Action = {
+            resource: IBGPConfigResource.value,
+            resourceAction: IBGPConfigResourceAction.enum.delete,
+            data: { peerId }
+        };
+        return this.applyAction(action);
     }
 
     async connectToIBGPPeer(secret: string): Promise<IBGPScope> {
@@ -165,4 +195,7 @@ export interface ManagementScope {
     listLocalRoutes(): Promise<ListLocalRoutesResult>;
     listMetrics(): Promise<ListMetricsResult>;
     listPeers(): Promise<ListPeersResult>;
+    createPeer(endpoint: string, domains?: string[]): Promise<ApplyActionResult>;
+    updatePeer(peerId: string, endpoint: string, domains?: string[]): Promise<ApplyActionResult>;
+    deletePeer(peerId: string): Promise<ApplyActionResult>;
 }

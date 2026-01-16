@@ -1,7 +1,7 @@
 import { newHttpBatchRpcSession } from 'capnweb';
-import type { PeerApi } from './schema/peering.js';
+import type { PublicIBGPScope } from './schema/peering.js';
 
 export function getPeerSession(endpoint: string, secret: string) {
-    const session = newHttpBatchRpcSession<PeerApi>(endpoint);
+    const session = newHttpBatchRpcSession<PublicIBGPScope>(endpoint);
     return session.connectToIBGPPeer(secret);
 }
