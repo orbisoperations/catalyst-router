@@ -11,6 +11,7 @@ export const peerCommands = () => {
         .description('Add a new peer connection')
         .argument('<endpoint>', 'WebSocket endpoint of the peer (e.g., ws://localhost:3000/rpc)')
         .requiredOption('--secret <secret>', 'Shared secret for authentication')
+        .option('--domains <domains>', 'Comma-separated list of domains')
         .action(async (endpoint, options) => {
             try {
                 const client = await createClient();
@@ -21,7 +22,7 @@ export const peerCommands = () => {
                     resourceAction: 'create',
                     data: {
                         endpoint,
-                        secret: options.secret
+                        domains: options.domains ? options.domains.split(',').map((d: string) => d.trim()) : []
                     }
                 });
 

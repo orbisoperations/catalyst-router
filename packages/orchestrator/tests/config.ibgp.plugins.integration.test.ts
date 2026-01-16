@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, mock } from 'bun:test';
 import { OrchestratorRpcServer } from '../src/rpc/server.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
+
+mock.module('capnweb', () => ({
+    newHttpBatchRpcSession: () => ({
+        connectToIBGPPeer: () => ({
+            open: async () => ({ success: true }),
+            update: async () => ({ success: true })
+        })
+    })
+}));
 
 describe('iBGP Config Integration Tests', () => {
 
@@ -12,8 +21,7 @@ describe('iBGP Config Integration Tests', () => {
             resource: IBGPConfigResource.value,
             resourceAction: IBGPConfigResourceAction.enum.create,
             data: {
-                endpoint,
-                secret: 'valid-secret'
+                endpoint
             }
         };
 
@@ -35,8 +43,7 @@ describe('iBGP Config Integration Tests', () => {
             resource: IBGPConfigResource.value,
             resourceAction: IBGPConfigResourceAction.enum.create,
             data: {
-                endpoint: initialEndpoint,
-                secret: 'valid-secret'
+                endpoint: initialEndpoint
             }
         } as any);
 
@@ -49,8 +56,7 @@ describe('iBGP Config Integration Tests', () => {
             resourceAction: IBGPConfigResourceAction.enum.update,
             data: {
                 peerId,
-                endpoint: newEndpoint,
-                secret: 'new-secret'
+                endpoint: newEndpoint
             }
         };
 
@@ -70,8 +76,7 @@ describe('iBGP Config Integration Tests', () => {
             resource: IBGPConfigResource.value,
             resourceAction: IBGPConfigResourceAction.enum.create,
             data: {
-                endpoint,
-                secret: 'valid-secret'
+                endpoint
             }
         } as any);
 

@@ -1,17 +1,17 @@
-
 import { z } from 'zod';
+import os from 'os';
 
 export const OrchestratorConfigSchema = z.object({
     gqlGatewayConfig: z.object({
         endpoint: z.string().url(),
     }).optional(),
-    peering: z.object({
+    as: z.number().default(0),
+    ibgp: z.object({
         localId: z.string().optional(),
         endpoint: z.string().url().optional(),
-        as: z.number().default(0),
         domains: z.array(z.string()).default([]),
         secret: z.string().default('valid-secret'),
-    }).default({ as: 0, domains: [], secret: 'valid-secret' }),
+    }).default({ domains: [], secret: 'valid-secret' }),
     port: z.number().default(3000),
 });
 
@@ -28,10 +28,10 @@ export function getConfig(): OrchestratorConfig {
 
     const config: any = {
         port,
-        peering: {
-            as: peeringAs ? parseInt(peeringAs) : 0,
+        as: peeringAs ? parseInt(peeringAs) : 0,
+        ibgp: {
             domains: peeringDomains ? peeringDomains.split(',').map(d => d.trim()) : [],
-            localId: peeringNodeId,
+            localId: peeringNodeId || os.hostname(),
             endpoint: peeringEndpoint,
             secret: peeringSecret || 'valid-secret'
         }

@@ -1,6 +1,6 @@
-
 import { z } from 'zod';
 import { ServiceDefinitionSchema } from './direct.js';
+import { ApplyActionResult } from './index.js';
 
 // --- iBGP Route Table ---
 export const AuthorizedPeerSchema = z.object({
@@ -54,7 +54,7 @@ export const IBGPConfigCreatePeerSchema = z.object({
     resourceAction: z.literal(IBGPConfigResourceAction.enum.create),
     data: z.object({
         endpoint: z.string(),
-        secret: z.string()
+        domains: z.array(z.string()).optional()
     })
 });
 
@@ -64,7 +64,7 @@ export const IBGPConfigUpdatePeerSchema = z.object({
     data: z.object({
         peerId: z.string(),
         endpoint: z.string(),
-        secret: z.string()
+        domains: z.array(z.string()).optional()
     })
 });
 
@@ -137,5 +137,14 @@ export const IBGPProtocolSchema = z.discriminatedUnion('resourceAction', [
 export type IBGPProtocol = z.infer<typeof IBGPProtocolSchema>;
 export type IBGPProtocolOpen = z.infer<typeof IBGPProtocolOpenSchema>;
 export type IBGPProtocolClose = z.infer<typeof IBGPProtocolCloseSchema>;
-export type IBGPProtocolKeepAlive = z.infer<typeof IBGPProtocolKeepAliveSchema>;
 export type IBGPProtocolUpdate = z.infer<typeof IBGPProtocolUpdateSchema>;
+
+export interface IBGPScope {
+    open(peerInfo: PeerInfo): Promise<ApplyActionResult>;
+    update(peerInfo: PeerInfo, routes: UpdateMessage[]): Promise<ApplyActionResult>;
+    close(peerInfo: PeerInfo): Promise<ApplyActionResult>;
+}
+
+export interface PeerApi {
+    connectToIBGPPeer(secret: string): IBGPScope;
+}

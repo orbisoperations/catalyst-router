@@ -12,7 +12,7 @@ import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
 import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js';
-import { AuthorizedPeer, IBGPProtocolResource, IBGPProtocolResourceAction, ListPeersResult, PeerInfo, UpdateMessage } from './schema/peering.js';
+import { AuthorizedPeer, IBGPProtocolResource, IBGPProtocolResourceAction, ListPeersResult, PeerInfo, UpdateMessage, IBGPScope } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
@@ -56,9 +56,12 @@ export class OrchestratorRpcServer extends RpcTarget {
         };
     }
 
-    async connectionFromIBGPPeer(secret: string): Promise<IBGPScope> {
+    async connectToIBGPPeer(secret: string): Promise<IBGPScope> {
         const config = getConfig();
-        if (secret !== config.peering.secret) {
+        if (config.as === 0) {
+            throw new Error('This node is not configured for iBGP');
+        }
+        if (secret !== config.ibgp.secret) {
             throw new Error('Invalid secret');
         }
 
@@ -162,10 +165,4 @@ export interface ManagementScope {
     listLocalRoutes(): Promise<ListLocalRoutesResult>;
     listMetrics(): Promise<ListMetricsResult>;
     listPeers(): Promise<ListPeersResult>;
-}
-
-export interface IBGPScope {
-    open(peerInfo: PeerInfo): Promise<ApplyActionResult>;
-    update(peerInfo: PeerInfo, routes: UpdateMessage[]): Promise<ApplyActionResult>;
-    close(peerInfo: PeerInfo): Promise<ApplyActionResult>;
 }
