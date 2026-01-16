@@ -6,7 +6,7 @@ import { ServiceDefinition } from '../src/rpc/schema/index.js';
 describe('Proxy State - Create', () => {
     const service: ServiceDefinition = {
         name: 'test-create-proxy',
-        protocol: 'tcp:graphql',
+        protocol: 'http:graphql',
         endpoint: 'localhost:8081',
         region: 'us-east-1'
     };

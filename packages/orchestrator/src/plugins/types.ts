@@ -1,6 +1,7 @@
 
 import { z } from 'zod';
 import { ActionSchema } from '../rpc/schema/index.js';
+export { ActionSchema };
 import { RouteTable } from '../state/route-table.js';
 
 export const AuthContextSchema = z.object({
@@ -27,7 +28,7 @@ export interface PluginResult {
     };
 }
 
-export interface Plugin {
+export interface PluginInterface {
     name: string;
     apply(context: PluginContext): Promise<PluginResult>;
 }

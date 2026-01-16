@@ -19,10 +19,10 @@ class MockPlugin extends BasePlugin {
 describe('PluginPipeline Unit Tests', () => {
     // Helper to generic valid context
     const createTestContext = (): PluginContext => ({
-        action: { resource: 'local-routing', action: 'create-datachannel', data: { name: 'test', endpoint: 'http://test', protocol: 'tcp' } },
+        action: { resource: 'localRoute', resourceAction: 'create', data: { name: 'test', endpoint: 'http://test', protocol: 'tcp' } },
         state: new RouteTable(),
-        authxContext: { userId: 'test-user' },
-        result: {}
+        authxContext: { userId: 'test-user', roles: [] },
+        results: []
     });
 
     it('should execute plugins sequentially', async () => {
@@ -47,12 +47,12 @@ describe('PluginPipeline Unit Tests', () => {
 
     it('should modify context across plugins', async () => {
         const plugin1 = new MockPlugin('Mutator1', async (ctx) => {
-            ctx.result = { ...ctx.result, step1: true };
+            ctx.results.push('step1');
             return { success: true, ctx };
         });
 
         const plugin2 = new MockPlugin('Mutator2', async (ctx) => {
-            ctx.result = { ...ctx.result, step2: true };
+            ctx.results.push('step2');
             return { success: true, ctx };
         });
 
@@ -60,7 +60,8 @@ describe('PluginPipeline Unit Tests', () => {
         const result = await pipeline.apply(createTestContext());
 
         if (result.success) {
-            expect(result.ctx.result).toEqual({ step1: true, step2: true });
+            expect(result.ctx.results).toContain('step1');
+            expect(result.ctx.results).toContain('step2');
         } else {
             throw new Error('Pipeline failed unexpectedly');
         }
@@ -70,6 +71,7 @@ describe('PluginPipeline Unit Tests', () => {
         const plugin1 = new MockPlugin('FailPlugin', async (ctx) => {
             return {
                 success: false,
+                ctx,
                 error: { pluginName: 'FailPlugin', message: 'Intentional Failure' }
             };
         });
@@ -83,8 +85,8 @@ describe('PluginPipeline Unit Tests', () => {
 
         expect(result.success).toBe(false);
         if (!result.success) { // logic guard
-            expect(result.error.pluginName).toBe('FailPlugin');
-            expect(result.error.message).toBe('Intentional Failure');
+            expect(result.error?.pluginName).toBe('FailPlugin');
+            expect(result.error?.message).toBe('Intentional Failure');
         }
     });
 
@@ -98,8 +100,8 @@ describe('PluginPipeline Unit Tests', () => {
 
         expect(result.success).toBe(false);
         if (!result.success) {
-            expect(result.error.pluginName).toBe('ThrowingPlugin');
-            expect(result.error.message).toContain('Unexpected error: Uncaught Exception');
+            expect(result.error?.pluginName).toBe('ThrowingPlugin');
+            expect(result.error?.message).toContain('Unexpected error: Uncaught Exception');
         }
     });
 

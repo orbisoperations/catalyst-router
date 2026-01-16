@@ -14,12 +14,11 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
         state = new RouteTable();
     });
 
-    // Helper to create context
-    const createCtx = (resource: string, resourceAction: string, data: any): PluginContext => ({
+    const createCtx = (resource: 'localRoute', resourceAction: 'create' | 'update' | 'delete', data: any): PluginContext => ({
         action: { resource, resourceAction, data },
         state,
         results: [],
-        authxContext: {} as any
+        authxContext: { userId: 'test', roles: [] }
     });
 
     describe('Create Actions', () => {
@@ -45,7 +44,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
             const data: DataChannel = {
                 name: 'proxy-service-1',
                 endpoint: 'http://proxy.target',
-                protocol: 'tcp:graphql',
+                protocol: 'http:graphql',
                 region: 'us-west-1'
             };
             const ctx = createCtx('localRoute', 'create', data);
@@ -104,7 +103,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
 
             expect(result.success).toBe(false);
             if (!result.success) { // Type guard
-                expect(result.error.message).toContain('Internal route not found');
+                expect(result.error?.message).toContain('Internal route not found');
             }
         });
 
@@ -113,7 +112,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
             const initialData: DataChannel = {
                 name: 'proxy-service-update',
                 endpoint: 'http://old.proxy',
-                protocol: 'tcp:graphql'
+                protocol: 'http:graphql'
             };
             const { state: stateWithRoute } = state.addProxiedRoute(initialData);
             state = stateWithRoute;
@@ -122,7 +121,7 @@ describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
             const updateData: DataChannel = {
                 name: 'proxy-service-update',
                 endpoint: 'http://new.proxy',
-                protocol: 'tcp:graphql'
+                protocol: 'http:graphql'
             };
             const ctx = createCtx('localRoute', 'update', updateData);
 

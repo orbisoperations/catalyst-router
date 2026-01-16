@@ -6,7 +6,7 @@ export class LoggerPlugin extends BasePlugin {
     name = 'LoggerPlugin';
 
     async apply(context: PluginContext): Promise<PluginResult> {
-        console.log(`[LoggerPlugin] Action: ${context.action.resource} / ${context.action.action}`);
+        console.log(`[LoggerPlugin] Action: ${context.action.resource} / ${context.action.resourceAction}`);
         if ('name' in context.action.data) {
             console.log(`[LoggerPlugin] Data: ${context.action.data.name}`);
         }

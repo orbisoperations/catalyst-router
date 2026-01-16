@@ -3,8 +3,16 @@ import { OrchestratorRpcServer } from '../src/rpc/server.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
 
 mock.module('../src/rpc/client.js', () => ({
-    getPeerSession: () => ({
-        open: async () => ({ success: true }),
+    getHttpPeerSession: () => ({
+        open: async () => ({
+            success: true,
+            peerInfo: {
+                id: 'mock-peer-id',
+                as: 100,
+                endpoint: 'http://peer-a:3000/rpc', // Match the test case
+                domains: []
+            }
+        }),
         update: async () => ({ success: true }),
         close: async () => ({ success: true })
     })

@@ -51,6 +51,7 @@ export class GatewayIntegrationPlugin extends BasePlugin {
             console.error('[GatewayIntegrationPlugin] Failed to update gateway:', error);
             return {
                 success: false,
+                ctx: context,
                 error: {
                     pluginName: this.name,
                     message: `Gateway update failed: ${error.message}`,

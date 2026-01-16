@@ -18,10 +18,11 @@ import { getConfig, OrchestratorConfig } from '../config.js';
 export class OrchestratorRpcServer extends RpcTarget {
     private pipeline: PluginPipeline;
     private state: RouteTable;
+    private config: OrchestratorConfig;
 
-    constructor() {
+    constructor(config?: OrchestratorConfig) {
         super();
-        const config = getConfig();
+        this.config = config || getConfig();
 
         // Initialize State with GlobalRouteTable (empty/initial)
         this.state = GlobalRouteTable;
@@ -32,8 +33,8 @@ export class OrchestratorRpcServer extends RpcTarget {
         ];
 
         // Conditionally add Gateway Plugin
-        if (config.gqlGatewayConfig) {
-            plugins.push(new GatewayIntegrationPlugin(config.gqlGatewayConfig, {
+        if (this.config.gqlGatewayConfig) {
+            plugins.push(new GatewayIntegrationPlugin(this.config.gqlGatewayConfig, {
                 triggerOnResources: [
                     'localRoute'
                 ]
@@ -50,7 +51,9 @@ export class OrchestratorRpcServer extends RpcTarget {
     async connectionFromManagementSDK(): Promise<ManagementScope> {
         return {
             applyAction: (action) => this.applyAction(action),
-            listLocalRoutes: () => this.listLocalRoutes(),
+            listLocalRoutes: () => {
+                return this.listLocalRoutes();
+            },
             listMetrics: () => this.listMetrics(),
             listPeers: () => this.listPeers(),
             createPeer: (endpoint, domains) => this.createPeer(endpoint, domains),
@@ -87,11 +90,10 @@ export class OrchestratorRpcServer extends RpcTarget {
     }
 
     async connectToIBGPPeer(secret: string): Promise<IBGPScope> {
-        const config = getConfig();
-        if (config.as === 0) {
+        if (this.config.as === 0) {
             throw new Error('This node is not configured for iBGP');
         }
-        if (secret !== config.ibgp.secret) {
+        if (secret !== this.config.ibgp.secret) {
             throw new Error('Invalid secret');
         }
 
@@ -109,7 +111,28 @@ export class OrchestratorRpcServer extends RpcTarget {
                     }
                 };
 
-                return await this.applyAction(action);
+                const result = await this.applyAction(action);
+
+                if (!result.success) {
+                    return {
+                        success: false,
+                        error: result.error
+                    };
+                }
+
+                // Return our local PeerInfo so the initiator knows who we are
+                const myConfig = this.config;
+                const myPeerInfo: PeerInfo = {
+                    id: myConfig.ibgp.localId || 'unknown',
+                    as: myConfig.as,
+                    endpoint: myConfig.ibgp.endpoint || 'unknown',
+                    domains: myConfig.ibgp.domains
+                };
+
+                return {
+                    success: true,
+                    peerInfo: myPeerInfo
+                };
             },
             update: async (peerInfo: PeerInfo, routes: UpdateMessage[]) => {
                 const action: Action = {

@@ -47,7 +47,7 @@ describe('Orchestrator RPC', () => {
         const cli = rpc.connectionFromManagementSDK();
         const result = await cli.applyAction(action);
         expect(result.success).toBe(true);
-        expect(result.results[0].id).toBe('test-service:tcp:graphql');
+        expect(result.results[0].id).toBe('test-service:http:graphql');
     });
 
     it('should list local routes', async () => {
@@ -55,7 +55,7 @@ describe('Orchestrator RPC', () => {
         const result = await cli.listLocalRoutes();
         expect(result.routes).toBeInstanceOf(Array);
         expect(result.routes.length).toBeGreaterThan(0);
-        const route = result.routes.find((r: any) => r.id === 'test-service:tcp:graphql');
+        const route = result.routes.find((r: any) => r.id === 'test-service:http:graphql');
         expect(route).toBeDefined();
         expect(route.service.name).toBe('test-service');
     });
@@ -64,7 +64,7 @@ describe('Orchestrator RPC', () => {
         const cli = rpc.connectionFromManagementSDK();
         const result = await cli.listMetrics();
         expect(result.metrics).toBeInstanceOf(Array);
-        const metric = result.metrics.find((m: any) => m.id === 'test-service:tcp:graphql');
+        const metric = result.metrics.find((m: any) => m.id === 'test-service:http:graphql');
         expect(metric).toBeDefined();
         expect(metric.connectionCount).toBe(0);
     });

@@ -6,8 +6,16 @@ import { AuthorizedPeer } from '../src/rpc/schema/peering.js';
 import { mock } from 'bun:test';
 
 mock.module('../src/rpc/client.js', () => ({
-    getPeerSession: () => ({
-        open: async () => ({ success: true }),
+    getHttpPeerSession: () => ({
+        open: async () => ({
+            success: true,
+            peerInfo: {
+                id: 'mock-peer-id',
+                as: 100,
+                endpoint: 'http://mock-endpoint',
+                domains: []
+            }
+        }),
         update: async () => ({ success: true }),
         close: async () => ({ success: true })
     })

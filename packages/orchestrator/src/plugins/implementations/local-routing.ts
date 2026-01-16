@@ -46,7 +46,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
             const data = action.data as z.infer<typeof ServiceDefinitionSchema>;
 
             // Logic: Distinguish by protocol
-            if (data.protocol === 'tcp:graphql' || data.protocol === 'tcp:gql') {
+            if (data.protocol === 'http:graphql' || data.protocol === 'http:gql') {
                 // Proxy Route
                 console.log(`[LocalRoutingTablePlugin] Adding PROXY route for ${data.name}`);
                 const { state: newState, id } = state.addProxiedRoute({
@@ -89,7 +89,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
         } else if (action.resourceAction === 'update') {
             const data = action.data as z.infer<typeof ServiceDefinitionSchema>;
 
-            if (data.protocol === 'tcp:graphql' || data.protocol === 'tcp:gql') {
+            if (data.protocol === 'http:graphql' || data.protocol === 'http:gql') {
                 // Proxy Route
                 const result = state.updateProxiedRoute({
                     name: data.name,
@@ -112,6 +112,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 } else {
                     return {
                         success: false,
+                        ctx: context,
                         error: {
                             pluginName: this.name,
                             message: `Proxy route not found for update: ${data.name}:${data.protocol}`
@@ -141,6 +142,7 @@ export class LocalRoutingTablePlugin extends BasePlugin {
                 } else {
                     return {
                         success: false,
+                        ctx: context,
                         error: {
                             pluginName: this.name,
                             message: `Internal route not found for update: ${data.name}:${data.protocol}`
