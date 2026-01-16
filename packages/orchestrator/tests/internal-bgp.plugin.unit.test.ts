@@ -222,4 +222,41 @@ describe('InternalBGPPlugin Unit Tests', () => {
         const result = await plugin.apply(context);
         expect(result.success).toBe(true);
     });
+
+    it('should trigger broadcast when a local route is updated', async () => {
+        // Mock factory to spy on usage
+        let callCount = 0;
+        const spyFactory = (endpoint: string) => {
+            callCount++;
+            return mockSession as any;
+        };
+
+        const plugin = new InternalBGPPlugin(spyFactory);
+        const stateWithPeer = new RouteTable().addPeer({
+            id: 'peer-c',
+            as: 100,
+            endpoint: 'http://peer-c:3000/rpc',
+            domains: []
+        }).state;
+
+        const context: PluginContext = {
+            action: {
+                resource: 'localRoute',
+                resourceAction: 'update',
+                data: {
+                    name: 'local-service-v2',
+                    endpoint: 'http://localhost:8081',
+                    protocol: 'tcp'
+                }
+            } as any,
+            state: stateWithPeer,
+            results: [],
+            authxContext: {} as any
+        };
+
+        const result = await plugin.apply(context);
+        expect(result.success).toBe(true);
+        // Should call factory for the one peer
+        expect(callCount).toBe(1);
+    });
 });

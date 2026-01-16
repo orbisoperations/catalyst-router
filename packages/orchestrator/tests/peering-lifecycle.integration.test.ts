@@ -5,20 +5,26 @@ import { RouteTable } from '../src/state/route-table.js';
 import { AuthorizedPeer } from '../src/rpc/schema/peering.js';
 import { mock } from 'bun:test';
 
+const mockSessions: any[] = [];
+
 mock.module('../src/rpc/client.js', () => ({
-    getHttpPeerSession: () => ({
-        open: async () => ({
-            success: true,
-            peerInfo: {
-                id: 'mock-peer-id',
-                as: 100,
-                endpoint: 'http://mock-endpoint',
-                domains: []
-            }
-        }),
-        update: async () => ({ success: true }),
-        close: async () => ({ success: true })
-    })
+    getHttpPeerSession: () => {
+        const session = {
+            open: mock(async () => ({
+                success: true,
+                peerInfo: {
+                    id: 'mock-peer-id',
+                    as: 100,
+                    endpoint: 'http://mock-endpoint',
+                    domains: []
+                }
+            })),
+            update: mock(async () => ({ success: true })),
+            close: mock(async () => ({ success: true }))
+        };
+        mockSessions.push(session);
+        return session;
+    }
 }));
 
 describe('Peering Status & Lifecycle (Mocked)', () => {
@@ -142,17 +148,9 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
         expect(routeGone).toBeUndefined();
     });
 
-    it.skip('should broadcast local route updates to connected peers', async () => {
+    it('should broadcast local route updates to connected peers', async () => {
         const server = new OrchestratorRpcServer();
-
-        // 1. Mock a peer stub that captures updateRoute calls
-        const updates: any[] = [];
-        const mockStub = {
-            updateRoute: (msg: any) => {
-                updates.push(msg);
-            },
-            keepAlive: () => { }
-        };
+        mockSessions.length = 0; // Clear mocks
 
         // 2. Add Peer
         await server.applyAction({
@@ -176,6 +174,17 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
         } as any);
 
         // 4. Verify peer received UPDATE
+        // The last session created should be the one for 'listener-peer' (during open)
+        // Actually, sendIndividualUpdate creates a NEW session each time currently (or factory usage).
+        // Wait for async broadcast
+        await new Promise(r => setTimeout(r, 10));
+
+        // Find calls to update
+        const updateCalls = mockSessions.flatMap(s => s.update.mock.calls);
+        const lastCallArgs = updateCalls[updateCalls.length - 1]; // [myPeerInfo, updates]
+
+        expect(lastCallArgs).toBeDefined();
+        const updates = lastCallArgs[1];
         expect(updates).toHaveLength(1);
         expect(updates[0].type).toBe('add');
         expect(updates[0].route.name).toBe(serviceName);
@@ -193,8 +202,16 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
         } as any);
 
         // 6. Verify peer received withdrawal
-        expect(updates).toHaveLength(2);
-        expect(updates[1].type).toBe('remove');
-        expect(updates[1].routeId).toBe(routeId);
+        await new Promise(r => setTimeout(r, 10));
+
+        const updateCalls2 = mockSessions.flatMap(s => s.update.mock.calls);
+        const lastCallArgs2 = updateCalls2[updateCalls2.length - 1];
+
+        expect(lastCallArgs2).toBeDefined();
+        const updates2 = lastCallArgs2[1];
+
+        expect(updates2).toHaveLength(1);
+        expect(updates2[0].type).toBe('remove');
+        expect(updates2[0].routeId).toBe(routeId);
     });
 });
