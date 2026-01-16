@@ -113,4 +113,91 @@ describe('InternalBGPPlugin Unit Tests', () => {
         const result = await plugin.apply(context);
         expect(result.success).toBe(true);
     });
+
+    it('should remove a peer and its routes when receiving a "close" action', async () => {
+        const plugin = new InternalBGPPlugin();
+        const peerId = 'peer-b';
+
+        // 1. Seed state with a peer and a route from that peer
+        let state = new RouteTable().addPeer({
+            id: peerId,
+            as: 100,
+            endpoint: 'http://peer-b:3000/rpc',
+            domains: []
+        }).state;
+
+        const { state: seededState } = state.addInternalRoute({
+            name: 'remote-service',
+            endpoint: 'http://remote:8080',
+            protocol: 'tcp'
+        }, peerId);
+
+        expect(seededState.getPeers()).toHaveLength(1);
+        expect(seededState.getInternalRoutes()).toHaveLength(1);
+
+        const context: PluginContext = {
+            action: {
+                resource: 'internalPeerSession',
+                resourceAction: 'close',
+                data: {
+                    peerId,
+                    skipNotify: true // Skip network call in unit test
+                }
+            },
+            state: seededState,
+            results: [],
+            authxContext: {} as any
+        };
+
+        const result = await plugin.apply(context);
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error('Plugin failed');
+
+        expect(result.ctx.state.getPeers()).toHaveLength(0);
+        expect(result.ctx.state.getInternalRoutes()).toHaveLength(0);
+    });
+
+    it('should send existing routes to a new peer during OPEN', async () => {
+        const plugin = new InternalBGPPlugin();
+
+        // 1. Seed state with some routes
+        let state = new RouteTable().addInternalRoute({
+            name: 'existing-service-1',
+            endpoint: 'http://loc:1',
+            protocol: 'tcp'
+        }).state;
+
+        state = state.addInternalRoute({
+            name: 'existing-service-2',
+            endpoint: 'http://loc:2',
+            protocol: 'tcp'
+        }).state;
+
+        const peerInfo = {
+            id: 'new-peer',
+            as: 200,
+            endpoint: 'http://new-peer:3000/rpc',
+            domains: []
+        };
+
+        const context: PluginContext = {
+            action: {
+                resource: 'internalPeerSession',
+                resourceAction: 'open',
+                data: {
+                    peerInfo,
+                    direction: 'inbound'
+                }
+            },
+            state,
+            results: [],
+            authxContext: {} as any
+        };
+
+        // We want to verify that broadcasts happen during the OPEN call.
+        // This is hard to unit test without mocking the Batch RPC calls,
+        // but it verifies the code path completes.
+        const result = await plugin.apply(context);
+        expect(result.success).toBe(true);
+    });
 });

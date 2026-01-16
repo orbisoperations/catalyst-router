@@ -48,7 +48,8 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             .withEnvironment({
                 'PORT': '3000',
                 'CATALYST_AS': '100',
-                'CATALYST_NODE_ID': 'peer-a'
+                'CATALYST_NODE_ID': 'peer-a',
+                'CATALYST_PEERING_ENDPOINT': 'http://peer-a:3000/rpc'
             })
             .withWaitStrategy(Wait.forHttp('/health', 3000))
             .start();
@@ -64,7 +65,8 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             .withEnvironment({
                 'PORT': '3000',
                 'CATALYST_AS': '200',
-                'CATALYST_NODE_ID': 'peer-b'
+                'CATALYST_NODE_ID': 'peer-b',
+                'CATALYST_PEERING_ENDPOINT': 'http://peer-b:3000/rpc'
             })
             .withWaitStrategy(Wait.forHttp('/health', 3000))
             .start();
@@ -109,14 +111,29 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
         return output;
     };
 
-    it('should connect Peer A to Peer B', async () => {
+    it('should connect Peer A to Peer B and sync existing routes', async () => {
+        // Pre-seed A with a service
+        await runCli(['service', 'add', 'pre-existing-on-a', 'http://a:9000'], portA);
+
+        // Wait for it to be actually in A's state
+        let onA = false;
+        for (let i = 0; i < 5; i++) {
+            const out = await runCli(['service', 'list'], portA);
+            if (out.includes('pre-existing-on-a')) {
+                onA = true;
+                break;
+            }
+            await new Promise(r => setTimeout(r, 500));
+        }
+        expect(onA).toBe(true);
+
         // Connect A to B (B is at peer-b:3000 inside network)
         await runCli(['peer', 'add', 'http://peer-b:3000/rpc', '--secret', 'valid-secret'], portA);
 
         // Wait and verify
         let connected = false;
         let lastOutput = '';
-        for (let i = 0; i < 30; i++) { // Increased retries
+        for (let i = 0; i < 30; i++) {
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const output = await runCli(['peer', 'list'], portA);
@@ -125,36 +142,66 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     connected = true;
                     break;
                 }
-            } catch (e) {
-                // Ignore transient CLI errors during polling
-            }
+            } catch (e) { }
         }
-        if (!connected) {
-            console.error('Peer connection verification failed. Last Peer List Output:\n', lastOutput);
-        }
+        if (!connected) console.error('Peer connection verification failed. Last Peer List Output:\n', lastOutput);
         expect(connected).toBe(true);
-    }, 30000); // Increased Timeout
 
-    it('should propagate a service from A to B', async () => {
-        // Add service on A
-        await runCli(['service', 'add', 'test-service', 'http://test:8080'], portA);
-
-        // Verify propagation to B
-        let propagated = false;
-        for (let i = 0; i < 30; i++) { // Increased retries
+        // Verify B learned the pre-existing service immediately after connecting
+        let synced = false;
+        let lastOutputB = '';
+        for (let i = 0; i < 60; i++) { // Extreme iterations (60s)
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const output = await runCli(['service', 'list'], portB);
-                if (output.includes('test-service')) {
-                    propagated = true;
+                lastOutputB = output;
+                if (output.includes('pre-existing-on-a')) {
+                    synced = true;
                     break;
                 }
-            } catch (e) {
-                // Ignore
-            }
+            } catch (e) { }
         }
-        expect(propagated).toBe(true);
-    }, 60000); // Increased Timeout
+        if (!synced) {
+            console.error('Initial sync failed on B. Service List Output:\n', lastOutputB);
+        }
+        expect(synced).toBe(true);
+    }, 60000);
+
+    it('should propagate services bidirectionally', async () => {
+        // Add service on A -> Check on B
+        await runCli(['service', 'add', 'service-on-a', 'http://a:8080'], portA);
+        // Add service on B -> Check on A
+        await runCli(['service', 'add', 'service-on-b', 'http://b:8080'], portB);
+
+        // Verify propagation to B
+        let propagatedToB = false;
+        for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+                const output = await runCli(['service', 'list'], portB);
+                if (output.includes('service-on-a')) {
+                    propagatedToB = true;
+                    break;
+                }
+            } catch (e) { }
+        }
+
+        // Verify propagation to A
+        let propagatedToA = false;
+        for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+                const output = await runCli(['service', 'list'], portA);
+                if (output.includes('service-on-b')) {
+                    propagatedToA = true;
+                    break;
+                }
+            } catch (e) { }
+        }
+
+        expect(propagatedToB).toBe(true);
+        expect(propagatedToA).toBe(true);
+    }, 120000); // 2 mins total for bidir check
 
     it('should disconnect and cleanup routes', async () => {
         // Find the generated peer ID for peer-b
@@ -166,26 +213,41 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
         // Disconnect A from B
         await runCli(['peer', 'remove', peerId], portA);
 
-        // Verify cleanup on B
-        let cleaned = false;
-        let lastOutput = '';
+        // Verify cleanup on B (A's services should be gone)
+        let cleanedOnB = false;
+        let lastOutputB = '';
         for (let i = 0; i < 15; i++) {
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const output = await runCli(['service', 'list'], portB);
-                lastOutput = output;
-                if (!output.includes('test-service')) {
-                    cleaned = true;
+                lastOutputB = output;
+                if (!output.includes('service-on-a')) {
+                    cleanedOnB = true;
                     break;
                 }
-            } catch (e) {
-                // Ignore
-            }
+            } catch (e) { }
         }
-        if (!cleaned) {
-            console.error('Cleanup verification failed on B. Last Service List Output:\n', lastOutput);
+
+        // Verify cleanup on A (B's services should be gone)
+        let cleanedOnA = false;
+        let lastOutputA = '';
+        for (let i = 0; i < 15; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+                const output = await runCli(['service', 'list'], portA);
+                lastOutputA = output;
+                if (!output.includes('service-on-b')) {
+                    cleanedOnA = true;
+                    break;
+                }
+            } catch (e) { }
         }
-        expect(cleaned).toBe(true);
-    }, 30000); // Increased Timeout
+
+        if (!cleanedOnB) console.error('Cleanup failed on B. Output:\n', lastOutputB);
+        if (!cleanedOnA) console.error('Cleanup failed on A. Output:\n', lastOutputA);
+
+        expect(cleanedOnB).toBe(true);
+        expect(cleanedOnA).toBe(true);
+    }, 60000);
 
 });
