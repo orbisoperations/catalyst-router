@@ -2,12 +2,11 @@ import { describe, it, expect, mock } from 'bun:test';
 import { OrchestratorRpcServer } from '../src/rpc/server.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
 
-mock.module('capnweb', () => ({
-    newHttpBatchRpcSession: () => ({
-        connectToIBGPPeer: () => ({
-            open: async () => ({ success: true }),
-            update: async () => ({ success: true })
-        })
+mock.module('../src/rpc/client.js', () => ({
+    getPeerSession: () => ({
+        open: async () => ({ success: true }),
+        update: async () => ({ success: true }),
+        close: async () => ({ success: true })
     })
 }));
 

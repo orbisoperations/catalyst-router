@@ -3,6 +3,15 @@ import { describe, it, expect } from 'bun:test';
 import { OrchestratorRpcServer } from '../src/rpc/server.js';
 import { RouteTable } from '../src/state/route-table.js';
 import { AuthorizedPeer } from '../src/rpc/schema/peering.js';
+import { mock } from 'bun:test';
+
+mock.module('../src/rpc/client.js', () => ({
+    getPeerSession: () => ({
+        open: async () => ({ success: true }),
+        update: async () => ({ success: true }),
+        close: async () => ({ success: true })
+    })
+}));
 
 describe('Peering Status & Lifecycle (Mocked)', () => {
 

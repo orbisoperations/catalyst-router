@@ -3,14 +3,13 @@ import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.j
 import { RouteTable } from '../src/state/route-table.js';
 import { PluginContext } from '../src/plugins/types.js';
 
-mock.module('capnweb', () => ({
-    newHttpBatchRpcSession: () => ({
-        connectToIBGPPeer: () => ({
-            open: async () => ({ success: true }),
-            update: async () => ({ success: true })
-        })
-    })
-}));
+const mockSession = {
+    open: async () => ({ success: true }),
+    update: async () => ({ success: true }),
+    close: async () => ({ success: true })
+};
+const mockFactory = () => mockSession as any;
+
 
 describe('InternalBGPPlugin Unit Tests', () => {
 
@@ -94,8 +93,8 @@ describe('InternalBGPPlugin Unit Tests', () => {
     });
 
     it('should trigger broadcast when a local route is created', async () => {
-        const plugin = new InternalBGPPlugin();
-
+        const plugin = new InternalBGPPlugin(mockFactory);
+        const initialState = new RouteTable()
         // Mock the internal broadcast logic if possible, 
         // but since it's a private method and uses dynamic imports, 
         // we can test it by seeding peers and checking if it runs without error 
@@ -133,7 +132,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
     });
 
     it('should remove a peer and its routes when receiving a "close" action', async () => {
-        const plugin = new InternalBGPPlugin();
+        const plugin = new InternalBGPPlugin(mockFactory);
         const peerId = 'peer-b';
 
         // 1. Seed state with a peer and a route from that peer
@@ -175,8 +174,8 @@ describe('InternalBGPPlugin Unit Tests', () => {
     });
 
     it('should send existing routes to a new peer during OPEN', async () => {
-        const plugin = new InternalBGPPlugin();
-
+        const plugin = new InternalBGPPlugin(mockFactory);
+        const peerId = 'new-peer';
         // 1. Seed state with some routes
         let state = new RouteTable().addInternalRoute({
             name: 'existing-service-1',

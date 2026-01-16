@@ -3,6 +3,7 @@ import { BasePlugin } from '../../plugins/base.js';
 import { PluginContext, PluginResult } from '../../plugins/types.js';
 import { newHttpBatchRpcSession } from 'capnweb';
 import { getConfig } from '../../config.js';
+import { getPeerSession } from '../../rpc/client.js';
 import {
     IBGPConfigCreatePeerSchema,
     IBGPConfigUpdatePeerSchema,
@@ -17,12 +18,18 @@ import {
     IBGPProtocolResourceAction,
     PeerInfo,
     AuthorizedPeer,
-    PeerApi
+    PeerApi,
+    IBGPScope,
+    PublicIBGPScope
 } from '../../rpc/schema/peering.js';
 import { LocalRoutingCreateActionSchema, LocalRoutingDeleteActionSchema } from './local-routing.js';
 
 export class InternalBGPPlugin extends BasePlugin {
     name = 'InternalBGPPlugin';
+
+    constructor(private readonly sessionFactory: typeof getPeerSession = getPeerSession) {
+        super();
+    }
 
     async apply(context: PluginContext): Promise<PluginResult> {
         const { action } = context;
@@ -62,6 +69,16 @@ export class InternalBGPPlugin extends BasePlugin {
         return { success: true, ctx: context };
     }
 
+    private getMyPeerInfo(): PeerInfo {
+        const config = getConfig();
+        return {
+            id: config.ibgp.localId || 'unknown',
+            as: config.as,
+            domains: config.ibgp.domains,
+            endpoint: config.ibgp.endpoint || 'unknown'
+        };
+    }
+
     private async handleConfigCreatePeer(context: PluginContext): Promise<PluginResult> {
         const { action } = context;
         const result = IBGPConfigCreatePeerSchema.safeParse(action);
@@ -94,7 +111,24 @@ export class InternalBGPPlugin extends BasePlugin {
 
         // Handshake before adding to state
         try {
-            await this.executeHandshakeAndSync(context, peerData);
+            const ibgpScope = this.sessionFactory(endpoint, config.ibgp.secret);
+            const myPeerInfo = this.getMyPeerInfo();
+
+            // 1. OPEN
+            const openResult = await ibgpScope.open(myPeerInfo);
+            if (!openResult.success) {
+                throw new Error(openResult.error || 'Peer rejected OPEN request');
+            }
+
+            // 2. UPDATE (Initial Sync)
+            const routes = context.state.getAllRoutes();
+            if (routes.length > 0) {
+                const updates = routes.map(route => ({
+                    type: 'add' as const,
+                    route: route.service
+                }));
+                await ibgpScope.update(myPeerInfo, updates);
+            }
 
             const { state: newState } = context.state.addPeer(peerData);
             context.state = newState;
@@ -133,14 +167,55 @@ export class InternalBGPPlugin extends BasePlugin {
 
         console.log(`[InternalAS] Updating peer ${peerId} to ${endpoint}`);
 
-        const updatedPeer = {
-            ...peer,
-            endpoint,
-            domains: domains !== undefined ? domains : peer.domains
-        };
+        const config = getConfig();
+        const myPeerInfo = this.getMyPeerInfo();
 
-        const { state: newState } = context.state.addPeer(updatedPeer); // addPeer handles overwrite
-        context.state = newState;
+        try {
+            // 1. Close Old Connection
+            if (peer.endpoint && peer.endpoint !== 'unknown') {
+                try {
+                    const oldScope = this.sessionFactory(peer.endpoint, config.ibgp.secret);
+                    await oldScope.close(myPeerInfo);
+                } catch (e: any) {
+                    console.warn(`[InternalAS] Failed to close old connection to ${peer.endpoint}:`, e.message);
+                }
+            }
+
+            // 2. Open New Connection
+            const ibgpScope = this.sessionFactory(endpoint, config.ibgp.secret);
+
+            const openResult = await ibgpScope.open(myPeerInfo);
+            if (!openResult.success) {
+                throw new Error(openResult.error || 'Peer rejected OPEN request');
+            }
+
+            // 3. Update (Sync)
+            const routes = context.state.getAllRoutes();
+            if (routes.length > 0) {
+                const updates = routes.map(route => ({
+                    type: 'add' as const,
+                    route: route.service
+                }));
+                await ibgpScope.update(myPeerInfo, updates);
+            }
+
+            // 4. Update State
+            const updatedPeer = {
+                ...peer,
+                endpoint,
+                domains: domains !== undefined ? domains : peer.domains
+            };
+
+            const { state: newState } = context.state.addPeer(updatedPeer);
+            context.state = newState;
+
+        } catch (e: any) {
+            console.error(`[InternalAS] Failed handshake updates with ${endpoint}:`, e.message);
+            return {
+                success: false,
+                error: { pluginName: this.name, message: `Failed to handshake with new endpoint: ${e.message}` }
+            };
+        }
 
         return { success: true, ctx: context };
     }
@@ -158,10 +233,27 @@ export class InternalBGPPlugin extends BasePlugin {
         };
 
         const { peerId } = result.data.data;
-        console.log(`[InternalAS] Deleting peer ${peerId}`);
+        const peer = context.state.getPeer(peerId);
 
-        const newState = context.state.removePeer(peerId);
-        context.state = newState;
+        if (peer) {
+            console.log(`[InternalAS] Deleting peer ${peerId}`);
+            const config = getConfig();
+            const myPeerInfo = this.getMyPeerInfo();
+
+            // 1. Close Connection
+            if (peer.endpoint && peer.endpoint !== 'unknown') {
+                try {
+                    const ibgpScope = this.sessionFactory(peer.endpoint, config.ibgp.secret);
+                    await ibgpScope.close(myPeerInfo);
+                } catch (e: any) {
+                    console.warn(`[InternalAS] Failed to send CLOSE to ${peer.endpoint}:`, e.message);
+                }
+            }
+
+            // 2. Update State
+            const newState = context.state.removePeer(peerId);
+            context.state = newState;
+        }
 
         return { success: true, ctx: context };
     }
@@ -211,10 +303,30 @@ export class InternalBGPPlugin extends BasePlugin {
         console.log(`[InternalAS] Peer ${peerInfo.id} registered.`);
 
         // Synchronize in background to allow the OPEN call to complete
-        setImmediate(() => {
-            this.syncExistingRoutesToPeer(context, peerInfo.id).catch(e => {
+        setImmediate(async () => {
+            try {
+                const config = getConfig();
+                const myPeerInfo = this.getMyPeerInfo();
+                const ibgpScope = this.sessionFactory(peerInfo.endpoint, config.ibgp.secret);
+
+                // Reverse sync: Open -> Update
+                const openResult = await ibgpScope.open(myPeerInfo);
+                if (!openResult.success) {
+                    console.warn(`[InternalAS] Reverse OPEN failed to ${peerInfo.id}: ${openResult.error}`);
+                    return;
+                }
+
+                const routes = context.state.getAllRoutes();
+                if (routes.length > 0) {
+                    const updates = routes.map(route => ({
+                        type: 'add' as const,
+                        route: route.service
+                    }));
+                    await ibgpScope.update(myPeerInfo, updates);
+                }
+            } catch (e: any) {
                 console.error(`[InternalAS] Background sync failed for ${peerInfo.id}:`, e.message);
-            });
+            }
         });
 
         return { success: true, ctx: context };
@@ -300,8 +412,7 @@ export class InternalBGPPlugin extends BasePlugin {
             endpoint: config.ibgp.endpoint || 'unknown'
         };
 
-        const session = newHttpBatchRpcSession<PeerApi>(peer.endpoint);
-        const ibgpScope = session.connectToIBGPPeer(config.ibgp.secret);
+        const ibgpScope = this.sessionFactory(peer.endpoint, config.ibgp.secret);
 
         // Sequential: OPEN then UPDATE
         const result = await ibgpScope.open(myPeerInfo);
@@ -349,12 +460,12 @@ export class InternalBGPPlugin extends BasePlugin {
                 endpoint: config.ibgp.endpoint || 'unknown'
             };
 
-            const session: any = newHttpBatchRpcSession(peer.endpoint);
+            const session = newHttpBatchRpcSession<PublicIBGPScope>(peer.endpoint);
             const ibgpScope = session.connectToIBGPPeer(sharedSecret);
             // Batch open and update together using pipelining
-            const openPromise = ibgpScope.open(myPeerInfo);
             const updatePromise = ibgpScope.update(myPeerInfo, [updateMsg]);
-            await Promise.all([openPromise, updatePromise]);
+            // @ts-ignore
+            await Promise.all([updatePromise]);
         } catch (e: any) {
             console.error(`[InternalAS] Failed to send update to peer ${peerId} at ${peer.endpoint}:`, e.message);
         }
