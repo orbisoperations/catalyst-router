@@ -11,7 +11,8 @@ export const OrchestratorConfigSchema = z.object({
         endpoint: z.string().url().optional(),
         domains: z.array(z.string()).default([]),
         secret: z.string().default('valid-secret'),
-    }).default({ domains: [], secret: 'valid-secret' }),
+        transport: z.enum(['http', 'websocket']).default('http')
+    }).default({ domains: [], secret: 'valid-secret', transport: 'http' }),
     port: z.number().default(3000),
 });
 
@@ -25,6 +26,7 @@ export function getConfig(): OrchestratorConfig {
     const peeringEndpoint = process.env.CATALYST_PEERING_ENDPOINT;
     const peeringSecret = process.env.CATALYST_PEERING_SECRET;
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    const peeringTransport = process.env.CATALYST_IBGP_TRANSPORT; // 'http' | 'websocket'
 
     const config: any = {
         port,
@@ -33,7 +35,8 @@ export function getConfig(): OrchestratorConfig {
             domains: peeringDomains ? peeringDomains.split(',').map(d => d.trim()) : [],
             localId: peeringNodeId || os.hostname(),
             endpoint: peeringEndpoint,
-            secret: peeringSecret || 'valid-secret'
+            secret: peeringSecret || 'valid-secret',
+            transport: peeringTransport === 'websocket' ? 'websocket' : 'http'
         }
     };
 
