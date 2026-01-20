@@ -2,8 +2,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { GenericContainer, Wait, StartedTestContainer, Network, StartedNetwork } from 'testcontainers';
 import path from 'path';
+import { newHttpBatchRpcSession } from 'capnweb';
+import type { PublicApi } from '../../cli/src/client.js';
 
-describe.skip('Topology: Transit Peering (Containerized)', () => {
+describe('Topology: Transit Peering (Containerized)', () => {
     const TIMEOUT = 300000; // 5 minutes
 
     let network: StartedNetwork;
@@ -15,7 +17,7 @@ describe.skip('Topology: Transit Peering (Containerized)', () => {
     let portB: number;
     let portC: number;
 
-    const imageName = 'catalyst-node:test';
+    const imageName = 'catalyst-node:e2e-transit-rpc';
 
     beforeAll(async () => {
         // 1. Build Image
@@ -45,7 +47,8 @@ describe.skip('Topology: Transit Peering (Containerized)', () => {
                 'PORT': '3000',
                 'CATALYST_AS': '100',
                 'CATALYST_DOMAINS': 'domain-a.internal',
-                'CATALYST_NODE_ID': 'node-a'
+                'CATALYST_NODE_ID': 'node-a',
+                'CATALYST_PEERING_ENDPOINT': 'http://node-a:3000/rpc'
             })
             .withWaitStrategy(Wait.forHttp('/health', 3000))
             .start();
@@ -54,16 +57,17 @@ describe.skip('Topology: Transit Peering (Containerized)', () => {
         portA = nodeA.getMappedPort(3000);
         console.log(`Node A started on port ${portA}`);
 
-        // 4. Start Node B (AS 100)
+        // 4. Start Node B (AS 200)
         nodeB = await new GenericContainer(imageName)
             .withNetwork(network)
             .withNetworkAliases('node-b')
             .withExposedPorts(3000)
             .withEnvironment({
                 'PORT': '3000',
-                'CATALYST_AS': '100',
+                'CATALYST_AS': '200',
                 'CATALYST_DOMAINS': 'domain-b.internal',
-                'CATALYST_NODE_ID': 'node-b'
+                'CATALYST_NODE_ID': 'node-b',
+                'CATALYST_PEERING_ENDPOINT': 'http://node-b:3000/rpc'
             })
             .withWaitStrategy(Wait.forHttp('/health', 3000))
             .start();
@@ -71,16 +75,17 @@ describe.skip('Topology: Transit Peering (Containerized)', () => {
         portB = nodeB.getMappedPort(3000);
         console.log(`Node B started on port ${portB}`);
 
-        // 5. Start Node C (AS 100)
+        // 5. Start Node C (AS 300)
         nodeC = await new GenericContainer(imageName)
             .withNetwork(network)
             .withNetworkAliases('node-c')
             .withExposedPorts(3000)
             .withEnvironment({
                 'PORT': '3000',
-                'CATALYST_AS': '100',
+                'CATALYST_AS': '300',
                 'CATALYST_DOMAINS': 'domain-c.internal',
-                'CATALYST_NODE_ID': 'node-c'
+                'CATALYST_NODE_ID': 'node-c',
+                'CATALYST_PEERING_ENDPOINT': 'http://node-c:3000/rpc'
             })
             .withWaitStrategy(Wait.forHttp('/health', 3000))
             .start();
@@ -97,52 +102,61 @@ describe.skip('Topology: Transit Peering (Containerized)', () => {
         if (network) await network.stop();
     });
 
-    // Helper to run CLI command
-    const runCli = async (args: string[], targetPort: number) => {
-        const cliPath = path.resolve(__dirname, '../../../cli/src/index.ts');
-        const cmd = ['bun', cliPath, ...args];
-        console.log(`[CLI -> :${targetPort}] ${args.join(' ')}`);
+    const getClient = (port: number) => {
+        const url = `http://127.0.0.1:${port}/rpc`;
+        return newHttpBatchRpcSession<PublicApi>(url, {
+            fetch: fetch as any
+        } as any);
+    };
 
-        const proc = Bun.spawn(cmd, {
-            stdout: 'pipe',
-            stderr: 'pipe',
-            env: {
-                ...process.env,
-                'CATALYST_ORCHESTRATOR_URL': `ws://localhost:${targetPort}/rpc`
-            }
-        });
-
-        const output = await new Response(proc.stdout).text();
-        const error = await new Response(proc.stderr).text();
-        await proc.exited;
-
-        if (proc.exitCode !== 0) {
-            console.error('CLI Error:', error);
-            throw new Error(`CLI command failed: ${args.join(' ')}\nOutput: ${output}\nError: ${error}`);
-        }
-        return output;
+    const runOp = async <T>(port: number, operation: (mgmt: any) => Promise<T>): Promise<T> => {
+        const client = getClient(port);
+        const mgmt = client.connectionFromManagementSDK(); // Pipelined
+        return operation(mgmt);
     };
 
     it('should peer A -> B', async () => {
         // Connect A to B
-        await runCli(['peer', 'add', 'ws://node-b:3000/rpc', '--secret', 'test'], portA);
+        await runOp(portA, mgmt => mgmt.applyAction({
+            resource: 'internalBGPConfig',
+            resourceAction: 'create',
+            data: {
+                endpoint: 'http://node-b:3000/rpc',
+                domains: ['valid-secret']
+            }
+        }));
     }, 30000);
 
     it('should peer B -> C', async () => {
         // Connect B to C
-        await runCli(['peer', 'add', 'ws://node-c:3000/rpc', '--secret', 'test'], portB);
+        await runOp(portB, mgmt => mgmt.applyAction({
+            resource: 'internalBGPConfig',
+            resourceAction: 'create',
+            data: {
+                endpoint: 'http://node-c:3000/rpc',
+                domains: ['valid-secret']
+            }
+        }));
 
         // Wait for connection B->C
         let connected = false;
         console.log('Waiting for B->C connection...');
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 20; i++) {
             await new Promise(r => setTimeout(r, 1000));
-            const peers = await runCli(['peer', 'list'], portB);
-            console.log(`[Attempt ${i}] Peers on B: ${peers}`);
-            if (peers.includes('node-c') && !peers.includes('No peers connected')) {
-                console.log('B->C Connected');
-                connected = true;
-                break;
+            try {
+                const peers = await runOp(portB, async mgmt => {
+                    const res = await mgmt.listPeers();
+                    return res.peers || [];
+                });
+                const peerIds = peers.map((p: any) => p.id);
+                console.log(`[Attempt ${i}] Peers on B: ${peerIds}`);
+                if (peerIds.includes('node-c')) {
+                    console.log('B->C Connected');
+                    connected = true;
+                    break;
+                }
+            } catch (e) {
+                console.warn('RPC check failed:', e);
             }
         }
         if (!connected) throw new Error('B->C failed to connect');
@@ -152,45 +166,68 @@ describe.skip('Topology: Transit Peering (Containerized)', () => {
         // Wait for connection A->B
         let connected = false;
         console.log('Waiting for A->B connection...');
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 20; i++) {
             await new Promise(r => setTimeout(r, 1000));
-            const peers = await runCli(['peer', 'list'], portA);
-            console.log(`[Attempt ${i}] Peers on A: ${peers}`);
-            if (peers.includes('node-b') && !peers.includes('No peers connected')) {
-                console.log('A->B Connected');
-                connected = true;
-                break;
-            }
+            try {
+                const peers = await runOp(portA, async mgmt => {
+                    const res = await mgmt.listPeers();
+                    return res.peers || [];
+                });
+                const peerIds = peers.map((p: any) => p.id);
+                console.log(`[Attempt ${i}] Peers on A: ${peerIds}`);
+                if (peerIds.includes('node-b')) {
+                    console.log('A->B Connected');
+                    connected = true;
+                    break;
+                }
+            } catch (e) { }
         }
         if (!connected) throw new Error('A->B failed to connect');
     }, 30000);
 
     it('should register service on A', async () => {
         // Add Service on A
-        await runCli(['service', 'add', 'service-a', 'http://a-backend:8080', '--protocol', 'tcp:http', '--fqdn', 'service-a.domain-a.internal'], portA);
+        await runOp(portA, mgmt => mgmt.applyAction({
+            resource: 'localRoute',
+            resourceAction: 'create',
+            data: {
+                name: 'service-a',
+                endpoint: 'http://a-backend:8080',
+                protocol: 'http',
+                region: 'us-east'
+            }
+        }));
     }, 30000);
 
     it('should propagate route to C', async () => {
         // Poll for propagation (up to 60s)
         let found = false;
-        let output = '';
         for (let i = 0; i < 30; i++) {
             await new Promise(r => setTimeout(r, 2000));
 
-            output = await runCli(['routes', 'list'], portC);
-            console.log(`[Attempt ${i}] Routes on C:`, output);
+            try {
+                const routes = await runOp(portC, async mgmt => {
+                    const res = await mgmt.listLocalRoutes();
+                    return res.routes || [];
+                });
+                const routeNames = routes.map((r: any) => r.service.name);
+                console.log(`[Attempt ${i}] Routes on C:`, routeNames);
 
-            if (output.includes('service-a')) {
-                found = true;
-                break;
-            }
+                if (routeNames.includes('service-a')) {
+                    found = true;
+                    break;
+                }
+            } catch (e) { }
         }
 
         if (!found) {
             // Debug: Check connections on B
-            const peersB = await runCli(['peer', 'list'], portB);
-            console.log('Peers on B (Debug):', peersB);
-            throw new Error(`Route propagation failed. Last output on C: ${output}`);
+            const peersB = await runOp(portB, async mgmt => {
+                const res = await mgmt.listPeers();
+                return res.peers || [];
+            });
+            console.log('Peers on B (Debug):', peersB.map((p: any) => p.id));
+            throw new Error(`Route propagation failed.`);
         }
     }, 60000);
 

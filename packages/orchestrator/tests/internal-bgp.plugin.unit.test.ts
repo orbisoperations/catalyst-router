@@ -259,4 +259,101 @@ describe('InternalBGPPlugin Unit Tests', () => {
         // Should call factory for the one peer
         expect(callCount).toBe(1);
     });
+
+    it('should propagate learned routes to other peers and await results (transit)', async () => {
+        let propagationCalled = false;
+        const transitPeerSession = {
+            update: async () => {
+                propagationCalled = true;
+                return { success: true };
+            },
+            open: async () => ({ success: true, peerInfo: { id: 'peer-c', as: 300, endpoint: 'http://peer-c:3000/rpc', domains: [] } }),
+        };
+
+        const factory = (endpoint: string) => {
+            if (endpoint === 'http://peer-c:3000/rpc') return transitPeerSession as any;
+            return mockSession as any;
+        };
+
+        const plugin = new InternalBGPPlugin(factory);
+
+        // Seed state with peer C
+        let state = new RouteTable().addPeer({
+            id: 'peer-c',
+            as: 300,
+            endpoint: 'http://peer-c:3000/rpc',
+            domains: []
+        }).state;
+
+        const context: PluginContext = {
+            action: {
+                resource: 'internalBGP',
+                resourceAction: 'update',
+                data: {
+                    peerInfo: { id: 'peer-a', as: 100, endpoint: 'http://peer-a:3000/rpc', domains: [] },
+                    updateMessages: [
+                        {
+                            type: 'add',
+                            route: {
+                                name: 'service-a',
+                                endpoint: 'http://a-backend:8080',
+                                protocol: 'tcp'
+                            },
+                            asPath: [100]
+                        }
+                    ]
+                }
+            },
+            state,
+            results: [],
+            authxContext: {} as any
+        };
+
+        const result = await plugin.apply(context);
+        expect(result.success).toBe(true);
+        expect(propagationCalled).toBe(true);
+
+        const routesOnB = result.ctx.state.getInternalRoutes();
+        expect(routesOnB).toHaveLength(1);
+        expect(routesOnB[0].asPath).toEqual([100]);
+    });
+
+    it('should fail if propagation to transit peer fails', async () => {
+        const failingSession = {
+            update: async () => ({ success: false, error: 'Network timeout' }),
+            open: async () => ({ success: true, peerInfo: { id: 'peer-c', as: 300, endpoint: 'http://peer-c:3000/rpc', domains: [] } }),
+        };
+
+        const factory = (endpoint: string) => failingSession as any;
+        const plugin = new InternalBGPPlugin(factory);
+
+        let state = new RouteTable().addPeer({
+            id: 'peer-c',
+            as: 300,
+            endpoint: 'http://peer-c:3000/rpc',
+            domains: []
+        }).state;
+
+        const context: PluginContext = {
+            action: {
+                resource: 'internalBGP',
+                resourceAction: 'update',
+                data: {
+                    peerInfo: { id: 'peer-a', as: 100, endpoint: 'http://peer-a:3000/rpc', domains: [] },
+                    updateMessages: [{
+                        type: 'add',
+                        route: { name: 'service-a', endpoint: 'http://a:80', protocol: 'tcp' },
+                        asPath: [100]
+                    }]
+                }
+            },
+            state,
+            results: [],
+            authxContext: {} as any
+        };
+
+        const result = await plugin.apply(context);
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('Propagation failed: Network timeout');
+    });
 });

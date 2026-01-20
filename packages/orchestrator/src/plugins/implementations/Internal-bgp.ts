@@ -117,7 +117,8 @@ export class InternalBGPPlugin extends BasePlugin {
             if (routes.length > 0) {
                 const updates = routes.map(route => ({
                     type: 'add' as const,
-                    route: route.service
+                    route: route.service,
+                    asPath: [config.as, ...(route.asPath || [])]
                 }));
                 // Use the returned peerInfo from the open promise?
                 // Actually, for pipelining, we just pass myPeerInfo again or wait?
@@ -203,7 +204,8 @@ export class InternalBGPPlugin extends BasePlugin {
             if (routes.length > 0) {
                 const updates = routes.map(route => ({
                     type: 'add' as const,
-                    route: route.service
+                    route: route.service,
+                    asPath: [config.as, ...(route.asPath || [])]
                 }));
                 updatePromise = ibgpScope.update(myPeerInfo, updates);
             }
@@ -338,7 +340,8 @@ export class InternalBGPPlugin extends BasePlugin {
                 if (routes.length > 0) {
                     const updates = routes.map(route => ({
                         type: 'add' as const,
-                        route: route.service
+                        route: route.service,
+                        asPath: [config.as, ...(route.asPath || [])]
                     }));
                     await ibgpScope.update(myPeerInfo, updates);
                 }
@@ -406,22 +409,70 @@ export class InternalBGPPlugin extends BasePlugin {
 
         const { peerInfo, updateMessages } = result.data.data;
         const sourcePeerId = peerInfo.id;
+        const myAs = getConfig().as;
 
         console.log(`[InternalAS] Handling BGP UPDATE session from ${sourcePeerId} with ${updateMessages.length} messages`);
 
         let newState = context.state;
+        const routesToPropagate: { route: any, asPath: number[] }[] = [];
+
         for (const msg of updateMessages) {
             if (msg.type === 'add') {
-                const res = newState.addInternalRoute(msg.route, sourcePeerId);
+                const asPath = msg.asPath || [];
+
+                // Loop Prevention
+                if (asPath.includes(myAs)) {
+                    console.warn(`[InternalAS] Loop detected for route ${msg.route.name} (Path: ${asPath}). Dropping.`);
+                    continue;
+                }
+
+                const res = newState.addInternalRoute(msg.route, sourcePeerId, asPath);
                 newState = res.state;
+
+                // Queue for propagation
+                routesToPropagate.push({ route: msg.route, asPath });
+
             } else if (msg.type === 'remove') {
                 newState = newState.removeRoute(msg.routeId);
+                // TODO: Propagate remove?
             }
         }
 
         console.log(`[InternalAS] Route table updated. Total routes: ${newState.getRoutes().length}`);
-
         context.state = newState;
+
+        // Propagate learned routes to OTHER peers
+        if (routesToPropagate.length > 0) {
+            const peers = newState.getPeers().filter(p => p.id !== sourcePeerId);
+            console.log(`[InternalAS] Propagating ${routesToPropagate.length} routes to ${peers.length} peers.`);
+
+            const propagationPromises: Promise<any>[] = [];
+            for (const peer of peers) {
+                for (const item of routesToPropagate) {
+                    // Prepend My AS before sending
+                    const newPath = [myAs, ...item.asPath];
+                    propagationPromises.push(this.sendIndividualUpdate(context, peer.id, {
+                        type: 'add',
+                        route: item.route,
+                        asPath: newPath
+                    }));
+                }
+            }
+
+            const results = await Promise.all(propagationPromises);
+            const firstFailure = results.find(r => !r.success);
+            if (firstFailure) {
+                return {
+                    success: false,
+                    ctx: context,
+                    error: {
+                        pluginName: this.name,
+                        message: `Propagation failed: ${firstFailure.error}`
+                    }
+                };
+            }
+        }
+
         return { success: true, ctx: context };
     }
 
@@ -447,7 +498,11 @@ export class InternalBGPPlugin extends BasePlugin {
         if (routes.length > 0) {
             const updates = routes.map(route => ({
                 type: 'add' as const,
-                route: route.service
+                route: route.service,
+                // If it's a local route, [myAs]. If learned, [myAs, ...originalPath]
+                // But wait, the route in state ALREADY has the original path if learned.
+                // We just need to prepend MyAS to whatever is in state.
+                asPath: [config.as, ...(route.asPath || [])]
             }));
 
             await ibgpScope.update(myPeerInfo, updates);
@@ -469,18 +524,19 @@ export class InternalBGPPlugin extends BasePlugin {
         }
     }
 
-    private async sendIndividualUpdate(context: PluginContext, peerId: string, updateMsg: any): Promise<void> {
+    private async sendIndividualUpdate(context: PluginContext, peerId: string, updateMsg: any): Promise<any> {
         const peer = context.state.getPeer(peerId);
-        if (!peer || !peer.endpoint || peer.endpoint === 'unknown') return;
+        if (!peer || !peer.endpoint || peer.endpoint === 'unknown') return { success: true };
 
         try {
             const config = getConfig();
             const ibgpScope = this.sessionFactory(peer.endpoint, config.ibgp.secret);
             const myPeerInfo = this.getMyPeerInfo();
 
-            await ibgpScope.update(myPeerInfo, [updateMsg]);
+            return await ibgpScope.update(myPeerInfo, [updateMsg]);
         } catch (e: any) {
             console.error(`[InternalAS] Failed to send update to peer ${peerId} at ${peer.endpoint}:`, e.message);
+            return { success: false, error: e.message };
         }
     }
 
@@ -493,18 +549,27 @@ export class InternalBGPPlugin extends BasePlugin {
 
         if (action.resourceAction === 'create') {
             const result = LocalRoutingCreateActionSchema.safeParse(action);
-            if (!result.success) return { success: true, ctx: context };
+            if (!result.success) {
+                console.error(`[InternalAS] Failed to parse localRoute create action:`, result.error.message);
+                return { success: true, ctx: context }; // Still return success to allow OTHER plugins to run, but log the error
+            }
             updateType = 'add';
             routeData = result.data.data;
         } else if (action.resourceAction === 'update') {
             const result = LocalRoutingUpdateActionSchema.safeParse(action);
-            if (!result.success) return { success: true, ctx: context };
+            if (!result.success) {
+                console.error(`[InternalAS] Failed to parse localRoute update action:`, result.error.message);
+                return { success: true, ctx: context };
+            }
             // BGP Treat update as 'add' (upsert)
             updateType = 'add';
             routeData = result.data.data;
         } else {
             const result = LocalRoutingDeleteActionSchema.safeParse(action);
-            if (!result.success) return { success: true, ctx: context };
+            if (!result.success) {
+                console.error(`[InternalAS] Failed to parse localRoute delete action:`, result.error.message);
+                return { success: true, ctx: context };
+            }
             updateType = 'remove';
             routeId = result.data.data.id;
         }
@@ -515,6 +580,8 @@ export class InternalBGPPlugin extends BasePlugin {
 
         if (updateType === 'add') {
             updateMsg.route = routeData;
+            // Local route originates here
+            updateMsg.asPath = [getConfig().as];
         } else {
             updateMsg.routeId = routeId;
         }
@@ -524,7 +591,20 @@ export class InternalBGPPlugin extends BasePlugin {
 
         const promises = peers.map((peer) => this.sendIndividualUpdate(context, peer.id, updateMsg));
 
-        await Promise.all(promises);
+        const results = await Promise.all(promises);
+        const firstFailure = results.find(r => !r.success);
+
+        if (firstFailure) {
+            return {
+                success: false,
+                ctx: context,
+                error: {
+                    pluginName: this.name,
+                    message: `Broadcast failed: ${firstFailure.error}`
+                }
+            };
+        }
+
         return { success: true, ctx: context };
     }
 }

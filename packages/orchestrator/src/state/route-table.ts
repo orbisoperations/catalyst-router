@@ -34,7 +34,8 @@ export class RouteTable {
     private addRouteToMap(
         currentMap: Map<string, LocalRoute>,
         service: ServiceDefinition,
-        sourcePeerId?: string
+        sourcePeerId?: string,
+        asPath?: number[]
     ): { map: Map<string, LocalRoute>, metrics: Map<string, DataChannelMetrics>, id: string } {
         const id = this.createId(service);
         const newMap = new Map(currentMap);
@@ -42,6 +43,7 @@ export class RouteTable {
             id,
             service,
             sourcePeerId,
+            asPath
         });
 
         const newMetrics = new Map(this.metrics);
@@ -60,8 +62,8 @@ export class RouteTable {
         return this.addInternalRoute(service);
     }
 
-    addInternalRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } {
-        const { map, metrics, id } = this.addRouteToMap(this.internalRoutes, service, sourcePeerId);
+    addInternalRoute(service: ServiceDefinition, sourcePeerId?: string, asPath?: number[]): { state: RouteTable, id: string } {
+        const { map, metrics, id } = this.addRouteToMap(this.internalRoutes, service, sourcePeerId, asPath);
         return {
             state: this.clone({ internalRoutes: map, metrics }),
             id
@@ -129,7 +131,8 @@ export class RouteTable {
     private updateRouteInMap(
         currentMap: Map<string, LocalRoute>,
         service: ServiceDefinition,
-        sourcePeerId?: string
+        sourcePeerId?: string,
+        asPath?: number[]
     ): { map: Map<string, LocalRoute>, id: string } | null {
         const id = this.createId(service);
         if (currentMap.has(id)) {
@@ -140,6 +143,7 @@ export class RouteTable {
                 id,
                 service,
                 sourcePeerId: sourcePeerId ?? existing?.sourcePeerId,
+                asPath: asPath ?? existing?.asPath
             });
             // Init metrics if missing (safety check)
             // But usually update happens after add.
@@ -149,8 +153,8 @@ export class RouteTable {
         return null;
     }
 
-    updateInternalRoute(service: ServiceDefinition, sourcePeerId?: string): { state: RouteTable, id: string } | null {
-        const result = this.updateRouteInMap(this.internalRoutes, service, sourcePeerId);
+    updateInternalRoute(service: ServiceDefinition, sourcePeerId?: string, asPath?: number[]): { state: RouteTable, id: string } | null {
+        const result = this.updateRouteInMap(this.internalRoutes, service, sourcePeerId, asPath);
         if (result) {
             return { state: this.clone({ internalRoutes: result.map }), id: result.id };
         }
