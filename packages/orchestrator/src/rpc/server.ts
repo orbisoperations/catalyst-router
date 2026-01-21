@@ -1,4 +1,3 @@
-
 import { RpcTarget } from 'capnweb';
 import {
     ServiceDefinitionSchema,
@@ -10,7 +9,7 @@ import {
     ListLocalRoutesResultSchema,
     ListMetricsResultSchema
 } from './schema/index.js';
-import { GlobalRouteTable } from '../state/route-table.js';
+import { GlobalRouteTable, RouteTable } from '../state/route-table.js';
 import { PluginPipeline } from '../plugins/pipeline.js';
 import { AuthPlugin } from '../plugins/implementations/auth.js';
 import { LoggerPlugin } from '../plugins/implementations/logger.js';
@@ -23,10 +22,14 @@ import { getConfig, OrchestratorConfig } from '../config.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
     private pipeline: PluginPipeline;
+    private state: RouteTable;
 
     constructor() {
         super();
         const config = getConfig();
+
+        // Initialize State with GlobalRouteTable (empty/initial)
+        this.state = GlobalRouteTable;
 
         // Initialize Plugins
         const plugins: any[] = [
@@ -50,13 +53,16 @@ export class OrchestratorRpcServer extends RpcTarget {
         try {
             const result = await this.pipeline.apply({
                 action,
-                state: GlobalRouteTable,
+                state: this.state,
                 authxContext: { userId: 'stub-user', roles: ['admin'] } // Stub auth context
             });
 
             if (!result.success) {
                 return { success: false, error: result.error.message };
             }
+
+            // Update local state with the state returned from the pipeline
+            this.state = result.ctx.state;
 
             return {
                 success: true,
@@ -69,12 +75,12 @@ export class OrchestratorRpcServer extends RpcTarget {
 
 
     async listLocalRoutes(): Promise<ListLocalRoutesResult> {
-        const routes = GlobalRouteTable.getRoutes();
+        const routes = this.state.getRoutes();
         return { routes };
     }
 
     async listMetrics(): Promise<ListMetricsResult> {
-        const metrics = GlobalRouteTable.getMetrics();
+        const metrics = this.state.getMetrics();
         return { metrics };
     }
 }

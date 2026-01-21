@@ -1,16 +1,20 @@
-# Builder stage
-FROM oven/bun:1 AS builder
+# Runtime stage (use bun directly)
+FROM oven/bun:1
 WORKDIR /app
-COPY package.json ./
-RUN bun install
-COPY . .
-RUN bun build --compile --minify --outfile server src/index.ts
 
-# Runtime stage
-# We use distroless/base-nossl-debian12 for a minimal glibc image
-FROM gcr.io/distroless/base-nossl-debian12
-WORKDIR /app
-COPY --from=builder /app/server .
+# Copy root config
+COPY package.json bun.lockb ./
+
+# Copy source
+COPY packages/gateway packages/gateway
+
+# Remove host node_modules to avoid broken symlinks
+RUN rm -rf packages/gateway/node_modules
+
+# Install dependencies from root
+RUN bun install
+
+WORKDIR /app/packages/gateway
 ENV PORT=4000
 EXPOSE 4000
-CMD ["./server"]
+CMD ["bun", "run", "src/index.ts"]
