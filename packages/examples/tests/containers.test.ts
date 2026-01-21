@@ -11,11 +11,12 @@ describe('Example GraphQL Servers', () => {
 
         beforeAll(async () => {
             // Build and start the container
-            // context is packages/examples
-            const buildContext = path.resolve(__dirname, '..');
+            // context is repository root
+            const repoRoot = path.resolve(__dirname, '../../..');
+            const examplesDir = path.resolve(__dirname, '..');
 
             const imageName = 'books-service:test';
-            const dockerfile = 'Dockerfile.books';
+            const dockerfile = 'packages/examples/Dockerfile.books';
 
             // Workaround for Bun incompatibility with testcontainers' build strategy.
             // GenericContainer.fromDockerfile() uses 'tar-stream' which fails in Bun with:
@@ -23,7 +24,7 @@ describe('Example GraphQL Servers', () => {
             // This is likely due to differences in Buffer/Stream implementation in Bun vs Node.
             // We manually build the image using the docker CLI instead.
             const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: buildContext,
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit',
             });
@@ -71,13 +72,13 @@ describe('Example GraphQL Servers', () => {
         let startedContainer: StartedTestContainer;
 
         beforeAll(async () => {
-            const buildContext = path.resolve(__dirname, '..');
+            const repoRoot = path.resolve(__dirname, '../../..');
 
             const imageName = 'movies-service:test';
-            const dockerfile = 'Dockerfile.movies';
+            const dockerfile = 'packages/examples/Dockerfile.movies';
 
             const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: buildContext,
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit',
             });

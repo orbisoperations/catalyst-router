@@ -11,16 +11,15 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
     try {
         const root = await createClient(params.orchestratorUrl);
 
-
-        const api = await root.connectionFromManagementSDK();
+        const { orchestratorUrl, logLevel, ...serviceData } = params;
 
         const action = {
             resource: 'localRoute',
             resourceAction: 'create',
-            data: params
+            data: serviceData
         };
 
-        const result = await api.applyAction(action);
+        const result = await root.connectionFromManagementSDK().applyAction(action);
 
         if (result.success) {
             return { success: true };
@@ -28,6 +27,7 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
             return { success: false, error: result.error || 'Unknown server error' };
         }
     } catch (err: any) {
+        console.error(chalk.red('[CLI] addService Error:'), err.message);
         return { success: false, error: err.message || 'Connection error' };
     }
 }
@@ -35,10 +35,10 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
 export async function listServices(orchestratorUrl?: string): Promise<CliResult<any[]>> {
     try {
         const root = await createClient(orchestratorUrl);
-        const api = await root.connectionFromManagementSDK();
-        const result = await api.listLocalRoutes();
+        const result = await root.connectionFromManagementSDK().listLocalRoutes();
         return { success: true, data: result.routes || [] };
     } catch (err: any) {
+        console.error(chalk.red('[CLI] listServices Error:'), err.message);
         return { success: false, error: err.message || 'Connection error' };
     }
 }

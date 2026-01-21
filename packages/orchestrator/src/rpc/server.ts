@@ -59,17 +59,7 @@ export class OrchestratorRpcServer extends RpcTarget {
     }
 
     async connectionFromManagementSDK(): Promise<ManagementScope> {
-        return {
-            applyAction: (action) => this.applyAction(action),
-            listLocalRoutes: () => {
-                return this.listLocalRoutes();
-            },
-            listMetrics: () => this.listMetrics(),
-            listPeers: () => this.listPeers(),
-            createPeer: (endpoint, domains) => this.createPeer(endpoint, domains),
-            updatePeer: (peerId, endpoint, domains) => this.updatePeer(peerId, endpoint, domains),
-            deletePeer: (peerId) => this.deletePeer(peerId)
-        };
+        return new ManagementRpcScope(this);
     }
 
     async createPeer(endpoint: string, domains?: string[]): Promise<ApplyActionResult> {
@@ -231,4 +221,38 @@ export interface ManagementScope {
     createPeer(endpoint: string, domains?: string[]): Promise<ApplyActionResult>;
     updatePeer(peerId: string, endpoint: string, domains?: string[]): Promise<ApplyActionResult>;
     deletePeer(peerId: string): Promise<ApplyActionResult>;
+}
+
+export class ManagementRpcScope extends RpcTarget implements ManagementScope {
+    constructor(private server: OrchestratorRpcServer) {
+        super();
+    }
+
+    async applyAction(action: Action): Promise<ApplyActionResult> {
+        return this.server.applyAction(action);
+    }
+
+    async listLocalRoutes(): Promise<ListLocalRoutesResult> {
+        return this.server.listLocalRoutes();
+    }
+
+    async listMetrics(): Promise<ListMetricsResult> {
+        return this.server.listMetrics();
+    }
+
+    async listPeers(): Promise<ListPeersResult> {
+        return this.server.listPeers();
+    }
+
+    async createPeer(endpoint: string, domains?: string[]): Promise<ApplyActionResult> {
+        return this.server.createPeer(endpoint, domains);
+    }
+
+    async updatePeer(peerId: string, endpoint: string, domains?: string[]): Promise<ApplyActionResult> {
+        return this.server.updatePeer(peerId, endpoint, domains);
+    }
+
+    async deletePeer(peerId: string): Promise<ApplyActionResult> {
+        return this.server.deletePeer(peerId);
+    }
 }

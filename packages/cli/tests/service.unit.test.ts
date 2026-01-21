@@ -6,8 +6,13 @@ const mockApplyAction = mock((action: any) => Promise.resolve({ success: true, e
 const mockListLocalRoutes = mock(() => Promise.resolve({ routes: [] as any[] }));
 
 const mockCreateClient = mock(() => Promise.resolve({
-    applyAction: mockApplyAction,
-    listLocalRoutes: mockListLocalRoutes,
+    connectionFromManagementSDK: () => ({
+        applyAction: mockApplyAction,
+        listLocalRoutes: mockListLocalRoutes,
+        listMetrics: mock(() => Promise.resolve({ metrics: [] })),
+        listPeers: mock(() => Promise.resolve({ peers: [] })),
+        deletePeer: mock(() => Promise.resolve({ success: true }))
+    } as any),
     [Symbol.asyncDispose]: async () => { }
 } as any));
 
@@ -26,8 +31,13 @@ describe('Service Commands', () => {
         // and override using mockResolvedValue logic only when needed, but primarily we want the default behavior.
         // If a test changed implementation, we must reset it.
         mockCreateClient.mockImplementation(() => Promise.resolve({
-            applyAction: mockApplyAction,
-            listLocalRoutes: mockListLocalRoutes,
+            connectionFromManagementSDK: () => ({
+                applyAction: mockApplyAction,
+                listLocalRoutes: mockListLocalRoutes,
+                listMetrics: mock(() => Promise.resolve({ metrics: [] })),
+                listPeers: mock(() => Promise.resolve({ peers: [] })),
+                deletePeer: mock(() => Promise.resolve({ success: true }))
+            } as any),
             [Symbol.asyncDispose]: async () => { }
         } as any));
     });
@@ -120,7 +130,7 @@ describe('Validation Schema', () => {
         const result = AddServiceInputSchema.safeParse(input);
         expect(result.success).toBe(false);
         if (!result.success) {
-            expect(result.error.issues[0].message).toContain('Invalid url');
+            expect(result.error.issues[0].message).toContain('Invalid URL');
         }
     });
 
