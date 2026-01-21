@@ -132,13 +132,17 @@ describe('CLI E2E with Containers', () => {
     }, TIMEOUT);
 
     afterAll(async () => {
-        await Promise.all([
-            moviesContainer?.stop(),
-            booksContainer?.stop(),
-            gatewayContainer?.stop(),
-            orchestratorContainer?.stop(),
-            network?.stop()
-        ]);
+        console.log('Teardown: Stopping containers...');
+        if (orchestratorContainer) await orchestratorContainer.stop();
+        if (gatewayContainer) await gatewayContainer.stop();
+        if (booksContainer) await booksContainer.stop();
+        if (moviesContainer) await moviesContainer.stop();
+
+        if (network) {
+            console.log('Teardown: Stopping network...');
+            await network.stop();
+        }
+        console.log('Teardown: Complete.');
     });
 
     it('should add services via CLI and reflect in list', async () => {
