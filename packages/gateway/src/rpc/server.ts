@@ -46,9 +46,10 @@ export class GatewayRpcServer extends RpcTarget {
 
         try {
             return await this.updateCallback(result.data);
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
             console.error('Failed to update configuration:', error);
-            return { success: false, error: `Failed to apply configuration: ${error.message}` };
+            return { success: false, error: `Failed to apply configuration: ${message}` };
         }
     }
 }

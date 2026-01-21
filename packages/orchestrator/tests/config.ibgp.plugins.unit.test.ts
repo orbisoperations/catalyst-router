@@ -1,15 +1,10 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js';
 import { RouteTable } from '../src/state/route-table.js';
 import type { PluginContext } from '../src/plugins/types.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
 
-const mockPeerInfo = {
-    id: 'mock-peer-id',
-    as: 100,
-    endpoint: 'http://mock-endpoint',
-    domains: []
-};
+// Removed unused mockPeerInfo
 
 const mockSessionBase = {
     update: async () => ({ success: true }),
@@ -27,7 +22,7 @@ const mockFactory = (endpoint: string) => ({
             domains: []
         }
     })
-}) as any;
+}) as unknown as any;
 
 
 describe('InternalBGPPlugin Config Unit Tests', () => {
@@ -46,7 +41,7 @@ describe('InternalBGPPlugin Config Unit Tests', () => {
             },
             state: initialState,
             results: [],
-            authxContext: {} as any
+            authxContext: {} as unknown as any
         };
 
         const result = await plugin.apply(context);
@@ -81,7 +76,7 @@ describe('InternalBGPPlugin Config Unit Tests', () => {
             },
             state: stateWithPeer,
             results: [],
-            authxContext: {} as any
+            authxContext: {} as unknown as any
         };
 
         const result = await plugin.apply(context);
@@ -113,7 +108,7 @@ describe('InternalBGPPlugin Config Unit Tests', () => {
             },
             state: stateWithPeer,
             results: [],
-            authxContext: {} as any
+            authxContext: {} as unknown as any
         };
 
         const result = await plugin.apply(context);

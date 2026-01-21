@@ -5,7 +5,7 @@ import { GenericContainer, Network, Wait } from 'testcontainers';
 import { GatewayIntegrationPlugin } from '../src/plugins/implementations/gateway.js';
 import type { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
-import { join, resolve } from 'path';
+import { resolve } from 'path';
 
 // Increase timeout for builds
 const TIMEOUT = 180_000;
@@ -24,8 +24,8 @@ describe('GraphQL Plugin E2E with Containers', () => {
         network = await new Network().start();
 
         const repoRoot = resolve(__dirname, '../../..');
-        const examplesDir = join(repoRoot, 'packages/examples');
-        const gatewayDir = join(repoRoot, 'packages/gateway');
+        // const examplesDir = join(repoRoot, 'packages/examples');
+        // const gatewayDir = join(repoRoot, 'packages/gateway');
 
         console.log('Building Docker images...');
 
@@ -119,7 +119,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
         );
         let state = new RouteTable();
         const context: PluginContext = {
-            // @ts-ignore - Dummy action for context, we manipulate state directly
+            // @ts-expect-error - Dummy action for context, we manipulate state directly
             action: { resource: 'create-datachannel:local-routing', data: {} },
             state,
             authxContext: {} as any

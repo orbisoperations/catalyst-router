@@ -63,7 +63,13 @@ describe('Auth Service Container', () => {
         });
 
         // client IS the service (remote capability)
-        const service = client as unknown as any;
+        // client IS the service (remote capability)
+        const service = client as unknown as {
+            getJwks(): Promise<{ keys: any[] }>;
+            sign(payload: any, options?: any): Promise<{ token: string }>;
+            verify(args: { token: string }): Promise<{ valid: boolean; payload?: any; error?: string }>;
+            rotate(args: { immediate: boolean }): Promise<{ success: boolean }>;
+        };
 
         // 1. Get JWKS
         const jwks = await service.getJwks();

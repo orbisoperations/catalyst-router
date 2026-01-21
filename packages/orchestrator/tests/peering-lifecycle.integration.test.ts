@@ -1,8 +1,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { OrchestratorRpcServer } from '../src/rpc/server.js';
-import { RouteTable } from '../src/state/route-table.js';
-import { AuthorizedPeer } from '../src/rpc/schema/peering.js';
+// Removed unused RouteTable and AuthorizedPeer imports
 import { mock } from 'bun:test';
 
 const mockSessions: any[] = [];
@@ -41,7 +40,7 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
 
         // 2. Add a Peer (Simulate 'create peer' action)
         // This simulates the CLI 'peer add' command dispatching an action
-        const addPeerAction = {
+        const _addPeerAction = {
             resource: 'internalBGPConfig',
             resourceAction: 'create',
             data: {
@@ -104,7 +103,7 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
             data: {
                 peerInfo: { id: peerId, as: 300, endpoint: 'ws://p2', domains: [] }
             }
-        } as any);
+        } as unknown as any);
 
         // 2. Add Route from that Peer via BGP Update action
         // Note: The plugin now supports 'internalBGPRoute/update'
@@ -125,7 +124,7 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
                     }
                 ]
             }
-        } as any);
+        } as unknown as any);
 
         // 3. Verify Route Exists
         const routesAfterAdd = await server.listLocalRoutes();
@@ -140,7 +139,7 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
             data: {
                 peerInfo: { id: peerId, as: 300, endpoint: 'ws://p2' }
             }
-        } as any);
+        } as unknown as any);
 
         // 5. Verify Route Removed
         const routesAfterDisconnect = await server.listLocalRoutes();
@@ -159,7 +158,7 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
             data: {
                 peerInfo: { id: 'listener-peer', as: 400, endpoint: 'ws://p3', domains: [] }
             }
-        } as any);
+        } as unknown as any);
 
         // 3. Create a Local Route (simulating Service Add)
         const serviceName = 'propagated-service';
@@ -171,7 +170,7 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
                 endpoint: 'http://local:3000',
                 protocol: 'tcp'
             }
-        } as any);
+        } as unknown as any);
 
         // 4. Verify peer received UPDATE
         // The last session created should be the one for 'listener-peer' (during open)
@@ -199,7 +198,7 @@ describe('Peering Status & Lifecycle (Mocked)', () => {
             resource: 'localRoute',
             resourceAction: 'delete',
             data: { id: routeId }
-        } as any);
+        } as unknown as any);
 
         // 6. Verify peer received withdrawal
         await new Promise(r => setTimeout(r, 10));

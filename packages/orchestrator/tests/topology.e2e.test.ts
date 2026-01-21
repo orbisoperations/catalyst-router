@@ -108,8 +108,8 @@ describe('Topology E2E: Star (A center, B & C leaves)', () => {
     const getClient = (port: number) => {
         const url = `http://127.0.0.1:${port}/rpc`;
         return newHttpBatchRpcSession<PublicApi>(url, {
-            fetch: fetch as any
-        } as any);
+            fetch: fetch as unknown
+        } as unknown as any);
     };
 
     const runOp = async <T>(port: number, operation: (mgmt: any) => Promise<T>): Promise<T> => {
@@ -156,7 +156,7 @@ describe('Topology E2E: Star (A center, B & C leaves)', () => {
                     peersConnected = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
         expect(peersConnected).toBe(true);
         console.log('Peers B and C connected to A');
@@ -253,7 +253,7 @@ describe('Topology E2E: Star (A center, B & C leaves)', () => {
                     expect(route.asPath).toEqual([300]);
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
         expect(aSawIt).toBe(true);
         console.log(`Peer A saw ${serviceOnC}`);
@@ -275,9 +275,7 @@ describe('Topology E2E: Star (A center, B & C leaves)', () => {
                     // expect(route.asPath).toEqual([100, 300]);
                     break;
                 }
-            } catch (e) {
-                // console.error('Error checking B for C:', e);
-            }
+            } catch { /* ignore */ }
         }
         expect(bSawC).toBe(true);
         console.log(`Peer B saw ${serviceOnC}`);

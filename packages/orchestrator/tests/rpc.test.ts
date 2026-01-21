@@ -24,7 +24,7 @@ describe('Orchestrator RPC', () => {
             ws.addEventListener('open', () => resolve());
         });
 
-        rpc = newWebSocketRpcSession(ws as any);
+        rpc = newWebSocketRpcSession(ws as unknown as WebSocket);
     });
 
     afterAll(() => {
@@ -55,7 +55,7 @@ describe('Orchestrator RPC', () => {
         const result = await cli.listLocalRoutes();
         expect(result.routes).toBeInstanceOf(Array);
         expect(result.routes.length).toBeGreaterThan(0);
-        const route = result.routes.find((r: any) => r.id === 'test-service:http:graphql');
+        const route = result.routes.find((r: { id: string }) => r.id === 'test-service:http:graphql');
         expect(route).toBeDefined();
         expect(route.service.name).toBe('test-service');
     });
@@ -64,7 +64,7 @@ describe('Orchestrator RPC', () => {
         const cli = rpc.connectionFromManagementSDK();
         const result = await cli.listMetrics();
         expect(result.metrics).toBeInstanceOf(Array);
-        const metric = result.metrics.find((m: any) => m.id === 'test-service:http:graphql');
+        const metric = result.metrics.find((m: { id: string }) => m.id === 'test-service:http:graphql');
         expect(metric).toBeDefined();
         expect(metric.connectionCount).toBe(0);
     });
