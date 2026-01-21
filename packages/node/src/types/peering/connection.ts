@@ -24,7 +24,7 @@ export interface NotificationMessage {
     type: 'NOTIFICATION';
     code: number;
     subcode: number;
-    data?: any;
+    data?: unknown;
 }
 
 export interface KeepAliveMessage {

@@ -1,6 +1,6 @@
 import { createSchema, createYoga } from 'graphql-yoga';
 import { createServer } from 'node:http';
-import { Storage } from '../storage';
+import type { Storage } from '../storage';
 
 export function createS3GraphqlServer(storage: Storage) {
     const typeDefs = /* GraphQL */ `

@@ -1,18 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { existsSync, rmSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import * as jose from 'jose';
 import {
     generateKeyPair,
-    exportKeyPair,
-    importKeyPair,
     saveKeyPair,
     loadKeyPair,
     loadOrGenerateKeyPair,
-    getPublicKeyJwk,
     getJwks,
-    type KeyPair,
     type SerializedKeyPair
 } from '../src/keys.js';
 
@@ -305,8 +301,8 @@ describe('Keys Integration Tests - File Persistence', () => {
             const { writeFileSync } = await import('fs');
 
             const invalidData: SerializedKeyPair = {
-                privateKeyJwk: { kty: 'invalid' as any },
-                publicKeyJwk: { kty: 'invalid' as any },
+                privateKeyJwk: { kty: 'invalid' } as unknown as any,
+                publicKeyJwk: { kty: 'invalid' } as unknown as any,
                 kid: 'test-kid',
                 createdAt: new Date().toISOString()
             };

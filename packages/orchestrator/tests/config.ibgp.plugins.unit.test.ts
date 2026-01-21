@@ -1,7 +1,7 @@
 import { describe, it, expect, mock } from 'bun:test';
 import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js';
 import { RouteTable } from '../src/state/route-table.js';
-import { PluginContext } from '../src/plugins/types.js';
+import type { PluginContext } from '../src/plugins/types.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
 
 const mockPeerInfo = {

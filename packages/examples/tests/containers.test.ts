@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { GenericContainer, Wait, StartedTestContainer } from 'testcontainers';
+import type { StartedTestContainer } from 'testcontainers';
+import { GenericContainer, Wait } from 'testcontainers';
 import path from 'path';
 
 describe('Example GraphQL Servers', () => {
@@ -13,7 +14,6 @@ describe('Example GraphQL Servers', () => {
             // Build and start the container
             // context is repository root
             const repoRoot = path.resolve(__dirname, '../../..');
-            const examplesDir = path.resolve(__dirname, '..');
 
             const imageName = 'books-service:test';
             const dockerfile = 'packages/examples/Dockerfile.books';

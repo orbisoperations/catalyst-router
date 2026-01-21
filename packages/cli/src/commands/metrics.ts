@@ -5,13 +5,14 @@ import type { CliResult } from '../types.js';
 
 
 
-export async function fetchMetrics(): Promise<CliResult<any>> {
+export async function fetchMetrics(): Promise<CliResult<unknown>> {
     try {
         const root = await createClient();
         const result = await root.connectionFromManagementSDK().listMetrics();
         return { success: true, data: result };
-    } catch (err: any) {
-        return { success: false, error: err.message || 'Unknown error' };
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { success: false, error: message || 'Unknown error' };
     }
 }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, mock } from 'bun:test';
 import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js';
 import { RouteTable } from '../src/state/route-table.js';
-import { PluginContext } from '../src/plugins/types.js';
+import type { PluginContext } from '../src/plugins/types.js';
 
 const mockPeerInfo = {
     id: 'mock-peer-id',
@@ -143,7 +143,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
         const peerId = 'peer-b';
 
         // 1. Seed state with a peer and a route from that peer
-        let state = new RouteTable().addPeer({
+        const state = new RouteTable().addPeer({
             id: peerId,
             as: 100,
             endpoint: 'http://peer-b:3000/rpc',
@@ -278,7 +278,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
         const plugin = new InternalBGPPlugin(factory);
 
         // Seed state with peer C
-        let state = new RouteTable().addPeer({
+        const state = new RouteTable().addPeer({
             id: 'peer-c',
             as: 300,
             endpoint: 'http://peer-c:3000/rpc',
@@ -327,7 +327,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
         const factory = (endpoint: string) => failingSession as any;
         const plugin = new InternalBGPPlugin(factory);
 
-        let state = new RouteTable().addPeer({
+        const state = new RouteTable().addPeer({
             id: 'peer-c',
             as: 300,
             endpoint: 'http://peer-c:3000/rpc',

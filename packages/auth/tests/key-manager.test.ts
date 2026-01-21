@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { FileSystemKeyManager } from '../src/key-manager';
+import { FileSystemKeyManager } from '../src/key-manager.js';
 import { rmSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
@@ -7,12 +7,20 @@ const TEST_KEYS_DIR = join(__dirname, 'test-keys-manager-persistence');
 
 describe('FileSystemKeyManager Persistence', () => {
     beforeEach(() => {
-        try { rmSync(TEST_KEYS_DIR, { recursive: true, force: true }); } catch { }
+        try {
+            rmSync(TEST_KEYS_DIR, { recursive: true, force: true });
+        } catch {
+            // Ignore error
+        }
         mkdirSync(TEST_KEYS_DIR, { recursive: true });
     });
 
     afterEach(() => {
-        try { rmSync(TEST_KEYS_DIR, { recursive: true, force: true }); } catch { }
+        try {
+            rmSync(TEST_KEYS_DIR, { recursive: true, force: true });
+        } catch {
+            // Ignore error
+        }
     });
 
     it('should persist current key', async () => {

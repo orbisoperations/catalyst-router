@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ServiceDefinitionSchema } from './direct.js';
-import { ApplyActionResult } from './index.js';
+import type { ApplyActionResult } from './index.js';
 
 // --- iBGP Route Table ---
 export const AuthorizedPeerSchema = z.object({

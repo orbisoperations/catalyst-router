@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { GenericContainer, Wait, StartedTestContainer } from 'testcontainers';
+import { Hono } from 'hono';
+import type { StartedTestContainer } from 'testcontainers';
+import { GenericContainer, Wait } from 'testcontainers';
 import path from 'path';
-import { createGatewayHandler, GatewayGraphqlServer } from '../src/graphql/server.ts';
+import type { GatewayGraphqlServer } from '../src/graphql/server.ts';
+import { createGatewayHandler } from '../src/graphql/server.ts';
 
 describe('Gateway Integration', () => {
     const TIMEOUT = 120000;
     let booksContainer: StartedTestContainer;
     let moviesContainer: StartedTestContainer;
     let gatewayServer: GatewayGraphqlServer;
-    let gatewayApp: any;
+    let gatewayApp: Hono;
 
     beforeAll(async () => {
         const repoRoot = path.resolve(__dirname, '../../..');
@@ -52,7 +55,7 @@ describe('Gateway Integration', () => {
         // 3. Start Gateway (in-process)
         // We use createGatewayHandler to get the app and the server instance
         const result = createGatewayHandler();
-        gatewayApp = result.app;
+        gatewayApp = result.app as unknown as Hono;
         gatewayServer = result.server;
 
     }, TIMEOUT);

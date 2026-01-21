@@ -1,14 +1,17 @@
 
 import { RpcTarget } from 'capnweb';
-import { KeyManager, FileSystemKeyManager } from './key-manager.js';
-import {
-    SignOptionsSchema,
+import type { KeyManager} from './key-manager.js';
+import { FileSystemKeyManager } from './key-manager.js';
+import type {
     SignResponse,
-    VerifyRequestSchema,
     VerifyResponse,
-    RotateRequestSchema,
     RotateResponse,
     JwksResponse
+} from './rpc-schema.js';
+import {
+    SignOptionsSchema,
+    VerifyRequestSchema,
+    RotateRequestSchema
 } from './rpc-schema.js';
 
 export class JwtService extends RpcTarget {

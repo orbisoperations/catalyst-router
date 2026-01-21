@@ -1,7 +1,7 @@
 
 import { BasePlugin } from '../base.js';
-import { PluginContext, PluginResult } from '../types.js';
-import { OrchestratorConfig } from '../../config.js';
+import type { PluginContext, PluginResult } from '../types.js';
+import type { OrchestratorConfig } from '../../config.js';
 
 export class GatewayIntegrationPlugin extends BasePlugin {
     name = 'GatewayIntegrationPlugin';
@@ -47,14 +47,15 @@ export class GatewayIntegrationPlugin extends BasePlugin {
 
         try {
             await this.sendConfigToGateway(config);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[GatewayIntegrationPlugin] Failed to update gateway:', error);
+            const message = error instanceof Error ? error.message : String(error);
             return {
                 success: false,
                 ctx: context,
                 error: {
                     pluginName: this.name,
-                    message: `Gateway update failed: ${error.message}`,
+                    message: `Gateway update failed: ${message}`,
                     error
                 }
             };
@@ -65,7 +66,7 @@ export class GatewayIntegrationPlugin extends BasePlugin {
 
     // Method to send config
     // Method to send config
-    async sendConfigToGateway(config: any) {
+    async sendConfigToGateway(config: { services: { name: string; url: string; token?: string }[] }) {
         // Dynamic import to avoid strict dependency if not configured? No, we have it in package.json
         const { newWebSocketRpcSession } = await import('capnweb');
         // Import type only for compilation safety is done at top level usually, 
@@ -96,7 +97,7 @@ export class GatewayIntegrationPlugin extends BasePlugin {
             // without accessing hidden session state or if capnweb exports session helper.
             // For now, let it be cleaned up or persisted.
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[GatewayIntegrationPlugin] RPC Error:', error);
             throw error;
         }

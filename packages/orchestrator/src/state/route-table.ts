@@ -1,5 +1,5 @@
-import { ServiceDefinition, LocalRoute, DataChannelMetrics } from '../rpc/schema/index.js';
-import { AuthorizedPeer } from '../rpc/schema/peering.js';
+import type { ServiceDefinition, LocalRoute, DataChannelMetrics } from '../rpc/schema/index.js';
+import type { AuthorizedPeer } from '../rpc/schema/peering.js';
 
 export class RouteTable {
     constructor(

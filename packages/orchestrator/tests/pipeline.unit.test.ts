@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { PluginPipeline } from '../src/plugins/pipeline.js';
-import { PluginInterface } from '../src/plugins/types.js';
+import type { PluginInterface } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
 
 describe('PluginPipeline', () => {

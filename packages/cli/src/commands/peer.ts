@@ -1,7 +1,6 @@
 
 import { Command } from 'commander';
 import { createClient } from '../client.js';
-import { z } from 'zod';
 import chalk from 'chalk';
 
 export const peerCommands = () => {
@@ -35,8 +34,9 @@ export const peerCommands = () => {
                     console.error(chalk.red(`Failed to add peer: ${result.error}`));
                     process.exit(1);
                 }
-            } catch (error: any) {
-                console.error(chalk.red(`Error: ${error.message}`));
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(chalk.red(`Error: ${message}`));
                 process.exit(1);
             }
         });
@@ -51,17 +51,21 @@ export const peerCommands = () => {
                 if (result.peers.length === 0) {
                     console.log('No peers connected.');
                 } else {
-                    console.table(result.peers.map((p: any) => ({
-                        ID: p.id,
-                        AS: p.as,
-                        Endpoint: p.endpoint,
-                        Domains: p.domains.join(', ')
-                    })));
+                    console.table(result.peers.map((p: unknown) => {
+                        const peer = p as { id: string; as: number; endpoint: string; domains: string[] };
+                        return {
+                            ID: peer.id,
+                            AS: peer.as,
+                            Endpoint: peer.endpoint,
+                            Domains: peer.domains.join(', ')
+                        };
+                    }));
                 }
                 await new Promise(r => setTimeout(r, 100));
                 process.exit(0);
-            } catch (error: any) {
-                console.error(chalk.red(`Error: ${error.message}`));
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(chalk.red(`Error: ${message}`));
                 process.exit(1);
             }
         });
@@ -80,8 +84,9 @@ export const peerCommands = () => {
                     console.error(chalk.red(`Failed to remove peer: ${result.error}`));
                     process.exit(1);
                 }
-            } catch (error: any) {
-                console.error(chalk.red(`Error: ${error.message}`));
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(chalk.red(`Error: ${message}`));
                 process.exit(1);
             }
         });

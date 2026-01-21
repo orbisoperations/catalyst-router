@@ -1,14 +1,8 @@
-import type {
-    Action,
-    AddDataChannelResult,
-    ListLocalRoutesResult,
-    ListMetricsResult
-} from '@catalyst/orchestrator';
-import { newWebSocketRpcSession, RpcPromise, RpcStub } from 'capnweb';
-import { WebSocket } from 'ws';
+import type { RpcPromise, RpcStub } from 'capnweb';
+import { newWebSocketRpcSession } from 'capnweb';
 
 // Polyfill Symbol.asyncDispose if necessary (TypeScript < 5.2 or older environments)
-// @ts-ignore
+// @ts-expect-error - polyfilling Symbol.asyncDispose
 Symbol.asyncDispose ??= Symbol('Symbol.asyncDispose');
 
 export async function createClient(url: string = process.env.CATALYST_ORCHESTRATOR_URL || 'ws://localhost:4015/rpc'): Promise<PublicApi> {
@@ -24,9 +18,9 @@ export interface PublicApi {
 }
 
 export interface ManagementScope {
-    applyAction(action: any): Promise<any>;
-    listLocalRoutes(): Promise<any>;
-    listMetrics(): Promise<any>;
-    listPeers(): Promise<any>;
-    deletePeer(peerId: string): Promise<any>;
+    applyAction(action: unknown): Promise<unknown>;
+    listLocalRoutes(): Promise<unknown>;
+    listMetrics(): Promise<unknown>;
+    listPeers(): Promise<unknown>;
+    deletePeer(peerId: string): Promise<unknown>;
 }

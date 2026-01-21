@@ -24,7 +24,7 @@ export interface PluginResult {
     error?: {
         pluginName: string;
         message: string;
-        error?: any;
+        error?: unknown;
     };
 }
 

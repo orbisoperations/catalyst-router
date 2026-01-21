@@ -2,13 +2,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { JwtService } from '../src/service';
 import { KeyManager } from '../src/key-manager';
-import { JSONWebKeySet } from 'jose';
+import type { JSONWebKeySet } from 'jose';
+import type { SignOptions } from '../src/jwt.js';
 
 // Mock KeyManager implementation
 class MockKeyManager extends KeyManager {
     async init() { }
-    async rotate(immediate: boolean) { }
-    async sign(options: any) { return "signed_token"; }
+    async rotate(_immediate: boolean) { }
+    async sign(_options: SignOptions) { return "signed_token"; }
     async getPublicKeys(): Promise<JSONWebKeySet> { return { keys: [{ kid: '1', kty: 'OKP' }] }; }
     async verify(token: string) {
         if (token === "valid") return { valid: true, payload: { sub: 'user' } };

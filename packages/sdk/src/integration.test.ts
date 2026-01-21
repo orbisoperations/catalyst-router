@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createGraphqlServer } from './graphql/server';
 import { createS3GraphqlServer } from './examples/s3-graphql';
-import { Storage } from './storage';
+import type { Storage } from './storage';
 
 // Mock Storage Implementation
 class MockStorage implements Storage {

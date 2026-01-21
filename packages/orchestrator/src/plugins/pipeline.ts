@@ -1,5 +1,5 @@
 
-import { PluginInterface, PluginContext, PluginResult } from './types.js';
+import type { PluginInterface, PluginContext, PluginResult } from './types.js';
 
 export class PluginPipeline implements PluginInterface {
     name = 'PluginPipeline';
@@ -19,14 +19,15 @@ export class PluginPipeline implements PluginInterface {
                     return result; // Propagate error immediately
                 }
                 context = result.ctx;
-            } catch (error: any) {
-                console.error(`[PluginPipeline] Error in plugin ${plugin.name}: ${error.message}`);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`[PluginPipeline] Error in plugin ${plugin.name}: ${message}`);
                 return {
                     success: false,
                     ctx: context,
                     error: {
                         pluginName: plugin.name,
-                        message: `Unexpected error: ${error.message}`,
+                        message: `Unexpected error: ${message}`,
                         error
                     }
                 };

@@ -14,7 +14,7 @@ describe('Local Examples Integration', () => {
             });
             const res = await booksServer.fetch(req);
             expect(res.status).toBe(200);
-            const data: any = await res.json();
+            const data = await res.json() as { data: { books: any[] } };
             expect(data.data.books).toBeDefined();
             expect(data.data.books[0]).toHaveProperty('title');
         });
@@ -31,7 +31,7 @@ describe('Local Examples Integration', () => {
             });
             const res = await moviesServer.fetch(req);
             expect(res.status).toBe(200);
-            const data: any = await res.json();
+            const data = await res.json() as { data: { movies: any[] } };
             expect(data.data.movies).toBeDefined();
             expect(data.data.movies[0]).toHaveProperty('title');
         });

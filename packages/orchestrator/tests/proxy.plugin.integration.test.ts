@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { LocalRoutingTablePlugin } from '../src/plugins/implementations/local-routing.js';
-import { PluginContext } from '../src/plugins/types.js';
+import type { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
 
 describe('LocalRoutingTablePlugin Tests', () => {

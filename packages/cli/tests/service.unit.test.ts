@@ -1,9 +1,10 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { addService, listServices } from '../src/commands/service.js';
+import { AddServiceInputSchema } from '../src/types.js';
 
 // Mock the client creation
-const mockApplyAction = mock((action: any) => Promise.resolve({ success: true, error: undefined as string | undefined }));
-const mockListLocalRoutes = mock(() => Promise.resolve({ routes: [] as any[] }));
+const mockApplyAction = mock((_action: unknown) => Promise.resolve({ success: true, error: undefined as string | undefined }));
+const mockListLocalRoutes = mock(() => Promise.resolve({ routes: [] as unknown[] }));
 
 const mockCreateClient = mock(() => Promise.resolve({
     connectionFromManagementSDK: () => ({
@@ -12,9 +13,9 @@ const mockCreateClient = mock(() => Promise.resolve({
         listMetrics: mock(() => Promise.resolve({ metrics: [] })),
         listPeers: mock(() => Promise.resolve({ peers: [] })),
         deletePeer: mock(() => Promise.resolve({ success: true }))
-    } as any),
+    } as unknown as any),
     [Symbol.asyncDispose]: async () => { }
-} as any));
+} as unknown as any));
 
 mock.module('../src/client.js', () => {
     return {
@@ -37,9 +38,9 @@ describe('Service Commands', () => {
                 listMetrics: mock(() => Promise.resolve({ metrics: [] })),
                 listPeers: mock(() => Promise.resolve({ peers: [] })),
                 deletePeer: mock(() => Promise.resolve({ success: true }))
-            } as any),
+            } as unknown as any),
             [Symbol.asyncDispose]: async () => { }
-        } as any));
+        } as unknown as any));
     });
 
     describe('addService', () => {
@@ -117,7 +118,7 @@ describe('Service Commands', () => {
 });
 
 describe('Validation Schema', () => {
-    const { AddServiceInputSchema } = require('../src/types.js'); // Lazy load if needed or imported at top
+    // Schema now imported at top level
 
     it('should validate correct input', () => {
         const input = { name: 'valid', endpoint: 'http://valid.com', protocol: 'http:graphql' };

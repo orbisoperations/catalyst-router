@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { newHttpBatchRpcSession } from 'capnweb';
-import { PublicIBGPScope, PeerInfo } from '../src/rpc/schema/peering.js';
+import type { PublicIBGPScope, PeerInfo } from '../src/rpc/schema/peering.js';
 import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/bun';
 import { newRpcResponse } from '@hono/capnweb';
 import { OrchestratorRpcServer } from '../src/rpc/server.js';
-import { OrchestratorConfig } from '../src/config.js';
+import type { OrchestratorConfig } from '../src/config.js';
 
 describe('Orchestrator iBGP Progressive API', () => {
     let server: any;

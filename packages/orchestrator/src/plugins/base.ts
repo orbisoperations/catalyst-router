@@ -1,5 +1,5 @@
 
-import { PluginInterface, PluginContext, PluginResult } from './types.js';
+import type { PluginInterface, PluginContext, PluginResult } from './types.js';
 
 export abstract class BasePlugin implements PluginInterface {
     abstract name: string;

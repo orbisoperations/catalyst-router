@@ -1,9 +1,9 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { LocalRoutingTablePlugin } from '../src/plugins/implementations/local-routing.js';
-import { PluginContext } from '../src/plugins/types.js';
+import type { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
-import { DataChannel } from '../src/types.js';
+import type { DataChannel } from '../src/types.js';
 
 describe('LocalRoutingTablePlugin Comprehensive Tests', () => {
     let plugin: LocalRoutingTablePlugin;

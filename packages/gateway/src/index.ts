@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { websocket } from 'hono/bun';
-import { GatewayGraphqlServer, createGatewayHandler } from './graphql/server.js';
+import { createGatewayHandler } from './graphql/server.js';
 import { GatewayRpcServer, createRpcHandler } from './rpc/server.js';
 
 
