@@ -72,6 +72,17 @@ export class InternalBGPPlugin extends BasePlugin {
             return { success: true, ctx: context };
         }
 
+        // Unify ID logic: if we have a peer with the same endpoint but different ID (the temporary one), replace it
+        // This handles the transition from endpoint-based ID (added via CLI) to real ID (advertised via open)
+        const existingPeers = context.state.getPeers();
+        const existingByEndpoint = existingPeers.find(p => p.endpoint === peerInfo.endpoint);
+
+        let newState = context.state;
+        if (existingByEndpoint && existingByEndpoint.id !== peerInfo.id) {
+            console.log(`[InternalAS] Unifying peer ID for ${peerInfo.endpoint}: ${existingByEndpoint.id} -> ${peerInfo.id}`);
+            newState = newState.removePeer(existingByEndpoint.id);
+        }
+
         const authorizedPeer = {
             id: peerInfo.id,
             as: peerInfo.as,
@@ -79,8 +90,8 @@ export class InternalBGPPlugin extends BasePlugin {
             domains: peerInfo.domains || []
         };
 
-        const { state: newState } = context.state.addPeer(authorizedPeer);
-        context.state = newState;
+        const { state: updatedState } = newState.addPeer(authorizedPeer);
+        context.state = updatedState;
 
         console.log(`[InternalAS] Peer ${peerInfo.id} registered.`);
         return { success: true, ctx: context };
@@ -88,12 +99,44 @@ export class InternalBGPPlugin extends BasePlugin {
 
     private async handleClosePeer(context: PluginContext): Promise<PluginResult> {
         const { data } = context.action;
-        const { peerId } = data;
+        const { peerId, skipNotify } = data;
         console.log(`[InternalAS] Handling CLOSE request for ${peerId}`);
+
+        if (!skipNotify) {
+            await this.notifyPeerClose(context, peerId);
+        }
 
         const newState = context.state.removePeer(peerId);
         context.state = newState;
         return { success: true, ctx: context };
+    }
+
+    private async notifyPeerClose(context: PluginContext, peerId: string): Promise<void> {
+        const peer = context.state.getPeer(peerId);
+        if (!peer || !peer.endpoint || peer.endpoint === 'unknown') return;
+
+        try {
+            console.log(`[InternalAS] Notifying peer ${peerId} of closure at ${peer.endpoint}`);
+            const { newHttpBatchRpcSession } = await import('capnweb');
+            const { getConfig } = await import('../../config.js');
+            const config = getConfig();
+            const sharedSecret = config.peering.secret;
+            const myPeerInfo = {
+                id: config.peering.localId || 'unknown',
+                as: config.peering.as,
+                domains: config.peering.domains,
+                services: [],
+                endpoint: null // Don't know our own public endpoint here easily
+            };
+
+            const session: any = newHttpBatchRpcSession(peer.endpoint);
+            const ibgpScope = session.connectionFromIBGPPeer(sharedSecret);
+            ibgpScope.open(myPeerInfo);
+            await ibgpScope.close();
+            console.log(`[InternalAS] Successfully notified peer ${peerId} of closure.`);
+        } catch (e: any) {
+            console.error(`[InternalAS] Failed to notify peer ${peerId} of closure:`, e.message);
+        }
     }
 
     private async broadcastRouteUpdate(context: PluginContext): Promise<PluginResult> {
@@ -116,6 +159,13 @@ export class InternalBGPPlugin extends BasePlugin {
         const { getConfig } = await import('../../config.js');
         const config = getConfig();
         const sharedSecret = config.peering.secret;
+        const myPeerInfo = {
+            id: config.peering.localId || 'unknown',
+            as: config.peering.as,
+            domains: config.peering.domains,
+            services: [],
+            endpoint: null
+        };
 
         const promises = peers.map(async (peer) => {
             if (!peer.endpoint || peer.endpoint === 'unknown') return;
@@ -128,6 +178,7 @@ export class InternalBGPPlugin extends BasePlugin {
                 // Pipelined call: get scope and then update
                 const ibgpScope = session.connectionFromIBGPPeer(sharedSecret);
 
+                ibgpScope.open(myPeerInfo);
                 await ibgpScope.update(updateMsg);
 
                 console.log(`[InternalAS] Broadcast to ${peer.id} successful.`);
@@ -184,7 +235,8 @@ export const InternalPeerSessionCloseSchema = z.object({
     resource: z.literal('internalPeerSession'),
     resourceAction: z.literal('close'),
     data: z.object({
-        peerId: z.string()
+        peerId: z.string(),
+        skipNotify: z.boolean().optional()
     })
 });
 

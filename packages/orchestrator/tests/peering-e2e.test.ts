@@ -157,15 +157,23 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
     }, 60000); // Increased Timeout
 
     it('should disconnect and cleanup routes', async () => {
+        // Find the generated peer ID for peer-b
+        const listOutput = await runCli(['peer', 'list'], portA);
+        const peerIdMatch = listOutput.match(/peer-http[^\s|]+/);
+        const peerId = peerIdMatch ? peerIdMatch[0] : 'peer-b';
+        console.log(`Discovered Peer ID on A for B: ${peerId}`);
+
         // Disconnect A from B
-        await runCli(['peer', 'remove', 'peer-b'], portA);
+        await runCli(['peer', 'remove', peerId], portA);
 
         // Verify cleanup on B
         let cleaned = false;
+        let lastOutput = '';
         for (let i = 0; i < 15; i++) {
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const output = await runCli(['service', 'list'], portB);
+                lastOutput = output;
                 if (!output.includes('test-service')) {
                     cleaned = true;
                     break;
@@ -173,6 +181,9 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             } catch (e) {
                 // Ignore
             }
+        }
+        if (!cleaned) {
+            console.error('Cleanup verification failed on B. Last Service List Output:\n', lastOutput);
         }
         expect(cleaned).toBe(true);
     }, 30000); // Increased Timeout
