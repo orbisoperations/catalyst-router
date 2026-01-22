@@ -10,7 +10,16 @@ import { AddServiceInputSchema, ListServicesInputSchema, type AddServiceInput } 
 
 export async function addService(params: AddServiceInput): Promise<CliResult<void>> {
     try {
+<<<<<<< HEAD
         await using root = await createClient(params.orchestratorUrl);
+=======
+        const root = await createClient();
+<<<<<<< HEAD
+        const api = root.connectionFromCli();
+>>>>>>> 9d03721 (chore: implements progressive api for cli)
+=======
+        const api = root.connectionFromManagementSDK();
+>>>>>>> 0f8156e (fix: rename from cli to management sdk)
 
         const action = {
             resource: 'localRoute',
@@ -18,7 +27,7 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
             data: params
         };
 
-        const result = await root.applyAction(action);
+        const result = await api.applyAction(action);
 
         if (result.success) {
             return { success: true };
@@ -32,8 +41,14 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
 
 export async function listServices(orchestratorUrl?: string): Promise<CliResult<any[]>> {
     try {
+<<<<<<< HEAD
         await using root = await createClient(orchestratorUrl);
         const result = await root.listLocalRoutes();
+=======
+        const root = await createClient();
+        const api = root.connectionFromManagementSDK();
+        const result = await api.listLocalRoutes();
+>>>>>>> 9d03721 (chore: implements progressive api for cli)
         return { success: true, data: result.routes || [] };
     } catch (err: any) {
         return { success: false, error: err.message || 'Connection error' };
@@ -72,6 +87,7 @@ export function serviceCommands() {
 
             if (result.success) {
                 console.log(chalk.green(`Service '${name}' added successfully.`));
+                process.exit(0);
             } else {
                 console.error(chalk.red(`Failed to add service:`), result.error);
                 process.exit(1);
@@ -117,6 +133,7 @@ export function serviceCommands() {
             } else {
                 console.log(chalk.yellow('No services found.'));
             }
+            process.exit(0);
         });
 
     return service;

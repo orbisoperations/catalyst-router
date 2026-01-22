@@ -13,29 +13,10 @@ export const peerCommands = () => {
         .requiredOption('--secret <secret>', 'Shared secret for authentication')
         .action(async (endpoint, options) => {
             try {
-                const client = await createClient() as any;
-                // We need to cast client to any or extend the type to include 'applyAction' if it's generic
-                // The RpcTarget usually exposes `applyAction`?
-                // Wait, the client is a proxy for `OrchestratorRpcServer`.
-                // `OrchestratorRpcServer` extends `RpcTarget`.
-                // `server.ts`: `class OrchestratorRpcServer extends RpcTarget`
-                // `RpcTarget` (from generic RPC lib) usually has `applyAction` if that's the pattern.
-                // BUT `OrchestratorRpcServer` EXPOSES `listPeers`, `authenticate` etc directly?
-                // capnweb/RPC usually exposes methods.
-                // `server.ts` has `authenticate`, `listPeers`.
-                // BUT `add peer` uses `InternalPeeringUserCreateAction`.
-                // Does `OrchestratorRpcServer` expose `applyAction` via RPC?
-                // `server.ts` does `new InternalPeeringPlugin(this.applyAction.bind(this))`... that passes it to Plugin.
-                // Does it expose it to RPC client?
-                // `class OrchestratorRpcServer extends RpcTarget`...
-                // Only public methods on the class are callable via RPC.
-                // `applyAction` is defined in `RpcTarget`?
-                // Let's assume `applyAction` IS exposed or we should use a specific method.
-                // Re-reading `server.ts`:
-                // It has `async applyAction(action: Action): Promise<ActionResult>`.
-                // S0 yes, we can call `client.applyAction(...)`.
+                const client = await createClient();
+                const api = client.connectionFromManagementSDK();
 
-                const result = await client.applyAction({
+                const result = await api.applyAction({
                     resource: 'internalPeerConfig',
                     resourceAction: 'create',
                     data: {
@@ -48,6 +29,8 @@ export const peerCommands = () => {
                     // Extract ID from results if available (assuming first result has id)
                     const id = result.results?.[0]?.id || 'unknown';
                     console.log(chalk.green(`Peer added successfully. ID: ${id}`));
+                    await new Promise(r => setTimeout(r, 100));
+                    process.exit(0);
                 } else {
                     console.error(chalk.red(`Failed to add peer: ${result.error}`));
                     process.exit(1);
@@ -62,9 +45,9 @@ export const peerCommands = () => {
         .description('List all peers')
         .action(async () => {
             try {
-                const client = await createClient() as any;
-                // Client has `listPeers` method
-                const result = await client.listPeers();
+                const client = await createClient();
+                const api = client.connectionFromManagementSDK();
+                const result = await api.listPeers();
 
                 if (result.peers.length === 0) {
                     console.log('No peers connected.');
@@ -75,6 +58,35 @@ export const peerCommands = () => {
                         Endpoint: p.endpoint,
                         Domains: p.domains.join(', ')
                     })));
+                }
+                await new Promise(r => setTimeout(r, 100));
+                process.exit(0);
+            } catch (error: any) {
+                console.error(chalk.red(`Error: ${error.message}`));
+                process.exit(1);
+            }
+        });
+
+    peer.command('remove')
+        .description('Remove a peer connection')
+        .argument('<peerId>', 'ID of the peer to remove')
+        .action(async (peerId) => {
+            try {
+                const client = await createClient();
+                const api = client.connectionFromManagementSDK();
+                const result = await api.applyAction({
+                    resource: 'internalPeerSession',
+                    resourceAction: 'close',
+                    data: {
+                        peerId
+                    }
+                });
+                if (result.success) {
+                    console.log(chalk.green(`Peer ${peerId} removed.`));
+                    process.exit(0);
+                } else {
+                    console.error(chalk.red(`Failed to remove peer: ${result.error}`));
+                    process.exit(1);
                 }
             } catch (error: any) {
                 console.error(chalk.red(`Error: ${error.message}`));

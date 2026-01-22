@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 
 import { LocalRoutingActionsSchema } from '../../plugins/implementations/local-routing.js';
-import { InternalPeeringActionsSchema } from '../../peering/plugins/InternalAutonomousSystem.js';
+import { InternalPeeringActionsSchema } from '../../plugins/implementations/Internal-bgp.js';
 
 export const ActionSchema = z.union([
     LocalRoutingActionsSchema,

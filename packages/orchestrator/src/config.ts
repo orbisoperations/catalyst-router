@@ -9,7 +9,8 @@ export const OrchestratorConfigSchema = z.object({
         localId: z.string().optional(),
         as: z.number().default(0),
         domains: z.array(z.string()).default([]),
-    }).default({}),
+        secret: z.string().default('valid-secret'),
+    }).default({ as: 0, domains: [], secret: 'valid-secret' }),
     port: z.number().default(3000),
 });
 
@@ -20,6 +21,7 @@ export function getConfig(): OrchestratorConfig {
     const peeringAs = process.env.CATALYST_AS;
     const peeringDomains = process.env.CATALYST_DOMAINS; // Comma separated
     const peeringNodeId = process.env.CATALYST_NODE_ID;
+    const peeringSecret = process.env.CATALYST_PEERING_SECRET;
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
     const config: any = {
@@ -27,7 +29,8 @@ export function getConfig(): OrchestratorConfig {
         peering: {
             as: peeringAs ? parseInt(peeringAs) : 0,
             domains: peeringDomains ? peeringDomains.split(',').map(d => d.trim()) : [],
-            localId: peeringNodeId
+            localId: peeringNodeId,
+            secret: peeringSecret || 'valid-secret'
         }
     };
 

@@ -17,7 +17,7 @@ import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { StatePersistencePlugin } from '../plugins/implementations/state.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
-import { InternalAutonomousSystemPlugin } from '../peering/plugins/InternalAutonomousSystem.js';
+import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js';
 import { AuthorizedPeer, ListPeersResult } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
 
@@ -52,9 +52,54 @@ export class OrchestratorRpcServer extends RpcTarget {
 
         // Initialize plugins
         const routingPlugin = new LocalRoutingTablePlugin();
-        const internalAsPlugin = new InternalAutonomousSystemPlugin();
+        const internalBgpPlugin = new InternalBGPPlugin();
 
-        this.pipeline = new PluginPipeline([routingPlugin, internalAsPlugin, ...plugins], 'OrchestratorPipeline');
+        this.pipeline = new PluginPipeline([routingPlugin, internalBgpPlugin, ...plugins], 'OrchestratorPipeline');
+    }
+
+    async connectionFromManagementSDK(): Promise<ManagementScope> {
+        return {
+            applyAction: (action) => this.applyAction(action),
+            listLocalRoutes: () => this.listLocalRoutes(),
+            listMetrics: () => this.listMetrics(),
+            listPeers: () => this.listPeers()
+        };
+    }
+
+    async connectionFromIBGPPeer(secret: string): Promise<IBGPScope> {
+        const config = getConfig();
+        if (secret !== config.peering.secret) {
+            throw new Error('Invalid secret');
+        }
+
+        return {
+            open: async (peerInfo: PeerInfo) => {
+                console.log(`[iBGP] Peer connected: ${peerInfo.id} (AS ${peerInfo.as})`);
+
+                // If new, register via pipeline
+                // The plugin will handle the reverse connection
+                const action: Action = {
+                    resource: 'internalPeerSession',
+                    resourceAction: 'open',
+                    data: {
+                        peerInfo,
+                        clientStub: null,
+                        direction: 'inbound'
+                    }
+                };
+
+                await this.applyAction(action);
+            },
+            update: async (routes: any) => {
+                const action: Action = {
+                    resource: 'internalBGPRoute',
+                    resourceAction: 'update',
+                    data: routes
+                };
+
+                return this.applyAction(action);
+            }
+        };
     }
 
     async applyAction(action: Action): Promise<ApplyActionResult> {
@@ -101,4 +146,23 @@ export class OrchestratorRpcServer extends RpcTarget {
         const peers = this.state.getPeers();
         return { peers };
     }
+}
+
+export interface ManagementScope {
+    applyAction(action: Action): Promise<ApplyActionResult>;
+    listLocalRoutes(): Promise<ListLocalRoutesResult>;
+    listMetrics(): Promise<ListMetricsResult>;
+    listPeers(): Promise<ListPeersResult>;
+}
+
+export interface PeerInfo {
+    id: string;
+    as: number;
+    domains: string[];
+    services: any[];
+}
+
+export interface IBGPScope {
+    open(peerInfo: PeerInfo): Promise<void>;
+    update(routes: any): Promise<ApplyActionResult>;
 }
