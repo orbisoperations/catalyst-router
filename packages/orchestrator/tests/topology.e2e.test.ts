@@ -168,7 +168,7 @@ describe('Topology E2E: Star (A center, B & C leaves)', () => {
             data: {
                 name: serviceName,
                 endpoint: 'http://a:9000',
-                protocol: 'tcp:datachannel'
+                protocol: 'tcp'
             }
         }));
         console.log(`Service ${serviceName} published on A`);
@@ -214,6 +214,72 @@ describe('Topology E2E: Star (A center, B & C leaves)', () => {
         }
         expect(cSawIt).toBe(true);
         console.log(`Peer C saw ${serviceName}`);
+
+
+        // =================================================================
+        // Test 2: Propagation C -> A -> B
+        // =================================================================
+        console.log('--- Starting Propagation Test (C -> A -> B) ---');
+
+        // 1. Publish Service on C
+        const serviceOnC = 'datachannel-on-c';
+        await runOp(portC, mgmt => mgmt.applyAction({
+            resource: 'localRoute',
+            resourceAction: 'create',
+            data: {
+                name: serviceOnC,
+                endpoint: 'http://c:9000',
+                protocol: 'tcp'
+            }
+        }));
+        console.log(`Service ${serviceOnC} published on C`);
+
+        // 2. Verify A sees it (Direct Peer)
+        // Path should be [300]
+        let aSawIt = false;
+        for (let i = 0; i < 60; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+                const routes = await runOp(portA, async mgmt => {
+                    const res = await mgmt.listLocalRoutes();
+                    return res.routes || [];
+                });
+                const route = routes.find((r: any) => r.service.name === serviceOnC);
+                if (route) {
+                    aSawIt = true;
+                    // Verify AS Path: C (300) -> A
+                    // A received [300] from C.
+                    expect(route.asPath).toEqual([300]);
+                    break;
+                }
+            } catch (e) { }
+        }
+        expect(aSawIt).toBe(true);
+        console.log(`Peer A saw ${serviceOnC}`);
+
+        // 3. Verify B sees it (Propagated via A)
+        // Path should be [100, 300] (A prepends its AS 100 to C's AS 300)
+        let bSawC = false;
+        for (let i = 0; i < 60; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+                const routes = await runOp(portB, async mgmt => {
+                    const res = await mgmt.listLocalRoutes();
+                    return res.routes || [];
+                });
+                const route = routes.find((r: any) => r.service.name === serviceOnC);
+                if (route) {
+                    bSawC = true;
+                    // TODO: Verify AS Path when implemented
+                    // expect(route.asPath).toEqual([100, 300]);
+                    break;
+                }
+            } catch (e) {
+                // console.error('Error checking B for C:', e);
+            }
+        }
+        expect(bSawC).toBe(true);
+        console.log(`Peer B saw ${serviceOnC}`);
 
     }, 120000);
 

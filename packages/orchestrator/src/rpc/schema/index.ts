@@ -24,6 +24,7 @@ export const LocalRouteSchema = z.object({
     id: z.string(),
     service: ServiceDefinitionSchema,
     sourcePeerId: z.string().optional(),
+    asPath: z.array(z.number()).optional(),
 });
 export type LocalRoute = z.infer<typeof LocalRouteSchema>;
 

@@ -22,6 +22,7 @@ export type PeerInfo = z.infer<typeof PeerInfoSchema>;
 export const UpdateMesssageAddSchema = z.object({
     type: z.literal('add'),
     route: ServiceDefinitionSchema,
+    asPath: z.array(z.number()).optional(),
 });
 
 export const UpdateMesssageRemoveSchema = z.object({
