@@ -1,8 +1,17 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, mock } from 'bun:test';
 import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js';
 import { RouteTable } from '../src/state/route-table.js';
 import { PluginContext } from '../src/plugins/types.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
+
+mock.module('capnweb', () => ({
+    newHttpBatchRpcSession: () => ({
+        connectToIBGPPeer: () => ({
+            open: async () => ({ success: true }),
+            update: async () => ({ success: true })
+        })
+    })
+}));
 
 describe('InternalBGPPlugin Config Unit Tests', () => {
 
@@ -15,8 +24,7 @@ describe('InternalBGPPlugin Config Unit Tests', () => {
                 resource: IBGPConfigResource.value,
                 resourceAction: IBGPConfigResourceAction.enum.create,
                 data: {
-                    endpoint: 'http://peer-a:3000/rpc',
-                    secret: 'peer-secret'
+                    endpoint: 'http://peer-a:3000/rpc'
                 }
             },
             state: initialState,
@@ -51,8 +59,7 @@ describe('InternalBGPPlugin Config Unit Tests', () => {
                 resourceAction: IBGPConfigResourceAction.enum.update,
                 data: {
                     peerId: peerId,
-                    endpoint: 'http://peer-new:3000/rpc',
-                    secret: 'new-secret'
+                    endpoint: 'http://peer-new:3000/rpc'
                 }
             },
             state: stateWithPeer,

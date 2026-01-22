@@ -3,6 +3,15 @@ import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.j
 import { RouteTable } from '../src/state/route-table.js';
 import { PluginContext } from '../src/plugins/types.js';
 
+mock.module('capnweb', () => ({
+    newHttpBatchRpcSession: () => ({
+        connectToIBGPPeer: () => ({
+            open: async () => ({ success: true }),
+            update: async () => ({ success: true })
+        })
+    })
+}));
+
 describe('InternalBGPPlugin Unit Tests', () => {
 
     it('should add an internal route when receiving an "add" update', async () => {
