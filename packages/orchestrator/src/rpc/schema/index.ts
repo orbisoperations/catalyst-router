@@ -35,3 +35,10 @@ export const ListMetricsResultSchema = z.object({
     metrics: z.array(DataChannelMetricsSchema),
 });
 export type ListMetricsResult = z.infer<typeof ListMetricsResultSchema>;
+
+export const ApplyActionResultSchema = z.object({
+    success: z.boolean(),
+    results: z.array(z.any()),
+    error: z.string().optional()
+});
+export type ApplyActionResult = z.infer<typeof ApplyActionResultSchema>;

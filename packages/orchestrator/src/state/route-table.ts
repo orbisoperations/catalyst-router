@@ -1,12 +1,13 @@
-
 import { ServiceDefinition, LocalRoute, DataChannelMetrics } from '../rpc/schema/index.js';
+import { AuthorizedPeer } from '../rpc/schema/peering.js';
 
 export class RouteTable {
     constructor(
         private proxiedRoutes: Map<string, LocalRoute> = new Map(),
         private internalRoutes: Map<string, LocalRoute> = new Map(),
         private externalRoutes: Map<string, LocalRoute> = new Map(),
-        private metrics: Map<string, DataChannelMetrics> = new Map()
+        private metrics: Map<string, DataChannelMetrics> = new Map(),
+        private peers: Map<string, AuthorizedPeer> = new Map()
     ) { }
 
     private createId(service: ServiceDefinition): string {
@@ -18,13 +19,15 @@ export class RouteTable {
         proxiedRoutes?: Map<string, LocalRoute>,
         internalRoutes?: Map<string, LocalRoute>,
         externalRoutes?: Map<string, LocalRoute>,
-        metrics?: Map<string, DataChannelMetrics>
+        metrics?: Map<string, DataChannelMetrics>,
+        peers?: Map<string, AuthorizedPeer>
     }): RouteTable {
         return new RouteTable(
             updates.proxiedRoutes ?? this.proxiedRoutes,
             updates.internalRoutes ?? this.internalRoutes,
             updates.externalRoutes ?? this.externalRoutes,
-            updates.metrics ?? this.metrics
+            updates.metrics ?? this.metrics,
+            updates.peers ?? this.peers
         );
     }
 
@@ -208,6 +211,33 @@ export class RouteTable {
             });
         }
         return this;
+    }
+
+    // Peering Management
+    addPeer(peer: AuthorizedPeer): { state: RouteTable, id: string } {
+        const newPeers = new Map(this.peers);
+        newPeers.set(peer.id, peer);
+        return {
+            state: this.clone({ peers: newPeers }),
+            id: peer.id
+        };
+    }
+
+    removePeer(id: string): RouteTable {
+        if (this.peers.has(id)) {
+            const newPeers = new Map(this.peers);
+            newPeers.delete(id);
+            return this.clone({ peers: newPeers });
+        }
+        return this;
+    }
+
+    getPeers(): AuthorizedPeer[] {
+        return Array.from(this.peers.values());
+    }
+
+    getPeer(id: string): AuthorizedPeer | undefined {
+        return this.peers.get(id);
     }
 }
 

@@ -1,17 +1,17 @@
 
 import { describe, it, expect } from 'bun:test';
-import { DirectProxyRouteTablePlugin } from '../src/plugins/implementations/proxy-route.js';
+import { LocalRoutingTablePlugin } from '../src/plugins/implementations/local-routing.js';
 import { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
 
-describe('DirectProxyRouteTablePlugin Tests', () => {
-    it('should add route to proxiedRoutes map on create action', async () => {
-        const plugin = new DirectProxyRouteTablePlugin();
+describe('LocalRoutingTablePlugin Tests', () => {
+    it('should add route to proxiedRoutes map on create action for proxy protocol', async () => {
+        const plugin = new LocalRoutingTablePlugin();
         const state = new RouteTable();
         const context: PluginContext = {
             action: {
-                resource: 'dataChannel',
-                action: 'create',
+                resource: 'localRoute',
+                resourceAction: 'create',
                 data: {
                     name: 'test-proxy-service',
                     endpoint: 'http://proxy-target',
@@ -20,6 +20,7 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
                 }
             },
             state,
+            results: [],
             authxContext: {} as any
         };
 
@@ -37,12 +38,44 @@ describe('DirectProxyRouteTablePlugin Tests', () => {
         expect(newState.getInternalRoutes()).toHaveLength(0);
     });
 
-    it('should ignore non-dataChannel actions', async () => {
-        const plugin = new DirectProxyRouteTablePlugin();
+    it('should add route to internalRoutes map on create action for internal protocol', async () => {
+        const plugin = new LocalRoutingTablePlugin();
+        const state = new RouteTable();
+        const context: PluginContext = {
+            action: {
+                resource: 'localRoute',
+                resourceAction: 'create',
+                data: {
+                    name: 'test-internal-service',
+                    endpoint: 'tcp://localhost:9090',
+                    protocol: 'tcp',
+                    region: 'us-west'
+                }
+            },
+            state,
+            results: [],
+            authxContext: {} as any
+        };
+
+        const result = await plugin.apply(context);
+
+        expect(result.success).toBe(true);
+        const newState = context.state;
+        const internal = newState.getInternalRoutes();
+        expect(internal).toHaveLength(1);
+        expect(internal[0].service.name).toBe('test-internal-service');
+
+        // Ensure it didn't leak to proxied
+        expect(newState.getProxiedRoutes()).toHaveLength(0);
+    });
+
+    it('should ignore non-local-routing actions', async () => {
+        const plugin = new LocalRoutingTablePlugin();
         const state = new RouteTable();
         const context: PluginContext = {
             action: { resource: 'unknown', action: 'create', data: {} } as any,
             state,
+            results: [],
             authxContext: {} as any
         };
 

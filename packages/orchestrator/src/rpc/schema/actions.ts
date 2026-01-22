@@ -1,29 +1,13 @@
 
 import { z } from 'zod';
-import { ServiceDefinitionSchema } from './direct.js';
 
-export const DataChannelCreateActionSchema = z.object({
-    resource: z.literal('dataChannel'),
-    action: z.literal('create'),
-    data: ServiceDefinitionSchema,
-});
 
-export const DataChannelUpdateActionSchema = z.object({
-    resource: z.literal('dataChannel'),
-    action: z.literal('update'),
-    data: ServiceDefinitionSchema,
-});
-
-export const DataChannelDeleteActionSchema = z.object({
-    resource: z.literal('dataChannel'),
-    action: z.literal('delete'),
-    data: z.object({ id: z.string() }),
-});
+import { LocalRoutingActionsSchema } from '../../plugins/implementations/local-routing.js';
+import { InternalPeeringActionsSchema } from '../../peering/plugins/InternalAutonomousSystem.js';
 
 export const ActionSchema = z.union([
-    DataChannelCreateActionSchema,
-    DataChannelUpdateActionSchema,
-    DataChannelDeleteActionSchema
+    LocalRoutingActionsSchema,
+    InternalPeeringActionsSchema
 ]);
 export type Action = z.infer<typeof ActionSchema>;
 

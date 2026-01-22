@@ -112,11 +112,14 @@ describe('GraphQL Plugin E2E with Containers', () => {
     it('should handle full lifecycle: unconfigured -> add -> update -> delete', async () => {
         // Setup Plugin
         const rpcEndpoint = `ws://localhost:${gatewayPort}/api`;
-        const plugin = new GatewayIntegrationPlugin({ endpoint: rpcEndpoint });
+        const plugin = new GatewayIntegrationPlugin(
+            { endpoint: rpcEndpoint },
+            { triggerOnResources: ['create-datachannel:local-routing'] }
+        );
         let state = new RouteTable();
         const context: PluginContext = {
             // @ts-ignore - Dummy action for context, we manipulate state directly
-            action: { resource: 'dataChannel', action: 'create', data: {} },
+            action: { resource: 'create-datachannel:local-routing', data: {} },
             state,
             authxContext: {} as any
         };

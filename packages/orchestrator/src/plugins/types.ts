@@ -10,11 +10,19 @@ export const AuthContextSchema = z.object({
 });
 export type AuthContext = z.infer<typeof AuthContextSchema>;
 
+export interface BaseAction<Resource extends string, Action extends string, Data> {
+    resource: Resource;
+    resourceAction: Action;
+    data: Data;
+}
+
+export type OrchestratorAction = BaseAction<string, string, any>;
+
 export const PluginContextSchema = z.object({
-    action: ActionSchema,
+    action: z.custom<OrchestratorAction>(),
     state: z.instanceof(RouteTable),
     authxContext: AuthContextSchema,
-    result: z.record(z.any()).optional(),
+    results: z.array(z.any()).default([]),
 });
 export type PluginContext = z.infer<typeof PluginContextSchema>;
 
