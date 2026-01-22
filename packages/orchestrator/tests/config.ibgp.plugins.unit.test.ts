@@ -4,19 +4,18 @@ import { RouteTable } from '../src/state/route-table.js';
 import { PluginContext } from '../src/plugins/types.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
 
-mock.module('capnweb', () => ({
-    newHttpBatchRpcSession: () => ({
-        connectToIBGPPeer: () => ({
-            open: async () => ({ success: true }),
-            update: async () => ({ success: true })
-        })
-    })
-}));
+const mockSession = {
+    open: async () => ({ success: true }),
+    update: async () => ({ success: true }),
+    close: async () => ({ success: true })
+};
+const mockFactory = () => mockSession as any;
+
 
 describe('InternalBGPPlugin Config Unit Tests', () => {
 
     it('should handle create peer action', async () => {
-        const plugin = new InternalBGPPlugin();
+        const plugin = new InternalBGPPlugin(mockFactory);
         const initialState = new RouteTable();
 
         const context: PluginContext = {
@@ -42,7 +41,7 @@ describe('InternalBGPPlugin Config Unit Tests', () => {
     });
 
     it('should handle update peer action', async () => {
-        const plugin = new InternalBGPPlugin();
+        const plugin = new InternalBGPPlugin(mockFactory);
         const endpoint = 'http://peer-old:3000/rpc';
         const peerId = 'peer-http---peer-old-3000-rpc';
 
@@ -76,7 +75,7 @@ describe('InternalBGPPlugin Config Unit Tests', () => {
     });
 
     it('should handle delete peer action', async () => {
-        const plugin = new InternalBGPPlugin();
+        const plugin = new InternalBGPPlugin(mockFactory);
         const peerId = 'peer-to-delete';
 
         const stateWithPeer = new RouteTable().addPeer({
