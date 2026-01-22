@@ -91,7 +91,7 @@ export class OrchestratorRpcServer extends RpcTarget {
                     }
                 };
 
-                await this.applyAction(action);
+                return await this.applyAction(action);
             },
             update: async (routes: any) => {
                 const action: Action = {
@@ -188,7 +188,7 @@ export interface PeerInfo {
 }
 
 export interface IBGPScope {
-    open(peerInfo: PeerInfo): Promise<void>;
+    open(peerInfo: PeerInfo): Promise<ApplyActionResult>;
     update(routes: any): Promise<ApplyActionResult>;
     close(): Promise<ApplyActionResult>;
 }

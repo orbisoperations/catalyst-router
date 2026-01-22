@@ -1,7 +1,9 @@
-
+import { Action } from '../../rpc/schema/actions.js';
 import { BasePlugin } from '../../plugins/base.js';
 import { PluginContext, PluginResult } from '../../plugins/types.js';
 import { z } from 'zod';
+import { newHttpBatchRpcSession } from 'capnweb';
+import { getConfig } from '../../config.js';
 
 export class InternalBGPPlugin extends BasePlugin {
     name = 'InternalBGPPlugin';
@@ -36,7 +38,6 @@ export class InternalBGPPlugin extends BasePlugin {
         const { data } = context.action;
         const { endpoint } = data;
 
-        // Idempotency check: If endpoint already exists as a peer, skip
         const existingPeers = context.state.getPeers();
         if (existingPeers.some(p => p.endpoint === endpoint)) {
             console.log(`[InternalAS] Peer at ${endpoint} already exists. Skipping.`);
@@ -45,10 +46,8 @@ export class InternalBGPPlugin extends BasePlugin {
 
         console.log(`[InternalAS] Registering peer at ${endpoint}`);
 
-        // We add to state. Since it's stateless HTTP RPC, we don't "connect" here.
-        // We just record the intent/config so we can broadcast to it.
         const peerData = {
-            id: `peer-${endpoint.replace(/[^a-zA-Z0-9]/g, '-')}`, // Temporary ID or wait for 'open'
+            id: `peer-${endpoint.replace(/[^a-zA-Z0-9]/g, '-')}`,
             as: 0,
             endpoint: endpoint,
             domains: []
@@ -56,6 +55,13 @@ export class InternalBGPPlugin extends BasePlugin {
 
         const { state: newState } = context.state.addPeer(peerData);
         context.state = newState;
+
+        // Trigger synchronization immediately when a peer is configured
+        setImmediate(() => {
+            this.syncExistingRoutesToPeer(context, peerData.id).catch(e => {
+                console.error(`[InternalAS] Initial sync failed for ${peerData.id}:`, e.message);
+            });
+        });
 
         return { success: true, ctx: context };
     }
@@ -66,14 +72,6 @@ export class InternalBGPPlugin extends BasePlugin {
 
         console.log(`[InternalAS] Handling OPEN request from ${peerInfo.id}`);
 
-        // Idempotency Check: If peer is already known in state, do nothing
-        if (context.state.getPeer(peerInfo.id)) {
-            console.log(`[InternalAS] Peer ${peerInfo.id} already exists in state. Skipping registration.`);
-            return { success: true, ctx: context };
-        }
-
-        // Unify ID logic: if we have a peer with the same endpoint but different ID (the temporary one), replace it
-        // This handles the transition from endpoint-based ID (added via CLI) to real ID (advertised via open)
         const existingPeers = context.state.getPeers();
         const existingByEndpoint = existingPeers.find(p => p.endpoint === peerInfo.endpoint);
 
@@ -81,6 +79,12 @@ export class InternalBGPPlugin extends BasePlugin {
         if (existingByEndpoint && existingByEndpoint.id !== peerInfo.id) {
             console.log(`[InternalAS] Unifying peer ID for ${peerInfo.endpoint}: ${existingByEndpoint.id} -> ${peerInfo.id}`);
             newState = newState.removePeer(existingByEndpoint.id);
+        }
+
+        // Simplification: If peer already exists, we are done (prevents infinite loops)
+        if (newState.getPeer(peerInfo.id)) {
+            console.log(`[InternalAS] Peer ${peerInfo.id} already exists in state.`);
+            return { success: true, ctx: { ...context, state: newState } };
         }
 
         const authorizedPeer = {
@@ -94,7 +98,88 @@ export class InternalBGPPlugin extends BasePlugin {
         context.state = updatedState;
 
         console.log(`[InternalAS] Peer ${peerInfo.id} registered.`);
+
+        // Synchronize in background to allow the OPEN call to complete
+        setImmediate(() => {
+            this.syncExistingRoutesToPeer(context, peerInfo.id).catch(e => {
+                console.error(`[InternalAS] Background sync failed for ${peerInfo.id}:`, e.message);
+            });
+        });
+
         return { success: true, ctx: context };
+    }
+
+    private async syncExistingRoutesToPeer(context: PluginContext, peerId: string): Promise<void> {
+        const start = Date.now();
+        const peer = context.state.getPeer(peerId);
+        if (!peer || !peer.endpoint || peer.endpoint === 'unknown') return;
+
+        const routes = context.state.getAllRoutes();
+        console.log(`[InternalAS] syncExistingRoutesToPeer: Peer=${peerId}, RouteCount=${routes.length}`);
+
+        try {
+            const config = getConfig();
+            const sharedSecret = config.peering.secret;
+            const myPeerInfo = {
+                id: config.peering.localId || 'unknown',
+                as: config.peering.as,
+                domains: config.peering.domains,
+                services: [],
+                endpoint: config.peering.endpoint || null
+            };
+
+            const session: any = newHttpBatchRpcSession(peer.endpoint);
+            const ibgpScope = session.connectionFromIBGPPeer(sharedSecret);
+
+            // Always start with OPEN to ensure bidirectional handshake
+            // Don't await it here, let it batch with updates for stateless RPC to work
+            const openPromise = ibgpScope.open(myPeerInfo);
+
+            if (routes.length > 0) {
+                let lastPromise: Promise<any> | null = null;
+                for (const route of routes) {
+                    console.log(`[InternalAS] --> Syncing ${route.service.name} to ${peerId}`);
+                    lastPromise = ibgpScope.update({
+                        type: 'add',
+                        route: route.service
+                    });
+                }
+                // Await the last one to flush everything
+                if (lastPromise) await lastPromise;
+                else await openPromise;
+            } else {
+                await openPromise;
+            }
+
+            console.log(`[InternalAS] Sync to ${peerId} completed in ${Date.now() - start}ms.`);
+        } catch (e: any) {
+            console.error(`[InternalAS] Failed to sync to peer ${peerId} at ${peer?.endpoint}:`, e.message);
+        }
+    }
+
+    private async sendIndividualUpdate(context: PluginContext, peerId: string, updateMsg: any): Promise<void> {
+        const peer = context.state.getPeer(peerId);
+        if (!peer || !peer.endpoint || peer.endpoint === 'unknown') return;
+
+        try {
+            const config = getConfig();
+            const sharedSecret = config.peering.secret;
+            const myPeerInfo = {
+                id: config.peering.localId || 'unknown',
+                as: config.peering.as,
+                domains: config.peering.domains,
+                services: [],
+                endpoint: config.peering.endpoint || null
+            };
+
+            const session: any = newHttpBatchRpcSession(peer.endpoint);
+            const ibgpScope = session.connectionFromIBGPPeer(sharedSecret);
+            // Batch open and update together
+            ibgpScope.open(myPeerInfo);
+            await ibgpScope.update(updateMsg);
+        } catch (e: any) {
+            console.error(`[InternalAS] Failed to send update to peer ${peerId} at ${peer.endpoint}:`, e.message);
+        }
     }
 
     private async handleClosePeer(context: PluginContext): Promise<PluginResult> {
@@ -117,8 +202,6 @@ export class InternalBGPPlugin extends BasePlugin {
 
         try {
             console.log(`[InternalAS] Notifying peer ${peerId} of closure at ${peer.endpoint}`);
-            const { newHttpBatchRpcSession } = await import('capnweb');
-            const { getConfig } = await import('../../config.js');
             const config = getConfig();
             const sharedSecret = config.peering.secret;
             const myPeerInfo = {
@@ -126,12 +209,12 @@ export class InternalBGPPlugin extends BasePlugin {
                 as: config.peering.as,
                 domains: config.peering.domains,
                 services: [],
-                endpoint: null // Don't know our own public endpoint here easily
+                endpoint: config.peering.endpoint || null
             };
 
             const session: any = newHttpBatchRpcSession(peer.endpoint);
             const ibgpScope = session.connectionFromIBGPPeer(sharedSecret);
-            ibgpScope.open(myPeerInfo);
+            await ibgpScope.open(myPeerInfo);
             await ibgpScope.close();
             console.log(`[InternalAS] Successfully notified peer ${peerId} of closure.`);
         } catch (e: any) {
@@ -155,37 +238,7 @@ export class InternalBGPPlugin extends BasePlugin {
         const peers = context.state.getPeers();
         console.log(`[InternalAS] Broadcasting ${updateType} to ${peers.length} peers via Batch HTTP RPC.`);
 
-        const { newHttpBatchRpcSession } = await import('capnweb');
-        const { getConfig } = await import('../../config.js');
-        const config = getConfig();
-        const sharedSecret = config.peering.secret;
-        const myPeerInfo = {
-            id: config.peering.localId || 'unknown',
-            as: config.peering.as,
-            domains: config.peering.domains,
-            services: [],
-            endpoint: null
-        };
-
-        const promises = peers.map(async (peer) => {
-            if (!peer.endpoint || peer.endpoint === 'unknown') return;
-
-            try {
-                // For Batch HTTP RPC, we usually call a bootstrap method to get a scope
-                // Consistent with server.ts: connectionFromIBGPPeer(secret)
-                const session: any = newHttpBatchRpcSession(peer.endpoint);
-
-                // Pipelined call: get scope and then update
-                const ibgpScope = session.connectionFromIBGPPeer(sharedSecret);
-
-                ibgpScope.open(myPeerInfo);
-                await ibgpScope.update(updateMsg);
-
-                console.log(`[InternalAS] Broadcast to ${peer.id} successful.`);
-            } catch (e: any) {
-                console.error(`[InternalAS] Failed to update peer ${peer.id} at ${peer.endpoint}:`, e.message);
-            }
-        });
+        const promises = peers.map((peer) => this.sendIndividualUpdate(context, peer.id, updateMsg));
 
         await Promise.all(promises);
         return { success: true, ctx: context };
@@ -194,10 +247,9 @@ export class InternalBGPPlugin extends BasePlugin {
     private async handleRouteUpdate(context: PluginContext): Promise<PluginResult> {
         const { data } = context.action;
         const { type, route, routeId } = data;
-
-        console.log(`[InternalAS] Handling BGP UPDATE: ${type} ${route?.name || routeId}`);
-
         const sourcePeerId = data.sourcePeerId || 'unknown';
+
+        console.log(`[InternalAS] Handling BGP UPDATE: ${type} ${route?.name || routeId} from ${sourcePeerId}`);
 
         let newState = context.state;
         if (type === 'add' && route) {
@@ -206,6 +258,8 @@ export class InternalBGPPlugin extends BasePlugin {
         } else if (type === 'remove' && routeId) {
             newState = newState.removeRoute(routeId);
         }
+
+        console.log(`[InternalAS] Route table updated. Total routes: ${newState.getRoutes().length}`);
 
         context.state = newState;
         return { success: true, ctx: context };
@@ -248,15 +302,14 @@ export const InternalPeerSessionKeepAliveSchema = z.object({
     })
 });
 
-// BGP Update Message Structure
 export const InternalBGPRouteUpdateSchema = z.object({
     resource: z.literal('internalBGPRoute'),
     resourceAction: z.literal('update'),
     data: z.object({
         type: z.union([z.literal('add'), z.literal('remove')]),
-        route: z.any().optional(), // ServiceDefinitionSchema
+        route: z.any().optional(),
         routeId: z.string().optional(),
-        sourcePeerId: z.string().optional() // Injected by dispatcher
+        sourcePeerId: z.string().optional()
     })
 });
 
