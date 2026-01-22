@@ -4,12 +4,30 @@ import { RouteTable } from '../src/state/route-table.js';
 import { PluginContext } from '../src/plugins/types.js';
 import { IBGPConfigResource, IBGPConfigResourceAction } from '../src/rpc/schema/peering.js';
 
-const mockSession = {
-    open: async () => ({ success: true }),
+const mockPeerInfo = {
+    id: 'mock-peer-id',
+    as: 100,
+    endpoint: 'http://mock-endpoint',
+    domains: []
+};
+
+const mockSessionBase = {
     update: async () => ({ success: true }),
     close: async () => ({ success: true })
 };
-const mockFactory = () => mockSession as any;
+
+const mockFactory = (endpoint: string) => ({
+    ...mockSessionBase,
+    open: async () => ({
+        success: true,
+        peerInfo: {
+            id: 'mock-peer-id',
+            as: 100,
+            endpoint: endpoint, // Return the endpoint requested
+            domains: []
+        }
+    })
+}) as any;
 
 
 describe('InternalBGPPlugin Config Unit Tests', () => {

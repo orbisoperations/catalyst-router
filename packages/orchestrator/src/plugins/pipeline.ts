@@ -23,6 +23,7 @@ export class PluginPipeline implements PluginInterface {
                 console.error(`[PluginPipeline] Error in plugin ${plugin.name}: ${error.message}`);
                 return {
                     success: false,
+                    ctx: context,
                     error: {
                         pluginName: plugin.name,
                         message: `Unexpected error: ${error.message}`,

@@ -9,14 +9,9 @@ const program = new Command();
 program
     .name('catalyst')
     .description('Catalyst Node CLI')
-<<<<<<< HEAD
     .version(process.env.VERSION || '0.0.0-dev')
-    .option('--orchestrator-url <url>', 'Orchestrator RPC URL', 'ws://localhost:3000/rpc')
+    .option('--orchestrator-url <url>', 'Orchestrator RPC URL', process.env.CATALYST_ORCHESTRATOR_URL || 'ws://localhost:3000/rpc')
     .option('--log-level <level>', 'Log level', 'info');
-=======
-    .version('0.0.1')
-    .option('-u, --orchestrator-url <url>', 'Orchestrator URL', 'http://localhost:3000');
->>>>>>> cc06185 (chore: peer to peer updates)
 
 program.addCommand(serviceCommands());
 program.addCommand(metricsCommands());

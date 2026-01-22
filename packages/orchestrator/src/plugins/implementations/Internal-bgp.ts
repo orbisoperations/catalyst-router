@@ -3,7 +3,7 @@ import { BasePlugin } from '../../plugins/base.js';
 import { PluginContext, PluginResult } from '../../plugins/types.js';
 import { newHttpBatchRpcSession } from 'capnweb';
 import { getConfig } from '../../config.js';
-import { getPeerSession } from '../../rpc/client.js';
+import { getHttpPeerSession } from '../../rpc/client.js';
 import {
     IBGPConfigCreatePeerSchema,
     IBGPConfigUpdatePeerSchema,
@@ -18,8 +18,6 @@ import {
     IBGPProtocolResourceAction,
     PeerInfo,
     AuthorizedPeer,
-    PeerApi,
-    IBGPScope,
     PublicIBGPScope
 } from '../../rpc/schema/peering.js';
 import { LocalRoutingCreateActionSchema, LocalRoutingDeleteActionSchema } from './local-routing.js';
@@ -27,7 +25,7 @@ import { LocalRoutingCreateActionSchema, LocalRoutingDeleteActionSchema } from '
 export class InternalBGPPlugin extends BasePlugin {
     name = 'InternalBGPPlugin';
 
-    constructor(private readonly sessionFactory: typeof getPeerSession = getPeerSession) {
+    constructor(private readonly sessionFactory: typeof getHttpPeerSession = getHttpPeerSession) {
         super();
     }
 
@@ -84,6 +82,7 @@ export class InternalBGPPlugin extends BasePlugin {
         const result = IBGPConfigCreatePeerSchema.safeParse(action);
         if (!result.success) return {
             success: false,
+            ctx: context,
             error: {
                 pluginName: this.name,
                 message: 'Error parsing message for iBGP create peer action',
@@ -102,12 +101,6 @@ export class InternalBGPPlugin extends BasePlugin {
         console.log(`[InternalAS] Handshaking with peer at ${endpoint}...`);
 
         const config = getConfig();
-        const peerData = {
-            id: `peer-${endpoint.replace(/[^a-zA-Z0-9]/g, '-')}`,
-            as: config.as,
-            endpoint: endpoint,
-            domains: domains || []
-        };
 
         // Handshake before adding to state
         try {
@@ -119,6 +112,9 @@ export class InternalBGPPlugin extends BasePlugin {
             if (!openResult.success) {
                 throw new Error(openResult.error || 'Peer rejected OPEN request');
             }
+
+            // Use the returned PeerInfo for registration
+            const peerData = openResult.peerInfo;
 
             // 2. UPDATE (Initial Sync)
             const routes = context.state.getAllRoutes();
@@ -137,6 +133,7 @@ export class InternalBGPPlugin extends BasePlugin {
             console.error(`[InternalAS] Failed handshake with ${endpoint}:`, e.message);
             return {
                 success: false,
+                ctx: context,
                 error: { pluginName: this.name, message: `Failed to handshake with peer: ${e.message}` }
             };
         }
@@ -149,6 +146,7 @@ export class InternalBGPPlugin extends BasePlugin {
         const result = IBGPConfigUpdatePeerSchema.safeParse(action);
         if (!result.success) return {
             success: false,
+            ctx: context,
             error: {
                 pluginName: this.name,
                 message: 'Error parsing message for iBGP update peer action',
@@ -161,6 +159,7 @@ export class InternalBGPPlugin extends BasePlugin {
         if (!peer) {
             return {
                 success: false,
+                ctx: context,
                 error: { pluginName: this.name, message: `Peer ${peerId} not found for update` }
             };
         }
@@ -213,6 +212,7 @@ export class InternalBGPPlugin extends BasePlugin {
             console.error(`[InternalAS] Failed handshake updates with ${endpoint}:`, e.message);
             return {
                 success: false,
+                ctx: context,
                 error: { pluginName: this.name, message: `Failed to handshake with new endpoint: ${e.message}` }
             };
         }
@@ -225,6 +225,7 @@ export class InternalBGPPlugin extends BasePlugin {
         const result = IBGPConfigDeletePeerSchema.safeParse(action);
         if (!result.success) return {
             success: false,
+            ctx: context,
             error: {
                 pluginName: this.name,
                 message: 'Error parsing message for iBGP delete peer action',
@@ -264,6 +265,7 @@ export class InternalBGPPlugin extends BasePlugin {
         const result = IBGPProtocolOpenSchema.safeParse(action);
         if (!result.success) return {
             success: false,
+            ctx: context,
             error: {
                 pluginName: this.name,
                 message: 'Error parsing message for iBGP open protocol action',
@@ -335,14 +337,17 @@ export class InternalBGPPlugin extends BasePlugin {
     private async handleProtocolClose(context: PluginContext): Promise<PluginResult> {
         const { action } = context;
         const result = IBGPProtocolCloseSchema.safeParse(action);
-        if (!result.success) return {
-            success: false,
-            error: {
-                pluginName: this.name,
-                message: 'Error parsing message for iBGP close protocol action',
-                error: result.error
-            }
-        };
+        if (!result.success) {
+            return {
+                success: false,
+                ctx: context,
+                error: {
+                    pluginName: this.name,
+                    message: 'Error parsing message for iBGP close protocol action',
+                    error: result.error
+                }
+            };
+        }
 
         const { peerInfo } = result.data.data;
         console.log(`[InternalAS] Handling CLOSE request for ${peerInfo.id}`);
@@ -357,6 +362,7 @@ export class InternalBGPPlugin extends BasePlugin {
         const result = IBGPProtocolKeepAliveSchema.safeParse(action);
         if (!result.success) return {
             success: false,
+            ctx: context,
             error: {
                 pluginName: this.name,
                 message: 'Error parsing message for iBGP keepalive protocol action',
@@ -374,6 +380,7 @@ export class InternalBGPPlugin extends BasePlugin {
         const result = IBGPProtocolUpdateSchema.safeParse(action);
         if (!result.success) return {
             success: false,
+            ctx: context,
             error: {
                 pluginName: this.name,
                 message: 'Error parsing message for iBGP update protocol action',
@@ -452,20 +459,10 @@ export class InternalBGPPlugin extends BasePlugin {
 
         try {
             const config = getConfig();
-            const sharedSecret = config.ibgp.secret;
-            const myPeerInfo: PeerInfo = {
-                id: config.ibgp.localId || 'unknown',
-                as: config.as,
-                domains: config.ibgp.domains,
-                endpoint: config.ibgp.endpoint || 'unknown'
-            };
+            const ibgpScope = this.sessionFactory(peer.endpoint, config.ibgp.secret);
+            const myPeerInfo = this.getMyPeerInfo();
 
-            const session = newHttpBatchRpcSession<PublicIBGPScope>(peer.endpoint);
-            const ibgpScope = session.connectToIBGPPeer(sharedSecret);
-            // Batch open and update together using pipelining
-            const updatePromise = ibgpScope.update(myPeerInfo, [updateMsg]);
-            // @ts-ignore
-            await Promise.all([updatePromise]);
+            await ibgpScope.update(myPeerInfo, [updateMsg]);
         } catch (e: any) {
             console.error(`[InternalAS] Failed to send update to peer ${peerId} at ${peer.endpoint}:`, e.message);
         }
@@ -501,7 +498,7 @@ export class InternalBGPPlugin extends BasePlugin {
         }
 
         const peers = context.state.getPeers();
-        console.log(`[InternalAS] Broadcasting ${updateType} to ${peers.length} peers via Batch HTTP RPC.`);
+        console.log(`[InternalAS] Broadcasting ${updateType} to ${peers.length} peers via WebSocket RPC.`);
 
         const promises = peers.map((peer) => this.sendIndividualUpdate(context, peer.id, updateMsg));
 

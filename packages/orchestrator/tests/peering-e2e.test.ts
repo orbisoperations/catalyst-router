@@ -96,7 +96,9 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             stderr: 'pipe',
             env: {
                 ...process.env,
-                'CATALYST_ORCHESTRATOR_URL': `ws://localhost:${targetPort}/rpc`
+                'CATALYST_ORCHESTRATOR_URL': `ws://127.0.0.1:${targetPort}/rpc`,
+                'NODE_ENV': 'test',
+                'DEBUG': '1'
             }
         });
 
@@ -106,7 +108,8 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
 
         if (proc.exitCode !== 0) {
             console.error(`CLI Command Failed: ${args.join(' ')}\nError:`, error);
-            throw new Error(`CLI command failed: ${args.join(' ')}\nError: ${error}`);
+            console.log(`CLI Output:\n`, output);
+            throw new Error(`CLI command failed: ${args.join(' ')}\nError: ${error}\nOutput: ${output}`);
         }
         return output;
     };

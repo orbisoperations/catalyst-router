@@ -15,7 +15,7 @@ export const peerCommands = () => {
         .action(async (endpoint, options) => {
             try {
                 const client = await createClient();
-                const api = client.connectionFromManagementSDK();
+                const api = await client.connectionFromManagementSDK();
 
                 const result = await api.applyAction({
                     resource: 'internalBGPConfig',
@@ -47,7 +47,7 @@ export const peerCommands = () => {
         .action(async () => {
             try {
                 const client = await createClient();
-                const api = client.connectionFromManagementSDK();
+                const api = await client.connectionFromManagementSDK();
                 const result = await api.listPeers();
 
                 if (result.peers.length === 0) {
@@ -74,14 +74,8 @@ export const peerCommands = () => {
         .action(async (peerId) => {
             try {
                 const client = await createClient();
-                const api = client.connectionFromManagementSDK();
-                const result = await api.applyAction({
-                    resource: 'internalBGP',
-                    resourceAction: 'close',
-                    data: {
-                        peerId
-                    }
-                });
+                const api = await client.connectionFromManagementSDK();
+                const result = await api.deletePeer(peerId);
                 if (result.success) {
                     console.log(chalk.green(`Peer ${peerId} removed.`));
                     process.exit(0);

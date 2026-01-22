@@ -3,8 +3,15 @@ import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.j
 import { RouteTable } from '../src/state/route-table.js';
 import { PluginContext } from '../src/plugins/types.js';
 
+const mockPeerInfo = {
+    id: 'mock-peer-id',
+    as: 100,
+    endpoint: 'http://mock-endpoint',
+    domains: []
+};
+
 const mockSession = {
-    open: async () => ({ success: true }),
+    open: async () => ({ success: true, peerInfo: mockPeerInfo }),
     update: async () => ({ success: true }),
     close: async () => ({ success: true })
 };
@@ -14,13 +21,13 @@ const mockFactory = () => mockSession as any;
 describe('InternalBGPPlugin Unit Tests', () => {
 
     it('should add an internal route when receiving an "add" update', async () => {
-        const plugin = new InternalBGPPlugin();
+        const plugin = new InternalBGPPlugin(mockFactory);
         const initialState = new RouteTable();
 
         const route = {
             name: 'proxied-service',
             endpoint: 'http://remote:8080/rpc',
-            protocol: 'tcp:graphql' as any
+            protocol: 'http:graphql' as any
         };
 
         const context: PluginContext = {
@@ -53,14 +60,14 @@ describe('InternalBGPPlugin Unit Tests', () => {
     });
 
     it('should remove an internal route when receiving a "remove" update', async () => {
-        const plugin = new InternalBGPPlugin();
-        const routeId = 'proxied-service:tcp:graphql';
+        const plugin = new InternalBGPPlugin(mockFactory);
+        const routeId = 'proxied-service:http:graphql';
 
         // Seed state with the route
         const seedState = new RouteTable().addInternalRoute({
             name: 'proxied-service',
             endpoint: 'http://remote:8080/rpc',
-            protocol: 'tcp:graphql'
+            protocol: 'http:graphql'
         }, 'peer-b').state;
 
         expect(seedState.getInternalRoutes()).toHaveLength(1);

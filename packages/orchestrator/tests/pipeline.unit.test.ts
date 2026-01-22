@@ -23,7 +23,8 @@ describe('PluginPipeline', () => {
         const result = await pipeline.apply({
             action: {} as any,
             state: initialState,
-            authxContext: {}
+            authxContext: { userId: 'test', roles: [] },
+            results: []
         });
 
         if (!result.success) {

@@ -1,5 +1,6 @@
+import { ServiceProtocol } from './rpc/schema/direct.js';
 
-export type ServiceProtocol = 'tcp' | 'tcp:http' | 'tcp:graphql' | 'tcp:gql' | 'tcp:grpc' | 'udp';
+export { ServiceProtocol };
 
 export interface DataChannel {
     name: string;

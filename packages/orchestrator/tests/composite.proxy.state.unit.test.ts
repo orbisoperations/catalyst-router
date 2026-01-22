@@ -6,7 +6,7 @@ import { ServiceDefinition } from '../src/rpc/schema/index.js';
 describe('Proxy State - Composite Lifecycle', () => {
     const service: ServiceDefinition = {
         name: 'test-composite-proxy',
-        protocol: 'tcp:graphql',
+        protocol: 'http:graphql',
         endpoint: 'initial-endpoint',
         region: 'ap-south-1'
     };

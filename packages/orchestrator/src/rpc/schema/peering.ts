@@ -139,12 +139,28 @@ export type IBGPProtocolOpen = z.infer<typeof IBGPProtocolOpenSchema>;
 export type IBGPProtocolClose = z.infer<typeof IBGPProtocolCloseSchema>;
 export type IBGPProtocolUpdate = z.infer<typeof IBGPProtocolUpdateSchema>;
 
+export const IBGPOpenResultSuccessSchema = z.object({
+    success: z.literal(true),
+    peerInfo: PeerInfoSchema
+});
+
+export const IBGPOpenResultFailureSchema = z.object({
+    success: z.literal(false),
+    error: z.string().optional()
+});
+
+export const IBGPOpenResultSchema = z.discriminatedUnion('success', [
+    IBGPOpenResultSuccessSchema,
+    IBGPOpenResultFailureSchema
+]);
+export type IBGPOpenResult = z.infer<typeof IBGPOpenResultSchema>;
+
 export interface IBGPScope {
-    open(peerInfo: PeerInfo): Promise<ApplyActionResult>;
+    open(peerInfo: PeerInfo): Promise<IBGPOpenResult>;
     update(peerInfo: PeerInfo, routes: UpdateMessage[]): Promise<ApplyActionResult>;
     close(peerInfo: PeerInfo): Promise<ApplyActionResult>;
 }
 
-export interface PeerApi {
+export interface PublicIBGPScope {
     connectToIBGPPeer(secret: string): IBGPScope;
 }

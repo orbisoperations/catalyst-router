@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import { createClient } from '../client.js';
 import chalk from 'chalk';
-import type { ServiceProtocol } from '@catalyst/orchestrator';
 import type { CliResult } from '../types.js';
 
 
@@ -10,16 +9,10 @@ import { AddServiceInputSchema, ListServicesInputSchema, type AddServiceInput } 
 
 export async function addService(params: AddServiceInput): Promise<CliResult<void>> {
     try {
-<<<<<<< HEAD
-        await using root = await createClient(params.orchestratorUrl);
-=======
-        const root = await createClient();
-<<<<<<< HEAD
-        const api = root.connectionFromCli();
->>>>>>> 9d03721 (chore: implements progressive api for cli)
-=======
-        const api = root.connectionFromManagementSDK();
->>>>>>> 0f8156e (fix: rename from cli to management sdk)
+        const root = await createClient(params.orchestratorUrl);
+
+
+        const api = await root.connectionFromManagementSDK();
 
         const action = {
             resource: 'localRoute',
@@ -41,14 +34,9 @@ export async function addService(params: AddServiceInput): Promise<CliResult<voi
 
 export async function listServices(orchestratorUrl?: string): Promise<CliResult<any[]>> {
     try {
-<<<<<<< HEAD
-        await using root = await createClient(orchestratorUrl);
-        const result = await root.listLocalRoutes();
-=======
-        const root = await createClient();
-        const api = root.connectionFromManagementSDK();
+        const root = await createClient(orchestratorUrl);
+        const api = await root.connectionFromManagementSDK();
         const result = await api.listLocalRoutes();
->>>>>>> 9d03721 (chore: implements progressive api for cli)
         return { success: true, data: result.routes || [] };
     } catch (err: any) {
         return { success: false, error: err.message || 'Connection error' };

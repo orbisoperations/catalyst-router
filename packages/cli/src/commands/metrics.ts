@@ -7,14 +7,9 @@ import type { CliResult } from '../types.js';
 
 export async function fetchMetrics(): Promise<CliResult<any>> {
     try {
-<<<<<<< HEAD
-        await using root = await createClient();
-        const result = await root.listMetrics();
-=======
         const root = await createClient();
-        const api = root.connectionFromManagementSDK();
+        const api = await root.connectionFromManagementSDK();
         const result = await api.listMetrics();
->>>>>>> 9d03721 (chore: implements progressive api for cli)
         return { success: true, data: result };
     } catch (err: any) {
         return { success: false, error: err.message || 'Unknown error' };
