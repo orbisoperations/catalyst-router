@@ -106,6 +106,24 @@ export class RouteTable {
         return Array.from(this.externalRoutes.values());
     }
 
+    getInternalRouteById(id: string): LocalRoute | undefined {
+        return this.internalRoutes.get(id);
+    }
+
+    getProxiedRouteById(id: string): LocalRoute | undefined {
+        return this.proxiedRoutes.get(id);
+    }
+
+    getExternalRouteById(id: string): LocalRoute | undefined {
+        return this.externalRoutes.get(id);
+    }
+
+    getRouteById(id: string): LocalRoute | undefined {
+        return this.internalRoutes.get(id)
+            || this.proxiedRoutes.get(id)
+            || this.externalRoutes.get(id);
+    }
+
     getRoutes(): LocalRoute[] {
         return this.getAllRoutes();
     }
