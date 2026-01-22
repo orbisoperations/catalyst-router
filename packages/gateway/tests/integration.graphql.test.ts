@@ -11,15 +11,15 @@ describe('Gateway Integration', () => {
     let gatewayApp: any;
 
     beforeAll(async () => {
-        // 1. Start Books Service
-        const examplesDir = path.resolve(__dirname, '../../examples');
+        const repoRoot = path.resolve(__dirname, '../../..');
 
+        // 1. Start Books Service
         {
             const imageName = 'books-service:test';
-            const dockerfile = 'Dockerfile.books';
+            const dockerfile = 'packages/examples/Dockerfile.books';
             // Workaround for Bun tar-stream issue
             const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: examplesDir,
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit',
             });
@@ -34,10 +34,10 @@ describe('Gateway Integration', () => {
         // 2. Start Movies Service
         {
             const imageName = 'movies-service:test';
-            const dockerfile = 'Dockerfile.movies';
+            const dockerfile = 'packages/examples/Dockerfile.movies';
             // Workaround for Bun tar-stream issue
             const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: examplesDir,
+                cwd: repoRoot,
                 stdout: 'ignore',
                 stderr: 'inherit',
             });

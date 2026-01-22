@@ -4,7 +4,7 @@ import type {
     ListLocalRoutesResult,
     ListMetricsResult
 } from '@catalyst/orchestrator';
-import { newWebSocketRpcSession, RpcPromise } from 'capnweb';
+import { newWebSocketRpcSession, RpcPromise, RpcStub } from 'capnweb';
 import { WebSocket } from 'ws';
 
 // Polyfill Symbol.asyncDispose if necessary (TypeScript < 5.2 or older environments)
@@ -20,7 +20,7 @@ export async function createClient(url: string = process.env.CATALYST_ORCHESTRAT
 export type RpcClient = RpcPromise<PublicApi>;
 
 export interface PublicApi {
-    connectionFromManagementSDK(): Promise<ManagementScope>;
+    connectionFromManagementSDK(): RpcStub<ManagementScope>;
 }
 
 export interface ManagementScope {

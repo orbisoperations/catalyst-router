@@ -8,8 +8,6 @@
     "test": "vitest",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
     "build": "tsup",
     "dev": "tsup --watch",
     "start": "node dist/index.js"
@@ -18,7 +16,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "catalog:testing",
     "@types/node": "catalog:dev",
     "@vitest/coverage-v8": "catalog:testing",
     "tsup": "catalog:dev",

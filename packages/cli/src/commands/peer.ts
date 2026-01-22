@@ -15,9 +15,8 @@ export const peerCommands = () => {
         .action(async (endpoint, options) => {
             try {
                 const client = await createClient();
-                const api = await client.connectionFromManagementSDK();
 
-                const result = await api.applyAction({
+                const result = await client.connectionFromManagementSDK().applyAction({
                     resource: 'internalBGPConfig',
                     resourceAction: 'create',
                     data: {
@@ -47,8 +46,7 @@ export const peerCommands = () => {
         .action(async () => {
             try {
                 const client = await createClient();
-                const api = await client.connectionFromManagementSDK();
-                const result = await api.listPeers();
+                const result = await client.connectionFromManagementSDK().listPeers();
 
                 if (result.peers.length === 0) {
                     console.log('No peers connected.');
@@ -74,8 +72,7 @@ export const peerCommands = () => {
         .action(async (peerId) => {
             try {
                 const client = await createClient();
-                const api = await client.connectionFromManagementSDK();
-                const result = await api.deletePeer(peerId);
+                const result = await client.connectionFromManagementSDK().deletePeer(peerId);
                 if (result.success) {
                     console.log(chalk.green(`Peer ${peerId} removed.`));
                     process.exit(0);

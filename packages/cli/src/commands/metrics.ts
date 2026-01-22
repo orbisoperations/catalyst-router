@@ -8,8 +8,7 @@ import type { CliResult } from '../types.js';
 export async function fetchMetrics(): Promise<CliResult<any>> {
     try {
         const root = await createClient();
-        const api = await root.connectionFromManagementSDK();
-        const result = await api.listMetrics();
+        const result = await root.connectionFromManagementSDK().listMetrics();
         return { success: true, data: result };
     } catch (err: any) {
         return { success: false, error: err.message || 'Unknown error' };
@@ -17,11 +16,8 @@ export async function fetchMetrics(): Promise<CliResult<any>> {
 }
 
 export function metricsCommands() {
-    const metrics = new Command('metrics').description('View metrics');
-
-    metrics
-        .command('show')
-        .description('Show current metrics')
+    const metrics = new Command('metrics')
+        .description('View metrics')
         .action(async () => {
             const result = await fetchMetrics();
 
@@ -31,6 +27,7 @@ export function metricsCommands() {
             }
 
             console.log(JSON.stringify(result.data, null, 2));
+            process.exit(0);
         });
 
     return metrics;
