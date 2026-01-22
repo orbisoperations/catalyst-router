@@ -67,6 +67,65 @@ describe('Internal Peering Integration', () => {
 
         const result = await plugin.apply(context);
         expect(result.success).toBe(true);
-        // In future, verify state.peers is updated
+        if (!result.success) throw new Error('Plugin failed');
+
+        // Verify peer was added
+        expect(result.ctx.state.getPeers()).toHaveLength(1);
+        expect(result.ctx.state.getPeers()[0].id).toBe('remote-1');
+    });
+
+    it('AuthorizedPeer.close() should dispatch internalPeerSession/close action', async () => {
+        let dispatchedAction: any = null;
+        const mockDispatch = async (action: any) => {
+            dispatchedAction = action;
+            return { success: true };
+        };
+        const server = new BGPPeeringServer({ actionHandler: mockDispatch });
+        const authorized = await server.authorize('secret');
+
+        await authorized.close('peer-123');
+
+        expect(dispatchedAction).toBeDefined();
+        expect(dispatchedAction.resource).toBe('internalPeerSession');
+        expect(dispatchedAction.resourceAction).toBe('close');
+        expect(dispatchedAction.data.peerId).toBe('peer-123');
+    });
+
+    it('InternalAutonomousSystemPlugin should handle close:internal-as and cleanup routes', async () => {
+        const plugin = new InternalAutonomousSystemPlugin();
+        let state = new RouteTable();
+
+        // Seed state with a peer and a route from that peer
+        const peer = { id: 'remote-exit', as: 300, endpoint: 'ws://host', domains: [] };
+        state = state.addPeer(peer).state;
+
+        state = state.addInternalRoute({
+            name: 'service-from-peer',
+            endpoint: 'http://peer-endpoint',
+            protocol: 'tcp'
+        }, 'remote-exit').state;
+
+        // Ensure seeded correctly
+        expect(state.getPeers()).toHaveLength(1);
+        expect(state.getInternalRoutes()).toHaveLength(1);
+        expect(state.getInternalRoutes()[0].sourcePeerId).toBe('remote-exit');
+
+        const context: PluginContext = {
+            action: {
+                resource: 'internalPeerSession',
+                resourceAction: 'close',
+                data: { peerId: 'remote-exit' }
+            },
+            state,
+            results: [],
+            authxContext: {} as any
+        };
+
+        const result = await plugin.apply(context);
+
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error('Plugin failed');
+        expect(result.ctx.state.getPeers()).toHaveLength(0);
+        expect(result.ctx.state.getInternalRoutes()).toHaveLength(0);
     });
 });

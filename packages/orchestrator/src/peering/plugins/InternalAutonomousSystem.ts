@@ -17,6 +17,14 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
             return this.handleOpenPeer(context);
         }
 
+        if (action.resource === 'internalPeerSession' && action.resourceAction === 'close') {
+            return this.handleClosePeer(context);
+        }
+
+        if (action.resource === 'internalBGPRoute' && action.resourceAction === 'update') {
+            return this.handleRouteUpdate(context);
+        }
+
         return { success: true, ctx: context };
     }
 
@@ -86,12 +94,73 @@ export class InternalAutonomousSystemPlugin extends BasePlugin {
         console.log(`[InternalAS] Handling OPEN request from ${peerInfo.id} (${direction})`);
 
         // Register peer in RouteTable
-        // We need to map PeerInfo + ClientStub to AuthorizedPeer structure logic
-        // context.state.addPeer(...) - RouteTable might need updates to store the stub?
-        // RouteTable currently stores 'AuthorizedPeer' (interface). 
-        // We'll store it as is for now or just log.
-        // real implementation requires RouteTable to hold the stub.
+        // We create a mocked/stubbed AuthorizedPeer object for the state
+        // In a real scenario, this object would have methods to call back the peer (using clientStub)
+        const authorizedPeer = {
+            id: peerInfo.id,
+            as: peerInfo.as,
+            endpoint: peerInfo.endpoint || 'unknown',
+            domains: peerInfo.domains || [],
+            // Methods and stub are not part of the AuthorizedPeer schema used by RouteTable
+            // We would need a separate PeerManager to hold the active connection stubs.
+        };
 
+        const { state: newState } = context.state.addPeer(authorizedPeer);
+        context.state = newState;
+
+        console.log(`[InternalAS] Peer ${peerInfo.id} registered.`);
+
+        return { success: true, ctx: context };
+    }
+
+    private async handleClosePeer(context: PluginContext): Promise<PluginResult> {
+        const { data } = context.action;
+        const { peerId } = data; // { peerId: string }
+
+        console.log(`[InternalAS] Handling CLOSE request for ${peerId}`);
+
+        // Remove peer and its routes
+        const newState = context.state.removePeer(peerId);
+        context.state = newState;
+
+        console.log(`[InternalAS] Peer ${peerId} and its routes removed.`);
+
+        return { success: true, ctx: context };
+    }
+
+    private async handleRouteUpdate(context: PluginContext): Promise<PluginResult> {
+        const { data } = context.action;
+        const { type, route, routeId } = data;
+
+        console.log(`[InternalAS] Handling BGP UPDATE: ${type} ${route?.name || routeId}`);
+
+        // We assume the route comes from an authorized peer (verified by caller/RPC layer)
+        // Ideally the action data should contain 'sourcePeerId' injected by the dispatcher?
+        // OR we trust the content. For now, let's assume we need to know WHO sent it.
+        // The current schema doesn't carry 'sourcePeerId' in the data payload explicitly for the user,
+        // but the RPC handler (AuthorizedPeer) should normally inject it.
+        // Let's assume for this mock that we can pass it or it's not strictly enforced yet 
+        // (but then removeRoutesFromPeer won't work if we don't set it!)
+
+        // HACK: We need sourcePeerId. let's check if we can add it to the schema or if it's there.
+        // The schema 'InternalBGPRouteUpdateSchema' does NOT have it.
+        // We probably need to add 'sourcePeerId' to the action data payload in the schema.
+
+        // For now, let's assume the 'AuthorizedPeer' which dispatches this ADDS the peerID.
+        // So allow 'sourcePeerId' in data (even if untyped or loose for now).
+        // Actually, let's just add it to the schema to be safe.
+
+        const sourcePeerId = data.sourcePeerId || 'unknown';
+
+        let newState = context.state;
+        if (type === 'add' && route) {
+            const res = newState.addInternalRoute(route, sourcePeerId);
+            newState = res.state;
+        } else if (type === 'remove' && routeId) {
+            newState = newState.removeRoute(routeId);
+        }
+
+        context.state = newState;
         return { success: true, ctx: context };
     }
 }
@@ -115,6 +184,14 @@ export const InternalPeerSessionOpenSchema = z.object({
     })
 });
 
+export const InternalPeerSessionCloseSchema = z.object({
+    resource: z.literal('internalPeerSession'),
+    resourceAction: z.literal('close'),
+    data: z.object({
+        peerId: z.string()
+    })
+});
+
 // BGP Update Message Structure
 export const InternalBGPRouteUpdateSchema = z.object({
     resource: z.literal('internalBGPRoute'),
@@ -122,12 +199,14 @@ export const InternalBGPRouteUpdateSchema = z.object({
     data: z.object({
         type: z.union([z.literal('add'), z.literal('remove')]),
         route: z.any().optional(), // ServiceDefinitionSchema
-        routeId: z.string().optional()
+        routeId: z.string().optional(),
+        sourcePeerId: z.string().optional() // Injected by dispatcher
     })
 });
 
 export const InternalPeeringActionsSchema = z.union([
     InternalPeerConfigCreateSchema,
     InternalPeerSessionOpenSchema,
+    InternalPeerSessionCloseSchema,
     InternalBGPRouteUpdateSchema
 ]);
