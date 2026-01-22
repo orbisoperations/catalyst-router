@@ -2,10 +2,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { GenericContainer, Wait, StartedTestContainer, Network, StartedNetwork } from 'testcontainers';
 import path from 'path';
-import { newHttpBatchRpcSession } from 'capnweb';
+import { newWebSocketRpcSession } from 'capnweb';
 import type { PublicApi } from '../../cli/src/client.js';
 
-describe('Peering E2E Lifecycle (Containerized)', () => {
+describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
     const TIMEOUT = 300000; // 5 minutes
 
     let network: StartedNetwork;
@@ -15,7 +15,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
     let portA: number;
     let portB: number;
 
-    const imageName = 'catalyst-node:e2e-peer';
+    const imageName = 'catalyst-node:e2e-peer-ws';
 
     // Resolve Repo Root correctly
     const repoRoot = path.resolve(__dirname, '../../../');
@@ -48,7 +48,8 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                 'PORT': '3000',
                 'CATALYST_AS': '100',
                 'CATALYST_NODE_ID': 'peer-a',
-                'CATALYST_PEERING_ENDPOINT': 'http://peer-a:3000/rpc'
+                'CATALYST_PEERING_ENDPOINT': 'http://peer-a:3000/rpc',
+                'CATALYST_IBGP_TRANSPORT': 'websocket'
             })
             .withWaitStrategy(Wait.forHttp('/health', 3000))
             .start();
@@ -65,7 +66,8 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                 'PORT': '3000',
                 'CATALYST_AS': '200',
                 'CATALYST_NODE_ID': 'peer-b',
-                'CATALYST_PEERING_ENDPOINT': 'http://peer-b:3000/rpc'
+                'CATALYST_PEERING_ENDPOINT': 'http://peer-b:3000/rpc',
+                'CATALYST_IBGP_TRANSPORT': 'websocket'
             })
             .withWaitStrategy(Wait.forHttp('/health', 3000))
             .start();
@@ -86,17 +88,17 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
     });
 
     const getClient = (port: number) => {
-        const url = `http://127.0.0.1:${port}/rpc`;
-        return newHttpBatchRpcSession<PublicApi>(url, {
-            fetch: fetch as any
-        } as any);
+        const url = `ws://127.0.0.1:${port}/rpc`;
+        return newWebSocketRpcSession<PublicApi>(url);
     };
 
     // Helper: Execute a function against a fresh session
+    // Even though WS is persistent, we can use this helper to keep the test structure identical
     const runOp = async <T>(port: number, operation: (mgmt: any) => Promise<T>): Promise<T> => {
         const client = getClient(port);
-        // Do not await! Pipeline the capability request.
-        const mgmt = client.connectionFromManagementSDK();
+        // Note: For WS, we don't strictly *need* to pipeline like HTTP, but it shouldn't hurt.
+        // However, WS sessions are NOT one-shot.
+        const mgmt = await client.connectionFromManagementSDK();
         return operation(mgmt);
     };
 
@@ -106,7 +108,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             resource: 'localRoute',
             resourceAction: 'create',
             data: {
-                name: 'pre-existing-on-a',
+                name: 'pre-existing-on-a-ws',
                 endpoint: 'http://a:9000',
                 protocol: 'http:graphql'
             }
@@ -120,7 +122,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                 return res.routes || [];
             });
 
-            if (routes.some((r: any) => r.service.name === 'pre-existing-on-a')) {
+            if (routes.some((r: any) => r.service.name === 'pre-existing-on-a-ws')) {
                 onA = true;
                 break;
             }
@@ -167,7 +169,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     return res.routes || [];
                 });
 
-                if (lastRoutesB.some((r: any) => r.service.name === 'pre-existing-on-a')) {
+                if (lastRoutesB.some((r: any) => r.service.name === 'pre-existing-on-a-ws')) {
                     synced = true;
                     break;
                 }
@@ -185,7 +187,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             resource: 'localRoute',
             resourceAction: 'create',
             data: {
-                name: 'service-on-a',
+                name: 'service-on-a-ws',
                 endpoint: 'http://a:8080',
                 protocol: 'http:graphql'
             }
@@ -196,7 +198,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             resource: 'localRoute',
             resourceAction: 'create',
             data: {
-                name: 'service-on-b',
+                name: 'service-on-b-ws',
                 endpoint: 'http://b:8080',
                 protocol: 'http:graphql'
             }
@@ -211,7 +213,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     const res = await mgmt.listLocalRoutes();
                     return res.routes || [];
                 });
-                if (routes.some((r: any) => r.service.name === 'service-on-a')) {
+                if (routes.some((r: any) => r.service.name === 'service-on-a-ws')) {
                     propagatedToB = true;
                     break;
                 }
@@ -227,7 +229,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     const res = await mgmt.listLocalRoutes();
                     return res.routes || [];
                 });
-                if (routes.some((r: any) => r.service.name === 'service-on-b')) {
+                if (routes.some((r: any) => r.service.name === 'service-on-b-ws')) {
                     propagatedToA = true;
                     break;
                 }
@@ -236,19 +238,25 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
 
         expect(propagatedToB).toBe(true);
         expect(propagatedToA).toBe(true);
-    }, 120000); // 2 mins total for bidir check
+    }, 120000);
 
     it('should disconnect and cleanup routes', async () => {
         // Find the generated peer ID for peer-b
         let peerId: string | undefined;
-        try {
-            const peers = await runOp(portA, async mgmt => {
-                const res = await mgmt.listPeers();
-                return res.peers || [];
-            });
-            const peerBRecord = peers.find((p: any) => p.id === 'peer-b');
-            peerId = peerBRecord?.id;
-        } catch (e) { }
+        for (let i = 0; i < 10; i++) {
+            try {
+                const peers = await runOp(portA, async mgmt => {
+                    const res = await mgmt.listPeers();
+                    return res.peers || [];
+                });
+                const peerBRecord = peers.find((p: any) => p.id === 'peer-b');
+                if (peerBRecord) {
+                    peerId = peerBRecord.id;
+                    break;
+                }
+            } catch (e) { }
+            await new Promise(r => setTimeout(r, 1000));
+        }
 
         console.log(`Discovered Peer ID on A for B: ${peerId}`);
         expect(peerId).toBeDefined();
@@ -272,7 +280,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     const res = await mgmt.listLocalRoutes();
                     return res.routes || [];
                 });
-                if (!lastRoutesB.some((r: any) => r.service.name === 'service-on-a')) {
+                if (!lastRoutesB.some((r: any) => r.service.name === 'service-on-a-ws')) {
                     cleanedOnB = true;
                     break;
                 }
@@ -289,7 +297,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     const res = await mgmt.listLocalRoutes();
                     return res.routes || [];
                 });
-                if (!lastRoutesA.some((r: any) => r.service.name === 'service-on-b')) {
+                if (!lastRoutesA.some((r: any) => r.service.name === 'service-on-b-ws')) {
                     cleanedOnA = true;
                     break;
                 }

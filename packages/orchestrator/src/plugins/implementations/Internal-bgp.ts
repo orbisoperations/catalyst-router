@@ -107,24 +107,35 @@ export class InternalBGPPlugin extends BasePlugin {
             const ibgpScope = this.sessionFactory(endpoint, config.ibgp.secret);
             const myPeerInfo = this.getMyPeerInfo();
 
-            // 1. OPEN
-            const openResult = await ibgpScope.open(myPeerInfo);
+            // 1. OPEN (Pipelined)
+            const openPromise = ibgpScope.open(myPeerInfo);
+
+            // 2. UPDATE (Initial Sync - Pipelined)
+            const routes = context.state.getAllRoutes();
+            let updatePromise: Promise<any> = Promise.resolve();
+
+            if (routes.length > 0) {
+                const updates = routes.map(route => ({
+                    type: 'add' as const,
+                    route: route.service
+                }));
+                // Use the returned peerInfo from the open promise?
+                // Actually, for pipelining, we just pass myPeerInfo again or wait?
+                // CapnProto/CapnWeb pipelining works on PROMISES.
+                // But `update` takes `PeerInfo`, not a promise.
+                // We should just fire both.
+                updatePromise = ibgpScope.update(myPeerInfo, updates);
+            }
+
+            // Execute batch
+            const [openResult, _updateResult] = await Promise.all([openPromise, updatePromise]);
+
             if (!openResult.success) {
                 throw new Error(openResult.error || 'Peer rejected OPEN request');
             }
 
             // Use the returned PeerInfo for registration
             const peerData = openResult.peerInfo;
-
-            // 2. UPDATE (Initial Sync)
-            const routes = context.state.getAllRoutes();
-            if (routes.length > 0) {
-                const updates = routes.map(route => ({
-                    type: 'add' as const,
-                    route: route.service
-                }));
-                await ibgpScope.update(myPeerInfo, updates);
-            }
 
             const { state: newState } = context.state.addPeer(peerData);
             context.state = newState;
@@ -181,12 +192,11 @@ export class InternalBGPPlugin extends BasePlugin {
             }
 
             // 2. Open New Connection
+            // 2. Open New Connection & Pipeline
             const ibgpScope = this.sessionFactory(endpoint, config.ibgp.secret);
 
-            const openResult = await ibgpScope.open(myPeerInfo);
-            if (!openResult.success) {
-                throw new Error(openResult.error || 'Peer rejected OPEN request');
-            }
+            const openPromise = ibgpScope.open(myPeerInfo);
+            let updatePromise: Promise<any> = Promise.resolve();
 
             // 3. Update (Sync)
             const routes = context.state.getAllRoutes();
@@ -195,7 +205,13 @@ export class InternalBGPPlugin extends BasePlugin {
                     type: 'add' as const,
                     route: route.service
                 }));
-                await ibgpScope.update(myPeerInfo, updates);
+                updatePromise = ibgpScope.update(myPeerInfo, updates);
+            }
+
+            const [openResult] = await Promise.all([openPromise, updatePromise]);
+
+            if (!openResult.success) {
+                throw new Error(openResult.error || 'Peer rejected OPEN request');
             }
 
             // 4. Update State

@@ -14,6 +14,7 @@ import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routin
 import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js';
 import { AuthorizedPeer, IBGPProtocolResource, IBGPProtocolResourceAction, ListPeersResult, PeerInfo, UpdateMessage, IBGPScope, IBGPConfigResource, IBGPConfigResourceAction } from './schema/peering.js';
 import { getConfig, OrchestratorConfig } from '../config.js';
+import { getHttpPeerSession, getWebSocketPeerSession } from './client.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
     private pipeline: PluginPipeline;
@@ -43,7 +44,16 @@ export class OrchestratorRpcServer extends RpcTarget {
 
         // Initialize plugins
         const routingPlugin = new LocalRoutingTablePlugin();
-        const internalBgpPlugin = new InternalBGPPlugin();
+
+        const sessionFactory = this.config.ibgp.transport === 'websocket'
+            ? getWebSocketPeerSession
+            : getHttpPeerSession;
+
+        if (this.config.ibgp.transport === 'websocket') {
+            console.log('[Orchestrator] Using WebSocket transport for iBGP');
+        }
+
+        const internalBgpPlugin = new InternalBGPPlugin(sessionFactory);
 
         this.pipeline = new PluginPipeline([routingPlugin, internalBgpPlugin, ...plugins], 'OrchestratorPipeline');
     }
