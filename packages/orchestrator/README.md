@@ -12,12 +12,12 @@ Each plugin implements the `PluginInterface` and processes a `PluginContext`.
 
 ```typescript
 type PluginResult = {
-   success: boolean;
-   stop: boolean;      // If true, stops the pipeline
-   error?: string;
-   data?: unknown;     // Optional data to return to caller
-   state?: RouteTable; // Updated state
-};
+  success: boolean
+  stop: boolean // If true, stops the pipeline
+  error?: string
+  data?: unknown // Optional data to return to caller
+  state?: RouteTable // Updated state
+}
 ```
 
 ### Plugin Pipeline
@@ -37,14 +37,32 @@ The pipeline executes plugins sequentially. If a plugin returns `stop: true`, ex
 The Orchestrator operates on an **Action-based** RPC model. Instead of calling specific methods for every little thing, clients send `Actions` to resources.
 
 **Schema:**
+
 ```typescript
-type Action = 
-  | { resource: 'dataChannel'; action: 'create', data: CreateDataChannel }
-  | { resource: 'dataChannel'; action: 'delete', data: { id: string } }
-  // ... future resources
+type Action =
+  | { resource: 'dataChannel'; action: 'create'; data: CreateDataChannel }
+  | { resource: 'dataChannel'; action: 'delete'; data: { id: string } }
+// ... future resources
 ```
 
 This allows the plugin pipeline to standardize processing logic based on `resource` and `action`.
+
+## 📡 Events & Plugins
+
+The following table lists the core events that orchestrator plugins react to. Note that a single event can trigger multiple plugins.
+
+| Event (Resource.Action)  | Direction     | Handling Plugins                                                               | Description                                                                                                |
+| :----------------------- | :------------ | :----------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| `localRoute.create`      | **In -> Out** | `LocalRoutingTablePlugin`<br>`InternalBGPPlugin`<br>`GatewayIntegrationPlugin` | - Updates local routing table<br>- Broadcasts route to iBGP peers<br>- Updates Gateway config (if GraphQL) |
+| `localRoute.update`      | **In -> Out** | `LocalRoutingTablePlugin`<br>`InternalBGPPlugin`<br>`GatewayIntegrationPlugin` | Updates existing service definition and propagates changes.                                                |
+| `localRoute.delete`      | **In -> Out** | `LocalRoutingTablePlugin`<br>`InternalBGPPlugin`<br>`GatewayIntegrationPlugin` | Removes service and propagates deletion.                                                                   |
+| `ibgpConfig.create`      | **Inbound**   | `InternalBGPPlugin`                                                            | Configures a new peer and initiates handshake.                                                             |
+| `ibgpConfig.update`      | **Inbound**   | `InternalBGPPlugin`                                                            | Updates peer connection params and reconnects.                                                             |
+| `ibgpConfig.delete`      | **Inbound**   | `InternalBGPPlugin`                                                            | Disconnects and removes peer from configuration.                                                           |
+| `ibgpProtocol.open`      | **Inbound**   | `InternalBGPPlugin`                                                            | Handles incoming iBGP handshakes and sends local table.                                                    |
+| `ibgpProtocol.close`     | **Inbound**   | `InternalBGPPlugin`                                                            | Handles peer disconnection cleanup.                                                                        |
+| `ibgpProtocol.update`    | **In -> Out** | `InternalBGPPlugin`                                                            | Processes learned routes from a peer and propagates them to _other_ peers.                                 |
+| `ibgpProtocol.keepAlive` | **Inbound**   | `InternalBGPPlugin`                                                            | Updates peer liveness state.                                                                               |
 
 ## 🌐 GraphQL Gateway Integration
 
@@ -54,9 +72,9 @@ One of the primary roles of the Orchestrator is to drive the **GraphQL Gateway**
 
 The integration requires specific configuration to locate the Gateway's RPC endpoint.
 
-| Config Variable | Required | Description | Default |
-| :--- | :--- | :--- | :--- |
-| `CATALYST_GQL_GATEWAY_ENDPOINT` | **Yes** | The WebSocket RPC endpoint of the running Gateway. | `ws://localhost:4000/api` |
+| Config Variable                 | Required | Description                                        | Default                   |
+| :------------------------------ | :------- | :------------------------------------------------- | :------------------------ |
+| `CATALYST_GQL_GATEWAY_ENDPOINT` | **Yes**  | The WebSocket RPC endpoint of the running Gateway. | `ws://localhost:4000/api` |
 
 ### How it Works
 
@@ -83,8 +101,8 @@ sequenceDiagram
 
 ### Components
 
-*   **`GatewayIntegrationPlugin`**: Listens for state changes and pushes config to the Gateway.
-*   **`DirectProxyRouteTablePlugin`**: Manages routes that should be exposed via the Gateway (protocol `tcp:graphql`).
+- **`GatewayIntegrationPlugin`**: Listens for state changes and pushes config to the Gateway.
+- **`DirectProxyRouteTablePlugin`**: Manages routes that should be exposed via the Gateway (protocol `tcp:graphql`).
 
 ## 🚀 Getting Started
 
@@ -130,42 +148,41 @@ The Orchestrator now exposes a public method, `connectionFromManagementSDK`, whi
 **Pattern Example:**
 
 ```typescript
-import { newHttpBatchRpcSession } from "capnweb";
+import { newHttpBatchRpcSession } from 'capnweb'
 
-let api = newHttpBatchRpcSession<PublicApi>("https://example.com/api");
+let api = newHttpBatchRpcSession<PublicApi>('https://example.com/api')
 
 // Call authenticate(), but don't await it. We can use the returned promise
 // to make "pipelined" calls without waiting.
-let authedApi: RpcPromise<AuthedApi> = api.authenticate(apiToken);
+let authedApi: RpcPromise<AuthedApi> = api.authenticate(apiToken)
 
 // Make a pipelined call to get the user's ID. Again, don't await it.
-let userIdPromise: RpcPromise<number> = authedApi.getUserId();
+let userIdPromise: RpcPromise<number> = authedApi.getUserId()
 
 // Make another pipelined call to fetch the user's public profile, based on
 // the user ID. Notice how we can use `RpcPromise<T>` in the parameters of a
 // call anywhere where T is expected. The promise will be replaced with its
 // resolution before delivering the call.
-let profilePromise = api.getUserProfile(userIdPromise);
+let profilePromise = api.getUserProfile(userIdPromise)
 
 // Make another call to get the user's friends.
-let friendsPromise = authedApi.getFriendIds();
+let friendsPromise = authedApi.getFriendIds()
 
 // That only returns an array of user IDs, but we want all the profile info
 // too, so use the magic .map() function to get them, too! Still one round
 // trip.
 let friendProfilesPromise = friendsPromise.map((id: RpcPromise<number>) => {
-  return { id, profile: api.getUserProfile(id) };
-});
+  return { id, profile: api.getUserProfile(id) }
+})
 
 // Now await the promises. The batch is sent at this point. It's important
 // to simultaneously await all promises for which you actually want the
 // result. If you don't actually await a promise before the batch is sent,
 // the system detects this and doesn't actually ask the server to send the
 // return value back!
-let [profile, friendProfiles] =
-    await Promise.all([profilePromise, friendProfilesPromise]);
+let [profile, friendProfiles] = await Promise.all([profilePromise, friendProfilesPromise])
 
-console.log(`Hello, ${profile.name}!`);
+console.log(`Hello, ${profile.name}!`)
 
 // Note that at this point, the `api` and `authedApi` stubs no longer work,
 // because the batch is done. You must start a new batch.
@@ -188,7 +205,7 @@ sequenceDiagram
 
     Note right of CLI: 2. Pipelined Operation
     CLI->>MgmtScope: applyAction(...)
-    
+
     Note over Public, MgmtScope: Request is pipelined immediately
 
     MgmtScope->>Private: applyAction(...) (Run Plugins)
@@ -216,7 +233,7 @@ sequenceDiagram
     IBGPScope-->>BGP: Returns PeerInfo
 
     Note over BGP, Private: Session Established (Updates can now flow)
-    
+
     Note right of BGP: 3. Route Propagation
     BGP->>IBGPScope: update(...)
     IBGPScope->>Private: applyAction(...) (Run Plugins)
@@ -243,7 +260,7 @@ sequenceDiagram
     Note right of BGP: 1. Inbound Update
     BGP->>IBGPScope: update(routes)
     IBGPScope->>API: applyAction({ action: 'updateRoutes', ... })
-    
+
     Note over API, Plugin: Pipeline Execution
     API->>Plugin: Process Action
     Plugin->>State: Update Global Route Table
@@ -271,12 +288,10 @@ sequenceDiagram
     Note over API, LocalPlugin: 2. Update Local State
     API->>LocalPlugin: Process Action
     LocalPlugin->>LocalPlugin: Add to Local Route Table
-    
+
     Note over API, BGPPlugin: 3. Propagate Change
     API->>BGPPlugin: Process Action
     BGPPlugin->>BGPPlugin: Detect New Local Route
     BGPPlugin->>Peer: callback.update(newRoutes)
     Note right of BGPPlugin: Sent via callback<br/>stored at open()
 ```
-
-
