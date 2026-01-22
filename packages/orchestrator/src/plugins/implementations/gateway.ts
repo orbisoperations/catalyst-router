@@ -1,42 +1,128 @@
+/**
+ * GatewayIntegrationPlugin - Configures external GraphQL gateway with route schemas.
+ *
+ * ARCHITECTURE: Event-driven with incremental updates.
+ * Maintains internal service list, updates from events directly (no stateProvider needed).
+ * Listens to ALL route events (both local AND peer) to enable cross-node gateway federation.
+ */
 
 import { BasePlugin } from '../base.js';
 import { PluginContext, PluginResult } from '../types.js';
-import { OrchestratorConfig } from '../../config.js';
+import { eventBus, RouteEvent } from '../../events/index.js';
+
+type RouteEventHandler = (event: RouteEvent) => void;
+
+interface ServiceConfig {
+    name: string;
+    url: string;
+    token?: string;
+}
 
 export class GatewayIntegrationPlugin extends BasePlugin {
     name = 'GatewayIntegrationPlugin';
     private endpoint: string;
     private triggers: string[];
+    private isSubscribed = false;
+    private boundHandler?: RouteEventHandler;
+    // Internal service list - updated incrementally from events
+    private services = new Map<string, ServiceConfig>();
 
     constructor(
-        config: OrchestratorConfig['gqlGatewayConfig'],
+        config: { endpoint: string },
         options: { triggerOnResources?: string[] } = {}
     ) {
         super();
         if (!config) {
-            throw new Error('GatewayIntegrationPlugin requires gqlGatewayConfig');
+            throw new Error('GatewayIntegrationPlugin requires config with endpoint');
         }
         this.endpoint = config.endpoint;
         this.triggers = options.triggerOnResources || [];
     }
 
+    private isGraphQL(protocol: string): boolean {
+        return protocol === 'http:graphql' || protocol === 'http:gql';
+    }
+
+    /**
+     * Start listening for route events and updating the gateway.
+     */
+    start(): void {
+        if (this.isSubscribed) return;
+
+        this.boundHandler = (event: RouteEvent) => this.handleRouteEvent(event);
+        eventBus.onAllRouteEvents(this.boundHandler);
+        this.isSubscribed = true;
+        console.log(`[${this.name}] Subscribed to route events (event-driven mode)`);
+    }
+
+    /**
+     * Stop listening for route events.
+     */
+    stop(): void {
+        if (this.boundHandler) {
+            eventBus.offAllRouteEvents(this.boundHandler);
+            this.boundHandler = undefined;
+        }
+        this.isSubscribed = false;
+        this.services.clear();
+    }
+
+    private handleRouteEvent(event: RouteEvent): void {
+        const { route } = event;
+
+        // Only track GraphQL services
+        if (!this.isGraphQL(route.protocol)) return;
+        if (!route.endpoint) return;
+
+        // Update internal service list from event data
+        if (event.type === 'route:created' || event.type === 'route:updated') {
+            this.services.set(route.id, {
+                name: route.name,
+                url: route.endpoint,
+                token: undefined
+            });
+        } else if (event.type === 'route:deleted') {
+            this.services.delete(route.id);
+        }
+
+        // Send updated config to gateway
+        this.sendUpdate();
+    }
+
+    private sendUpdate(): void {
+        const services = [...this.services.values()];
+        console.log(`[${this.name}] Configuring Gateway at ${this.endpoint} with ${services.length} services`);
+
+        this.sendConfigToGateway({ services }).catch(err => {
+            console.error(`[${this.name}] Gateway update error:`, err);
+        });
+    }
+
+    /**
+     * Action-triggered mode (backward compatibility).
+     * Only used when not in event-driven mode (start() not called).
+     */
     async apply(context: PluginContext): Promise<PluginResult> {
         const { action, state } = context;
+
+        // If using event-driven mode, skip action-triggered behavior
+        if (this.isSubscribed) {
+            return { success: true, ctx: context };
+        }
 
         // Check if action matches any trigger
         if (!this.triggers.includes(action.resource)) {
             return { success: true, ctx: context };
         }
 
-        console.log(`[GatewayIntegrationPlugin] Configuring Gateway at ${this.endpoint}`);
+        console.log(`[${this.name}] Configuring Gateway at ${this.endpoint} (action-triggered)`);
 
-        // 1. Map RouteTable to GatewayConfig
-        // We assume Routes in RouteTable are the services we want to register.
+        // Map RouteTable to GatewayConfig
         // We use getAllRoutes() to aggregate proxied, internal, external.
         const services = state.getAllRoutes()
             .map(r => r.service) // Extract ServiceDefinition
             // Filter strictly for GraphQL protocols.
-            .filter(s => s.endpoint && (s.protocol === 'http:graphql' || s.protocol === 'http:gql'))
+            .filter(s => s.endpoint && this.isGraphQL(s.protocol))
             .map(s => ({
                 name: s.name,
                 url: s.endpoint!,
@@ -63,26 +149,19 @@ export class GatewayIntegrationPlugin extends BasePlugin {
         return { success: true, ctx: context };
     }
 
-    // Method to send config
-    // Method to send config
+    // Method to send config to gateway via WebSocket RPC
     async sendConfigToGateway(config: any) {
-        // Dynamic import to avoid strict dependency if not configured? No, we have it in package.json
+        // Dynamic import to avoid strict dependency if not configured
         const { newWebSocketRpcSession } = await import('capnweb');
-        // Import type only for compilation safety is done at top level usually, 
-        // but here we are in a monorepo so we can assume we can import the type.
 
-        console.log(`[GatewayIntegrationPlugin] Connecting to ${this.endpoint}...`);
+        console.log(`[${this.name}] Connecting to ${this.endpoint}...`);
 
         try {
             // newWebSocketRpcSession returns a stub (Proxy) for the remote service
-            // We can pass the generic type if we had it, but for dynamic/loose typing here:
             const gateway = newWebSocketRpcSession(this.endpoint);
 
             // Invoke the method. newWebSocketRpcSession manages the connection.
-            // Note: It might not throw on connection failure immediately until a call is made?
-            // Or typically it tries to connect.
-
-            // @ts-ignore - Dynamic usage or loose typing to match remote method
+            // @ts-expect-error - Dynamic usage or loose typing to match remote method
             const resultPromise = gateway.updateConfig(config);
             const result = await resultPromise;
 
@@ -90,14 +169,14 @@ export class GatewayIntegrationPlugin extends BasePlugin {
                 throw new Error(result.error);
             }
 
-            console.log('[GatewayIntegrationPlugin] Gateway configuration updated successfully.');
+            console.log(`[${this.name}] Gateway configuration updated successfully.`);
 
-            // The session might stay open. We don't have an explicit close on the stub itself easily 
+            // The session might stay open. We don't have an explicit close on the stub itself
             // without accessing hidden session state or if capnweb exports session helper.
             // For now, let it be cleaned up or persisted.
 
         } catch (error: any) {
-            console.error('[GatewayIntegrationPlugin] RPC Error:', error);
+            console.error(`[${this.name}] RPC Error:`, error);
             throw error;
         }
     }
