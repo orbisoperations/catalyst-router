@@ -1,12 +1,14 @@
-import { RpcTarget } from 'capnweb'
+import { z } from 'zod'
 import { type Action } from './schema.js'
 import type { PeerInfo } from './routing/state.js'
 import { newRouteTable, type RouteTable } from './routing/state.js'
+import { UpdateMessageSchema } from './routing/internal/actions.js'
 import {
     newHttpBatchRpcSession,
     newWebSocketRpcSession,
     type RpcCompatible,
     type RpcStub,
+    RpcTarget,
 } from 'capnweb'
 // Interface for classes that need to emit actions
 export interface PublicApi {
@@ -27,6 +29,7 @@ export interface PeerManager {
 export interface PeerConnection {
     open(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
     close(peer: PeerInfo, code: number, reason?: string): Promise<{ success: true } | { success: false; error: string }>
+    update(peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
@@ -174,7 +177,7 @@ export class CatalystNodeBus extends RpcTarget {
                     state = {
                         ...state,
                         internal: {
-                            routes: state.internal.routes,
+                            routes: state.internal.routes.filter(r => r.peerName !== action.data.peerInfo.name),
                             peers: peerList.filter(p => p.name !== action.data.peerInfo.name)
                         }
                     }
@@ -210,6 +213,62 @@ export class CatalystNodeBus extends RpcTarget {
                             ...state.internal,
                             peers: state.internal.peers.map(p => p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p)
                         }
+                    }
+                }
+                break
+            }
+            case 'local:route:create': {
+                // Check if route already exists
+                if (state.local.routes.find(r => r.name === action.data.name)) {
+                    return { success: false, error: 'Route already exists' }
+                }
+                state = {
+                    ...state,
+                    local: {
+                        ...state.local,
+                        routes: [...state.local.routes, action.data]
+                    }
+                }
+                break
+            }
+            case 'local:route:delete': {
+                // Check if route exists
+                if (!state.local.routes.find(r => r.name === action.data.name)) {
+                    return { success: false, error: 'Route not found' }
+                }
+                state = {
+                    ...state,
+                    local: {
+                        ...state.local,
+                        routes: state.local.routes.filter(r => r.name !== action.data.name)
+                    }
+                }
+                break
+            }
+            case 'internal:protocol:update': {
+                const peerInfo = action.data.peerInfo
+                let currentInternalRoutes = [...state.internal.routes]
+
+                for (const update of action.data.update.updates) {
+                    if (update.action === 'add') {
+                        // Add if not exists (keyed by route name + peer name)
+
+                        const routeToAdd = { ...update.route, peer: peerInfo, peerName: peerInfo.name }
+
+                        // Remove existing if any (upsert)
+                        currentInternalRoutes = currentInternalRoutes.filter(r => !(r.name === update.route.name && r.peerName === peerInfo.name))
+                        currentInternalRoutes.push(routeToAdd)
+
+                    } else if (update.action === 'remove') {
+                        currentInternalRoutes = currentInternalRoutes.filter(r => !(r.name === update.route.name && r.peerName === peerInfo.name))
+                    }
+                }
+
+                state = {
+                    ...state,
+                    internal: {
+                        ...state.internal,
+                        routes: currentInternalRoutes
                     }
                 }
                 break
@@ -256,6 +315,32 @@ export class CatalystNodeBus extends RpcTarget {
                 } catch (e) {
                     // Connection failed, leave as initializing (or could transition to error state)
                     console.error("Failed to open connection", e)
+                }
+                break
+            }
+            case 'internal:protocol:connected': {
+                // Sync existing local routes to the new peer
+                for (const route of _state.local.routes) {
+                    try {
+                        const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
+                        if (stub) {
+                            const connectionResult = await stub.getPeerConnection("secret")
+                            if (connectionResult.success) {
+                                await connectionResult.connection.update(
+                                    {
+                                        name: "myself", // TODO: Configured local name
+                                        endpoint: "http://localhost:3000",
+                                        domains: []
+                                    },
+                                    {
+                                        updates: [{ action: 'add', route }]
+                                    }
+                                )
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Failed to sync route to new peer", e)
+                    }
                 }
                 break
             }
@@ -331,6 +416,15 @@ export class CatalystNodeBus extends RpcTarget {
                             return this.dispatch({
                                 action: 'internal:protocol:close',
                                 data: { peerInfo: peer, code, reason }
+                            })
+                        },
+                        update: async (peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>) => {
+                            return this.dispatch({
+                                action: 'internal:protocol:update',
+                                data: {
+                                    peerInfo: peer,
+                                    update: update
+                                }
                             })
                         }
                     }

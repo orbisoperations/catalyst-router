@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { localPeerCreateMessageSchema, localPeerUpdateMessageSchema, localPeerDeleteMessageSchema } from './routing/local/actions.js';
+import { localPeerCreateMessageSchema, localPeerUpdateMessageSchema, localPeerDeleteMessageSchema, localRouteCreateMessageSchema, localRouteDeleteMessageSchema } from './routing/local/actions.js';
 import { InternalProtocolOpenMessageSchema, InternalProtocolUpdateMessageSchema, InternalProtocolCloseMessageSchema, InternalProtocolConnectedMessageSchema } from './routing/internal/actions.js';
 
 /**
@@ -9,6 +9,8 @@ export const ActionSchema = z.discriminatedUnion('action', [
     localPeerCreateMessageSchema,
     localPeerUpdateMessageSchema,
     localPeerDeleteMessageSchema,
+    localRouteCreateMessageSchema,
+    localRouteDeleteMessageSchema,
     InternalProtocolOpenMessageSchema,
     InternalProtocolUpdateMessageSchema,
     InternalProtocolCloseMessageSchema,
