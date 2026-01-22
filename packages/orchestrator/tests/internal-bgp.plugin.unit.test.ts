@@ -12,17 +12,21 @@ describe('InternalBGPPlugin Unit Tests', () => {
         const route = {
             name: 'proxied-service',
             endpoint: 'http://remote:8080/rpc',
-            protocol: 'tcp:graphql'
+            protocol: 'tcp:graphql' as any
         };
 
         const context: PluginContext = {
             action: {
-                resource: 'internalBGPRoute',
+                resource: 'internalBGP',
                 resourceAction: 'update',
                 data: {
-                    type: 'add',
-                    route,
-                    sourcePeerId: 'peer-b'
+                    peerInfo: { id: 'peer-b', as: 100, endpoint: 'http://peer-b:3000/rpc', domains: [] },
+                    updateMessages: [
+                        {
+                            type: 'add',
+                            route
+                        }
+                    ]
                 }
             },
             state: initialState,
@@ -55,11 +59,16 @@ describe('InternalBGPPlugin Unit Tests', () => {
 
         const context: PluginContext = {
             action: {
-                resource: 'internalBGPRoute',
+                resource: 'internalBGP',
                 resourceAction: 'update',
                 data: {
-                    type: 'remove',
-                    routeId
+                    peerInfo: { id: 'peer-b', as: 100, endpoint: 'http://peer-b:3000/rpc', domains: [] },
+                    updateMessages: [
+                        {
+                            type: 'remove',
+                            routeId
+                        }
+                    ]
                 }
             },
             state: seedState,
@@ -98,7 +107,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
                 data: {
                     name: 'local-service',
                     endpoint: 'http://localhost:8080',
-                    protocol: 'tcp'
+                    protocol: 'tcp' as any
                 }
             } as any,
             state: stateWithPeer,
@@ -137,11 +146,10 @@ describe('InternalBGPPlugin Unit Tests', () => {
 
         const context: PluginContext = {
             action: {
-                resource: 'internalPeerSession',
+                resource: 'internalBGP',
                 resourceAction: 'close',
                 data: {
-                    peerId,
-                    skipNotify: true // Skip network call in unit test
+                    peerInfo: { id: peerId, as: 100, endpoint: 'http://peer-b:3000/rpc' }
                 }
             },
             state: seededState,
@@ -182,11 +190,10 @@ describe('InternalBGPPlugin Unit Tests', () => {
 
         const context: PluginContext = {
             action: {
-                resource: 'internalPeerSession',
+                resource: 'internalBGP',
                 resourceAction: 'open',
                 data: {
-                    peerInfo,
-                    direction: 'inbound'
+                    peerInfo
                 }
             },
             state,

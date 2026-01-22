@@ -10,12 +10,10 @@ describe('Internal Peering Integration', () => {
         const plugin = new InternalBGPPlugin();
         const context: PluginContext = {
             action: {
-                resource: 'internalPeerSession',
+                resource: 'internalBGP',
                 resourceAction: 'open',
                 data: {
-                    peerInfo: { id: 'remote-1', as: 200 },
-                    clientStub: {},
-                    direction: 'inbound'
+                    peerInfo: { id: 'remote-1', as: 200, endpoint: 'http://remote-1:3000/rpc', domains: [] }
                 }
             },
             state: new RouteTable(),
@@ -53,9 +51,11 @@ describe('Internal Peering Integration', () => {
 
         const context: PluginContext = {
             action: {
-                resource: 'internalPeerSession',
+                resource: 'internalBGP',
                 resourceAction: 'close',
-                data: { peerId: 'remote-exit' }
+                data: {
+                    peerInfo: { id: 'remote-exit', as: 300, endpoint: 'ws://host' }
+                }
             },
             state,
             results: [],
