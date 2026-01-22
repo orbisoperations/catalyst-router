@@ -20,7 +20,7 @@ import {
     AuthorizedPeer,
     PublicIBGPScope
 } from '../../rpc/schema/peering.js';
-import { LocalRoutingCreateActionSchema, LocalRoutingDeleteActionSchema } from './local-routing.js';
+import { LocalRoutingCreateActionSchema, LocalRoutingDeleteActionSchema, LocalRoutingUpdateActionSchema } from './local-routing.js';
 
 export class InternalBGPPlugin extends BasePlugin {
     name = 'InternalBGPPlugin';
@@ -58,7 +58,7 @@ export class InternalBGPPlugin extends BasePlugin {
                 break;
 
             case 'localRoute':
-                if (action.resourceAction === 'create' || action.resourceAction === 'delete') {
+                if (action.resourceAction === 'create' || action.resourceAction === 'delete' || action.resourceAction === 'update') {
                     return this.broadcastRouteUpdate(context);
                 }
                 break;
@@ -478,6 +478,12 @@ export class InternalBGPPlugin extends BasePlugin {
         if (action.resourceAction === 'create') {
             const result = LocalRoutingCreateActionSchema.safeParse(action);
             if (!result.success) return { success: true, ctx: context };
+            updateType = 'add';
+            routeData = result.data.data;
+        } else if (action.resourceAction === 'update') {
+            const result = LocalRoutingUpdateActionSchema.safeParse(action);
+            if (!result.success) return { success: true, ctx: context };
+            // BGP Treat update as 'add' (upsert)
             updateType = 'add';
             routeData = result.data.data;
         } else {
