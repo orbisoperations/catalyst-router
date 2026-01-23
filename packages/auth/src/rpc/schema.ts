@@ -139,3 +139,48 @@ export const GetCurrentKeyIdResponseSchema = z.discriminatedUnion('success', [
 ])
 
 export type GetCurrentKeyIdResponse = z.infer<typeof GetCurrentKeyIdResponseSchema>
+
+/**
+ * CreateFirstAdmin Request/Response schemas
+ *
+ * Bootstrap flow: creates the first admin user using a one-time bootstrap token.
+ * The token is generated on first deployment and must be provided to create the admin.
+ */
+export const CreateFirstAdminRequestSchema = z.object({
+  /** One-time bootstrap token */
+  token: z.string().min(1, 'Bootstrap token is required'),
+  /** Admin email address */
+  email: z.string().email('Valid email is required'),
+  /** Admin password (will be hashed with Argon2id) */
+  password: z.string().min(12, 'Password must be at least 12 characters'),
+})
+
+export type CreateFirstAdminRequest = z.infer<typeof CreateFirstAdminRequestSchema>
+
+export const CreateFirstAdminResponseSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    userId: z.string(),
+    token: z.string(),
+    expiresAt: z.string(), // ISO date string
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+])
+
+export type CreateFirstAdminResponse = z.infer<typeof CreateFirstAdminResponseSchema>
+
+/**
+ * GetBootstrapStatus Response schema
+ *
+ * Returns whether bootstrap has been initialized and/or used.
+ * Does not reveal the token itself.
+ */
+export const GetBootstrapStatusResponseSchema = z.object({
+  initialized: z.boolean(),
+  used: z.boolean(),
+})
+
+export type GetBootstrapStatusResponse = z.infer<typeof GetBootstrapStatusResponseSchema>
