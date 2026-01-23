@@ -1,16 +1,17 @@
 
-import { JSONWebKeySet, KeyLike } from 'jose';
+import type { JSONWebKeySet } from 'jose';
+import type {
+    KeyPair
+} from './keys.js';
 import {
-    KeyPair,
     loadOrGenerateKeyPair,
     generateKeyPair,
     saveKeyPair,
-    loadKeyPair,
-    getJwks,
     getPublicKeyJwk
 } from './keys.js';
-import { signToken, verifyToken, SignOptions } from './jwt.js';
-import { readdirSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
+import type { SignOptions } from './jwt.js';
+import { signToken, verifyToken } from './jwt.js';
+import { readdirSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
 export abstract class KeyManager {
@@ -41,7 +42,7 @@ export abstract class KeyManager {
     /**
      * Verifies a token against managed keys.
      */
-    abstract verify(token: string): Promise<{ valid: boolean; payload?: any; error?: string }>;
+    abstract verify(token: string): Promise<{ valid: boolean; payload?: unknown; error?: string }>;
 }
 
 export class FileSystemKeyManager extends KeyManager {
@@ -86,7 +87,11 @@ export class FileSystemKeyManager extends KeyManager {
                     const expiresAt = parseInt(match[1], 10);
                     if (Date.now() > expiresAt) {
                         // Clean up expired key
-                        try { unlinkSync(file); } catch { }
+                        try {
+                            unlinkSync(file);
+                        } catch {
+                            // Ignore cleanup errors
+                        }
                         continue;
                     }
 
@@ -100,15 +105,15 @@ export class FileSystemKeyManager extends KeyManager {
                     // Reuse importKeyPair from keys.ts if exported valid format
                     const { importKeyPair } = await import('./keys.js');
                     // We need to cast or trust the persistent format matches
-                    const key = await importKeyPair(parsed as any);
+                    const key = await importKeyPair(parsed as unknown as any);
 
                     this.previousKeys.push({ key, expiresAt });
 
-                } catch (e) {
-                    console.warn(`Failed to load archived key ${file}:`, e);
+                } catch (_e) {
+                    console.warn(`Failed to load archived key ${file}:`, _e);
                 }
             }
-        } catch (e) {
+        } catch (_e) {
             // Archive dir might be empty or unreadable
         }
     }
@@ -126,10 +131,7 @@ export class FileSystemKeyManager extends KeyManager {
             const expiresAt = Date.now() + gracePeriodMs;
             const archivePath = join(this.archiveDir, `keypair.${expiresAt}.json`);
 
-            // Move the current file to archive path
-            // We need to verify the current file on disk corresponds to oldKey... 
             // safest is to just write oldKey to archivePath
-            const { saveKeyPair } = await import('./keys.js');
             // We can't use saveKeyPair easily with custom path unless we modify it or implement custom write
             // Implementing custom write here to keep keys.ts simple
             const { exportKeyPair } = await import('./keys.js');
@@ -176,7 +178,7 @@ export class FileSystemKeyManager extends KeyManager {
         return { keys };
     }
 
-    async verify(token: string): Promise<{ valid: boolean; payload?: any; error?: string }> {
+    async verify(token: string): Promise<{ valid: boolean; payload?: unknown; error?: string }> {
         if (!this.currentKey) await this.init();
 
         // Try current key

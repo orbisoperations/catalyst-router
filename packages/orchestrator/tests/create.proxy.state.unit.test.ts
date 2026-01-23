@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { RouteTable } from '../src/state/route-table.js';
-import { ServiceDefinition } from '../src/rpc/schema/index.js';
+import type { ServiceDefinition } from '../src/rpc/schema/index.js';
 
 describe('Proxy State - Create', () => {
     const service: ServiceDefinition = {

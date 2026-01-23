@@ -1,19 +1,23 @@
 
 import { RpcTarget } from 'capnweb';
-import {
+import type {
     Action,
     ListLocalRoutesResult,
     ListMetricsResult,
     ApplyActionResult
 } from './schema/index.js';
-import { GlobalRouteTable, RouteTable } from '../state/route-table.js';
+import type { RouteTable } from '../state/route-table.js';
+import { GlobalRouteTable } from '../state/route-table.js';
+import type { PluginInterface } from '../plugins/types.js';
 import { PluginPipeline } from '../plugins/pipeline.js';
 import { LoggerPlugin } from '../plugins/implementations/logger.js';
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js';
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js';
 import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js';
-import { AuthorizedPeer, IBGPProtocolResource, IBGPProtocolResourceAction, ListPeersResult, PeerInfo, UpdateMessage, IBGPScope, IBGPConfigResource, IBGPConfigResourceAction } from './schema/peering.js';
-import { getConfig, OrchestratorConfig } from '../config.js';
+import type { ListPeersResult, PeerInfo, UpdateMessage, IBGPScope } from './schema/peering.js';
+import { IBGPProtocolResource, IBGPProtocolResourceAction, IBGPConfigResource, IBGPConfigResourceAction } from './schema/peering.js';
+import type { OrchestratorConfig } from '../config.js';
+import { getConfig } from '../config.js';
 import { getHttpPeerSession, getWebSocketPeerSession } from './client.js';
 
 export class OrchestratorRpcServer extends RpcTarget {
@@ -29,7 +33,7 @@ export class OrchestratorRpcServer extends RpcTarget {
         this.state = GlobalRouteTable;
 
         // Initialize Plugins
-        const plugins: any[] = [
+        const plugins: PluginInterface[] = [
             new LoggerPlugin(),
         ];
 
@@ -151,7 +155,7 @@ export class OrchestratorRpcServer extends RpcTarget {
                     resource: IBGPProtocolResource.value,
                     resourceAction: IBGPProtocolResourceAction.enum.close,
                     data: {
-                        peerInfo: peerInfo as any,
+                        peerInfo: peerInfo as unknown as PeerInfo,
                     }
                 };
 
@@ -160,7 +164,7 @@ export class OrchestratorRpcServer extends RpcTarget {
         };
     }
 
-    private actionLock: Promise<any> = Promise.resolve();
+    private actionLock: Promise<unknown> = Promise.resolve();
 
     async applyAction(action: Action): Promise<ApplyActionResult> {
         const resultPromise = this.actionLock.then(async () => {
@@ -173,7 +177,7 @@ export class OrchestratorRpcServer extends RpcTarget {
                 });
 
                 if (!result.success) {
-                    return { success: false, error: result.error?.message || 'Unknown error' } as any;
+                    return { success: false, error: result.error?.message || 'Unknown error' } as ApplyActionResult;
                 }
 
                 // Update local state with the state returned from the pipeline
@@ -182,13 +186,16 @@ export class OrchestratorRpcServer extends RpcTarget {
                 return {
                     success: true,
                     results: result.ctx.results
-                } as any;
-            } catch (e: any) {
-                return { success: false, error: e.message } as any;
+                } as ApplyActionResult;
+            } catch (e: unknown) {
+                const message = e instanceof Error ? e.message : String(e);
+                return { success: false, error: message } as ApplyActionResult;
             }
         });
 
-        this.actionLock = resultPromise.catch(() => { }); // Continue chain even on error
+        this.actionLock = resultPromise.catch(() => {
+            // Ignore lock errors to allow subsequent actions
+        }); // Continue chain even on error
         return resultPromise;
     }
 

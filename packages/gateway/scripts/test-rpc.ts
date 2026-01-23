@@ -9,7 +9,7 @@ async function main() {
 
     await new Promise<void>((resolve, reject) => {
         ws.addEventListener('open', () => resolve());
-        ws.addEventListener('error', (event) => reject(new Error('WebSocket connection failed')));
+        ws.addEventListener('error', (_event) => reject(new Error('WebSocket connection failed')));
     });
 
     console.log('Connected. Starting RPC session...');
@@ -18,7 +18,7 @@ async function main() {
     // We get back a stub for the remote main (the GatewayRpcServer).
     // We cast it to 'any' because we don't have the shared type definition file setup for the client script perfectly here,
     // but we know it has updateConfig.
-    const gateway = newWebSocketRpcSession(ws as any) as any;
+    const gateway = newWebSocketRpcSession(ws as unknown as WebSocket) as any;
 
     console.log('Sending configuration update...');
 

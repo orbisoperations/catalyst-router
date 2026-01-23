@@ -1,6 +1,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { GenericContainer, Wait, StartedTestContainer } from 'testcontainers';
+import type { StartedTestContainer } from 'testcontainers';
+import { GenericContainer, Wait } from 'testcontainers';
 import { resolve } from 'path';
 
 // Increase timeout for docker build
@@ -58,11 +59,11 @@ describe('Auth Service Container', () => {
 
         // Bun has global WebSocket
         const client = newWebSocketRpcSession(url, {
-            WebSocket: WebSocket as any
+            WebSocket: WebSocket as unknown as new (url: string) => WebSocket
         });
 
         // client IS the service (remote capability)
-        const service = client as any;
+        const service = client as unknown as any;
 
         // 1. Get JWKS
         const jwks = await service.getJwks();

@@ -10,7 +10,7 @@ export class CatalystClient {
 }
 
 export async function runCli() {
-    const client = new CatalystClient();
+    new CatalystClient();
     // const rpc = await client.connect();
     // const peers = await rpc.getPeers();
     // console.log(peers);

@@ -1,6 +1,6 @@
 
 import { BasePlugin } from '../base.js';
-import { PluginContext, PluginResult } from '../types.js';
+import type { PluginContext, PluginResult } from '../types.js';
 import { ServiceDefinitionSchema } from '../../rpc/schema/direct.js';
 import { z } from 'zod';
 

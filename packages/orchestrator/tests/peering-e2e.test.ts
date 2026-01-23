@@ -1,6 +1,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { GenericContainer, Wait, StartedTestContainer, Network, StartedNetwork } from 'testcontainers';
+import type { StartedTestContainer, StartedNetwork } from 'testcontainers';
+import { GenericContainer, Wait, Network } from 'testcontainers';
 import path from 'path';
 import { newHttpBatchRpcSession } from 'capnweb';
 import type { PublicApi } from '../../cli/src/client.js';

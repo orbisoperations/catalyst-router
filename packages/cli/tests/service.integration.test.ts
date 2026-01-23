@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { GenericContainer, Network, Wait, StartedTestContainer, StartedNetwork } from 'testcontainers';
-import { join, resolve } from 'path';
+import type { StartedTestContainer, StartedNetwork } from 'testcontainers';
+import { GenericContainer, Network, Wait } from 'testcontainers';
+import { resolve } from 'path';
 
 // Increase timeout for builds
 const TIMEOUT = 180_000;
@@ -113,6 +114,7 @@ describe('CLI E2E with Containers', () => {
             .start();
 
         gatewayPort = gatewayContainer.getMappedPort(4000);
+        console.log(`Gateway port: ${gatewayPort}`);
 
         orchestratorContainer = await new GenericContainer('orchestrator-service:test')
             .withExposedPorts(3000)
@@ -186,7 +188,7 @@ describe('CLI E2E with Containers', () => {
 
         // 6. Verify Metrics
         console.log('--- Step 6: Verify Metrics ---');
-        const metricsRes = await runCliExpectSuccess(['metrics']);
+        const _metricsRes = await runCliExpectSuccess(['metrics']);
         // Metrics output should show something
     }, 30_000);
 });

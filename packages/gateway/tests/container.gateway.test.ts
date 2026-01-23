@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { GenericContainer, Wait, StartedTestContainer, Network, StartedNetwork } from 'testcontainers';
+import type { StartedTestContainer, StartedNetwork } from 'testcontainers';
+import { GenericContainer, Wait, Network } from 'testcontainers';
 import path from 'path';
 import { newWebSocketRpcSession } from 'capnweb';
 
@@ -13,7 +14,7 @@ describe('Gateway Container Integration', () => {
 
     // Gateway Access
     let gatewayPort: number;
-    let rpcClient: any;
+    let rpcClient: unknown;
     let ws: WebSocket;
 
     beforeAll(async () => {
@@ -85,9 +86,9 @@ describe('Gateway Container Integration', () => {
         ws = new WebSocket(url);
         await new Promise<void>((resolve, reject) => {
             ws.addEventListener('open', () => resolve());
-            ws.addEventListener('error', (e) => reject(e));
+            ws.addEventListener('error', (_e) => reject(_e));
         });
-        rpcClient = newWebSocketRpcSession(ws as any);
+        rpcClient = newWebSocketRpcSession(ws as unknown as WebSocket);
         return rpcClient;
     };
 
@@ -120,7 +121,7 @@ describe('Gateway Container Integration', () => {
             ]
         };
 
-        const update = await client.updateConfig(config);
+        const update = await (client as any).updateConfig(config);
         expect(update).toEqual({ success: true });
 
         // Query Books
@@ -142,7 +143,7 @@ describe('Gateway Container Integration', () => {
             ]
         };
 
-        const update = await client.updateConfig(config);
+        const update = await (client as any).updateConfig(config);
         expect(update).toEqual({ success: true });
 
         // Query Both
@@ -166,7 +167,7 @@ describe('Gateway Container Integration', () => {
         // But let's try.
         const config = { services: [] };
 
-        const update = await client.updateConfig(config);
+        const update = await (client as any).updateConfig(config);
 
         // If the implementation allows clearing the schema (no services), it sets default schema or stays as is?
         // Checking `GatewayGraphqlServer.reload`:

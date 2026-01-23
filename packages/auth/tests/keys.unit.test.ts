@@ -1,18 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { existsSync, rmSync, mkdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { describe, it, expect } from 'bun:test';
 import * as jose from 'jose';
 import {
     generateKeyPair,
     exportKeyPair,
     importKeyPair,
-    saveKeyPair,
-    loadKeyPair,
-    loadOrGenerateKeyPair,
     getPublicKeyJwk,
-    getJwks,
-    type KeyPair,
-    type SerializedKeyPair
+    getJwks
 } from '../src/keys.js';
 
 describe('Keys Unit Tests', () => {

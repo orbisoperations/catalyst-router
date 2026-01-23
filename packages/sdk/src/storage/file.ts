@@ -1,6 +1,6 @@
-import { readFile, writeFile, mkdir, readdir, stat } from 'fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import { join, dirname, relative } from 'path';
-import { Storage } from './index';
+import type { Storage } from './index.js';
 
 export class FileStorage implements Storage {
     private rootDir: string;
@@ -13,7 +13,7 @@ export class FileStorage implements Storage {
         try {
             const filePath = join(this.rootDir, key);
             return await readFile(filePath);
-        } catch (e) {
+        } catch {
             return undefined;
         }
     }
@@ -40,7 +40,7 @@ export class FileStorage implements Storage {
                         }
                     }
                 }
-            } catch (e) {
+            } catch {
                 // ignore if dir doesn't exist
             }
         }

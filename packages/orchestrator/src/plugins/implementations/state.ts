@@ -1,6 +1,6 @@
 
 import { BasePlugin } from '../base.js';
-import { PluginContext, PluginResult } from '../types.js';
+import type { PluginContext, PluginResult } from '../types.js';
 
 export class StatePersistencePlugin extends BasePlugin {
     name = 'StatePersistencePlugin';

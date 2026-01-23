@@ -2,7 +2,8 @@
 import { describe, it, expect, mock } from 'bun:test';
 import { PluginPipeline } from '../src/plugins/pipeline.js';
 import { BasePlugin } from '../src/plugins/base.js';
-import { PluginContext, PluginResult, ActionSchema, AuthContextSchema } from '../src/plugins/types.js';
+import type { PluginContext, PluginResult} from '../src/plugins/types.js';
+import { ActionSchema, AuthContextSchema } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
 
 // Mock Implementation for testing

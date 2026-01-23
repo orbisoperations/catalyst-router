@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import { createYoga, createSchema, YogaInitialContext } from 'graphql-yoga';
+import { createYoga, createSchema } from 'graphql-yoga';
 import { stitchSchemas } from '@graphql-tools/stitch';
 
-import { AsyncExecutor, Executor } from '@graphql-tools/utils';
-import { buildSchema, parse, print, GraphQLError, getIntrospectionQuery, buildClientSchema } from 'graphql';
-import { GatewayConfig } from '../rpc/server.js';
+import type { AsyncExecutor, Executor } from '@graphql-tools/utils';
+import { parse, print, getIntrospectionQuery, buildClientSchema } from 'graphql';
+import type { GatewayConfig } from '../rpc/server.js';
 
 export class GatewayGraphqlServer {
     private yoga: ReturnType<typeof createYoga> | null = null;
@@ -55,31 +55,33 @@ export class GatewayGraphqlServer {
             this.createYogaInstance({ schema: stitchedSchema });
             console.log('Gateway reloaded successfully.');
             return { success: true };
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to reload gateway:', error);
+            const message = error instanceof Error ? error.message : String(error);
             // We do NOT update the yoga instance here, effectively keeping the last known good config.
-            return { success: false, error: error.message };
+            return { success: false, error: message };
         }
     }
 
-    fetch(request: Request, env: any, ctx: any) {
+    fetch(request: Request, env: unknown, ctx: unknown) {
         if (!this.yoga) {
             return new Response('Gateway not initialized', { status: 503 });
         }
-        return this.yoga.fetch(request, env, ctx);
+        return this.yoga.fetch(request, env as any, ctx as any);
     }
 
-    private createYogaInstance(schemaOrConfig: any) {
+    private createYogaInstance(schemaOrConfig: unknown) {
         let schema;
-        if (schemaOrConfig.schema) {
-            schema = schemaOrConfig.schema;
-        } else if (Array.isArray(schemaOrConfig)) {
+        const config = schemaOrConfig as { schema?: any } | any[];
+        if (config && 'schema' in config && config.schema) {
+            schema = config.schema;
+        } else if (Array.isArray(config)) {
             schema = createSchema({
-                typeDefs: schemaOrConfig.map(c => c.typeDefs),
-                resolvers: schemaOrConfig.map(c => c.resolvers)
+                typeDefs: (config as any[]).map(c => c.typeDefs),
+                resolvers: (config as any[]).map(c => c.resolvers)
             });
         } else {
-            schema = schemaOrConfig;
+            schema = config;
         }
 
         this.yoga = createYoga({
@@ -129,17 +131,18 @@ export class GatewayGraphqlServer {
                 throw new Error(`Service returned status ${res.status}`);
             }
 
-            const result = await res.json() as any;
+            const result = await res.json() as { data?: { _sdl?: string }; errors?: { message: string }[] };
             if (result.errors) {
-                throw new Error(result.errors.map((e: any) => e.message).join(', '));
+                throw new Error(result.errors.map((e) => e.message).join(', '));
             }
 
             const sdl = result.data?._sdl;
             if (!sdl || typeof sdl !== 'string' || sdl.trim().length === 0) {
                 throw new Error('Service returned empty or invalid SDL');
             }
-        } catch (error: any) {
-            throw new Error(`Service validation failed for ${url}: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Service validation failed for ${url}: ${message}`);
         }
     }
 }

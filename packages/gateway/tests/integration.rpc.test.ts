@@ -1,8 +1,8 @@
 import { describe, it, expect, mock, beforeAll, afterAll } from 'bun:test';
-import { Hono } from 'hono';
 import { websocket } from 'hono/bun';
 import { newWebSocketRpcSession } from 'capnweb';
-import { createRpcHandler, GatewayRpcServer, GatewayUpdateResult } from '../src/rpc/server.js';
+import type { GatewayUpdateResult } from '../src/rpc/server.js';
+import { createRpcHandler, GatewayRpcServer } from '../src/rpc/server.js';
 
 describe('RPC Integration', () => {
     let server: any;
@@ -11,7 +11,7 @@ describe('RPC Integration', () => {
     let rpcClient: any;
 
     // Mock callback
-    const updateCallback = mock(async (config: any): Promise<GatewayUpdateResult> => {
+    const updateCallback = mock(async (_config: unknown): Promise<GatewayUpdateResult> => {
         return { success: true };
     });
 
@@ -61,7 +61,7 @@ describe('RPC Integration', () => {
         // connect again for clean state or reuse
         ws = new WebSocket(`ws://localhost:${port}/`);
         await new Promise<void>((resolve) => ws.addEventListener('open', () => resolve()));
-        rpcClient = newWebSocketRpcSession(ws as any);
+        rpcClient = newWebSocketRpcSession(ws as unknown as WebSocket);
 
         const invalidConfig = {
             services: [

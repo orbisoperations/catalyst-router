@@ -1,6 +1,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { PluginContext } from '../src/plugins/types.js';
+import type { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
 import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js';
 

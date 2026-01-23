@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import chalk from 'chalk';
 import { serviceCommands } from './commands/service.js';
 import { metricsCommands } from './commands/metrics.js';
 import { peerCommands } from './commands/peer.js';

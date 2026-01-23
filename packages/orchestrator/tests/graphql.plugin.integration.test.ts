@@ -1,8 +1,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { GenericContainer, Network, Wait, StartedTestContainer, StartedNetwork } from 'testcontainers';
+import type { StartedTestContainer, StartedNetwork } from 'testcontainers';
+import { GenericContainer, Network, Wait } from 'testcontainers';
 import { GatewayIntegrationPlugin } from '../src/plugins/implementations/gateway.js';
-import { PluginContext } from '../src/plugins/types.js';
+import type { PluginContext } from '../src/plugins/types.js';
 import { RouteTable } from '../src/state/route-table.js';
 import { join, resolve } from 'path';
 
