@@ -55,7 +55,7 @@ export type VerifyTokenResponse = z.infer<typeof VerifyTokenResponseSchema>
  * GetPublicKey Response schema
  */
 export const GetPublicKeyResponseSchema = z.discriminatedUnion('success', [
-  z.object({ success: z.literal(true), jwk: z.record(z.unknown()) }),
+  z.object({ success: z.literal(true), jwk: z.record(z.string(), z.unknown()) }),
   z.object({ success: z.literal(false), error: z.string() }),
 ])
 
@@ -65,7 +65,10 @@ export type GetPublicKeyResponse = z.infer<typeof GetPublicKeyResponseSchema>
  * GetJwks Response schema
  */
 export const GetJwksResponseSchema = z.discriminatedUnion('success', [
-  z.object({ success: z.literal(true), jwks: z.object({ keys: z.array(z.record(z.unknown())) }) }),
+  z.object({
+    success: z.literal(true),
+    jwks: z.object({ keys: z.array(z.record(z.string(), z.unknown())) }),
+  }),
   z.object({ success: z.literal(false), error: z.string() }),
 ])
 
