@@ -12,6 +12,8 @@ interface TestBus {
 
 // Mock ConnectionPool
 class MockConnectionPool extends ConnectionPool {
+    public updateMock = mock(async () => ({ success: true }))
+
     get(endpoint: string) {
         // Return a mock object that satisfies whatever RpcStub<PublicApi> needs for this test
         // Key method is getPeerConnection().open()
@@ -25,7 +27,8 @@ class MockConnectionPool extends ConnectionPool {
                         },
                         close: async (peer: PeerInfo, code: number, reason?: string) => {
                             return { success: true }
-                        }
+                        },
+                        update: this.updateMock
                     }
                 }
             }
@@ -419,6 +422,189 @@ describe('CatalystNodeBus', () => {
             })
 
             expect(result).toEqual({ success: true })
+        })
+    })
+    describe('Route Updates', () => {
+        it('should add local route', async () => {
+            const route = {
+                name: 'local-service',
+                protocol: 'http' as const,
+                endpoint: 'http://localhost:3000'
+            }
+
+            const result = await bus.dispatch({
+                action: 'local:route:create',
+                data: route
+            })
+
+            expect(result).toEqual({ success: true })
+            const state = (bus as unknown as TestBus).state
+            expect(state.local.routes).toHaveLength(1)
+            expect(state.local.routes[0]).toMatchObject(route)
+        })
+
+        it('should remove local route', async () => {
+            const route = {
+                name: 'local-service',
+                protocol: 'http' as const,
+                endpoint: 'http://localhost:3000'
+            }
+            await bus.dispatch({
+                action: 'local:route:create',
+                data: route
+            })
+
+            const result = await bus.dispatch({
+                action: 'local:route:delete',
+                data: route
+            })
+
+            expect(result).toEqual({ success: true })
+            const state = (bus as unknown as TestBus).state
+            expect(state.local.routes).toHaveLength(0)
+        })
+
+        it('should process internal:protocol:update adds', async () => {
+            const peerInfo = {
+                name: 'remote-peer',
+                endpoint: 'http://remote.com',
+                domains: []
+            }
+            const route = {
+                name: 'remote-service',
+                protocol: 'http' as const,
+                endpoint: 'http://remote-service'
+            }
+
+            const result = await bus.dispatch({
+                action: 'internal:protocol:update',
+                data: {
+                    peerInfo: peerInfo,
+                    update: {
+                        updates: [
+                            { action: 'add', route: route }
+                        ]
+                    }
+                }
+            })
+
+            expect(result).toEqual({ success: true })
+            const state = (bus as unknown as TestBus).state
+            expect(state.internal.routes).toHaveLength(1)
+            expect(state.internal.routes[0]).toMatchObject({ ...route, peer: peerInfo })
+        })
+
+        it('should process internal:protocol:update removes', async () => {
+            const peerInfo = {
+                name: 'remote-peer',
+                endpoint: 'http://remote.com',
+                domains: []
+            }
+            const route = {
+                name: 'remote-service',
+                protocol: 'http' as const,
+                endpoint: 'http://remote-service'
+            }
+
+            // Add first
+            await bus.dispatch({
+                action: 'internal:protocol:update',
+                data: {
+                    peerInfo: peerInfo,
+                    update: {
+                        updates: [
+                            { action: 'add', route: route }
+                        ]
+                    }
+                }
+            })
+
+            const result = await bus.dispatch({
+                action: 'internal:protocol:update',
+                data: {
+                    peerInfo: peerInfo,
+                    update: {
+                        updates: [
+                            { action: 'remove', route: route }
+                        ]
+                    }
+                }
+            })
+
+            expect(result).toEqual({ success: true })
+            const state = (bus as unknown as TestBus).state
+            expect(state.internal.routes).toHaveLength(0)
+        })
+    })
+
+    describe('Route Lifecycle Edge Cases', () => {
+        it('should remove routes when peer disconnects', async () => {
+            const peerInfo: PeerInfo = { name: 'peer1', endpoint: 'http://p1', domains: [] }
+
+            // 0. Ensure peer exists in state (simulating handshake)
+            await bus.dispatch({
+                action: 'local:peer:create',
+                data: peerInfo
+            })
+
+            const route = { name: 'r1', protocol: 'http' as const, endpoint: 'http://r1' }
+
+            // 1. Add route via update
+            await bus.dispatch({
+                action: 'internal:protocol:update',
+                data: {
+                    peerInfo: peerInfo,
+                    update: {
+                        updates: [{ action: 'add', route: route }]
+                    }
+                }
+            })
+
+            // Verify route exists
+            let state = (bus as unknown as TestBus).state
+            expect(state.internal.routes).toHaveLength(1)
+            expect(state.internal.routes[0]).toMatchObject({
+                peerName: 'peer1'
+            })
+
+            // 2. Disconnect peer
+            await bus.dispatch({
+                action: 'internal:protocol:close',
+                data: { peerInfo: peerInfo, code: 1000, reason: 'bye' }
+            })
+
+            // Verify route is gone
+            state = (bus as unknown as TestBus).state
+            expect(state.internal.routes).toHaveLength(0)
+        })
+
+        it('should sync existing routes to new peer', async () => {
+            // 1. Create local route
+            const route = { name: 'local1', protocol: 'http' as const, endpoint: 'http://l1' }
+            await bus.dispatch({
+                action: 'local:route:create',
+                data: route
+            })
+
+            // 2. Simulate new peer connecting
+            const peerInfo: PeerInfo = { name: 'peer2', endpoint: 'http://p2', domains: [] }
+
+            await bus.dispatch({
+                action: 'internal:protocol:connected',
+                data: { peerInfo: peerInfo }
+            })
+
+            // Verify update was called on the new peer
+            const pool = (bus as any).connectionPool as MockConnectionPool
+            expect(pool.updateMock).toHaveBeenCalled()
+
+            const calls = pool.updateMock.mock.calls
+            const lastCall = calls[calls.length - 1] as any[]
+            expect(lastCall).toBeDefined()
+            const updateMsg = lastCall[1]
+            expect(updateMsg.updates).toHaveLength(1)
+            expect(updateMsg.updates[0].action).toBe('add')
+            expect(updateMsg.updates[0].route.name).toBe('local1')
         })
     })
 })

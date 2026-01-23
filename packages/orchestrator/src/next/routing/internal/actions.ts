@@ -7,10 +7,14 @@ export const internalProtocolUpdateAction = z.literal("internal:protocol:update"
 export const internalProtocolCloseAction = z.literal("internal:protocol:close");
 
 // Data Schemas
+import { DataChannelDefinitionSchema } from "../datachannel.js";
+
+// Data Schemas
 export const UpdateMessageSchema = z.object({
-    // Placeholder for actual route update structure
-    // This will eventually contain added/withdrawn routes
-    routes: z.array(z.unknown()).default([])
+    updates: z.array(z.object({
+        action: z.enum(['add', 'remove']),
+        route: DataChannelDefinitionSchema
+    }))
 });
 
 export const InternalProtocolOpenMessageSchema = z.object({
