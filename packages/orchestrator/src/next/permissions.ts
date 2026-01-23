@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { Action } from './schema.js'
+import { Actions } from './action-types.js'
 
 /**
  * Permission types for RBAC.
@@ -21,15 +22,15 @@ export type Permission =
  * Unknown actions require '*' (admin only).
  */
 const ACTION_PERMISSION_MAP: Record<string, Permission> = {
-  'local:peer:create': 'peer:create',
-  'local:peer:update': 'peer:update',
-  'local:peer:delete': 'peer:delete',
-  'local:route:create': 'route:create',
-  'local:route:delete': 'route:delete',
-  'internal:protocol:open': 'ibgp:connect',
-  'internal:protocol:close': 'ibgp:disconnect',
-  'internal:protocol:connected': 'ibgp:connect',
-  'internal:protocol:update': 'ibgp:update',
+  [Actions.LocalPeerCreate]: 'peer:create',
+  [Actions.LocalPeerUpdate]: 'peer:update',
+  [Actions.LocalPeerDelete]: 'peer:delete',
+  [Actions.LocalRouteCreate]: 'route:create',
+  [Actions.LocalRouteDelete]: 'route:delete',
+  [Actions.InternalProtocolOpen]: 'ibgp:connect',
+  [Actions.InternalProtocolClose]: 'ibgp:disconnect',
+  [Actions.InternalProtocolConnected]: 'ibgp:connect',
+  [Actions.InternalProtocolUpdate]: 'ibgp:update',
 }
 
 /**

@@ -1,50 +1,61 @@
 import { describe, it, expect } from 'bun:test'
 import { getRequiredPermission, hasPermission, isSecretValid } from './permissions'
 import type { Action } from './schema'
+import { Actions } from './action-types'
 
 describe('getRequiredPermission', () => {
-  it('should return peer:create for local:peer:create', () => {
-    expect(getRequiredPermission({ action: 'local:peer:create', data: {} })).toBe('peer:create')
-  })
-
-  it('should return peer:update for local:peer:update', () => {
-    expect(getRequiredPermission({ action: 'local:peer:update', data: {} })).toBe('peer:update')
-  })
-
-  it('should return peer:delete for local:peer:delete', () => {
-    expect(getRequiredPermission({ action: 'local:peer:delete', data: {} })).toBe('peer:delete')
-  })
-
-  it('should return route:create for local:route:create', () => {
-    expect(getRequiredPermission({ action: 'local:route:create', data: {} })).toBe('route:create')
-  })
-
-  it('should return route:delete for local:route:delete', () => {
-    expect(getRequiredPermission({ action: 'local:route:delete', data: {} })).toBe('route:delete')
-  })
-
-  it('should return ibgp:connect for internal:protocol:open', () => {
-    expect(getRequiredPermission({ action: 'internal:protocol:open', data: {} })).toBe(
-      'ibgp:connect'
+  it('should return peer:create for LocalPeerCreate', () => {
+    expect(getRequiredPermission({ action: Actions.LocalPeerCreate, data: {} } as Action)).toBe(
+      'peer:create'
     )
   })
 
-  it('should return ibgp:disconnect for internal:protocol:close', () => {
-    expect(getRequiredPermission({ action: 'internal:protocol:close', data: {} })).toBe(
-      'ibgp:disconnect'
+  it('should return peer:update for LocalPeerUpdate', () => {
+    expect(getRequiredPermission({ action: Actions.LocalPeerUpdate, data: {} } as Action)).toBe(
+      'peer:update'
     )
   })
 
-  it('should return ibgp:connect for internal:protocol:connected', () => {
-    expect(getRequiredPermission({ action: 'internal:protocol:connected', data: {} })).toBe(
-      'ibgp:connect'
+  it('should return peer:delete for LocalPeerDelete', () => {
+    expect(getRequiredPermission({ action: Actions.LocalPeerDelete, data: {} } as Action)).toBe(
+      'peer:delete'
     )
   })
 
-  it('should return ibgp:update for internal:protocol:update', () => {
-    expect(getRequiredPermission({ action: 'internal:protocol:update', data: {} })).toBe(
-      'ibgp:update'
+  it('should return route:create for LocalRouteCreate', () => {
+    expect(getRequiredPermission({ action: Actions.LocalRouteCreate, data: {} } as Action)).toBe(
+      'route:create'
     )
+  })
+
+  it('should return route:delete for LocalRouteDelete', () => {
+    expect(getRequiredPermission({ action: Actions.LocalRouteDelete, data: {} } as Action)).toBe(
+      'route:delete'
+    )
+  })
+
+  it('should return ibgp:connect for InternalProtocolOpen', () => {
+    expect(
+      getRequiredPermission({ action: Actions.InternalProtocolOpen, data: {} } as Action)
+    ).toBe('ibgp:connect')
+  })
+
+  it('should return ibgp:disconnect for InternalProtocolClose', () => {
+    expect(
+      getRequiredPermission({ action: Actions.InternalProtocolClose, data: {} } as Action)
+    ).toBe('ibgp:disconnect')
+  })
+
+  it('should return ibgp:connect for InternalProtocolConnected', () => {
+    expect(
+      getRequiredPermission({ action: Actions.InternalProtocolConnected, data: {} } as Action)
+    ).toBe('ibgp:connect')
+  })
+
+  it('should return ibgp:update for InternalProtocolUpdate', () => {
+    expect(
+      getRequiredPermission({ action: Actions.InternalProtocolUpdate, data: {} } as Action)
+    ).toBe('ibgp:update')
   })
 
   it('should return * for unknown action types', () => {

@@ -9,10 +9,12 @@ const nodeId = process.env.CATALYST_NODE_ID || 'myself';
 const peeringEndpoint = process.env.CATALYST_PEERING_ENDPOINT || 'http://localhost:3000/rpc';
 
 const bus = new CatalystNodeBus({
-    myself: {
-        name: nodeId,
-        endpoint: peeringEndpoint,
-        domains: []
+    config: {
+        node: {
+            name: nodeId,
+            endpoint: peeringEndpoint,
+            domains: []
+        }
     },
     connectionPool: { type: 'ws' }
 });
