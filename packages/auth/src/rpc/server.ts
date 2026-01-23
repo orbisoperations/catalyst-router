@@ -7,12 +7,14 @@ import type { IKeyManager } from '../key-manager/types.js'
 import { isAuthorizedToRevoke, type RevocationStore } from '../revocation.js'
 import { decodeToken, CLOCK_TOLERANCE } from '../jwt.js'
 import type { BootstrapService } from '../bootstrap.js'
+import type { LoginService } from '../login.js'
 import {
   SignTokenRequestSchema,
   VerifyTokenRequestSchema,
   RevokeTokenRequestSchema,
   RotateRequestSchema,
   CreateFirstAdminRequestSchema,
+  LoginRequestSchema,
   type SignTokenResponse,
   type VerifyTokenResponse,
   type GetPublicKeyResponse,
@@ -22,13 +24,15 @@ import {
   type GetCurrentKeyIdResponse,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
+  type LoginResponse,
 } from './schema.js'
 
 export class AuthRpcServer extends RpcTarget {
   constructor(
     private keyManager: IKeyManager,
     private revocationStore?: RevocationStore,
-    private bootstrapService?: BootstrapService
+    private bootstrapService?: BootstrapService,
+    private loginService?: LoginService
   ) {
     super()
   }
@@ -282,6 +286,36 @@ export class AuthRpcServer extends RpcTarget {
     }
 
     return this.bootstrapService.getBootstrapStatus()
+  }
+
+  /**
+   * Authenticate user with email/password and return JWT
+   *
+   * This is an unauthenticated endpoint.
+   * Returns the same error for wrong password and unknown email (timing-safe).
+   */
+  async login(request: unknown): Promise<LoginResponse> {
+    if (!this.loginService) {
+      return { success: false, error: 'Login not configured' }
+    }
+
+    const parsed = LoginRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      const errorMessages = parsed.error.issues.map((i) => i.message).join(', ')
+      return { success: false, error: errorMessages }
+    }
+
+    const result = await this.loginService.login(parsed.data)
+
+    if (!result.success) {
+      return { success: false, error: result.error ?? 'Login failed' }
+    }
+
+    return {
+      success: true,
+      token: result.token!,
+      expiresAt: result.expiresAt!.toISOString(),
+    }
   }
 }
 
