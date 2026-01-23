@@ -4,7 +4,7 @@ import type { PeerInfo } from './routing/state.js'
 import { newRouteTable, type RouteTable } from './routing/state.js'
 import type { UpdateMessageSchema } from './routing/internal/actions.js'
 import { type AuthContext, AuthContextSchema } from './types.js'
-import { getRequiredPermission, hasPermission } from './permissions.js'
+import { getRequiredPermission, hasPermission, isSecretValid } from './permissions.js'
 import { Actions } from './action-types.js'
 import {
   newHttpBatchRpcSession,
@@ -504,31 +504,52 @@ export class CatalystNodeBus extends RpcTarget {
         }
       },
       getPeerConnection: (
-        _secret: string
+        secret: string
       ): { success: true; connection: PeerConnection } | { success: false; error: string } => {
+        // Validate PSK
+        const expectedSecret = this.config?.ibgp?.secret
+        if (!expectedSecret || !isSecretValid(secret, expectedSecret)) {
+          return { success: false, error: 'Invalid secret' }
+        }
+
+        // Create peer auth context with ibgp permissions
+        const peerAuth: AuthContext = {
+          userId: 'peer:authenticated',
+          roles: ['ibgp:connect', 'ibgp:disconnect', 'ibgp:update'],
+        }
+
         return {
           success: true,
           connection: {
             open: async (peer: PeerInfo) => {
-              return this.dispatch({
-                action: Actions.InternalProtocolOpen,
-                data: { peerInfo: peer },
-              })
+              return this.dispatch(
+                {
+                  action: Actions.InternalProtocolOpen,
+                  data: { peerInfo: peer },
+                },
+                peerAuth
+              )
             },
             close: async (peer: PeerInfo, code: number, reason?: string) => {
-              return this.dispatch({
-                action: Actions.InternalProtocolClose,
-                data: { peerInfo: peer, code, reason },
-              })
+              return this.dispatch(
+                {
+                  action: Actions.InternalProtocolClose,
+                  data: { peerInfo: peer, code, reason },
+                },
+                peerAuth
+              )
             },
             update: async (peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>) => {
-              return this.dispatch({
-                action: Actions.InternalProtocolUpdate,
-                data: {
-                  peerInfo: peer,
-                  update: update,
+              return this.dispatch(
+                {
+                  action: Actions.InternalProtocolUpdate,
+                  data: {
+                    peerInfo: peer,
+                    update: update,
+                  },
                 },
-              })
+                peerAuth
+              )
             },
           },
         }
