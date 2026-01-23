@@ -369,7 +369,7 @@ describe('CatalystNodeBus', () => {
                 }
             })
 
-            expect(result).toEqual({ success: false, error: 'Peer not configured' })
+            expect(result).toEqual({ success: false, error: "Peer 'stranger' is not configured on this node" })
         })
     })
 
