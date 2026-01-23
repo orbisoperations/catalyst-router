@@ -1,8 +1,8 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import { type Action } from './schema.js'
 import type { PeerInfo } from './routing/state.js'
 import { newRouteTable, type RouteTable } from './routing/state.js'
-import { UpdateMessageSchema } from './routing/internal/actions.js'
+import type { UpdateMessageSchema } from './routing/internal/actions.js'
 import {
     newHttpBatchRpcSession,
     newWebSocketRpcSession,
@@ -35,8 +35,15 @@ export interface PeerManager {
 
 export interface PeerConnection {
     open(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
-    close(peer: PeerInfo, code: number, reason?: string): Promise<{ success: true } | { success: false; error: string }>
-    update(peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>): Promise<{ success: true } | { success: false; error: string }>
+    close(
+        peer: PeerInfo,
+        code: number,
+        reason?: string
+    ): Promise<{ success: true } | { success: false; error: string }>
+    update(
+        peer: PeerInfo,
+        update: z.infer<typeof UpdateMessageSchema>
+    ): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
@@ -74,20 +81,17 @@ export class ConnectionPool {
 
 export class CatalystNodeBus extends RpcTarget {
     private state: RouteTable
-    private myself: PeerInfo
     private connectionPool: ConnectionPool
+    private config?: { ibgp?: { secret?: string } }
+
     constructor(opts: {
         state?: RouteTable
-        myself?: PeerInfo
         connectionPool?: { type?: 'ws' | 'http'; pool?: ConnectionPool }
+        config?: { ibgp?: { secret?: string } }
     }) {
         super()
         this.state = opts.state ?? newRouteTable()
-        this.myself = opts.myself ?? {
-            name: "myself",
-            endpoint: "http://localhost:3000",
-            domains: []
-        }
+        this.config = opts.config
         this.connectionPool =
             opts.connectionPool?.pool ??
             (opts.connectionPool?.type
@@ -266,8 +270,8 @@ export class CatalystNodeBus extends RpcTarget {
                     ...state,
                     internal: {
                         ...state.internal,
-                        routes: currentInternalRoutes
-                    }
+                        routes: currentInternalRoutes,
+                    },
                 }
                 break
             }
