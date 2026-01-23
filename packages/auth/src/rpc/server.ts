@@ -1,0 +1,228 @@
+import { Hono } from 'hono'
+import { upgradeWebSocket } from 'hono/bun'
+import { RpcTarget } from 'capnweb'
+import { newRpcResponse } from '@hono/capnweb'
+
+import type { IKeyManager } from '../key-manager/types.js'
+import { isAuthorizedToRevoke, type RevocationStore } from '../revocation.js'
+import {
+  SignTokenRequestSchema,
+  VerifyTokenRequestSchema,
+  RevokeTokenRequestSchema,
+  RotateRequestSchema,
+  type SignTokenResponse,
+  type VerifyTokenResponse,
+  type GetPublicKeyResponse,
+  type GetJwksResponse,
+  type RevokeTokenResponse,
+  type RotateResponse,
+  type GetCurrentKeyIdResponse,
+} from './schema.js'
+
+export class AuthRpcServer extends RpcTarget {
+  constructor(
+    private keyManager: IKeyManager,
+    private revocationStore?: RevocationStore
+  ) {
+    super()
+  }
+
+  /**
+   * Sign a JWT with the provided options
+   *
+   * Note: This endpoint is intended for internal/trusted callers only.
+   * Network-level access control should be used to restrict access.
+   */
+  async signToken(request: unknown): Promise<SignTokenResponse> {
+    const parsed = SignTokenRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      const errorMessages = parsed.error.issues.map((i) => i.message).join(', ')
+      return { success: false, error: errorMessages }
+    }
+
+    try {
+      const token = await this.keyManager.sign({
+        subject: parsed.data.subject,
+        audience: parsed.data.audience,
+        expiresIn: parsed.data.expiresIn,
+        claims: parsed.data.claims,
+      })
+
+      return { success: true, token }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Token signing failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Verify a JWT and return the payload if valid
+   */
+  async verifyToken(request: unknown): Promise<VerifyTokenResponse> {
+    const parsed = VerifyTokenRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      return { valid: false, error: 'Token verification failed' }
+    }
+
+    try {
+      const result = await this.keyManager.verify(parsed.data.token, {
+        audience: parsed.data.audience,
+      })
+
+      if (!result.valid) {
+        return { valid: false, error: 'Token verification failed' }
+      }
+
+      // Check revocation after cryptographic verification
+      if (this.revocationStore && typeof result.payload.jti === 'string') {
+        if (this.revocationStore.isRevoked(result.payload.jti)) {
+          return { valid: false, error: 'Token revoked' }
+        }
+      }
+
+      return { valid: true, payload: result.payload }
+    } catch {
+      return { valid: false, error: 'Token verification failed' }
+    }
+  }
+
+  /**
+   * Revoke a JWT by adding its JTI to the revocation list
+   *
+   * Authorization: caller must provide authToken proving identity.
+   * Revocation allowed if:
+   * - authToken.sub matches token.sub (revoking own token), OR
+   * - authToken has role: 'admin' claim (admin can revoke any token)
+   */
+  async revokeToken(request: unknown): Promise<RevokeTokenResponse> {
+    if (!this.revocationStore) {
+      return { success: false, error: 'Revocation not enabled' }
+    }
+
+    const parsed = RevokeTokenRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      return { success: false, error: 'Invalid request' }
+    }
+
+    const { token, authToken } = parsed.data
+
+    // Verify the caller's auth token first
+    const authResult = await this.keyManager.verify(authToken)
+    if (!authResult.valid) {
+      return { success: false, error: 'Invalid auth token' }
+    }
+
+    // Verify the token to be revoked
+    const tokenResult = await this.keyManager.verify(token)
+    if (!tokenResult.valid) {
+      return { success: false, error: 'Invalid token signature' }
+    }
+
+    // Authorization check
+    if (!isAuthorizedToRevoke(authResult.payload, tokenResult.payload)) {
+      return { success: false, error: 'Not authorized to revoke this token' }
+    }
+
+    const { jti, exp } = tokenResult.payload
+
+    if (typeof jti !== 'string' || jti === '') {
+      return { success: false, error: 'Token missing jti claim' }
+    }
+    if (typeof exp !== 'number' || exp <= 0) {
+      return { success: false, error: 'Token missing or invalid exp claim' }
+    }
+
+    const added = this.revocationStore.revoke(jti, new Date(exp * 1000))
+    if (!added) {
+      return { success: false, error: 'Revocation store full' }
+    }
+
+    return { success: true }
+  }
+
+  /**
+   * Get the public key in JWK format (first key from JWKS)
+   */
+  async getPublicKey(): Promise<GetPublicKeyResponse> {
+    try {
+      const jwks = await this.keyManager.getJwks()
+      if (jwks.keys.length === 0) {
+        return { success: false, error: 'No keys available' }
+      }
+      return { success: true, jwk: jwks.keys[0] as Record<string, unknown> }
+    } catch {
+      return { success: false, error: 'Failed to get public key' }
+    }
+  }
+
+  /**
+   * Get the JWKS (public keys) for token verification
+   */
+  async getJwks(): Promise<GetJwksResponse> {
+    try {
+      const jwks = await this.keyManager.getJwks()
+      return { success: true, jwks: { keys: jwks.keys as Record<string, unknown>[] } }
+    } catch {
+      return { success: false, error: 'Failed to get JWKS' }
+    }
+  }
+
+  /**
+   * Get the current signing key ID
+   */
+  async getCurrentKeyId(): Promise<GetCurrentKeyIdResponse> {
+    try {
+      const kid = await this.keyManager.getCurrentKeyId()
+      return { success: true, kid }
+    } catch {
+      return { success: false, error: 'Failed to get key ID' }
+    }
+  }
+
+  /**
+   * Rotate to a new signing key
+   *
+   * Authorization: requires authToken with role: 'admin' claim.
+   */
+  async rotate(request: unknown): Promise<RotateResponse> {
+    const parsed = RotateRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      return { success: false, error: 'Invalid request' }
+    }
+
+    // Verify admin authorization
+    const authResult = await this.keyManager.verify(parsed.data.authToken)
+    if (!authResult.valid) {
+      return { success: false, error: 'Invalid auth token' }
+    }
+    if (authResult.payload.role !== 'admin') {
+      return { success: false, error: 'Admin authorization required' }
+    }
+
+    try {
+      const result = await this.keyManager.rotate({
+        immediate: parsed.data.immediate,
+        gracePeriodMs: parsed.data.gracePeriodMs,
+      })
+
+      return {
+        success: true,
+        previousKeyId: result.previousKeyId,
+        newKeyId: result.newKeyId,
+        gracePeriodEndsAt: result.gracePeriodEndsAt?.toISOString(),
+      }
+    } catch {
+      return { success: false, error: 'Rotation failed' }
+    }
+  }
+}
+
+export function createAuthRpcHandler(rpcServer: AuthRpcServer): Hono {
+  const app = new Hono()
+  app.get('/', (c) => {
+    return newRpcResponse(c, rpcServer, {
+      upgradeWebSocket,
+    })
+  })
+  return app
+}
