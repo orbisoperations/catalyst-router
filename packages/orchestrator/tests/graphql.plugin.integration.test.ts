@@ -26,12 +26,12 @@ describe('GraphQL Plugin E2E with Containers', () => {
     // const examplesDir = join(repoRoot, 'packages/examples');
     // const gatewayDir = join(repoRoot, 'packages/gateway');
 
-    console.log('Building Docker images...')
+    console.log('Building Podman images...')
 
     const buildBooks = async () => {
       await Bun.spawn(
         [
-          'docker',
+          'podman',
           'build',
           '-t',
           'books-service:test',
@@ -50,7 +50,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
     const buildMovies = async () => {
       await Bun.spawn(
         [
-          'docker',
+          'podman',
           'build',
           '-t',
           'movies-service:test',
@@ -68,7 +68,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
 
     const buildGateway = async () => {
       await Bun.spawn(
-        ['docker', 'build', '-t', 'gateway-service:test', '-f', 'packages/gateway/Dockerfile', '.'],
+        ['podman', 'build', '-t', 'gateway-service:test', '-f', 'packages/gateway/Dockerfile', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -78,7 +78,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
     }
 
     await Promise.all([buildBooks(), buildMovies(), buildGateway()])
-    console.log('Docker images built successfully.')
+    console.log('Podman images built successfully.')
 
     console.log('Starting Containers...')
 

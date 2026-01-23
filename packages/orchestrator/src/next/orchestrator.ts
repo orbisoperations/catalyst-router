@@ -10,12 +10,19 @@ import {
     type RpcStub,
     RpcTarget,
 } from 'capnweb'
-// Interface for classes that need to emit actions
+
 export interface PublicApi {
     getManagerConnection(): PeerManager
     getPeerConnection(
         secret: string
     ): { success: true; connection: PeerConnection } | { success: false; error: string }
+    getInspector(): Inspector
+    dispatch(action: Action): Promise<{ success: true } | { success: false; error: string }>
+}
+
+export interface Inspector {
+    listPeers(): Promise<PeerInfo[]>
+    listRoutes(): Promise<{ local: any[], internal: any[] }>
 }
 
 export interface PeerManager {
@@ -67,13 +74,20 @@ export class ConnectionPool {
 
 export class CatalystNodeBus extends RpcTarget {
     private state: RouteTable
+    private myself: PeerInfo
     private connectionPool: ConnectionPool
     constructor(opts: {
         state?: RouteTable
+        myself?: PeerInfo
         connectionPool?: { type?: 'ws' | 'http'; pool?: ConnectionPool }
     }) {
         super()
         this.state = opts.state ?? newRouteTable()
+        this.myself = opts.myself ?? {
+            name: "myself",
+            endpoint: "http://localhost:3000",
+            domains: []
+        }
         this.connectionPool =
             opts.connectionPool?.pool ??
             (opts.connectionPool?.type
@@ -88,7 +102,6 @@ export class CatalystNodeBus extends RpcTarget {
         const result = await this.handleAction(sentAction, this.state)
         if (result.success) {
             this.state = result.state
-            // Fire notifications/side-effects after state update
             await this.handleNotify(sentAction, result.state, prevState)
             return { success: true }
         }
@@ -106,8 +119,7 @@ export class CatalystNodeBus extends RpcTarget {
                     return { success: false, error: 'Peer already exists' }
                 }
 
-                // Optimistically add peer as initializing
-                let newState = {
+                state = {
                     ...state,
                     internal: {
                         routes: state.internal.routes,
@@ -123,8 +135,6 @@ export class CatalystNodeBus extends RpcTarget {
                         ],
                     },
                 }
-
-                state = newState;
                 break
             }
             case 'local:peer:update': {
@@ -169,10 +179,7 @@ export class CatalystNodeBus extends RpcTarget {
             }
             case 'internal:protocol:close': {
                 const peerList = state.internal.peers
-                // Find peer by matching info from sender
                 const peer = peerList.find(p => p.name === action.data.peerInfo.name)
-
-                // If found, remove it. If not found, it's already gone or never existed.
                 if (peer) {
                     state = {
                         ...state,
@@ -182,15 +189,13 @@ export class CatalystNodeBus extends RpcTarget {
                         }
                     }
                 }
-                break;
+                break
             }
             case 'internal:protocol:open': {
                 const peer = state.internal.peers.find(p => p.name === action.data.peerInfo.name)
                 if (!peer) {
-                    return { success: false, error: 'Peer not configured' }
+                    return { success: false, error: `Peer '${action.data.peerInfo.name}' is not configured on this node` }
                 }
-
-                // We could validte endpoints here too
 
                 if (peer.connectionStatus !== 'connected') {
                     state = {
@@ -201,7 +206,7 @@ export class CatalystNodeBus extends RpcTarget {
                         }
                     }
                 }
-                break;
+                break
             }
             case 'internal:protocol:connected': {
                 const peerList = state.internal.peers
@@ -218,7 +223,6 @@ export class CatalystNodeBus extends RpcTarget {
                 break
             }
             case 'local:route:create': {
-                // Check if route already exists
                 if (state.local.routes.find(r => r.name === action.data.name)) {
                     return { success: false, error: 'Route already exists' }
                 }
@@ -232,7 +236,6 @@ export class CatalystNodeBus extends RpcTarget {
                 break
             }
             case 'local:route:delete': {
-                // Check if route exists
                 if (!state.local.routes.find(r => r.name === action.data.name)) {
                     return { success: false, error: 'Route not found' }
                 }
@@ -251,14 +254,9 @@ export class CatalystNodeBus extends RpcTarget {
 
                 for (const update of action.data.update.updates) {
                     if (update.action === 'add') {
-                        // Add if not exists (keyed by route name + peer name)
-
                         const routeToAdd = { ...update.route, peer: peerInfo, peerName: peerInfo.name }
-
-                        // Remove existing if any (upsert)
                         currentInternalRoutes = currentInternalRoutes.filter(r => !(r.name === update.route.name && r.peerName === peerInfo.name))
                         currentInternalRoutes.push(routeToAdd)
-
                     } else if (update.action === 'remove') {
                         currentInternalRoutes = currentInternalRoutes.filter(r => !(r.name === update.route.name && r.peerName === peerInfo.name))
                     }
@@ -289,63 +287,62 @@ export class CatalystNodeBus extends RpcTarget {
     ): Promise<void> {
         switch (action.action) {
             case 'local:peer:create': {
-                // Perform side effect: Try to open connection
                 try {
                     const stub = this.connectionPool.get(action.data.endpoint)
                     if (stub) {
                         const connectionResult = await stub.getPeerConnection("secret")
                         if (connectionResult.success) {
-                            const result = await connectionResult.connection.open({
-                                name: "myself", // TODO: Configured local name
-                                endpoint: "http://localhost:3000", // TODO: Configured local endpoint
-                                domains: [] // TODO: Configured local domains
-                            })
-
+                            const result = await connectionResult.connection.open(this.myself)
                             if (result.success) {
-                                // Dispatch connected action
                                 await this.dispatch({
                                     action: 'internal:protocol:connected',
                                     data: { peerInfo: action.data }
                                 })
                             }
-                        } else {
-                            console.error("Failed to get peer connection", connectionResult.error)
                         }
                     }
                 } catch (e) {
-                    // Connection failed, leave as initializing (or could transition to error state)
-                    console.error("Failed to open connection", e)
+                    console.error(`[${this.myself.name}] Failed to open connection to ${action.data.name}`, e)
                 }
                 break
             }
-            case 'internal:protocol:connected': {
-                // Sync existing local routes to the new peer
+            case 'internal:protocol:open': {
                 for (const route of _state.local.routes) {
                     try {
                         const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
                         if (stub) {
                             const connectionResult = await stub.getPeerConnection("secret")
                             if (connectionResult.success) {
-                                await connectionResult.connection.update(
-                                    {
-                                        name: "myself", // TODO: Configured local name
-                                        endpoint: "http://localhost:3000",
-                                        domains: []
-                                    },
-                                    {
-                                        updates: [{ action: 'add', route }]
-                                    }
-                                )
+                                await connectionResult.connection.update(this.myself, {
+                                    updates: [{ action: 'add', route }]
+                                })
                             }
                         }
                     } catch (e) {
-                        console.error("Failed to sync route to new peer", e)
+                        console.error(`[${this.myself.name}] Failed to sync route back to ${action.data.peerInfo.name}`, e)
+                    }
+                }
+                break
+            }
+            case 'internal:protocol:connected': {
+                for (const route of _state.local.routes) {
+                    try {
+                        const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
+                        if (stub) {
+                            const connectionResult = await stub.getPeerConnection("secret")
+                            if (connectionResult.success) {
+                                await connectionResult.connection.update(this.myself, {
+                                    updates: [{ action: 'add', route }]
+                                })
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`[${this.myself.name}] Failed to sync route to ${action.data.peerInfo.name}`, e)
                     }
                 }
                 break
             }
             case 'local:peer:delete': {
-                // Use prevState to find the peer info that was just deleted
                 const peer = prevState.internal.peers.find(p => p.name === action.data.name)
                 if (peer) {
                     try {
@@ -353,19 +350,64 @@ export class CatalystNodeBus extends RpcTarget {
                         if (stub) {
                             const connectionResult = await stub.getPeerConnection("secret")
                             if (connectionResult.success) {
-                                await connectionResult.connection.close(
-                                    {
-                                        name: "myself", // TODO: Configured local name
-                                        endpoint: "http://localhost:3000",
-                                        domains: []
-                                    },
-                                    1000,
-                                    "Peer removed"
-                                )
+                                await connectionResult.connection.close(this.myself, 1000, "Peer removed")
                             }
                         }
                     } catch (e) {
-                        console.error("Failed to close connection", e)
+                        console.error(`[${this.myself.name}] Failed to close connection to ${peer.name}`, e)
+                    }
+                }
+                break
+            }
+            case 'local:route:create': {
+                for (const peer of _state.internal.peers.filter(p => p.connectionStatus === 'connected')) {
+                    try {
+                        const stub = this.connectionPool.get(peer.endpoint)
+                        if (stub) {
+                            const connectionResult = await stub.getPeerConnection("secret")
+                            if (connectionResult.success) {
+                                await connectionResult.connection.update(this.myself, {
+                                    updates: [{ action: 'add', route: action.data }]
+                                })
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`[${this.myself.name}] Failed to broadcast route to ${peer.name}`, e)
+                    }
+                }
+                break
+            }
+            case 'local:route:delete': {
+                for (const peer of _state.internal.peers.filter(p => p.connectionStatus === 'connected')) {
+                    try {
+                        const stub = this.connectionPool.get(peer.endpoint)
+                        if (stub) {
+                            const connectionResult = await stub.getPeerConnection("secret")
+                            if (connectionResult.success) {
+                                await connectionResult.connection.update(this.myself, {
+                                    updates: [{ action: 'remove', route: action.data }]
+                                })
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`[${this.myself.name}] Failed to broadcast route removal to ${peer.name}`, e)
+                    }
+                }
+                break
+            }
+            case 'internal:protocol:update': {
+                const sourcePeerName = action.data.peerInfo.name
+                for (const peer of _state.internal.peers.filter(p => p.connectionStatus === 'connected' && p.name !== sourcePeerName)) {
+                    try {
+                        const stub = this.connectionPool.get(peer.endpoint)
+                        if (stub) {
+                            const connectionResult = await stub.getPeerConnection("secret")
+                            if (connectionResult.success) {
+                                await connectionResult.connection.update(this.myself, action.data.update)
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`[${this.myself.name}] Failed to propagate update to ${peer.name}`, e)
                     }
                 }
                 break
@@ -378,21 +420,18 @@ export class CatalystNodeBus extends RpcTarget {
             getManagerConnection: (): PeerManager => {
                 return {
                     addPeer: async (peer: PeerInfo) => {
-                        console.log('addPeer', peer)
                         return this.dispatch({
                             action: 'local:peer:create',
                             data: peer,
                         })
                     },
                     updatePeer: async (peer: PeerInfo) => {
-                        console.log('updatePeer', peer)
                         return this.dispatch({
                             action: 'local:peer:update',
                             data: peer,
                         })
                     },
-                    removePeer: async (peer: Omit<PeerInfo, 'endpoint' | 'domains'>) => {
-                        console.log('removePeer', peer)
+                    removePeer: async (peer: Pick<PeerInfo, 'name'>) => {
                         return this.dispatch({
                             action: 'local:peer:delete',
                             data: peer,
@@ -426,9 +465,21 @@ export class CatalystNodeBus extends RpcTarget {
                                     update: update
                                 }
                             })
-                        }
-                    }
+                        },
+                    },
                 }
+            },
+            getInspector: (): Inspector => {
+                return {
+                    listPeers: async () => this.state.internal.peers,
+                    listRoutes: async () => ({
+                        local: this.state.local.routes,
+                        internal: this.state.internal.routes
+                    }),
+                }
+            },
+            dispatch: async (action: Action) => {
+                return this.dispatch(action)
             },
         }
     }

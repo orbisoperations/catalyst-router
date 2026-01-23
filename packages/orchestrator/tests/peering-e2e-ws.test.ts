@@ -26,9 +26,9 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
 
   beforeAll(async () => {
     // 1. Build Image
-    console.log('Building Docker image...')
+    console.log('Building Podman image...')
     const buildProc = Bun.spawn(
-      ['docker', 'build', '-f', 'packages/orchestrator/Dockerfile', '-t', imageName, '.'],
+      ['podman', 'build', '-f', 'packages/orchestrator/Dockerfile', '-t', imageName, '.'],
       {
         cwd: repoRoot,
         stdout: 'inherit',
@@ -38,7 +38,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
     await buildProc.exited
 
     if (buildProc.exitCode !== 0) {
-      throw new Error('Docker build failed')
+      throw new Error('Podman build failed')
     }
 
     // 2. Create Network
@@ -80,9 +80,9 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
     portB = peerB.getMappedPort(3000)
     console.log(`Peer B started on port ${portB}`)
 
-    // Stream logs for debugging
-    ;(await peerA.logs()).pipe(process.stdout)
-    ;(await peerB.logs()).pipe(process.stdout)
+      // Stream logs for debugging
+      ; (await peerA.logs()).pipe(process.stdout)
+      ; (await peerB.logs()).pipe(process.stdout)
   }, TIMEOUT)
 
   afterAll(async () => {
