@@ -713,4 +713,110 @@ describe('CatalystNodeBus', () => {
       expect(pool.updateMock.mock.calls.length).toBe(callsBefore)
     })
   })
+
+  describe('getPeerConnection PSK Validation', () => {
+    let busWithSecret: CatalystNodeBus
+
+    beforeEach(() => {
+      busWithSecret = new CatalystNodeBus({
+        config: { ibgp: { secret: 'correct-psk-secret' } },
+      })
+    })
+
+    it('should reject invalid secret', () => {
+      const api = busWithSecret.publicApi()
+      const result = api.getPeerConnection('wrong-secret')
+
+      expect(result.success).toBe(false)
+      expect((result as { error: string }).error).toBe('Invalid secret')
+    })
+
+    it('should accept valid secret', () => {
+      const api = busWithSecret.publicApi()
+      const result = api.getPeerConnection('correct-psk-secret')
+
+      expect(result.success).toBe(true)
+    })
+
+    it('should return connection with methods when secret valid', () => {
+      const api = busWithSecret.publicApi()
+      const result = api.getPeerConnection('correct-psk-secret')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.connection).toBeDefined()
+        expect(typeof result.connection.open).toBe('function')
+        expect(typeof result.connection.close).toBe('function')
+        expect(typeof result.connection.update).toBe('function')
+      }
+    })
+
+    it('should reject when no secret configured', () => {
+      // Bus without secret config
+      const busNoSecret = new CatalystNodeBus({})
+      const api = busNoSecret.publicApi()
+      const result = api.getPeerConnection('any-secret')
+
+      expect(result.success).toBe(false)
+      expect((result as { error: string }).error).toBe('Invalid secret')
+    })
+
+    it('should use timing-safe comparison (length mismatch still rejected)', () => {
+      const api = busWithSecret.publicApi()
+
+      // Short secret
+      const shortResult = api.getPeerConnection('short')
+      expect(shortResult.success).toBe(false)
+
+      // Long secret
+      const longResult = api.getPeerConnection('this-is-a-very-long-secret-that-does-not-match')
+      expect(longResult.success).toBe(false)
+    })
+
+    it('should use ibgp-peer roles for connection methods', async () => {
+      // Configure a peer first so protocol:open succeeds
+      await busWithSecret.dispatch(
+        {
+          action: Actions.LocalPeerCreate,
+          data: { name: 'remote-node', endpoint: 'http://remote', domains: [] },
+        },
+        { userId: 'admin', roles: ['admin'] }
+      )
+
+      const api = busWithSecret.publicApi()
+      const connResult = api.getPeerConnection('correct-psk-secret')
+
+      expect(connResult.success).toBe(true)
+      if (connResult.success) {
+        // Open should succeed - peer auth has ibgp:connect
+        const openResult = await connResult.connection.open({
+          name: 'remote-node',
+          endpoint: 'http://remote',
+          domains: [],
+        })
+        expect(openResult.success).toBe(true)
+      }
+    })
+
+    it('should reject connection methods without proper ibgp permissions', async () => {
+      // This test verifies that the peerAuth context is being used
+      // by checking that connection methods work (they need ibgp:* permissions)
+      const api = busWithSecret.publicApi()
+      const connResult = api.getPeerConnection('correct-psk-secret')
+
+      expect(connResult.success).toBe(true)
+      if (connResult.success) {
+        // Open should fail because peer is not configured
+        // (but NOT because of permission denied - that would indicate peerAuth isn't working)
+        const openResult = await connResult.connection.open({
+          name: 'unconfigured-peer',
+          endpoint: 'http://unknown',
+          domains: [],
+        })
+        expect(openResult.success).toBe(false)
+        // Error should be about peer not configured, NOT permission denied
+        expect((openResult as { error: string }).error).toBe('Peer not configured')
+      }
+    })
+  })
 })
