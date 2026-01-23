@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js';
 import { RouteTable } from '../src/state/route-table.js';
 import type { PluginContext } from '../src/plugins/types.js';
@@ -22,7 +22,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
 
     it('should add an internal route when receiving an "add" update', async () => {
         const plugin = new InternalBGPPlugin(mockFactory);
-        const initialState = new RouteTable();
+        // Removed unused initialState
 
         const route = {
             name: 'proxied-service',
@@ -44,7 +44,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
                     ]
                 }
             },
-            state: initialState,
+            state: new RouteTable(),
             results: [],
             authxContext: {} as any
         };
@@ -101,7 +101,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
 
     it('should trigger broadcast when a local route is created', async () => {
         const plugin = new InternalBGPPlugin(mockFactory);
-        const initialState = new RouteTable()
+        // Removed unused initialState
         // Mock the internal broadcast logic if possible, 
         // but since it's a private method and uses dynamic imports, 
         // we can test it by seeding peers and checking if it runs without error 
@@ -182,7 +182,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
 
     it('should send existing routes to a new peer during OPEN', async () => {
         const plugin = new InternalBGPPlugin(mockFactory);
-        const peerId = 'new-peer';
+        // Removed unused peerId
         // 1. Seed state with some routes
         let state = new RouteTable().addInternalRoute({
             name: 'existing-service-1',
@@ -226,7 +226,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
     it('should trigger broadcast when a local route is updated', async () => {
         // Mock factory to spy on usage
         let callCount = 0;
-        const spyFactory = (endpoint: string) => {
+        const spyFactory = (_endpoint: string) => {
             callCount++;
             return mockSession as any;
         };
@@ -324,7 +324,7 @@ describe('InternalBGPPlugin Unit Tests', () => {
             open: async () => ({ success: true, peerInfo: { id: 'peer-c', as: 300, endpoint: 'http://peer-c:3000/rpc', domains: [] } }),
         };
 
-        const factory = (endpoint: string) => failingSession as any;
+        const factory = (_endpoint: string) => failingSession as any;
         const plugin = new InternalBGPPlugin(factory);
 
         const state = new RouteTable().addPeer({

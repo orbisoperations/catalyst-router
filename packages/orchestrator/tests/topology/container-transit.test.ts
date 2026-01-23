@@ -1,10 +1,10 @@
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import type { StartedTestContainer, StartedNetwork } from 'testcontainers';
 import { GenericContainer, Wait, Network } from 'testcontainers';
 import path from 'path';
 import { newHttpBatchRpcSession } from 'capnweb';
-import type { PublicApi } from '../../cli/src/client.js';
+import type { PublicApi } from '../../../cli/src/client.js';
 
 describe('Topology: Transit Peering (Containerized)', () => {
     const TIMEOUT = 300000; // 5 minutes
@@ -106,8 +106,8 @@ describe('Topology: Transit Peering (Containerized)', () => {
     const getClient = (port: number) => {
         const url = `http://127.0.0.1:${port}/rpc`;
         return newHttpBatchRpcSession<PublicApi>(url, {
-            fetch: fetch as any
-        } as any);
+            fetch: fetch as unknown
+        } as unknown as any);
     };
 
     const runOp = async <T>(port: number, operation: (mgmt: any) => Promise<T>): Promise<T> => {
@@ -181,7 +181,7 @@ describe('Topology: Transit Peering (Containerized)', () => {
                     connected = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
         if (!connected) throw new Error('A->B failed to connect');
     }, 30000);
@@ -218,7 +218,7 @@ describe('Topology: Transit Peering (Containerized)', () => {
                     found = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         if (!found) {

@@ -28,7 +28,7 @@ export function getConfig(): OrchestratorConfig {
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
     const peeringTransport = process.env.CATALYST_IBGP_TRANSPORT; // 'http' | 'websocket'
 
-    const config: any = {
+    const config: Record<string, unknown> = {
         port,
         as: peeringAs ? parseInt(peeringAs) : 0,
         ibgp: {

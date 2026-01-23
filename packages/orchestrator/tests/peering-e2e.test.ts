@@ -89,8 +89,8 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
     const getClient = (port: number) => {
         const url = `http://127.0.0.1:${port}/rpc`;
         return newHttpBatchRpcSession<PublicApi>(url, {
-            fetch: fetch as any
-        } as any);
+            fetch: fetch as unknown
+        } as unknown as any);
     };
 
     // Helper: Execute a function against a fresh session
@@ -153,7 +153,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     connected = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
         expect(connected).toBe(true);
 
@@ -172,7 +172,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     synced = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
         if (!synced) {
             console.error('Initial sync failed on B. Routes:', lastRoutesB);
@@ -216,7 +216,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     propagatedToB = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         // Verify propagation to A
@@ -232,7 +232,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     propagatedToA = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         expect(propagatedToB).toBe(true);
@@ -249,7 +249,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
             });
             const peerBRecord = peers.find((p: any) => p.id === 'peer-b');
             peerId = peerBRecord?.id;
-        } catch (e) { }
+        } catch { /* ignore */ }
 
         console.log(`Discovered Peer ID on A for B: ${peerId}`);
         expect(peerId).toBeDefined();
@@ -277,7 +277,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     cleanedOnB = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         // Verify cleanup on A (B's services should be gone)
@@ -294,7 +294,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
                     cleanedOnA = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         if (!cleanedOnB) console.error('Cleanup failed on B. Routes:', lastRoutesB);

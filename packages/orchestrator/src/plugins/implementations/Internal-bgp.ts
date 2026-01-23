@@ -128,19 +128,20 @@ export class InternalBGPPlugin extends BasePlugin {
                 // CapnProto/CapnWeb pipelining works on PROMISES.
                 // But `update` takes `PeerInfo`, not a promise.
                 // We should just fire both.
-                updatePromise = ibgpScope.update(myPeerInfo, updates as UpdateMessage[]);
+                const updatesList = updates as UpdateMessage[];
+                // @ts-expect-error - TS deep instantiation error
+                updatePromise = ibgpScope.update(myPeerInfo, updatesList);
             }
 
             // Execute batch
             const [openResult] = await Promise.all([openPromise, updatePromise]);
             const openRes = openResult as IBGPOpenResult;
 
-            if (!openResult.success) {
-                throw new Error(openResult.error || 'Peer rejected OPEN request');
+            if (!openRes.success) {
+                throw new Error(openRes.error || 'Peer rejected OPEN request');
             }
 
-            // Use the returned PeerInfo for registration
-            const peerData = openResult.peerInfo;
+            const peerData = (openRes as any).peerInfo;
 
             const { state: newState } = context.state.addPeer(peerData);
             context.state = newState;
@@ -584,7 +585,7 @@ export class InternalBGPPlugin extends BasePlugin {
         }
 
         const updateMsg: UpdateMessage = (updateType === 'add')
-            ? { type: 'add', route: routeData as { name: string;[key: string]: unknown }, asPath: [getConfig().as] }
+            ? { type: 'add', route: routeData as any, asPath: [getConfig().as] }
             : { type: 'remove', routeId: routeId! };
 
         const peers = context.state.getPeers();

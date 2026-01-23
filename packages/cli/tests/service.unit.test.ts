@@ -13,9 +13,9 @@ const mockCreateClient = mock(() => Promise.resolve({
         listMetrics: mock(() => Promise.resolve({ metrics: [] })),
         listPeers: mock(() => Promise.resolve({ peers: [] })),
         deletePeer: mock(() => Promise.resolve({ success: true }))
-    } as unknown as any),
+    } as unknown),
     [Symbol.asyncDispose]: async () => { }
-} as unknown as any));
+} as unknown));
 
 mock.module('../src/client.js', () => {
     return {
@@ -38,9 +38,9 @@ describe('Service Commands', () => {
                 listMetrics: mock(() => Promise.resolve({ metrics: [] })),
                 listPeers: mock(() => Promise.resolve({ peers: [] })),
                 deletePeer: mock(() => Promise.resolve({ success: true }))
-            } as unknown as any),
+            } as unknown),
             [Symbol.asyncDispose]: async () => { }
-        } as unknown as any));
+        } as unknown));
     });
 
     describe('addService', () => {

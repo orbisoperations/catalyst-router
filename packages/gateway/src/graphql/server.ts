@@ -67,18 +67,18 @@ export class GatewayGraphqlServer {
         if (!this.yoga) {
             return new Response('Gateway not initialized', { status: 503 });
         }
-        return this.yoga.fetch(request, env as any, ctx as any);
+        return this.yoga.fetch(request, env as Record<string, unknown>, ctx as Record<string, unknown>);
     }
 
     private createYogaInstance(schemaOrConfig: unknown) {
-        let schema;
-        const config = schemaOrConfig as { schema?: any } | any[];
+        let schema: any;
+        const config = schemaOrConfig as { schema?: unknown } | { typeDefs: unknown; resolvers: unknown }[];
         if (config && 'schema' in config && config.schema) {
             schema = config.schema;
         } else if (Array.isArray(config)) {
             schema = createSchema({
-                typeDefs: (config as any[]).map(c => c.typeDefs),
-                resolvers: (config as any[]).map(c => c.resolvers)
+                typeDefs: (config as { typeDefs: any }[]).map(c => c.typeDefs),
+                resolvers: (config as { resolvers: any }[]).map(c => c.resolvers)
             });
         } else {
             schema = config;
@@ -108,9 +108,9 @@ export class GatewayGraphqlServer {
     }
 
     private async fetchRemoteSchema(executor: Executor) {
-        const result: any = await executor({ document: parse(getIntrospectionQuery()) });
+        const result = (await executor({ document: parse(getIntrospectionQuery()) })) as { data?: any; errors?: { message: string }[] };
         if (result.errors) {
-            throw new Error(result.errors.map((e: any) => e.message).join('\n'));
+            throw new Error(result.errors.map(e => e.message).join('\n'));
         }
         return buildClientSchema(result.data);
     }

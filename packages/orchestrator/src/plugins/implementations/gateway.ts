@@ -83,7 +83,7 @@ export class GatewayIntegrationPlugin extends BasePlugin {
             // Note: It might not throw on connection failure immediately until a call is made?
             // Or typically it tries to connect.
 
-            // @ts-ignore - Dynamic usage or loose typing to match remote method
+            // @ts-expect-error - Dynamic usage or loose typing to match remote method
             const resultPromise = gateway.updateConfig(config);
             const result = await resultPromise;
 

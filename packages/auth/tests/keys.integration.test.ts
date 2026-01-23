@@ -301,8 +301,8 @@ describe('Keys Integration Tests - File Persistence', () => {
             const { writeFileSync } = await import('fs');
 
             const invalidData: SerializedKeyPair = {
-                privateKeyJwk: { kty: 'invalid' } as unknown as any,
-                publicKeyJwk: { kty: 'invalid' } as unknown as any,
+                privateKeyJwk: { kty: 'invalid' } as unknown as { kty: string },
+                publicKeyJwk: { kty: 'invalid' } as unknown as { kty: string },
                 kid: 'test-kid',
                 createdAt: new Date().toISOString()
             };

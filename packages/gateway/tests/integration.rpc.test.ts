@@ -83,13 +83,13 @@ describe('RPC Integration', () => {
 
     it('should handle gateway update failure', async () => {
         // Setup mock to fail
-        updateCallback.mockImplementation(async (config: any) => {
+        updateCallback.mockImplementation(async (_config: any) => {
             return { success: false, error: 'Configuration rejected' };
         });
 
         ws = new WebSocket(`ws://localhost:${port}/`);
         await new Promise<void>((resolve) => ws.addEventListener('open', () => resolve()));
-        rpcClient = newWebSocketRpcSession(ws as any);
+        rpcClient = newWebSocketRpcSession(ws as unknown as WebSocket);
 
         const config = {
             services: [

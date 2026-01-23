@@ -155,7 +155,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
                     connected = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
         expect(connected).toBe(true);
 
@@ -174,7 +174,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
                     synced = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
         if (!synced) {
             console.error('Initial sync failed on B. Routes:', lastRoutesB);
@@ -218,7 +218,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
                     propagatedToB = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         // Verify propagation to A
@@ -234,7 +234,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
                     propagatedToA = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         expect(propagatedToB).toBe(true);
@@ -255,7 +255,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
                     peerId = peerBRecord.id;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
             await new Promise(r => setTimeout(r, 1000));
         }
 
@@ -285,7 +285,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
                     cleanedOnB = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         // Verify cleanup on A (B's services should be gone)
@@ -302,7 +302,7 @@ describe('Peering E2E Lifecycle (WebSocket Transport)', () => {
                     cleanedOnA = true;
                     break;
                 }
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
 
         if (!cleanedOnB) console.error('Cleanup failed on B. Routes:', lastRoutesB);

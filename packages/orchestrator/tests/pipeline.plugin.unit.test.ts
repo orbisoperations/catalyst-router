@@ -1,9 +1,9 @@
 
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { PluginPipeline } from '../src/plugins/pipeline.js';
 import { BasePlugin } from '../src/plugins/base.js';
-import type { PluginContext, PluginResult} from '../src/plugins/types.js';
-import { ActionSchema, AuthContextSchema } from '../src/plugins/types.js';
+import type { PluginContext, PluginResult } from '../src/plugins/types.js';
+// Removed unused ActionSchema and AuthContextSchema imports
 import { RouteTable } from '../src/state/route-table.js';
 
 // Mock Implementation for testing
@@ -77,7 +77,7 @@ describe('PluginPipeline Unit Tests', () => {
             };
         });
 
-        const plugin2 = new MockPlugin('SkippedPlugin', async (ctx) => {
+        const plugin2 = new MockPlugin('SkippedPlugin', async (_ctx) => {
             throw new Error('Should not run');
         });
 
@@ -92,7 +92,7 @@ describe('PluginPipeline Unit Tests', () => {
     });
 
     it('should catch exceptions and return typed error', async () => {
-        const plugin1 = new MockPlugin('ThrowingPlugin', async (ctx) => {
+        const plugin1 = new MockPlugin('ThrowingPlugin', async (_ctx) => {
             throw new Error('Uncaught Exception');
         });
 

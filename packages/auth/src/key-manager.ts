@@ -7,7 +7,8 @@ import {
     loadOrGenerateKeyPair,
     generateKeyPair,
     saveKeyPair,
-    getPublicKeyJwk
+    getPublicKeyJwk,
+    type SerializedKeyPair
 } from './keys.js';
 import type { SignOptions } from './jwt.js';
 import { signToken, verifyToken } from './jwt.js';
@@ -105,7 +106,7 @@ export class FileSystemKeyManager extends KeyManager {
                     // Reuse importKeyPair from keys.ts if exported valid format
                     const { importKeyPair } = await import('./keys.js');
                     // We need to cast or trust the persistent format matches
-                    const key = await importKeyPair(parsed as unknown as any);
+                    const key = await importKeyPair(parsed as unknown as SerializedKeyPair);
 
                     this.previousKeys.push({ key, expiresAt });
 
@@ -113,7 +114,7 @@ export class FileSystemKeyManager extends KeyManager {
                     console.warn(`Failed to load archived key ${file}:`, _e);
                 }
             }
-        } catch (_e) {
+        } catch {
             // Archive dir might be empty or unreadable
         }
     }
