@@ -6,22 +6,18 @@ export const localPeerUpdateAction = z.literal('local:peer:update')
 export const localPeerDeleteAction = z.literal('local:peer:delete')
 
 export const localPeerCreateMessageSchema = z.object({
-  action: localPeerCreateAction,
-  data: z.object({
-    peerInfo: PeerInfoSchema,
-  }),
+    action: localPeerCreateAction,
+    data: PeerInfoSchema,
 })
 
 export const localPeerUpdateMessageSchema = z.object({
-  action: localPeerUpdateAction,
-  data: z.object({
-    peerInfo: PeerInfoSchema,
-  }),
+    action: localPeerUpdateAction,
+    data: PeerInfoSchema,
 })
 
 export const localPeerDeleteMessageSchema = z.object({
-  action: localPeerDeleteAction,
-  data: z.object({
-    peerInfo: PeerInfoSchema,
-  }),
+    action: localPeerDeleteAction,
+    data: z.object({
+        name: z.string(),
+    }).and(PeerInfoSchema.partial()),
 })
