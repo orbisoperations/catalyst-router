@@ -1,19 +1,14 @@
 {
-    "compilerOptions": {
-        "target": "ESNext",
-        "module": "ESNext",
-        "moduleResolution": "bundler",
-        "strict": true,
-        "skipLibCheck": true,
-        "outDir": "./dist",
-        "types": [
-            "node",
-            "bun-types"
-        ],
-        "allowImportingTsExtensions": true,
-        "noEmit": true
-    },
-    "include": [
-        "src/**/*"
-    ]
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "types": ["bun", "node"],
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*"]
 }

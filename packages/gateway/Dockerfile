@@ -1,5 +1,5 @@
 # Runtime stage (use bun directly)
-FROM oven/bun:1
+FROM oven/bun:1.3.6
 WORKDIR /app
 
 # Copy root config
