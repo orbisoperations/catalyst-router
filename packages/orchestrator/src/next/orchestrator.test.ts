@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
-import type { PeerManager, PublicApi, PeerConnection } from './orchestrator'
+import type { PeerManager, PublicApi } from './orchestrator'
 import { CatalystNodeBus, ConnectionPool } from './orchestrator'
 import type { PeerInfo, RouteTable } from './routing/state'
 import { newRouteTable } from './routing/state'
@@ -8,30 +8,31 @@ import type { RpcStub } from 'capnweb'
 // Helper to access private state for testing
 interface TestBus {
     state: RouteTable
+    config?: { ibgp?: { secret?: string } }
 }
 
 // Mock ConnectionPool
 class MockConnectionPool extends ConnectionPool {
     public updateMock = mock(async () => ({ success: true }))
 
-    get(endpoint: string) {
+    get(_endpoint: string) {
         // Return a mock object that satisfies whatever RpcStub<PublicApi> needs for this test
         // Key method is getPeerConnection().open()
         return {
-            getPeerConnection: async (secret: string) => {
+            getPeerConnection: async (_secret: string) => {
                 return {
                     success: true,
                     connection: {
-                        open: async (peer: PeerInfo) => {
+                        open: async (_peer: PeerInfo) => {
                             return { success: true }
                         },
-                        close: async (peer: PeerInfo, code: number, reason?: string) => {
+                        close: async (_peer: PeerInfo, _code: number, _reason?: string) => {
                             return { success: true }
                         },
-                        update: this.updateMock
-                    }
+                        update: this.updateMock,
+                    },
                 }
-            }
+            },
         } as unknown as RpcStub<PublicApi>
     }
 }
@@ -42,7 +43,7 @@ describe('CatalystNodeBus', () => {
     beforeEach(() => {
         bus = new CatalystNodeBus({
             state: newRouteTable(),
-            connectionPool: { pool: new MockConnectionPool() }
+            connectionPool: { pool: new MockConnectionPool() },
         })
     })
 
@@ -195,7 +196,7 @@ describe('CatalystNodeBus', () => {
             // so mocking the pool in constructor is sufficient.
             bus = new CatalystNodeBus({
                 state: newRouteTable(),
-                connectionPool: { pool: new MockConnectionPool() }
+                connectionPool: { pool: new MockConnectionPool() },
             })
             api = bus.publicApi().getManagerConnection()
         })
@@ -262,8 +263,8 @@ describe('CatalystNodeBus', () => {
             })
 
             // Manually force to initializing if create didn't leave it there (it does, but handleNotify -> open -> connected sequence happens fast in test)
-            // Actually, since handleNotify is awaited, state is already connected. 
-            // So we need to cheat to test the action handler in isolation? 
+            // Actually, since handleNotify is awaited, state is already connected.
+            // So we need to cheat to test the action handler in isolation?
             // OR we rely on the fact that dispatch('internal:protocol:connected') is what does it.
 
             // Let's manually set it to initializing to verify the handler specifically
@@ -277,8 +278,8 @@ describe('CatalystNodeBus', () => {
                         name: 'connecting-peer',
                         endpoint: 'http://connecting.com',
                         domains: [],
-                    }
-                }
+                    },
+                },
             })
 
             expect(result).toEqual({ success: true })
@@ -303,7 +304,7 @@ describe('CatalystNodeBus', () => {
             })
 
             const state = (bus as unknown as TestBus).state
-            const peer = state.internal.peers.find(p => p.name === 'handshake-peer')
+            const peer = state.internal.peers.find((p) => p.name === 'handshake-peer')
             expect(peer).toBeDefined()
             expect(peer?.connectionStatus).toBe('connected')
 
@@ -313,12 +314,12 @@ describe('CatalystNodeBus', () => {
                 data: {
                     peerInfo: peerInfo,
                     code: 1000,
-                    reason: 'Done'
-                }
+                    reason: 'Done',
+                },
             })
 
             const finalState = (bus as unknown as TestBus).state
-            const peerAfterClose = finalState.internal.peers.find(p => p.name === 'handshake-peer')
+            const peerAfterClose = finalState.internal.peers.find((p) => p.name === 'handshake-peer')
             expect(peerAfterClose).toBeUndefined()
         })
     })
@@ -334,7 +335,7 @@ describe('CatalystNodeBus', () => {
                 },
             })
 
-            // 2. Simulate disconnect / reset status manually for test? 
+            // 2. Simulate disconnect / reset status manually for test?
             // Or just verify it stays connected / returns success.
             // Let's manually set it to initializing to test transition
             const state = (bus as unknown as TestBus).state
@@ -348,8 +349,8 @@ describe('CatalystNodeBus', () => {
                         name: 'remote-peer',
                         endpoint: 'http://remote.com',
                         domains: [],
-                    }
-                }
+                    },
+                },
             })
 
             expect(result).toEqual({ success: true })
@@ -365,8 +366,8 @@ describe('CatalystNodeBus', () => {
                         name: 'stranger',
                         endpoint: 'http://remote.com',
                         domains: [],
-                    }
-                }
+                    },
+                },
             })
 
             expect(result).toEqual({ success: false, error: "Peer 'stranger' is not configured on this node" })
@@ -398,8 +399,8 @@ describe('CatalystNodeBus', () => {
                         domains: [],
                     },
                     code: 1000,
-                    reason: 'Closed'
-                }
+                    reason: 'Closed',
+                },
             })
 
             expect(result).toEqual({ success: true })
@@ -417,8 +418,8 @@ describe('CatalystNodeBus', () => {
                         domains: [],
                     },
                     code: 1000,
-                    reason: 'Closed'
-                }
+                    reason: 'Closed',
+                },
             })
 
             expect(result).toEqual({ success: true })
@@ -429,12 +430,12 @@ describe('CatalystNodeBus', () => {
             const route = {
                 name: 'local-service',
                 protocol: 'http' as const,
-                endpoint: 'http://localhost:3000'
+                endpoint: 'http://localhost:3000',
             }
 
             const result = await bus.dispatch({
                 action: 'local:route:create',
-                data: route
+                data: route,
             })
 
             expect(result).toEqual({ success: true })
@@ -447,16 +448,16 @@ describe('CatalystNodeBus', () => {
             const route = {
                 name: 'local-service',
                 protocol: 'http' as const,
-                endpoint: 'http://localhost:3000'
+                endpoint: 'http://localhost:3000',
             }
             await bus.dispatch({
                 action: 'local:route:create',
-                data: route
+                data: route,
             })
 
             const result = await bus.dispatch({
                 action: 'local:route:delete',
-                data: route
+                data: route,
             })
 
             expect(result).toEqual({ success: true })
@@ -468,12 +469,12 @@ describe('CatalystNodeBus', () => {
             const peerInfo = {
                 name: 'remote-peer',
                 endpoint: 'http://remote.com',
-                domains: []
+                domains: [],
             }
             const route = {
                 name: 'remote-service',
                 protocol: 'http' as const,
-                endpoint: 'http://remote-service'
+                endpoint: 'http://remote-service',
             }
 
             const result = await bus.dispatch({
@@ -481,11 +482,9 @@ describe('CatalystNodeBus', () => {
                 data: {
                     peerInfo: peerInfo,
                     update: {
-                        updates: [
-                            { action: 'add', route: route }
-                        ]
-                    }
-                }
+                        updates: [{ action: 'add', route: route }],
+                    },
+                },
             })
 
             expect(result).toEqual({ success: true })
@@ -498,12 +497,12 @@ describe('CatalystNodeBus', () => {
             const peerInfo = {
                 name: 'remote-peer',
                 endpoint: 'http://remote.com',
-                domains: []
+                domains: [],
             }
             const route = {
                 name: 'remote-service',
                 protocol: 'http' as const,
-                endpoint: 'http://remote-service'
+                endpoint: 'http://remote-service',
             }
 
             // Add first
@@ -512,11 +511,9 @@ describe('CatalystNodeBus', () => {
                 data: {
                     peerInfo: peerInfo,
                     update: {
-                        updates: [
-                            { action: 'add', route: route }
-                        ]
-                    }
-                }
+                        updates: [{ action: 'add', route: route }],
+                    },
+                },
             })
 
             const result = await bus.dispatch({
@@ -524,11 +521,9 @@ describe('CatalystNodeBus', () => {
                 data: {
                     peerInfo: peerInfo,
                     update: {
-                        updates: [
-                            { action: 'remove', route: route }
-                        ]
-                    }
-                }
+                        updates: [{ action: 'remove', route: route }],
+                    },
+                },
             })
 
             expect(result).toEqual({ success: true })
@@ -544,7 +539,7 @@ describe('CatalystNodeBus', () => {
             // 0. Ensure peer exists in state (simulating handshake)
             await bus.dispatch({
                 action: 'local:peer:create',
-                data: peerInfo
+                data: peerInfo,
             })
 
             const route = { name: 'r1', protocol: 'http' as const, endpoint: 'http://r1' }
@@ -555,22 +550,22 @@ describe('CatalystNodeBus', () => {
                 data: {
                     peerInfo: peerInfo,
                     update: {
-                        updates: [{ action: 'add', route: route }]
-                    }
-                }
+                        updates: [{ action: 'add', route: route }],
+                    },
+                },
             })
 
             // Verify route exists
             let state = (bus as unknown as TestBus).state
             expect(state.internal.routes).toHaveLength(1)
             expect(state.internal.routes[0]).toMatchObject({
-                peerName: 'peer1'
+                peerName: 'peer1',
             })
 
             // 2. Disconnect peer
             await bus.dispatch({
                 action: 'internal:protocol:close',
-                data: { peerInfo: peerInfo, code: 1000, reason: 'bye' }
+                data: { peerInfo: peerInfo, code: 1000, reason: 'bye' },
             })
 
             // Verify route is gone
@@ -583,7 +578,7 @@ describe('CatalystNodeBus', () => {
             const route = { name: 'local1', protocol: 'http' as const, endpoint: 'http://l1' }
             await bus.dispatch({
                 action: 'local:route:create',
-                data: route
+                data: route,
             })
 
             // 2. Simulate new peer connecting
@@ -591,20 +586,63 @@ describe('CatalystNodeBus', () => {
 
             await bus.dispatch({
                 action: 'internal:protocol:connected',
-                data: { peerInfo: peerInfo }
+                data: { peerInfo: peerInfo },
             })
 
             // Verify update was called on the new peer
-            const pool = (bus as any).connectionPool as MockConnectionPool
+            const pool = (bus as unknown as { connectionPool: MockConnectionPool }).connectionPool
             expect(pool.updateMock).toHaveBeenCalled()
 
             const calls = pool.updateMock.mock.calls
-            const lastCall = calls[calls.length - 1] as any[]
+            const lastCall = calls[calls.length - 1] as unknown[]
             expect(lastCall).toBeDefined()
-            const updateMsg = lastCall[1]
+            const updateMsg = lastCall[1] as { updates: { action: string; route: { name: string } }[] }
             expect(updateMsg.updates).toHaveLength(1)
             expect(updateMsg.updates[0].action).toBe('add')
             expect(updateMsg.updates[0].route.name).toBe('local1')
+        })
+    })
+
+    describe('Config', () => {
+        it('should accept config in constructor', () => {
+            const configuredBus = new CatalystNodeBus({
+                state: newRouteTable(),
+                config: { ibgp: { secret: 'test-secret' } },
+            })
+
+            const busInternal = configuredBus as unknown as TestBus
+            expect(busInternal.config).toBeDefined()
+            expect(busInternal.config?.ibgp?.secret).toBe('test-secret')
+        })
+
+        it('should make config.ibgp.secret accessible', () => {
+            const configuredBus = new CatalystNodeBus({
+                state: newRouteTable(),
+                config: { ibgp: { secret: 'my-mesh-secret' } },
+            })
+
+            const busInternal = configuredBus as unknown as TestBus
+            expect(busInternal.config?.ibgp?.secret).toBe('my-mesh-secret')
+        })
+
+        it('should default gracefully when config is not provided', () => {
+            const busWithoutConfig = new CatalystNodeBus({
+                state: newRouteTable(),
+            })
+
+            const busInternal = busWithoutConfig as unknown as TestBus
+            expect(busInternal.config).toBeUndefined()
+        })
+
+        it('should default gracefully when ibgp config is empty', () => {
+            const busWithEmptyConfig = new CatalystNodeBus({
+                state: newRouteTable(),
+                config: {},
+            })
+
+            const busInternal = busWithEmptyConfig as unknown as TestBus
+            expect(busInternal.config).toBeDefined()
+            expect(busInternal.config?.ibgp).toBeUndefined()
         })
     })
 })
