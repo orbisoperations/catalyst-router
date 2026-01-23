@@ -6,11 +6,13 @@ import { newRpcResponse } from '@hono/capnweb'
 import type { IKeyManager } from '../key-manager/types.js'
 import { isAuthorizedToRevoke, type RevocationStore } from '../revocation.js'
 import { decodeToken, CLOCK_TOLERANCE } from '../jwt.js'
+import type { BootstrapService } from '../bootstrap.js'
 import {
   SignTokenRequestSchema,
   VerifyTokenRequestSchema,
   RevokeTokenRequestSchema,
   RotateRequestSchema,
+  CreateFirstAdminRequestSchema,
   type SignTokenResponse,
   type VerifyTokenResponse,
   type GetPublicKeyResponse,
@@ -18,12 +20,15 @@ import {
   type RevokeTokenResponse,
   type RotateResponse,
   type GetCurrentKeyIdResponse,
+  type CreateFirstAdminResponse,
+  type GetBootstrapStatusResponse,
 } from './schema.js'
 
 export class AuthRpcServer extends RpcTarget {
   constructor(
     private keyManager: IKeyManager,
-    private revocationStore?: RevocationStore
+    private revocationStore?: RevocationStore,
+    private bootstrapService?: BootstrapService
   ) {
     super()
   }
@@ -220,6 +225,63 @@ export class AuthRpcServer extends RpcTarget {
     } catch {
       return { success: false, error: 'Rotation failed' }
     }
+  }
+
+  /**
+   * Create the first admin user using a bootstrap token
+   *
+   * This is an unauthenticated endpoint that can only be used once.
+   * The bootstrap token must have been generated during service initialization.
+   * Returns a JWT on success for immediate use.
+   */
+  async createFirstAdmin(request: unknown): Promise<CreateFirstAdminResponse> {
+    if (!this.bootstrapService) {
+      return { success: false, error: 'Bootstrap not configured' }
+    }
+
+    const parsed = CreateFirstAdminRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      const errorMessages = parsed.error.issues.map((i) => i.message).join(', ')
+      return { success: false, error: errorMessages }
+    }
+
+    const result = await this.bootstrapService.createFirstAdmin(parsed.data)
+
+    if (!result.success) {
+      return { success: false, error: result.error ?? 'Bootstrap failed' }
+    }
+
+    // Issue JWT for the newly created admin
+    const token = await this.keyManager.sign({
+      subject: result.userId!,
+      expiresIn: '1h',
+      claims: {
+        roles: ['admin'],
+        orgId: 'default',
+      },
+    })
+
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+
+    return {
+      success: true,
+      userId: result.userId!,
+      token,
+      expiresAt: expiresAt.toISOString(),
+    }
+  }
+
+  /**
+   * Get bootstrap status (initialized/used)
+   *
+   * This is an unauthenticated endpoint that reveals no sensitive information.
+   */
+  async getBootstrapStatus(): Promise<GetBootstrapStatusResponse> {
+    if (!this.bootstrapService) {
+      return { initialized: false, used: false }
+    }
+
+    return this.bootstrapService.getBootstrapStatus()
   }
 }
 
