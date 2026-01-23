@@ -8,6 +8,7 @@ import { isAuthorizedToRevoke, type RevocationStore } from '../revocation.js'
 import { decodeToken, CLOCK_TOLERANCE } from '../jwt.js'
 import type { BootstrapService } from '../bootstrap.js'
 import type { LoginService } from '../login.js'
+import type { ApiKeyService } from '../api-key-service.js'
 import {
   SignTokenRequestSchema,
   VerifyTokenRequestSchema,
@@ -15,6 +16,10 @@ import {
   RotateRequestSchema,
   CreateFirstAdminRequestSchema,
   LoginRequestSchema,
+  CreateServiceAccountRequestSchema,
+  ListServiceAccountsRequestSchema,
+  DeleteServiceAccountRequestSchema,
+  AuthenticateApiKeyRequestSchema,
   type SignTokenResponse,
   type VerifyTokenResponse,
   type GetPublicKeyResponse,
@@ -25,6 +30,10 @@ import {
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
   type LoginResponse,
+  type CreateServiceAccountResponse,
+  type ListServiceAccountsResponse,
+  type DeleteServiceAccountResponse,
+  type AuthenticateApiKeyResponse,
 } from './schema.js'
 
 export class AuthRpcServer extends RpcTarget {
@@ -32,7 +41,8 @@ export class AuthRpcServer extends RpcTarget {
     private keyManager: IKeyManager,
     private revocationStore?: RevocationStore,
     private bootstrapService?: BootstrapService,
-    private loginService?: LoginService
+    private loginService?: LoginService,
+    private apiKeyService?: ApiKeyService
   ) {
     super()
   }
@@ -317,14 +327,192 @@ export class AuthRpcServer extends RpcTarget {
       expiresAt: result.expiresAt!.toISOString(),
     }
   }
+
+  /**
+   * Create a service account with API key
+   *
+   * Requires admin authorization.
+   */
+  async createServiceAccount(request: unknown): Promise<CreateServiceAccountResponse> {
+    if (!this.apiKeyService) {
+      return { success: false, error: 'API key service not configured' }
+    }
+
+    const parsed = CreateServiceAccountRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      const errorMessages = parsed.error.issues.map((i) => i.message).join(', ')
+      return { success: false, error: errorMessages }
+    }
+
+    // Verify admin authorization
+    const authResult = await this.keyManager.verify(parsed.data.authToken)
+    if (!authResult.valid) {
+      return { success: false, error: 'Invalid auth token' }
+    }
+    const roles = authResult.payload.roles as string[] | undefined
+    if (!roles?.includes('admin')) {
+      return { success: false, error: 'Admin authorization required' }
+    }
+
+    const result = await this.apiKeyService.createServiceAccount({
+      name: parsed.data.name,
+      roles: parsed.data.roles,
+      orgId: parsed.data.orgId,
+      expiresInDays: parsed.data.expiresInDays,
+      createdBy: authResult.payload.sub as string,
+    })
+
+    if (!result.success) {
+      return { success: false, error: result.error ?? 'Failed to create service account' }
+    }
+
+    return {
+      success: true,
+      serviceAccountId: result.serviceAccountId!,
+      apiKey: result.apiKey!,
+      expiresAt: result.expiresAt!.toISOString(),
+    }
+  }
+
+  /**
+   * List service accounts for an org
+   *
+   * Requires admin authorization.
+   */
+  async listServiceAccounts(request: unknown): Promise<ListServiceAccountsResponse> {
+    if (!this.apiKeyService) {
+      return { success: false, error: 'API key service not configured' }
+    }
+
+    const parsed = ListServiceAccountsRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      return { success: false, error: 'Invalid request' }
+    }
+
+    // Verify admin authorization
+    const authResult = await this.keyManager.verify(parsed.data.authToken)
+    if (!authResult.valid) {
+      return { success: false, error: 'Invalid auth token' }
+    }
+    const roles = authResult.payload.roles as string[] | undefined
+    if (!roles?.includes('admin')) {
+      return { success: false, error: 'Admin authorization required' }
+    }
+
+    const accounts = await this.apiKeyService.listServiceAccounts(parsed.data.orgId)
+
+    return {
+      success: true,
+      accounts: accounts.map((a) => ({
+        id: a.id,
+        name: a.name,
+        roles: a.roles,
+        keyPrefix: a.keyPrefix,
+        expiresAt: a.expiresAt.toISOString(),
+        createdAt: a.createdAt.toISOString(),
+      })),
+    }
+  }
+
+  /**
+   * Delete a service account
+   *
+   * Requires admin authorization.
+   */
+  async deleteServiceAccount(request: unknown): Promise<DeleteServiceAccountResponse> {
+    if (!this.apiKeyService) {
+      return { success: false, error: 'API key service not configured' }
+    }
+
+    const parsed = DeleteServiceAccountRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      return { success: false, error: 'Invalid request' }
+    }
+
+    // Verify admin authorization
+    const authResult = await this.keyManager.verify(parsed.data.authToken)
+    if (!authResult.valid) {
+      return { success: false, error: 'Invalid auth token' }
+    }
+    const roles = authResult.payload.roles as string[] | undefined
+    if (!roles?.includes('admin')) {
+      return { success: false, error: 'Admin authorization required' }
+    }
+
+    await this.apiKeyService.deleteServiceAccount(parsed.data.serviceAccountId)
+    return { success: true }
+  }
+
+  /**
+   * Authenticate an API key
+   *
+   * This is an unauthenticated endpoint used by the orchestrator
+   * to validate API keys from incoming requests.
+   */
+  async authenticateApiKey(request: unknown): Promise<AuthenticateApiKeyResponse> {
+    if (!this.apiKeyService) {
+      return { success: false, error: 'API key service not configured' }
+    }
+
+    const parsed = AuthenticateApiKeyRequestSchema.safeParse(request)
+    if (!parsed.success) {
+      return { success: false, error: 'Invalid request' }
+    }
+
+    return this.apiKeyService.authenticateApiKey(parsed.data.apiKey)
+  }
 }
 
 export function createAuthRpcHandler(rpcServer: AuthRpcServer): Hono {
   const app = new Hono()
+
+  // Simple JSON-RPC handler for HTTP POST (curl-friendly)
+  app.post('/', async (c) => {
+    try {
+      const body = await c.req.json()
+      const { method, params } = body as { method: string; params: unknown }
+
+      if (!method) {
+        return c.json({ success: false, error: 'Method required' }, 400)
+      }
+
+      // Route to appropriate method
+      const methodMap: Record<string, (params: unknown) => Promise<unknown>> = {
+        signToken: (p) => rpcServer.signToken(p),
+        verifyToken: (p) => rpcServer.verifyToken(p),
+        revokeToken: (p) => rpcServer.revokeToken(p),
+        getPublicKey: () => rpcServer.getPublicKey(),
+        getJwks: () => rpcServer.getJwks(),
+        getCurrentKeyId: () => rpcServer.getCurrentKeyId(),
+        rotate: (p) => rpcServer.rotate(p),
+        createFirstAdmin: (p) => rpcServer.createFirstAdmin(p),
+        getBootstrapStatus: () => rpcServer.getBootstrapStatus(),
+        login: (p) => rpcServer.login(p),
+        createServiceAccount: (p) => rpcServer.createServiceAccount(p),
+        listServiceAccounts: (p) => rpcServer.listServiceAccounts(p),
+        deleteServiceAccount: (p) => rpcServer.deleteServiceAccount(p),
+        authenticateApiKey: (p) => rpcServer.authenticateApiKey(p),
+      }
+
+      const handler = methodMap[method]
+      if (!handler) {
+        return c.json({ success: false, error: `Unknown method: ${method}` }, 400)
+      }
+
+      const result = await handler(params)
+      return c.json(result)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Internal error'
+      return c.json({ success: false, error: message }, 500)
+    }
+  })
+
+  // WebSocket handler for capnweb RPC (for programmatic clients)
   app.get('/', (c) => {
     return newRpcResponse(c, rpcServer, {
       upgradeWebSocket,
     })
   })
+
   return app
 }
