@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { Role } from '../permissions.js'
 
 /**
  * SignToken Request/Response schemas
@@ -320,3 +321,29 @@ export const AuthenticateApiKeyResponseSchema = z.discriminatedUnion('success', 
 ])
 
 export type AuthenticateApiKeyResponse = z.infer<typeof AuthenticateApiKeyResponseSchema>
+/**
+ * progressive API handler interfaces
+ */
+export interface AdminHandlers {
+  createToken(request: { role: Role; name: string }): Promise<string>
+  revokeToken(request: { target: string }): Promise<void>
+}
+
+export interface ValidationHandlers {
+  getJWKS(): Promise<GetJwksResponse>
+  getRevocationList(): Promise<string[]>
+  validate(request: { token: string }): Promise<VerifyTokenResponse>
+}
+
+/**
+ * PublicAPI (AuthRpcServer) schemas
+ */
+export const AdminApiRequestSchema = z.string() // token
+export const ValidationApiRequestSchema = z.string() // token
+
+export const CreateTokenRequestSchema = z.object({
+  role: z.string(),
+  name: z.string().min(1),
+})
+
+export type CreateTokenRequest = z.infer<typeof CreateTokenRequestSchema>

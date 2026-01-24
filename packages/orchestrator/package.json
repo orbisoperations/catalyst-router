@@ -10,6 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@catalyst/auth": "workspace:*",
     "@hono/capnweb": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",
