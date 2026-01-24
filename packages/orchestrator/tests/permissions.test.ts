@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'bun:test'
+<<<<<<< HEAD:packages/orchestrator/tests/permissions.test.ts
 import { getRequiredPermission, hasPermission, isSecretValid } from '../src/permissions'
 import type { Action } from '../src/schema'
 import { Actions } from '../src/action-types'
+=======
+import { getRequiredPermission, hasPermission, isSecretValid } from './permissions.js'
+import type { Action } from './schema'
+import { Actions } from './action-types'
+>>>>>>> 5726238 (chore: move permissions file into auth package):packages/orchestrator/src/next/permissions.test.ts
 
 describe('getRequiredPermission', () => {
   it('should return peer:create for LocalPeerCreate', () => {
@@ -92,6 +98,7 @@ describe('hasPermission', () => {
     })
   })
 
+<<<<<<< HEAD:packages/orchestrator/tests/permissions.test.ts
   describe('category wildcard', () => {
     // @JTaylor: this is kinda weird.
     // the first argument is not a role, but a wildcard permission scope.
@@ -101,11 +108,18 @@ describe('hasPermission', () => {
       expect(hasPermission(['peer:*'], 'peer:create')).toBe(true)
       expect(hasPermission(['peer:*'], 'peer:update')).toBe(true)
       expect(hasPermission(['peer:*'], 'peer:delete')).toBe(true)
+=======
+  describe('roles', () => {
+    it('should grant permissions associated with the role', () => {
+      expect(hasPermission(['peer'], 'ibgp:connect')).toBe(true)
+      expect(hasPermission(['peer_custodian'], 'peer:create')).toBe(true)
+      expect(hasPermission(['data_custodian'], 'route:create')).toBe(true)
+>>>>>>> 5726238 (chore: move permissions file into auth package):packages/orchestrator/src/next/permissions.test.ts
     })
 
-    it('should deny permission when category wildcard does not match', () => {
-      expect(hasPermission(['peer:*'], 'route:create')).toBe(false)
-      expect(hasPermission(['route:*'], 'peer:create')).toBe(false)
+    it('should deny permissions not associated with the role', () => {
+      expect(hasPermission(['peer'], 'peer:create')).toBe(false)
+      expect(hasPermission(['peer_custodian'], 'route:create')).toBe(false)
     })
   })
 
