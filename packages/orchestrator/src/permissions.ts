@@ -1,8 +1,9 @@
-import { timingSafeEqual } from 'node:crypto'
 import type { Action } from './schema.js'
 import { Actions } from './action-types.js'
 
 import { Permission } from '@catalyst/auth'
+export { Permission } from '@catalyst/auth'
+export type { Role } from '@catalyst/auth'
 
 /**
  * Maps action types to their required permissions.
@@ -27,7 +28,7 @@ export function getRequiredPermission(action: Action): Permission {
   return ACTION_PERMISSION_MAP[action.action] ?? Permission.Admin
 }
 
-import { hasPermission as authHasPermission } from '@catalyst/auth'
+import { hasPermission as authHasPermission, isSecretValid as authIsSecretValid } from '@catalyst/auth'
 
 /**
  * Checks if the given roles include the required permission.
@@ -38,32 +39,7 @@ export function hasPermission(roles: string[], required: Permission): boolean {
 
 /**
  * Timing-safe secret comparison.
- * Prevents timing attacks by:
- * 1. Using crypto.timingSafeEqual for constant-time comparison
- * 2. Padding shorter strings to prevent length-based timing leaks
- *
- * @param provided - The secret provided by the caller
- * @param expected - The expected secret from config
- * @returns true if secrets match, false otherwise
  */
 export function isSecretValid(provided: string, expected: string): boolean {
-  const providedBuf = Buffer.from(provided)
-  const expectedBuf = Buffer.from(expected)
-
-  // If lengths differ, pad the shorter one and still run comparison
-  // This prevents timing attacks based on early-exit for length mismatch
-  if (providedBuf.length !== expectedBuf.length) {
-    // Pad to match the longer length
-    const maxLen = Math.max(providedBuf.length, expectedBuf.length)
-    const paddedProvided = Buffer.alloc(maxLen)
-    const paddedExpected = Buffer.alloc(maxLen)
-    providedBuf.copy(paddedProvided)
-    expectedBuf.copy(paddedExpected)
-
-    // Run comparison but always return false for length mismatch
-    timingSafeEqual(paddedProvided, paddedExpected)
-    return false
-  }
-
-  return timingSafeEqual(providedBuf, expectedBuf)
+  return authIsSecretValid(provided, expected)
 }
