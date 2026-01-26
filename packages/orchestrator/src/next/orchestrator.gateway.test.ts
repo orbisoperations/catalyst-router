@@ -32,9 +32,9 @@ class MockConnectionPool extends ConnectionPool {
           this.calls.push({ endpoint, config })
           return { success: true }
         }),
-        getPeerConnection: mock(async () => ({
+        getIBGPClient: mock(async () => ({
           success: true,
-          connection: {
+          client: {
             update: mock(async () => ({ success: true })),
             open: mock(async () => ({ success: true })),
           },

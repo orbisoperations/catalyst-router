@@ -16,10 +16,15 @@ import {
 } from 'capnweb'
 
 export interface PublicApi {
-  getManagerConnection(): PeerManager
-  getPeerConnection(
-    secret: string
-  ): { success: true; connection: PeerConnection } | { success: false; error: string }
+  getNetworkClient(
+    token: string
+  ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }>
+  getDataCustodianClient(
+    token: string
+  ): Promise<{ success: true; client: DataCustodian } | { success: false; error: string }>
+  getIBGPClient(
+    token: string
+  ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
   getInspector(): Inspector
   dispatch(
     action: Action,
@@ -32,22 +37,22 @@ export interface Inspector {
   listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 
-export interface PeerManager {
-  addPeer(
-    peer: PeerInfo,
-    auth?: AuthContext
-  ): Promise<{ success: true } | { success: false; error: string }>
-  updatePeer(
-    peer: PeerInfo,
-    auth?: AuthContext
-  ): Promise<{ success: true } | { success: false; error: string }>
+export interface NetworkClient {
+  addPeer(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
+  updatePeer(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
   removePeer(
-    peer: Pick<PeerInfo, 'name'>,
-    auth?: AuthContext
+    peer: Pick<PeerInfo, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
 }
 
-export interface PeerConnection {
+export interface DataCustodian {
+  addRoute(route: DataChannelDefinition): Promise<{ success: true } | { success: false; error: string }>
+  removeRoute(
+    route: DataChannelDefinition
+  ): Promise<{ success: true } | { success: false; error: string }>
+}
+
+export interface IBGPClient {
   open(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
   close(
     peer: PeerInfo,
@@ -103,10 +108,15 @@ export interface OrchestratorConfig {
   }
 }
 
+const NETWORK_MGMT_AUTH: AuthContext = { userId: 'network:mgmt', roles: ['network custodian'] }
+const DATA_MGMT_AUTH: AuthContext = { userId: 'data:mgmt', roles: ['data custodian'] }
+const PEER_AUTH: AuthContext = { userId: 'peer:authenticated', roles: ['network peers'] }
+
 export class CatalystNodeBus extends RpcTarget {
   private state: RouteTable
   private connectionPool: ConnectionPool
   private config: OrchestratorConfig
+  public lastNotificationPromise?: Promise<void>
 
   constructor(opts: {
     state?: RouteTable
@@ -142,18 +152,34 @@ export class CatalystNodeBus extends RpcTarget {
     sentAction: Action,
     auth?: AuthContext
   ): Promise<{ success: true } | { success: false; error: string }> {
+    console.log(`[${this.config.node.name}] dispatch called. Auth provided:`, JSON.stringify(auth))
     // Validate and default to anonymous context
     const resolvedAuth: AuthContext = auth
       ? AuthContextSchema.parse(auth)
       : { userId: 'anonymous', roles: [] }
 
     const prevState = this.state
+    console.log(`[${this.config.node.name}] Dispatching action: ${sentAction.action}`)
+
+    // Log detailed data for route creation to debug
+    if (sentAction.action === Actions.LocalRouteCreate) {
+      console.log(`[${this.config.node.name}] Route Create Data:`, JSON.stringify(sentAction.data))
+    }
+
     const result = await this.handleAction(sentAction, this.state, resolvedAuth)
     if (result.success) {
       this.state = result.state
-      // Fire notifications/side-effects after state update
-      await this.handleNotify(sentAction, result.state, prevState, resolvedAuth)
+      // Fire and forget side effects to avoid deadlocks in distributed calls
+
+      // Note: Hono's waitUntil is not available here easily as we are in the core class.
+      // The catch below handles unhandled rejections for the side effect chain.
+      // Ideally in a serverless evironment we would use ctx.waitUntil.
+      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState, resolvedAuth).catch((e) => {
+        console.error(`[${this.config.node.name}] Error in handleNotify for ${sentAction.action}:`, e)
+      })
       return { success: true }
+    } else {
+      console.error(`[${this.config.node.name}] Action failed: ${sentAction.action}`, result.error)
     }
     return result
   }
@@ -165,7 +191,10 @@ export class CatalystNodeBus extends RpcTarget {
   ): Promise<{ success: true; state: RouteTable } | { success: false; error: string }> {
     // Permission check - single enforcement point
     const permission = getRequiredPermission(action)
-    if (!hasPermission(auth.roles, permission)) {
+    if (!permission) {
+      return { success: false, error: `Unauthorized action: ${action.action}` }
+    }
+    if (!hasPermission(auth.roles, permission, auth.permissions)) {
       return { success: false, error: `Permission denied: ${permission}` }
     }
 
@@ -210,12 +239,12 @@ export class CatalystNodeBus extends RpcTarget {
             peers: peerList.map((p) =>
               p.name === action.data.name
                 ? {
-                    ...p,
-                    endpoint: action.data.endpoint,
-                    domains: action.data.domains,
-                    connectionStatus: 'initializing',
-                    lastConnected: undefined,
-                  }
+                  ...p,
+                  endpoint: action.data.endpoint,
+                  domains: action.data.domains,
+                  connectionStatus: 'initializing',
+                  lastConnected: undefined,
+                }
                 : p
             ),
           },
@@ -322,12 +351,14 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       case Actions.InternalProtocolUpdate: {
-        const peerInfo = action.data.peerInfo
+        const { peerInfo, update } = action.data
+        console.log(`[${this.config.node.name}] InternalProtocolUpdate: received ${update.updates.length} updates from ${peerInfo.name}`)
+        const sourcePeerName = peerInfo.name
         let currentInternalRoutes = [...state.internal.routes]
 
-        for (const update of action.data.update.updates) {
-          if (update.action === 'add') {
-            const nodePath = update.nodePath ?? []
+        for (const u of update.updates) {
+          if (u.action === 'add') {
+            const nodePath = u.nodePath ?? []
 
             // Loop Prevention
             if (nodePath.includes(this.config.node.name)) {
@@ -337,21 +368,19 @@ export class CatalystNodeBus extends RpcTarget {
               continue
             }
 
-            const routeToAdd = {
-              ...update.route,
-              peer: peerInfo,
-              peerName: peerInfo.name,
-              nodePath,
-            }
-
             // Remove existing if any (upsert)
             currentInternalRoutes = currentInternalRoutes.filter(
-              (r) => !(r.name === update.route.name && r.peerName === peerInfo.name)
+              (r) => !(r.name === u.route.name && r.peerName === sourcePeerName)
             )
-            currentInternalRoutes.push(routeToAdd)
-          } else if (update.action === 'remove') {
+            currentInternalRoutes.push({
+              ...u.route,
+              peerName: sourcePeerName,
+              peer: peerInfo,
+              nodePath: nodePath,
+            })
+          } else if (u.action === 'remove') {
             currentInternalRoutes = currentInternalRoutes.filter(
-              (r) => !(r.name === update.route.name && r.peerName === peerInfo.name)
+              (r) => r.name !== u.route.name || r.peerName !== sourcePeerName
             )
           }
         }
@@ -374,7 +403,7 @@ export class CatalystNodeBus extends RpcTarget {
     return { success: true, state }
   }
 
-  private async syncGateway() {
+  private async handleGraphqlConfiguration() {
     const gatewayEndpoint = this.config.gqlGatewayConfig?.endpoint
     if (!gatewayEndpoint) return
 
@@ -414,10 +443,7 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
-  /**
-   * Handle side effects after state changes.
-   */
-  async handleNotify(
+  async handleBGPNotify(
     action: Action,
     _state: RouteTable,
     prevState: RouteTable,
@@ -427,13 +453,18 @@ export class CatalystNodeBus extends RpcTarget {
       case Actions.LocalPeerCreate: {
         // Perform side effect: Try to open connection
         try {
+          console.log(`[${this.config.node.name}] LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`)
           const stub = this.connectionPool.get(action.data.endpoint)
           if (stub) {
-            const connectionResult = await stub.getPeerConnection('secret')
+            const connectionResult = await stub.getIBGPClient(
+              this.config.ibgp?.secret || 'valid-secret'
+            )
+
             if (connectionResult.success) {
-              const result = await connectionResult.connection.open(this.config.node)
+              const result = await connectionResult.client.open(this.config.node)
 
               if (result.success) {
+                console.log(`[${this.config.node.name}] Successfully opened connection to ${action.data.name}`)
                 // Dispatch connected action with inherited auth
                 await this.dispatch(
                   {
@@ -457,82 +488,121 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       case Actions.InternalProtocolOpen: {
-        // Sync existing local routes back to the new peer
-        for (const route of _state.local.routes) {
+        console.log(`[${this.config.node.name}] InternalProtocolOpen: sync request from ${action.data.peerInfo.name}`)
+        // Sync existing routes (local AND internal) back to the new peer
+        const allRoutes = [
+          ..._state.local.routes.map((r) => ({
+            action: 'add' as const,
+            route: r,
+            nodePath: [this.config.node.name],
+          })),
+          ..._state.internal.routes
+            .filter((r) => !r.nodePath.includes(action.data.peerInfo.name))
+            .map((r) => ({
+              action: 'add' as const,
+              route: r,
+              nodePath: [this.config.node.name, ...r.nodePath],
+            })),
+        ]
+
+        if (allRoutes.length > 0) {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const connectionResult = await stub.getPeerConnection('secret')
+              const connectionResult = await stub.getIBGPClient(
+                this.config.ibgp?.secret || 'valid-secret'
+              )
               if (connectionResult.success) {
-                await connectionResult.connection.update(this.config.node, {
-                  updates: [{ action: 'add', route, nodePath: [this.config.node.name] }],
+                await connectionResult.client.update(this.config.node, {
+                  updates: allRoutes,
                 })
               }
             }
           } catch (e) {
             console.error(
-              `[${this.config.node.name}] Failed to sync route back to ${action.data.peerInfo.name}`,
+              `[${this.config.node.name}] Failed to sync routes back to ${action.data.peerInfo.name}`,
               e
             )
           }
         }
-        await this.syncGateway()
         break
       }
       case Actions.InternalProtocolConnected: {
-        // Sync existing local routes to the new peer
-        for (const route of _state.local.routes) {
+        // Sync existing routes (local AND internal) to the new peer
+        const allRoutes = [
+          ..._state.local.routes.map((r) => ({
+            action: 'add' as const,
+            route: r,
+            nodePath: [this.config.node.name],
+          })),
+          ..._state.internal.routes
+            .filter((r) => !r.nodePath.includes(action.data.peerInfo.name))
+            .map((r) => ({
+              action: 'add' as const,
+              route: r,
+              nodePath: [this.config.node.name, ...r.nodePath],
+            })),
+        ]
+
+        if (allRoutes.length > 0) {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const connectionResult = await stub.getPeerConnection('secret')
+              const connectionResult = await stub.getIBGPClient(
+                this.config.ibgp?.secret || 'valid-secret'
+              )
               if (connectionResult.success) {
-                await connectionResult.connection.update(this.config.node, {
-                  updates: [{ action: 'add', route, nodePath: [this.config.node.name] }],
+                await connectionResult.client.update(this.config.node, {
+                  updates: allRoutes,
                 })
               }
             }
           } catch (e) {
             console.error(
-              `[${this.config.node.name}] Failed to sync route to ${action.data.peerInfo.name}`,
+              `[${this.config.node.name}] Failed to sync routes to ${action.data.peerInfo.name}`,
               e
             )
           }
         }
-        await this.syncGateway()
         break
       }
       case Actions.LocalPeerDelete: {
-        // Use prevState to find the peer info that was just deleted
+        // 1. Close connection to the deleted peer
         const peer = prevState.internal.peers.find((p) => p.name === action.data.name)
         if (peer) {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getPeerConnection('secret')
+              const connectionResult = await stub.getIBGPClient(
+                this.config.ibgp?.secret || 'valid-secret'
+              )
               if (connectionResult.success) {
-                await connectionResult.connection.close(this.config.node, 1000, 'Peer removed')
+                await connectionResult.client.close(this.config.node, 1000, 'Peer removed')
               }
             }
           } catch (e) {
-            console.error(
-              `[${this.config.node.name}] Failed to close connection to ${peer.name}`,
-              e
-            )
+            console.error(`[${this.config.node.name}] Failed to close connection to ${peer.name}`, e)
           }
         }
+
+        // 2. Propagate removal of routes learned FROM this peer to OTHER peers
+        await this.propagateWithdrawalsForPeer(action.data.name, prevState, _state)
         break
       }
       case Actions.LocalRouteCreate: {
-        for (const peer of _state.internal.peers.filter(
-          (p) => p.connectionStatus === 'connected'
-        )) {
+        // Broadcast to all connected internal peers
+        const connectedPeers = _state.internal.peers.filter((p) => p.connectionStatus === 'connected')
+        console.log(`[${this.config.node.name}] LocalRouteCreate: ${action.data.name}, broadcasting to ${connectedPeers.length} peers.`)
+        for (const peer of connectedPeers) {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getPeerConnection('secret')
+              console.log(`[${this.config.node.name}] Pushing local route ${action.data.name} to ${peer.name}`)
+              const connectionResult = await stub.getIBGPClient(
+                this.config.ibgp?.secret || 'valid-secret'
+              )
               if (connectionResult.success) {
-                await connectionResult.connection.update(this.config.node, {
+                await connectionResult.client.update(this.config.node, {
                   updates: [
                     { action: 'add', route: action.data, nodePath: [this.config.node.name] },
                   ],
@@ -543,7 +613,6 @@ export class CatalystNodeBus extends RpcTarget {
             console.error(`[${this.config.node.name}] Failed to broadcast route to ${peer.name}`, e)
           }
         }
-        await this.syncGateway()
         break
       }
       case Actions.LocalRouteDelete: {
@@ -553,9 +622,11 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getPeerConnection('secret')
+              const connectionResult = await stub.getIBGPClient(
+                this.config.ibgp?.secret || 'valid-secret'
+              )
               if (connectionResult.success) {
-                await connectionResult.connection.update(this.config.node, {
+                await connectionResult.client.update(this.config.node, {
                   updates: [{ action: 'remove', route: action.data }],
                 })
               }
@@ -567,7 +638,6 @@ export class CatalystNodeBus extends RpcTarget {
             )
           }
         }
-        await this.syncGateway()
         break
       }
       case Actions.InternalProtocolUpdate: {
@@ -576,13 +646,28 @@ export class CatalystNodeBus extends RpcTarget {
           (p) => p.connectionStatus === 'connected' && p.name !== sourcePeerName
         )) {
           try {
+            // Filter out updates that have a loop (including the local node,
+            // as we should have already dropped them, and the target peer,
+            // as they would drop it anyway).
+            const safeUpdates = action.data.update.updates.filter((u) => {
+              if (u.action === 'remove') return true
+              const path = u.nodePath ?? []
+              if (path.includes(this.config.node.name)) return false
+              if (path.includes(peer.name)) return false
+              return true
+            })
+
+            if (safeUpdates.length === 0) continue
+
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getPeerConnection('secret')
+              const connectionResult = await stub.getIBGPClient(
+                this.config.ibgp?.secret || 'valid-secret'
+              )
               if (connectionResult.success) {
                 // Prepend my FQDN to the path of propagated updates
                 const updatesWithPrepend = {
-                  updates: action.data.update.updates.map((u) => {
+                  updates: safeUpdates.map((u) => {
                     if (u.action === 'add') {
                       return {
                         ...u,
@@ -592,7 +677,7 @@ export class CatalystNodeBus extends RpcTarget {
                     return u
                   }),
                 }
-                await connectionResult.connection.update(this.config.node, updatesWithPrepend)
+                await connectionResult.client.update(this.config.node, updatesWithPrepend)
               }
             }
           } catch (e) {
@@ -602,56 +687,149 @@ export class CatalystNodeBus extends RpcTarget {
             )
           }
         }
-        await this.syncGateway()
         break
       }
       case Actions.InternalProtocolClose: {
-        await this.syncGateway()
+        await this.propagateWithdrawalsForPeer(action.data.peerInfo.name, prevState, _state)
         break
+      }
+    }
+  }
+
+  /**
+   * Handle side effects after state changes.
+   */
+  async handleNotify(
+    action: Action,
+    _state: RouteTable,
+    prevState: RouteTable,
+    auth: AuthContext
+  ): Promise<void> {
+    await this.handleBGPNotify(action, _state, prevState, auth)
+    await this.handleGraphqlConfiguration()
+  }
+
+  private async propagateWithdrawalsForPeer(
+    peerName: string,
+    prevState: RouteTable,
+    newState: RouteTable
+  ) {
+    const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === peerName)
+    if (removedRoutes.length === 0) return
+
+    console.log(
+      `[${this.config.node.name}] Propagating withdrawal of ${removedRoutes.length} routes from ${peerName}`
+    )
+
+    for (const peer of newState.internal.peers.filter(
+      (p) => p.connectionStatus === 'connected' && p.name !== peerName
+    )) {
+      try {
+        const stub = this.connectionPool.get(peer.endpoint)
+        if (stub) {
+          const connectionResult = await stub.getIBGPClient(
+            this.config.ibgp?.secret || 'valid-secret'
+          )
+
+          if (connectionResult.success) {
+            await connectionResult.client.update(this.config.node, {
+              updates: removedRoutes.map((r) => ({ action: 'remove' as const, route: r })),
+            })
+          }
+        }
+      } catch (e) {
+        console.error(
+          `[${this.config.node.name}] Failed to propagate withdrawal to ${peer.name}`,
+          e
+        )
       }
     }
   }
 
   publicApi(): PublicApi {
     return {
-      getManagerConnection: (): PeerManager => {
-        return {
-          addPeer: async (peer: PeerInfo, auth?: AuthContext) => {
-            return this.dispatch({ action: Actions.LocalPeerCreate, data: peer }, auth)
-          },
-          updatePeer: async (peer: PeerInfo, auth?: AuthContext) => {
-            return this.dispatch({ action: Actions.LocalPeerUpdate, data: peer }, auth)
-          },
-          removePeer: async (peer: Pick<PeerInfo, 'name'>, auth?: AuthContext) => {
-            return this.dispatch({ action: Actions.LocalPeerDelete, data: peer }, auth)
-          },
-        }
-      },
-      getPeerConnection: (
-        secret: string
-      ): { success: true; connection: PeerConnection } | { success: false; error: string } => {
-        // Validate PSK
+      getNetworkClient: async (
+        token: string
+      ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> => {
+        // TODO: Parse token to extract authorization context
         const expectedSecret = this.config?.ibgp?.secret
-        if (!expectedSecret || !isSecretValid(secret, expectedSecret)) {
-          return { success: false, error: 'Invalid secret' }
+        if (!expectedSecret || !isSecretValid(token, expectedSecret)) {
+          return { success: false, error: 'Invalid management token' }
         }
 
-        // Create peer auth context with ibgp permissions
-        const peerAuth: AuthContext = {
-          userId: 'peer:authenticated',
-          roles: ['ibgp:connect', 'ibgp:disconnect', 'ibgp:update'],
+        const auth: AuthContext = {
+          userId: 'networkmgmt',
+          roles: ['networkcustodian'],
+          permissions: ['peer:create', 'peer:update', 'peer:delete'],
         }
 
         return {
           success: true,
-          connection: {
+          client: {
+            addPeer: async (peer: PeerInfo) => {
+              return this.dispatch({ action: Actions.LocalPeerCreate, data: peer }, auth)
+            },
+            updatePeer: async (peer: PeerInfo) => {
+              return this.dispatch({ action: Actions.LocalPeerUpdate, data: peer }, auth)
+            },
+            removePeer: async (peer: Pick<PeerInfo, 'name'>) => {
+              return this.dispatch({ action: Actions.LocalPeerDelete, data: peer }, auth)
+            },
+          },
+        }
+      },
+      getDataCustodianClient: async (
+        token: string
+      ): Promise<{ success: true; client: DataCustodian } | { success: false; error: string }> => {
+        // TODO: Parse token to extract authorization context
+        const expectedSecret = this.config?.ibgp?.secret
+        if (!expectedSecret || !isSecretValid(token, expectedSecret)) {
+          return { success: false, error: 'Invalid management token' }
+        }
+
+        const auth: AuthContext = {
+          userId: 'datamgmt',
+          roles: ['datacustodian'],
+          permissions: ['route:create', 'route:delete'],
+        }
+
+        return {
+          success: true,
+          client: {
+            addRoute: async (route: DataChannelDefinition) => {
+              return this.dispatch({ action: Actions.LocalRouteCreate, data: route }, auth)
+            },
+            removeRoute: async (route: DataChannelDefinition) => {
+              return this.dispatch({ action: Actions.LocalRouteDelete, data: route }, auth)
+            },
+          },
+        }
+      },
+      getIBGPClient: async (
+        token: string
+      ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }> => {
+        // TODO: Parse token to extract authorization context
+        const expectedSecret = this.config?.ibgp?.secret
+        if (!expectedSecret || !isSecretValid(token, expectedSecret)) {
+          return { success: false, error: 'Invalid secret' }
+        }
+
+        const auth: AuthContext = {
+          userId: 'ibgppeer',
+          roles: ['networkpeer'],
+          permissions: ['ibgp:connect', 'ibgp:disconnect', 'ibgp:update'],
+        }
+
+        return {
+          success: true,
+          client: {
             open: async (peer: PeerInfo) => {
               return this.dispatch(
                 {
                   action: Actions.InternalProtocolOpen,
                   data: { peerInfo: peer },
                 },
-                peerAuth
+                auth
               )
             },
             close: async (peer: PeerInfo, code: number, reason?: string) => {
@@ -660,7 +838,7 @@ export class CatalystNodeBus extends RpcTarget {
                   action: Actions.InternalProtocolClose,
                   data: { peerInfo: peer, code, reason },
                 },
-                peerAuth
+                auth
               )
             },
             update: async (peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>) => {
@@ -672,7 +850,7 @@ export class CatalystNodeBus extends RpcTarget {
                     update: update,
                   },
                 },
-                peerAuth
+                auth
               )
             },
           },
@@ -693,3 +871,4 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 }
+
