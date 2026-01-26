@@ -21,7 +21,10 @@ export interface PublicApi {
     secret: string
   ): { success: true; connection: PeerConnection } | { success: false; error: string }
   getInspector(): Inspector
-  dispatch(action: Action): Promise<{ success: true } | { success: false; error: string }>
+  dispatch(
+    action: Action,
+    auth?: AuthContext
+  ): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export interface Inspector {
@@ -91,15 +94,15 @@ export class ConnectionPool {
   }
 }
 
-export const OrchestratorConfigSchema = z.object({
-  node: PeerInfoSchema,
-  ibgp: z
-    .object({
-      secret: z.string().optional(),
-    })
-    .optional(),
-})
-export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
+export interface OrchestratorConfig {
+  node: PeerInfo
+  ibgp?: {
+    secret?: string
+  }
+  gqlGatewayConfig?: {
+    endpoint: string
+  }
+}
 
 export class CatalystNodeBus extends RpcTarget {
   private state: RouteTable
@@ -390,6 +393,46 @@ export class CatalystNodeBus extends RpcTarget {
     return { success: true, state }
   }
 
+  private async syncGateway() {
+    const gatewayEndpoint = this.config.gqlGatewayConfig?.endpoint
+    if (!gatewayEndpoint) return
+
+    const graphqlRoutes = [...this.state.local.routes, ...this.state.internal.routes].filter(
+      (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
+    )
+
+    if (graphqlRoutes.length === 0) {
+      console.log(`[${this.config.node.name}] No GraphQL routes to sync.`)
+      return
+    }
+
+    console.log(
+      `[${this.config.node.name}] Syncing ${graphqlRoutes.length} GraphQL routes to gateway...`
+    )
+
+    try {
+      const stub = this.connectionPool.get(gatewayEndpoint)
+      if (stub) {
+        const config = {
+          services: graphqlRoutes.map((r) => ({
+            name: r.name,
+            url: r.endpoint!,
+          })),
+        }
+
+        // @ts-expect-error - Gateway RPC implementation uses updateConfig
+        const result = await stub.updateConfig(config)
+        if (!result.success) {
+          console.error(`[${this.config.node.name}] Gateway sync failed:`, result.error)
+        } else {
+          console.log(`[${this.config.node.name}] Gateway sync successful.`)
+        }
+      }
+    } catch (e) {
+      console.error(`[${this.config.node.name}] Error syncing to gateway:`, e)
+    }
+  }
+
   /**
    * Handle side effects after state changes.
    */
@@ -460,6 +503,7 @@ export class CatalystNodeBus extends RpcTarget {
             )
           }
         }
+        await this.syncGateway()
         break
       }
       case Actions.InternalProtocolConnected: {
@@ -486,6 +530,7 @@ export class CatalystNodeBus extends RpcTarget {
             )
           }
         }
+        await this.syncGateway()
         break
       }
       case Actions.LocalPeerDelete: {
@@ -536,6 +581,7 @@ export class CatalystNodeBus extends RpcTarget {
             console.error(`[${this.config.node.name}] Failed to broadcast route to ${peer.name}`, e)
           }
         }
+        await this.syncGateway()
         break
       }
       case Actions.LocalRouteDelete: {
@@ -566,6 +612,7 @@ export class CatalystNodeBus extends RpcTarget {
             )
           }
         }
+        await this.syncGateway()
         break
       }
       case Actions.InternalProtocolUpdate: {
@@ -604,6 +651,11 @@ export class CatalystNodeBus extends RpcTarget {
             )
           }
         }
+        await this.syncGateway()
+        break
+      }
+      case Actions.InternalProtocolClose: {
+        await this.syncGateway()
         break
       }
     }

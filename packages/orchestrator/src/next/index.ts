@@ -27,6 +27,9 @@ const bus = new CatalystNodeBus({
     ibgp: {
       secret: process.env.CATALYST_PEERING_SECRET || 'valid-secret',
     },
+    gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
+      ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
+      : undefined,
   },
   connectionPool: { type: 'ws' },
 })
