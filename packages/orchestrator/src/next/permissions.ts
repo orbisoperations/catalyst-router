@@ -19,7 +19,7 @@ export type Permission =
 
 /**
  * Maps action types to their required permissions.
- * Unknown actions require '*' (admin only).
+ * Unknown actions require explicit admin privileges.
  */
 const ACTION_PERMISSION_MAP: Record<string, Permission> = {
   [Actions.LocalPeerCreate]: 'peer:create',
@@ -34,39 +34,62 @@ const ACTION_PERMISSION_MAP: Record<string, Permission> = {
 }
 
 /**
- * Returns the permission required to execute the given action.
- * Unknown actions require '*' (admin only).
+ * Discrete roles and their associated permissions.
  */
-export function getRequiredPermission(action: Action): Permission {
-  return ACTION_PERMISSION_MAP[action.action] ?? '*'
+export const ROLES: Record<string, Permission[]> = {
+  admin: [
+    'peer:create',
+    'peer:update',
+    'peer:delete',
+    'route:create',
+    'route:delete',
+    'ibgp:connect',
+    'ibgp:disconnect',
+    'ibgp:update',
+  ],
+  networkcustodian: [
+    'peer:create',
+    'peer:update',
+    'peer:delete',
+    'ibgp:connect',
+    'ibgp:disconnect',
+    'ibgp:update',
+  ],
+  datacustodian: ['route:create', 'route:delete'],
+  networkpeer: ['ibgp:connect', 'ibgp:disconnect', 'ibgp:update'],
+}
+
+/**
+ * Returns the permission required to execute the given action.
+ */
+export function getRequiredPermission(action: Action): Permission | undefined {
+  return ACTION_PERMISSION_MAP[action.action]
 }
 
 /**
  * Checks if the given roles include the required permission.
  *
- * Permission is granted if roles include:
- * - '*' (superuser)
- * - 'admin' (admin role)
- * - The exact permission string
- * - A category wildcard (e.g., 'peer:*' grants 'peer:create')
+ * Permission is granted if the user has a role that contains
+ * the exact permission string.
  */
-export function hasPermission(roles: string[], required: Permission): boolean {
-  // Superuser or admin grants everything
-  if (roles.includes('*') || roles.includes('admin')) {
+export function hasPermission(
+  userRoles: string[],
+  requiredPermission: Permission,
+  userPermissions?: string[]
+): boolean {
+  // 1. Check direct permissions if provided
+  if (userPermissions?.includes('*') || userPermissions?.includes(requiredPermission)) {
     return true
   }
 
-  // Direct permission match
-  if (roles.includes(required)) {
-    return true
+  // 2. Check permissions inherited from roles
+  for (const roleName of userRoles) {
+    if (roleName === '*') return true // Support legacy wildcard role
+    const permissions = ROLES[roleName] || []
+    if (permissions.includes('*') || permissions.includes(requiredPermission)) {
+      return true
+    }
   }
-
-  // Category wildcard (e.g., 'peer:*' matches 'peer:create')
-  const [category] = required.split(':')
-  if (roles.includes(`${category}:*`)) {
-    return true
-  }
-
   return false
 }
 
