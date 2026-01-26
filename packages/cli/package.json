@@ -8,7 +8,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "test": "bun test tests/*.unit.test.ts && bun test tests/*.integration.test.ts"
+    "test": "bun test tests/**/*.unit.test.ts && bun test tests/**/*.integration.test.ts",
+    "test:unit": "bun test tests/**/*.unit.test.ts",
+    "test:integration": "bun test tests/**/*.integration.test.ts"
   },
   "dependencies": {
     "capnweb": "catalog:",

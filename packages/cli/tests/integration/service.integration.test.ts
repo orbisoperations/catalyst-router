@@ -18,7 +18,7 @@ describe('CLI E2E with Containers', () => {
     let booksUri: string;
     let moviesUri: string;
 
-    const repoRoot = resolve(__dirname, '../../..');
+    const repoRoot = resolve(__dirname, '../../../..');
 
     async function runCli(args: string[]) {
         const proc = Bun.spawn(['bun', 'run', 'src/index.ts', ...args], {
@@ -131,7 +131,7 @@ describe('CLI E2E with Containers', () => {
         orchestratorPort = orchestratorContainer.getMappedPort(3000);
         process.env.CATALYST_ORCHESTRATOR_URL = `ws://localhost:${orchestratorPort}/rpc`;
 
-    }, TIMEOUT);
+    });
 
     afterAll(async () => {
         console.log('Teardown: Stopping containers...');
@@ -147,7 +147,7 @@ describe('CLI E2E with Containers', () => {
         console.log('Teardown: Complete.');
     });
 
-    it('should add services via CLI and reflect in list', async () => {
+    it('should add services via CLI and reflect in list (backward compatible)', { timeout: 30_000 }, async () => {
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for server warmup
 
         const runCliExpectSuccess = async (args: string[]) => {
@@ -159,12 +159,12 @@ describe('CLI E2E with Containers', () => {
             return res;
         };
 
-        // 1. Initial State: Empty
+        // 1. Initial State: Empty (backward compatible command)
         console.log('--- Step 1: List Empty ---');
         const listRes1 = await runCliExpectSuccess(['service', 'list']);
         expect(listRes1.stdout).toContain('No services found');
 
-        // 2. Add Books
+        // 2. Add Books (backward compatible command)
         console.log('--- Step 2: Add Books ---');
         const addRes1 = await runCliExpectSuccess(['service', 'add', 'books', booksUri]);
         expect(addRes1.stdout).toContain("Service 'books' added successfully");
@@ -190,5 +190,28 @@ describe('CLI E2E with Containers', () => {
         console.log('--- Step 6: Verify Metrics ---');
         const _metricsRes = await runCliExpectSuccess(['metrics']);
         // Metrics output should show something
-    }, 30_000);
+    });
+
+    it('should add services via new control command structure', { timeout: 30_000 }, async () => {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait briefly
+
+        const runCliExpectSuccess = async (args: string[]) => {
+            const res = await runCli(args);
+            if (!res.success) {
+                console.error(`CLI Failure [${args.join(' ')}]:\nSTDOUT: ${res.stdout}\nSTDERR: ${res.stderr}`);
+            }
+            expect(res.success).toBe(true);
+            return res;
+        };
+
+        // Test new command structure
+        console.log('--- Test: Add service with new structure ---');
+        const addRes = await runCliExpectSuccess(['control', 'service', 'add', 'test-service', booksUri]);
+        expect(addRes.stdout).toContain("Service 'test-service' added successfully");
+
+        // List with new structure
+        console.log('--- Test: List with new structure ---');
+        const listRes = await runCliExpectSuccess(['control', 'service', 'list']);
+        expect(listRes.stdout).toContain('test-service');
+    });
 });
