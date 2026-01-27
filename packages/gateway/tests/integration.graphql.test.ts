@@ -1,95 +1,100 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import type { Hono } from 'hono';
-import type { StartedTestContainer } from 'testcontainers';
-import { GenericContainer, Wait } from 'testcontainers';
-import path from 'path';
-import type { GatewayGraphqlServer } from '../src/graphql/server.ts';
-import { createGatewayHandler } from '../src/graphql/server.ts';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import type { Hono } from 'hono'
+import type { StartedTestContainer } from 'testcontainers'
+import { GenericContainer, Wait } from 'testcontainers'
+import path from 'path'
+import type { GatewayGraphqlServer } from '../src/graphql/server.ts'
+import { createGatewayHandler } from '../src/graphql/server.ts'
 
 describe('Gateway Integration', () => {
-    const TIMEOUT = 120000;
-    let booksContainer: StartedTestContainer;
-    let moviesContainer: StartedTestContainer;
-    let gatewayServer: GatewayGraphqlServer;
-    let gatewayApp: Hono;
+  const TIMEOUT = 120000
+  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+  let booksContainer: StartedTestContainer
+  let moviesContainer: StartedTestContainer
+  let gatewayServer: GatewayGraphqlServer
+  let gatewayApp: Hono
 
-    beforeAll(async () => {
-        const repoRoot = path.resolve(__dirname, '../../..');
+  beforeAll(async () => {
+    if (skipTests) return
+    const repoRoot = path.resolve(__dirname, '../../..')
 
-        // 1. Start Books Service
-        {
-            const imageName = 'books-service:test';
-            const dockerfile = 'packages/examples/Dockerfile.books';
-            // Workaround for Bun tar-stream issue
-            const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: repoRoot,
-                stdout: 'ignore',
-                stderr: 'inherit',
-            });
-            await proc.exited;
+    // 1. Start Books Service
+    {
+      const imageName = 'books-service:test'
+      const dockerfile = 'packages/examples/Dockerfile.books'
+      // Workaround for Bun tar-stream issue
+      const proc = Bun.spawn(['podman', 'build', '-t', imageName, '-f', dockerfile, '.'], {
+        cwd: repoRoot,
+        stdout: 'ignore',
+        stderr: 'inherit',
+      })
+      await proc.exited
 
-            const container = await new GenericContainer(imageName)
-                .withExposedPorts(8080)
-                .withWaitStrategy(Wait.forHttp('/health', 8080));
-            booksContainer = await container.start();
-        }
+      const container = await new GenericContainer(imageName)
+        .withExposedPorts(8080)
+        .withWaitStrategy(Wait.forHttp('/health', 8080))
+      booksContainer = await container.start()
+    }
 
-        // 2. Start Movies Service
-        {
-            const imageName = 'movies-service:test';
-            const dockerfile = 'packages/examples/Dockerfile.movies';
-            // Workaround for Bun tar-stream issue
-            const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-                cwd: repoRoot,
-                stdout: 'ignore',
-                stderr: 'inherit',
-            });
-            await proc.exited;
+    // 2. Start Movies Service
+    {
+      const imageName = 'movies-service:test'
+      const dockerfile = 'packages/examples/Dockerfile.movies'
+      // Workaround for Bun tar-stream issue
+      const proc = Bun.spawn(['podman', 'build', '-t', imageName, '-f', dockerfile, '.'], {
+        cwd: repoRoot,
+        stdout: 'ignore',
+        stderr: 'inherit',
+      })
+      await proc.exited
 
-            const container = await new GenericContainer(imageName)
-                .withExposedPorts(8080)
-                .withWaitStrategy(Wait.forHttp('/health', 8080));
-            moviesContainer = await container.start();
-        }
+      const container = await new GenericContainer(imageName)
+        .withExposedPorts(8080)
+        .withWaitStrategy(Wait.forHttp('/health', 8080))
+      moviesContainer = await container.start()
+    }
 
-        // 3. Start Gateway (in-process)
-        // We use createGatewayHandler to get the app and the server instance
-        const result = createGatewayHandler();
-        gatewayApp = result.app as unknown as Hono;
-        gatewayServer = result.server;
+    // 3. Start Gateway (in-process)
+    // We use createGatewayHandler to get the app and the server instance
+    const result = createGatewayHandler()
+    gatewayApp = result.app as unknown as Hono
+    gatewayServer = result.server
+  }, TIMEOUT)
 
-    }, TIMEOUT);
+  afterAll(async () => {
+    if (skipTests) return
+    if (booksContainer) await booksContainer.stop()
+    if (moviesContainer) await moviesContainer.stop()
+  })
 
-    afterAll(async () => {
-        if (booksContainer) await booksContainer.stop();
-        if (moviesContainer) await moviesContainer.stop();
-    });
+  it(
+    'should federate books and movies',
+    async () => {
+      if (skipTests) return
+      const booksPort = booksContainer.getMappedPort(8080)
+      const booksHost = booksContainer.getHost()
+      const moviesPort = moviesContainer.getMappedPort(8080)
+      const moviesHost = moviesContainer.getHost()
 
-    it('should federate books and movies', async () => {
-        const booksPort = booksContainer.getMappedPort(8080);
-        const booksHost = booksContainer.getHost();
-        const moviesPort = moviesContainer.getMappedPort(8080);
-        const moviesHost = moviesContainer.getHost();
+      // 4. Configure Gateway with dynamic ports
+      const config = {
+        services: [
+          {
+            name: 'books',
+            url: `http://${booksHost}:${booksPort}/graphql`,
+          },
+          {
+            name: 'movies',
+            url: `http://${moviesHost}:${moviesPort}/graphql`,
+          },
+        ],
+      }
 
-        // 4. Configure Gateway with dynamic ports
-        const config = {
-            services: [
-                {
-                    name: 'books',
-                    url: `http://${booksHost}:${booksPort}/graphql`
-                },
-                {
-                    name: 'movies',
-                    url: `http://${moviesHost}:${moviesPort}/graphql`
-                }
-            ]
-        };
+      const updateResult = await gatewayServer.reload(config)
+      expect(updateResult.success).toBe(true)
 
-        const updateResult = await gatewayServer.reload(config);
-        expect(updateResult.success).toBe(true);
-
-        // 5. Query Gateway
-        const query = `
+      // 5. Query Gateway
+      const query = `
             query {
                 books {
                     title
@@ -100,27 +105,29 @@ describe('Gateway Integration', () => {
                     director
                 }
             }
-        `;
+        `
 
-        const response = await gatewayApp.request('http://localhost/graphql', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query })
-        });
+      const response = await gatewayApp.request('http://localhost/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      })
 
-        const result = await response.json();
+      const result = await response.json()
 
-        expect(result.data).toEqual({
-            books: [
-                { title: 'The Lord of the Rings', author: 'J.R.R. Tolkien' },
-                { title: 'Pride and Prejudice', author: 'Jane Austen' },
-                { title: 'The Hobbit', author: 'J.R.R. Tolkien' }
-            ],
-            movies: [
-                { title: 'The Lord of the Rings: The Fellowship of the Ring', director: 'Peter Jackson' },
-                { title: 'Super Mario Bros.', director: 'Rocky Morton, Annabel Jankel' },
-                { title: 'Pride & Prejudice', director: 'Joe Wright' }
-            ]
-        });
-    }, TIMEOUT);
-});
+      expect(result.data).toEqual({
+        books: [
+          { title: 'The Lord of the Rings', author: 'J.R.R. Tolkien' },
+          { title: 'Pride and Prejudice', author: 'Jane Austen' },
+          { title: 'The Hobbit', author: 'J.R.R. Tolkien' },
+        ],
+        movies: [
+          { title: 'The Lord of the Rings: The Fellowship of the Ring', director: 'Peter Jackson' },
+          { title: 'Super Mario Bros.', director: 'Rocky Morton, Annabel Jankel' },
+          { title: 'Pride & Prejudice', director: 'Joe Wright' },
+        ],
+      })
+    },
+    TIMEOUT
+  )
+})

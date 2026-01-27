@@ -5,7 +5,7 @@ export type DataChannelProtocol = z.infer<typeof DataChannelProtocolEnum>
 
 export const DataChannelDefinitionSchema = z.object({
   name: z.string(),
-  endpoint: z.string().optional(),
+  endpoint: z.string().url().optional(),
   protocol: DataChannelProtocolEnum,
   region: z.string().optional(),
   tags: z.array(z.string()).optional(),

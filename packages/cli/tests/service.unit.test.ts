@@ -6,7 +6,9 @@ import { AddServiceInputSchema } from '../src/types.js'
 const mockApplyAction = mock((_action: unknown) =>
   Promise.resolve({ success: true, error: undefined as string | undefined })
 )
-const mockListLocalRoutes = mock(() => Promise.resolve({ routes: [] as unknown[] }))
+const mockListLocalRoutes = mock(() =>
+  Promise.resolve({ routes: { local: [] as any[], internal: [] as any[] } })
+)
 
 const mockCreateClient = mock(() =>
   Promise.resolve({
@@ -117,7 +119,9 @@ describe('Service Commands', () => {
 
   describe('listServices', () => {
     it('should list services', async () => {
-      mockListLocalRoutes.mockResolvedValueOnce({ routes: [{ name: 's1', endpoint: 'url' }] })
+      mockListLocalRoutes.mockResolvedValueOnce({
+        routes: { local: [{ name: 's1', endpoint: 'url' }], internal: [] },
+      })
       const result = await listServices()
       expect(result.success).toBe(true)
       if (result.success) {

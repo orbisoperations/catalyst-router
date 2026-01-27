@@ -20,7 +20,7 @@
   "devDependencies": {
     "@types/bun": "catalog:dev",
     "@types/node": "^20.11.0",
-    "testcontainers": "^10.7.1",
+    "testcontainers": "catalog:testing",
     "typescript": "^5.3.3",
     "vitest": "^1.2.1"
   }
