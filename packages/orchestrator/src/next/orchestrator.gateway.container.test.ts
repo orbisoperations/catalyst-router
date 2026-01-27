@@ -35,17 +35,34 @@ describe('Orchestrator Gateway Container Tests', () => {
 
     // Build images (rely on cache)
     console.log('Building Gateway image...')
-    spawnSync('podman', ['build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'], { cwd: repoRoot, stdio: 'inherit' })
+    spawnSync('podman', ['build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    })
 
     console.log('Building Books service image...')
-    spawnSync('podman', ['build', '-f', 'packages/examples/Dockerfile.books', '-t', booksImage, '.'], { cwd: repoRoot, stdio: 'inherit' })
+    spawnSync(
+      'podman',
+      ['build', '-f', 'packages/examples/Dockerfile.books', '-t', booksImage, '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
+    )
 
     console.log('Building Orchestrator image...')
-    spawnSync('podman', ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'], { cwd: repoRoot, stdio: 'inherit' })
+    spawnSync(
+      'podman',
+      ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
+    )
 
     network = await new Network().start()
 
-    const startContainer = async (name: string, alias: string, waitMsg: string, env: any = {}, ports: number[] = []) => {
+    const startContainer = async (
+      name: string,
+      alias: string,
+      waitMsg: string,
+      env: any = {},
+      ports: number[] = []
+    ) => {
       let image = orchestratorImage
       if (alias === 'gateway') image = gatewayImage
       if (alias === 'books') image = booksImage
@@ -56,15 +73,15 @@ describe('Orchestrator Gateway Container Tests', () => {
         .withWaitStrategy(Wait.forLogMessage(waitMsg))
         .withLogConsumer((stream: any) => {
           if (stream.pipe) stream.pipe(process.stdout)
-          stream.on('line', (line: string) => {
+          stream.on('data', (data: Buffer | string) => {
             if (alias === 'peer-b') {
-              peerBLogs.push(line)
+              peerBLogs.push(data.toString())
             }
           })
         })
 
       if (ports.length > 0) {
-        ports.forEach(p => container = container.withExposedPorts(p))
+        ports.forEach((p) => (container = container.withExposedPorts(p)))
       }
       if (Object.keys(env).length > 0) {
         container = container.withEnvironment(env)
@@ -83,8 +100,20 @@ describe('Orchestrator Gateway Container Tests', () => {
       CATALYST_GQL_GATEWAY_ENDPOINT: gq,
     })
 
-    peerA = await startContainer('peer-a.somebiz.local.io', 'peer-a', 'NEXT_ORCHESTRATOR_STARTED', nodeEnv('peer-a.somebiz.local.io', 'peer-a'), [3000])
-    peerB = await startContainer('peer-b.somebiz.local.io', 'peer-b', 'NEXT_ORCHESTRATOR_STARTED', nodeEnv('peer-b.somebiz.local.io', 'peer-b', 'ws://gateway:4000/api'), [3000])
+    peerA = await startContainer(
+      'peer-a.somebiz.local.io',
+      'peer-a',
+      'NEXT_ORCHESTRATOR_STARTED',
+      nodeEnv('peer-a.somebiz.local.io', 'peer-a'),
+      [3000]
+    )
+    peerB = await startContainer(
+      'peer-b.somebiz.local.io',
+      'peer-b',
+      'NEXT_ORCHESTRATOR_STARTED',
+      nodeEnv('peer-b.somebiz.local.io', 'peer-b', 'ws://gateway:4000/api'),
+      [3000]
+    )
     books = await startContainer('books', 'books', 'BOOKS_STARTED', {}, [8080])
 
     console.log('Containers started')
@@ -164,7 +193,10 @@ describe('Orchestrator Gateway Container Tests', () => {
       }
 
       if (!sawSync) {
-        console.log('Peer B Logs during failure (count: ' + peerBLogs.length + '):', peerBLogs.join('\n'))
+        console.log(
+          'Peer B Logs during failure (count: ' + peerBLogs.length + '):',
+          peerBLogs.join('\n')
+        )
       }
       expect(sawSync).toBe(true)
     },
