@@ -12,7 +12,7 @@ import { PluginPipeline } from '../plugins/pipeline.js'
 import { LoggerPlugin } from '../plugins/implementations/logger.js'
 import { GatewayIntegrationPlugin } from '../plugins/implementations/gateway.js'
 import { LocalRoutingTablePlugin } from '../plugins/implementations/local-routing.js'
-import { InternalBGPPlugin } from '../plugins/implementations/Internal-bgp.js'
+import { InternalBGPPlugin } from '../plugins/implementations/internal-bgp.js'
 import type { ListPeersResult, PeerInfo, UpdateMessage, IBGPScope } from './schema/peering.js'
 import {
   IBGPProtocolResource,
@@ -70,11 +70,11 @@ export class OrchestratorRpcServer extends RpcTarget {
     // V2 MIGRATION NOTE:
     // The architecture is moving towards a split State/Notification pipeline.
     // The integration would look like this:
-    
+
     // import { OrchestratorV2 } from '../next/orchestrator.js';
     // const v2 = new OrchestratorV2();
-    // return v2; 
-    
+    // return v2;
+
     // For now, this class maintains the V1 PluginPipeline compatibility.
     */
 

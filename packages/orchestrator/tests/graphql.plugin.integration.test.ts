@@ -9,6 +9,8 @@ import { resolve } from 'path'
 // Increase timeout for builds
 const TIMEOUT = 180_000
 
+const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
+
 describe('GraphQL Plugin E2E with Containers', () => {
   let network: StartedNetwork
   let gatewayContainer: StartedTestContainer
@@ -26,12 +28,12 @@ describe('GraphQL Plugin E2E with Containers', () => {
     // const examplesDir = join(repoRoot, 'packages/examples');
     // const gatewayDir = join(repoRoot, 'packages/gateway');
 
-    console.log('Building Podman images...')
+    console.log(`Building ${CONTAINER_RUNTIME} images...`)
 
     const buildBooks = async () => {
       await Bun.spawn(
         [
-          'podman',
+          CONTAINER_RUNTIME,
           'build',
           '-t',
           'books-service:test',
@@ -50,7 +52,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
     const buildMovies = async () => {
       await Bun.spawn(
         [
-          'podman',
+          CONTAINER_RUNTIME,
           'build',
           '-t',
           'movies-service:test',
@@ -68,7 +70,15 @@ describe('GraphQL Plugin E2E with Containers', () => {
 
     const buildGateway = async () => {
       await Bun.spawn(
-        ['podman', 'build', '-t', 'gateway-service:test', '-f', 'packages/gateway/Dockerfile', '.'],
+        [
+          CONTAINER_RUNTIME,
+          'build',
+          '-t',
+          'gateway-service:test',
+          '-f',
+          'packages/gateway/Dockerfile',
+          '.',
+        ],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -78,7 +88,7 @@ describe('GraphQL Plugin E2E with Containers', () => {
     }
 
     await Promise.all([buildBooks(), buildMovies(), buildGateway()])
-    console.log('Podman images built successfully.')
+    console.log(`${CONTAINER_RUNTIME} images built successfully.`)
 
     console.log('Starting Containers...')
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { InternalBGPPlugin } from '../src/plugins/implementations/Internal-bgp.js'
+import { InternalBGPPlugin } from '../src/plugins/implementations/internal-bgp.js'
 import { RouteTable } from '../src/state/route-table.js'
 import type { PluginContext } from '../src/plugins/types.js'
 import type { Action } from '../src/rpc/schema/index.js'
