@@ -40,7 +40,13 @@ export async function listServices(
   try {
     const root = await createClient(orchestratorUrl)
     const result = await root.connectionFromManagementSDK().listLocalRoutes()
-    return { success: true, data: result.routes || [] }
+    // Flattens local and internal routes for the CLI list
+    const allRoutes = [...result.routes.local, ...result.routes.internal].map((r) => ({
+      name: r.name,
+      endpoint: r.endpoint || 'N/A',
+      protocol: r.protocol,
+    }))
+    return { success: true, data: allRoutes }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(chalk.red('[CLI] listServices Error:'), message)

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
-import { Actions } from './action-types.js'
-import { CatalystNodeBus, ConnectionPool, type PublicApi } from './orchestrator.js'
+import { Actions } from '../src/action-types.js'
+import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
-import type { PeerInfo } from './routing/state.js'
+import type { PeerInfo } from '../src/routing/state.js'
 
 const MOCK_NODE: PeerInfo = {
   name: 'node-a.somebiz.local.io',

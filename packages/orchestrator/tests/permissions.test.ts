@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
-import { getRequiredPermission, hasPermission, isSecretValid } from './permissions'
-import type { Action } from './schema'
-import { Actions } from './action-types'
+import { getRequiredPermission, hasPermission, isSecretValid } from '../src/permissions'
+import type { Action } from '../src/schema'
+import { Actions } from '../src/action-types'
 
 describe('getRequiredPermission', () => {
   it('should return peer:create for LocalPeerCreate', () => {

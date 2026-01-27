@@ -1,7 +1,11 @@
 import { Hono } from 'hono'
 import { upgradeWebSocket, websocket } from 'hono/bun'
 import { newRpcResponse } from '@hono/capnweb'
+import { DataChannelDefinitionSchema } from './routing/datachannel.js'
 import { CatalystNodeBus } from './orchestrator.js'
+
+export { DataChannelDefinitionSchema as ServiceDefinitionSchema }
+export { CatalystNodeBus }
 
 const app = new Hono()
 

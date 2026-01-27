@@ -6,10 +6,10 @@ import {
   type StartedTestContainer,
   type StartedNetwork,
 } from 'testcontainers'
-import path from 'path'
-import { spawnSync } from 'node:child_process'
+
+import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
-import type { PublicApi } from './orchestrator.js'
+import type { PublicApi } from '../src/orchestrator.js'
 
 describe('Orchestrator Container Tests (Next)', () => {
   const TIMEOUT = 600000 // 10 minutes
@@ -20,7 +20,6 @@ describe('Orchestrator Container Tests (Next)', () => {
   let nodeC: StartedTestContainer
 
   const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../../')
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
@@ -45,8 +44,8 @@ describe('Orchestrator Container Tests (Next)', () => {
           CATALYST_PEERING_SECRET: 'valid-secret',
         })
         .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
-        .withLogConsumer((stream: any) => {
-          if (stream.pipe) stream.pipe(process.stdout)
+        .withLogConsumer((stream: Readable) => {
+          stream.pipe(process.stdout)
         })
         .start()
     }
@@ -115,7 +114,7 @@ describe('Orchestrator Container Tests (Next)', () => {
       await dataAResult.client.addRoute({
         name: 'service-a',
         endpoint: 'http://a:8080',
-        protocol: 'http'
+        protocol: 'http',
       })
 
       // Check B learned it
