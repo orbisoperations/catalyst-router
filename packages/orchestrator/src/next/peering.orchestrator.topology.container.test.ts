@@ -20,8 +20,7 @@ describe('Orchestrator Peering Container Tests', () => {
 
     const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
     const repoRoot = path.resolve(__dirname, '../../../../')
-    const skipTests =
-        !process.env.DOCKER_HOST && !process.env.DOCKER_SOCK && !process.env.PODMAN_VAR_LINK
+    const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
     beforeAll(async () => {
         if (skipTests) {
