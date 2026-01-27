@@ -8,7 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "test": "bun test",
-    "test:podman": "./src/next/test_with_podman.sh"
+    "test:next": "bun test --filter 'src/next'"
   },
   "dependencies": {
     "@hono/capnweb": "catalog:",

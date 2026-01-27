@@ -93,7 +93,7 @@ describe('hasPermission', () => {
   })
 
   describe('category wildcard', () => {
-    it.skip('should grant permission when category wildcard matches', () => {
+    it('should grant permission when category wildcard matches', () => {
       expect(hasPermission(['peer:*'], 'peer:create')).toBe(true)
       expect(hasPermission(['peer:*'], 'peer:update')).toBe(true)
       expect(hasPermission(['peer:*'], 'peer:delete')).toBe(true)

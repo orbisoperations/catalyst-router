@@ -6,12 +6,14 @@ import {
   type StartedTestContainer,
   type StartedNetwork,
 } from 'testcontainers'
-import path from 'path'
-import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from './orchestrator.js'
 
-describe('Orchestrator Container Tests (Next)', () => {
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+if (skipTests) {
+  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED unset')
+}
+describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
@@ -20,15 +22,8 @@ describe('Orchestrator Container Tests (Next)', () => {
   let nodeC: StartedTestContainer
 
   const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../../')
-  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
-    if (skipTests) {
-      console.warn('Skipping container tests: Podman runtime not detected')
-      return
-    }
-
     // Base image already built by script
     network = await new Network().start()
 
@@ -45,7 +40,7 @@ describe('Orchestrator Container Tests (Next)', () => {
           CATALYST_PEERING_SECRET: 'valid-secret',
         })
         .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
-        .withLogConsumer((stream: any) => {
+        .withLogConsumer((stream) => {
           if (stream.pipe) stream.pipe(process.stdout)
         })
         .start()
@@ -71,7 +66,7 @@ describe('Orchestrator Container Tests (Next)', () => {
     }
   }, TIMEOUT)
 
-  const getClient = (node: StartedTestContainer) => {
+  const getClient = (node: StartedTestContainer): PublicApi => {
     const port = node.getMappedPort(3000)
     return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
   }
@@ -79,7 +74,6 @@ describe('Orchestrator Container Tests (Next)', () => {
   it(
     'A <-> B: peering and route sync',
     async () => {
-      if (skipTests) return
       const clientA = getClient(nodeA)
       const clientB = getClient(nodeB)
 
@@ -115,7 +109,7 @@ describe('Orchestrator Container Tests (Next)', () => {
       await dataAResult.client.addRoute({
         name: 'service-a',
         endpoint: 'http://a:8080',
-        protocol: 'http'
+        protocol: 'http',
       })
 
       // Check B learned it
@@ -137,7 +131,6 @@ describe('Orchestrator Container Tests (Next)', () => {
   it(
     'A <-> B <-> C: transit route propagation with nodePath',
     async () => {
-      if (skipTests) return
       const clientB = getClient(nodeB)
       const clientC = getClient(nodeC)
 

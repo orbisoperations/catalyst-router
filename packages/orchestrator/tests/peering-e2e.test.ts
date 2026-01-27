@@ -7,7 +7,13 @@ import type { PublicApi, ManagementScope } from '../../cli/src/client.js'
 import type { LocalRoute } from '../src/rpc/schema/index.js'
 import type { AuthorizedPeer } from '../src/rpc/schema/peering.js'
 
-describe('Peering E2E Lifecycle (Containerized)', () => {
+const containerRuntime = process.env.CATALYST_CONTAINER_RUNTIME || 'docker'
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+if (skipTests) {
+  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED unset')
+}
+
+describe.skipIf(skipTests)('Peering E2E Lifecycle (Containerized)', () => {
   const TIMEOUT = 300000 // 5 minutes
 
   let network: StartedNetwork
@@ -26,9 +32,9 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
 
   beforeAll(async () => {
     // 1. Build Image
-    console.log('Building Podman image...')
+    console.log(`Building ${containerRuntime} image...`)
     const buildProc = Bun.spawn(
-      ['podman', 'build', '-f', 'packages/orchestrator/Dockerfile', '-t', imageName, '.'],
+      [containerRuntime, 'build', '-f', 'packages/orchestrator/Dockerfile', '-t', imageName, '.'],
       {
         cwd: repoRoot,
         stdout: 'inherit',
@@ -38,7 +44,7 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
     await buildProc.exited
 
     if (buildProc.exitCode !== 0) {
-      throw new Error('Podman build failed')
+      throw new Error(`${containerRuntime} build failed`)
     }
 
     // 2. Create Network
@@ -78,9 +84,9 @@ describe('Peering E2E Lifecycle (Containerized)', () => {
     portB = peerB.getMappedPort(3000)
     console.log(`Peer B started on port ${portB}`)
 
-      // Stream logs for debugging
-      ; (await peerA.logs()).pipe(process.stdout)
-      ; (await peerB.logs()).pipe(process.stdout)
+    // Stream logs for debugging
+    ;(await peerA.logs()).pipe(process.stdout)
+    ;(await peerB.logs()).pipe(process.stdout)
   }, TIMEOUT)
 
   afterAll(async () => {

@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import { type Action } from './schema.js'
-import type { PeerInfo, InternalRoute } from './routing/state.js'
+import type { PeerInfo, InternalRoute, PeerRecord } from './routing/state.js'
 import { newRouteTable, type RouteTable } from './routing/state.js'
 import type { DataChannelDefinition } from './routing/datachannel.js'
 import type { UpdateMessageSchema } from './routing/internal/actions.js'
@@ -25,7 +25,7 @@ export interface PublicApi {
   getIBGPClient(
     token: string
   ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
-  getInspector(): Inspector
+  getInspector(): Promise<Inspector>
   dispatch(
     action: Action,
     auth?: AuthContext
@@ -33,7 +33,7 @@ export interface PublicApi {
 }
 
 export interface Inspector {
-  listPeers(): Promise<PeerInfo[]>
+  listPeers(): Promise<PeerRecord[]>
   listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 
@@ -46,7 +46,9 @@ export interface NetworkClient {
 }
 
 export interface DataCustodian {
-  addRoute(route: DataChannelDefinition): Promise<{ success: true } | { success: false; error: string }>
+  addRoute(
+    route: DataChannelDefinition
+  ): Promise<{ success: true } | { success: false; error: string }>
   removeRoute(
     route: DataChannelDefinition
   ): Promise<{ success: true } | { success: false; error: string }>
@@ -108,9 +110,9 @@ export interface OrchestratorConfig {
   }
 }
 
-const NETWORK_MGMT_AUTH: AuthContext = { userId: 'network:mgmt', roles: ['network custodian'] }
-const DATA_MGMT_AUTH: AuthContext = { userId: 'data:mgmt', roles: ['data custodian'] }
-const PEER_AUTH: AuthContext = { userId: 'peer:authenticated', roles: ['network peers'] }
+// const NETWORK_MGMT_AUTH: AuthContext = { userId: 'network:mgmt', roles: ['network custodian'] }
+// const DATA_MGMT_AUTH: AuthContext = { userId: 'data:mgmt', roles: ['data custodian'] }
+// const PEER_AUTH: AuthContext = { userId: 'peer:authenticated', roles: ['network peers'] }
 
 export class CatalystNodeBus extends RpcTarget {
   private state: RouteTable
@@ -174,8 +176,16 @@ export class CatalystNodeBus extends RpcTarget {
       // Note: Hono's waitUntil is not available here easily as we are in the core class.
       // The catch below handles unhandled rejections for the side effect chain.
       // Ideally in a serverless evironment we would use ctx.waitUntil.
-      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState, resolvedAuth).catch((e) => {
-        console.error(`[${this.config.node.name}] Error in handleNotify for ${sentAction.action}:`, e)
+      this.lastNotificationPromise = this.handleNotify(
+        sentAction,
+        this.state,
+        prevState,
+        resolvedAuth
+      ).catch((e) => {
+        console.error(
+          `[${this.config.node.name}] Error in handleNotify for ${sentAction.action}:`,
+          e
+        )
       })
       return { success: true }
     } else {
@@ -239,12 +249,12 @@ export class CatalystNodeBus extends RpcTarget {
             peers: peerList.map((p) =>
               p.name === action.data.name
                 ? {
-                  ...p,
-                  endpoint: action.data.endpoint,
-                  domains: action.data.domains,
-                  connectionStatus: 'initializing',
-                  lastConnected: undefined,
-                }
+                    ...p,
+                    endpoint: action.data.endpoint,
+                    domains: action.data.domains,
+                    connectionStatus: 'initializing',
+                    lastConnected: undefined,
+                  }
                 : p
             ),
           },
@@ -352,7 +362,9 @@ export class CatalystNodeBus extends RpcTarget {
       }
       case Actions.InternalProtocolUpdate: {
         const { peerInfo, update } = action.data
-        console.log(`[${this.config.node.name}] InternalProtocolUpdate: received ${update.updates.length} updates from ${peerInfo.name}`)
+        console.log(
+          `[${this.config.node.name}] InternalProtocolUpdate: received ${update.updates.length} updates from ${peerInfo.name}`
+        )
         const sourcePeerName = peerInfo.name
         let currentInternalRoutes = [...state.internal.routes]
 
@@ -453,7 +465,9 @@ export class CatalystNodeBus extends RpcTarget {
       case Actions.LocalPeerCreate: {
         // Perform side effect: Try to open connection
         try {
-          console.log(`[${this.config.node.name}] LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`)
+          console.log(
+            `[${this.config.node.name}] LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`
+          )
           const stub = this.connectionPool.get(action.data.endpoint)
           if (stub) {
             const connectionResult = await stub.getIBGPClient(
@@ -464,7 +478,9 @@ export class CatalystNodeBus extends RpcTarget {
               const result = await connectionResult.client.open(this.config.node)
 
               if (result.success) {
-                console.log(`[${this.config.node.name}] Successfully opened connection to ${action.data.name}`)
+                console.log(
+                  `[${this.config.node.name}] Successfully opened connection to ${action.data.name}`
+                )
                 // Dispatch connected action with inherited auth
                 await this.dispatch(
                   {
@@ -488,7 +504,9 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       case Actions.InternalProtocolOpen: {
-        console.log(`[${this.config.node.name}] InternalProtocolOpen: sync request from ${action.data.peerInfo.name}`)
+        console.log(
+          `[${this.config.node.name}] InternalProtocolOpen: sync request from ${action.data.peerInfo.name}`
+        )
         // Sync existing routes (local AND internal) back to the new peer
         const allRoutes = [
           ..._state.local.routes.map((r) => ({
@@ -581,7 +599,10 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(`[${this.config.node.name}] Failed to close connection to ${peer.name}`, e)
+            console.error(
+              `[${this.config.node.name}] Failed to close connection to ${peer.name}`,
+              e
+            )
           }
         }
 
@@ -591,13 +612,19 @@ export class CatalystNodeBus extends RpcTarget {
       }
       case Actions.LocalRouteCreate: {
         // Broadcast to all connected internal peers
-        const connectedPeers = _state.internal.peers.filter((p) => p.connectionStatus === 'connected')
-        console.log(`[${this.config.node.name}] LocalRouteCreate: ${action.data.name}, broadcasting to ${connectedPeers.length} peers.`)
+        const connectedPeers = _state.internal.peers.filter(
+          (p) => p.connectionStatus === 'connected'
+        )
+        console.log(
+          `[${this.config.node.name}] LocalRouteCreate: ${action.data.name}, broadcasting to ${connectedPeers.length} peers.`
+        )
         for (const peer of connectedPeers) {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              console.log(`[${this.config.node.name}] Pushing local route ${action.data.name} to ${peer.name}`)
+              console.log(
+                `[${this.config.node.name}] Pushing local route ${action.data.name} to ${peer.name}`
+              )
               const connectionResult = await stub.getIBGPClient(
                 this.config.ibgp?.secret || 'valid-secret'
               )
@@ -856,7 +883,7 @@ export class CatalystNodeBus extends RpcTarget {
           },
         }
       },
-      getInspector: (): Inspector => {
+      getInspector: async (): Promise<Inspector> => {
         return {
           listPeers: async () => this.state.internal.peers,
           listRoutes: async () => ({
@@ -871,4 +898,3 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 }
-

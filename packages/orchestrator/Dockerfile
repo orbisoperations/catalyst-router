@@ -11,8 +11,7 @@ RUN rm -rf packages/orchestrator/node_modules
 
 # Install dependencies
 WORKDIR /app/packages/orchestrator
-RUN bun install
-
+RUN bun install --omit=dev --ignore-scripts
 ENV PORT=3000
 EXPOSE 3000
 

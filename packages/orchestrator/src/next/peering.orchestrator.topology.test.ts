@@ -2,102 +2,101 @@ import { describe, it, expect, beforeEach } from 'bun:test'
 import { CatalystNodeBus } from './orchestrator.js'
 import type { PeerInfo, RouteTable } from './routing/state.js'
 import { newRouteTable } from './routing/state.js'
-import { Actions } from './action-types.js'
 import { MockConnectionPool } from './mock-connection-pool.js'
 
-const ADMIN_AUTH = { userId: 'admin', roles: ['*'] }
+// const ADMIN_AUTH = { userId: 'admin', roles: ['*'] }
 
 describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
-    let pool: MockConnectionPool
-    let nodeA: CatalystNodeBus
-    let nodeB: CatalystNodeBus
+  let pool: MockConnectionPool
+  let nodeA: CatalystNodeBus
+  let nodeB: CatalystNodeBus
 
-    const infoA: PeerInfo = {
-        name: 'node-a.somebiz.local.io',
-        endpoint: 'ws://node-a',
-        domains: ['somebiz.local.io'],
-    }
-    const infoB: PeerInfo = {
-        name: 'node-b.somebiz.local.io',
-        endpoint: 'ws://node-b',
-        domains: ['somebiz.local.io'],
-    }
+  const infoA: PeerInfo = {
+    name: 'node-a.somebiz.local.io',
+    endpoint: 'ws://node-a',
+    domains: ['somebiz.local.io'],
+  }
+  const infoB: PeerInfo = {
+    name: 'node-b.somebiz.local.io',
+    endpoint: 'ws://node-b',
+    domains: ['somebiz.local.io'],
+  }
 
-    beforeEach(() => {
-        pool = new MockConnectionPool()
+  beforeEach(() => {
+    pool = new MockConnectionPool()
 
-        const createNode = (info: PeerInfo) => {
-            const bus = new CatalystNodeBus({
-                config: { node: info, ibgp: { secret: 'secret' } },
-                connectionPool: { pool },
-                state: newRouteTable(),
-            })
-            pool.registerNode(bus)
-            return bus
-        }
-
-        nodeA = createNode(infoA)
-        nodeB = createNode(infoB)
-    })
-
-    const waitForNotification = async (node: CatalystNodeBus) => {
-        if ((node as unknown as { lastNotificationPromise?: Promise<void> }).lastNotificationPromise) {
-            await (node as unknown as { lastNotificationPromise?: Promise<void> }).lastNotificationPromise
-        }
+    const createNode = (info: PeerInfo) => {
+      const bus = new CatalystNodeBus({
+        config: { node: info, ibgp: { secret: 'secret' } },
+        connectionPool: { pool },
+        state: newRouteTable(),
+      })
+      pool.registerNode(bus)
+      return bus
     }
 
-    it('Simple Peering: A <-> B propagation', async () => {
-        // 1. Establish Peering
-        const apiA = nodeA.publicApi()
-        const apiB = nodeB.publicApi()
+    nodeA = createNode(infoA)
+    nodeB = createNode(infoB)
+  })
 
-        const netAResult = await apiA.getNetworkClient('secret')
-        const netBResult = await apiB.getNetworkClient('secret')
+  const waitForNotification = async (node: CatalystNodeBus) => {
+    if ((node as unknown as { lastNotificationPromise?: Promise<void> }).lastNotificationPromise) {
+      await (node as unknown as { lastNotificationPromise?: Promise<void> }).lastNotificationPromise
+    }
+  }
 
-        expect(netAResult.success).toBe(true)
-        expect(netBResult.success).toBe(true)
+  it('Simple Peering: A <-> B propagation', async () => {
+    // 1. Establish Peering
+    const apiA = nodeA.publicApi()
+    const apiB = nodeB.publicApi()
 
-        const netA = (netAResult as any).client
-        const netB = (netBResult as any).client
+    const netAResult = await apiA.getNetworkClient('secret')
+    const netBResult = await apiB.getNetworkClient('secret')
 
-        console.log('Node B adding peer A')
-        await netB.addPeer(infoA)
+    expect(netAResult.success).toBe(true)
+    expect(netBResult.success).toBe(true)
 
-        console.log('Node A adding peer B')
-        await netA.addPeer(infoB)
+    const netA = (netAResult as any).client
+    const netB = (netBResult as any).client
 
-        // Wait for handshake
-        await waitForNotification(nodeA)
-        await waitForNotification(nodeB)
+    console.log('Node B adding peer A')
+    await netB.addPeer(infoA)
 
-        // Additional wait to ensure bidirectional sync
-        await new Promise(r => setTimeout(r, 50))
+    console.log('Node A adding peer B')
+    await netA.addPeer(infoB)
 
-        // Verify connection status
-        const stateA = (nodeA as unknown as { state: RouteTable }).state
-        const peerB = stateA.internal.peers.find(p => p.name === infoB.name)
-        expect(peerB?.connectionStatus).toBe('connected')
+    // Wait for handshake
+    await waitForNotification(nodeA)
+    await waitForNotification(nodeB)
 
-        const stateB = (nodeB as unknown as { state: RouteTable }).state
-        const peerA = stateB.internal.peers.find(p => p.name === infoA.name)
-        expect(peerA?.connectionStatus).toBe('connected')
+    // Additional wait to ensure bidirectional sync
+    await new Promise((r) => setTimeout(r, 50))
 
-        // 2. A adds a local route
-        console.log('Node A adding local route')
-        const routeA = { name: 'service-a', protocol: 'http' as const, endpoint: 'http://a:8080' }
-        const dataA = (await apiA.getDataCustodianClient('secret') as any).client
-        await dataA.addRoute(routeA)
+    // Verify connection status
+    const stateA = (nodeA as unknown as { state: RouteTable }).state
+    const peerB = stateA.internal.peers.find((p) => p.name === infoB.name)
+    expect(peerB?.connectionStatus).toBe('connected')
 
-        // Wait for propagation
-        await waitForNotification(nodeA)
-        await waitForNotification(nodeB)
-        await new Promise(r => setTimeout(r, 50))
+    const stateB = (nodeB as unknown as { state: RouteTable }).state
+    const peerA = stateB.internal.peers.find((p) => p.name === infoA.name)
+    expect(peerA?.connectionStatus).toBe('connected')
 
-        // Check B learned it
-        const stateB_After = (nodeB as unknown as { state: RouteTable }).state
-        const learnedRoute = stateB_After.internal.routes.find(r => r.name === 'service-a')
+    // 2. A adds a local route
+    console.log('Node A adding local route')
+    const routeA = { name: 'service-a', protocol: 'http' as const, endpoint: 'http://a:8080' }
+    const dataA = ((await apiA.getDataCustodianClient('secret')) as any).client
+    await dataA.addRoute(routeA)
 
-        expect(learnedRoute).toBeDefined()
-        expect(learnedRoute?.nodePath).toEqual(['node-a.somebiz.local.io'])
-    })
+    // Wait for propagation
+    await waitForNotification(nodeA)
+    await waitForNotification(nodeB)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Check B learned it
+    const stateB_After = (nodeB as unknown as { state: RouteTable }).state
+    const learnedRoute = stateB_After.internal.routes.find((r) => r.name === 'service-a')
+
+    expect(learnedRoute).toBeDefined()
+    expect(learnedRoute?.nodePath).toEqual(['node-a.somebiz.local.io'])
+  })
 })

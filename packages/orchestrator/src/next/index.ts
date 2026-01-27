@@ -45,7 +45,7 @@ app.get('/health', (c) => c.text('OK'))
 const port = Number(process.env.PORT) || 3000
 
 console.log(`Orchestrator (Next) running on port ${port} as ${nodeId}`)
-console.log('NEXT_ORCHESTRATOR_STARTED')
+console.log(`NEXT_ORCHESTRATOR_STARTED: Node: ${nodeId}`)
 
 export default {
   port,

@@ -11,7 +11,13 @@ import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from './orchestrator.js'
 
-describe('Orchestrator Gateway Container Tests', () => {
+const containerRuntime = process.env.CATALYST_CONTAINER_RUNTIME || 'docker'
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+if (skipTests) {
+  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED unset')
+}
+
+describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
@@ -25,31 +31,29 @@ describe('Orchestrator Gateway Container Tests', () => {
   const gatewayImage = 'localhost/catalyst-gateway:test'
   const booksImage = 'localhost/catalyst-example-books:test'
   const repoRoot = path.resolve(__dirname, '../../../../')
-  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
-    if (skipTests) {
-      console.warn('Skipping container tests: Podman runtime not detected')
-      return
-    }
-
     // Build images (rely on cache)
     console.log('Building Gateway image...')
-    spawnSync('podman', ['build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'], {
-      cwd: repoRoot,
-      stdio: 'inherit',
-    })
+    spawnSync(
+      containerRuntime,
+      ['build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'],
+      {
+        cwd: repoRoot,
+        stdio: 'inherit',
+      }
+    )
 
     console.log('Building Books service image...')
     spawnSync(
-      'podman',
+      containerRuntime,
       ['build', '-f', 'packages/examples/Dockerfile.books', '-t', booksImage, '.'],
       { cwd: repoRoot, stdio: 'inherit' }
     )
 
     console.log('Building Orchestrator image...')
     spawnSync(
-      'podman',
+      containerRuntime,
       ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
       { cwd: repoRoot, stdio: 'inherit' }
     )
@@ -60,7 +64,7 @@ describe('Orchestrator Gateway Container Tests', () => {
       name: string,
       alias: string,
       waitMsg: string,
-      env: any = {},
+      env: Record<string, string> = {},
       ports: number[] = []
     ) => {
       let image = orchestratorImage
@@ -71,7 +75,7 @@ describe('Orchestrator Gateway Container Tests', () => {
         .withNetwork(network)
         .withNetworkAliases(alias)
         .withWaitStrategy(Wait.forLogMessage(waitMsg))
-        .withLogConsumer((stream: any) => {
+        .withLogConsumer((stream) => {
           if (stream.pipe) stream.pipe(process.stdout)
           stream.on('data', (data: Buffer | string) => {
             if (alias === 'peer-b') {

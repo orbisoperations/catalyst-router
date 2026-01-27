@@ -1,250 +1,265 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import {
-    GenericContainer,
-    Wait,
-    Network,
-    type StartedTestContainer,
-    type StartedNetwork,
+  GenericContainer,
+  Wait,
+  Network,
+  type StartedTestContainer,
+  type StartedNetwork,
 } from 'testcontainers'
 import path from 'path'
 import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from './orchestrator.js'
+import type { Readable } from 'node:stream'
+import type { PeerRecord } from './routing/state.js'
 
-describe('Orchestrator Transit Container Tests', () => {
-    const TIMEOUT = 600000 // 10 minutes
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+if (skipTests) {
+  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED unset')
+}
+const containerRuntime = process.env.CATALYST_CONTAINER_RUNTIME || 'docker'
 
-    let network: StartedNetwork
-    let nodeA: StartedTestContainer
-    let nodeB: StartedTestContainer
-    let nodeC: StartedTestContainer
+describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
+  const TIMEOUT = 600000 // 10 minutes
 
-    const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
-    const repoRoot = path.resolve(__dirname, '../../../../')
-    const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+  let network: StartedNetwork
+  let nodeA: StartedTestContainer
+  let nodeB: StartedTestContainer
+  let nodeC: StartedTestContainer
 
-    beforeAll(async () => {
-        if (skipTests) {
-            console.warn('Skipping container tests: Podman runtime not detected')
-            return
-        }
+  const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
+  const repoRoot = path.resolve(__dirname, '../../../../')
 
-        // Check if image exists
-        const checkImage = spawnSync('podman', ['image', 'exists', orchestratorImage])
-        if (checkImage.status !== 0) {
-            console.log('Building Orchestrator image for Topology tests...')
-            const orchestratorBuild = spawnSync(
-                'podman',
-                ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-                { cwd: repoRoot, stdio: 'inherit' }
-            )
-            if (orchestratorBuild.status !== 0) throw new Error('Podman build orchestrator failed')
-        } else {
-            console.log(`Using existing image: ${orchestratorImage}`)
-        }
-
-        network = await new Network().start()
-
-        const startNode = async (name: string, alias: string) => {
-            console.log(`Starting node ${name}...`)
-            const container = await new GenericContainer(orchestratorImage)
-                .withNetwork(network)
-                .withNetworkAliases(alias)
-                .withExposedPorts(3000)
-                .withEnvironment({
-                    PORT: '3000',
-                    CATALYST_NODE_ID: name,
-                    CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-                    CATALYST_DOMAINS: 'somebiz.local.io',
-                    CATALYST_PEERING_SECRET: 'valid-secret',
-                })
-                .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
-                .withLogConsumer(
-                    (stream: { on(event: string, listener: (line: string) => void): void; pipe?(dest: any): void }) => {
-                        if (stream.pipe) (stream as any).pipe(process.stdout)
-
-                        stream.on('line', (line: string) => {
-                            process.stdout.write(`[${name}] ${line}\n`)
-                        })
-                        stream.on('err', (line: string) => process.stderr.write(`[${name}] ERR: ${line}\n`))
-                    }
-                )
-                .start()
-            console.log(`Node ${name} started and healthy.`)
-            return container
-        }
-
-        nodeA = await startNode('node-a.somebiz.local.io', 'node-a')
-        nodeB = await startNode('node-b.somebiz.local.io', 'node-b')
-        nodeC = await startNode('node-c.somebiz.local.io', 'node-c')
-
-        console.log('All nodes started.')
-    }, TIMEOUT)
-
-    afterAll(async () => {
-        console.log('Teardown: Starting...')
-        try {
-            if (nodeA) await nodeA.stop()
-            if (nodeB) await nodeB.stop()
-            if (nodeC) await nodeC.stop()
-            if (network) await network.stop()
-            console.log('Teardown: Success')
-        } catch (e) {
-            console.error('Teardown: Error during stop (ignoring for test result)', e)
-        }
-    })
-
-    const getClient = (node: StartedTestContainer) => {
-        const port = node.getMappedPort(3000)
-        return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+  beforeAll(async () => {
+    // Check if image exists
+    const checkImage = spawnSync(containerRuntime, ['image', 'exists', orchestratorImage])
+    if (checkImage.status !== 0) {
+      console.log('Building Orchestrator image for Topology tests...')
+      const orchestratorBuild = spawnSync(
+        containerRuntime,
+        ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
+        { cwd: repoRoot, stdio: 'inherit' }
+      )
+      if (orchestratorBuild.status !== 0)
+        throw new Error(`${containerRuntime} build orchestrator failed`)
+    } else {
+      console.log(`Using existing image: ${orchestratorImage}`)
     }
 
-    it(
-        'Transit Topology: A <-> B <-> C propagation, sync, and withdrawal',
-        async () => {
-            if (skipTests) return
+    network = await new Network().start()
 
-            const clientA = getClient(nodeA)
-            const clientB = getClient(nodeB)
-            const clientC = getClient(nodeC)
+    const startNode = async (name: string, alias: string) => {
+      console.log(`Starting node ${name}...`)
+      const container = await new GenericContainer(orchestratorImage)
+        .withNetwork(network)
+        .withNetworkAliases(alias)
+        .withExposedPorts(3000)
+        .withEnvironment({
+          PORT: '3000',
+          CATALYST_NODE_ID: name,
+          CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
+          CATALYST_DOMAINS: 'somebiz.local.io',
+          CATALYST_PEERING_SECRET: 'valid-secret',
+        })
+        .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
+        .withLogConsumer((stream: Readable) => {
+          if (stream.pipe) stream.pipe(process.stdout)
 
-            const adminAuth = { userId: 'admin', roles: ['*'] }
+          stream.on('line', (line: string) => {
+            process.stdout.write(`[${name}] ${line}\n`)
+          })
+          stream.on('err', (line: string) => process.stderr.write(`[${name}] ERR: ${line}\n`))
+        })
+        .start()
+      console.log(`Node ${name} started and healthy.`)
+      return container
+    }
 
-            // 1. Linear Peering: A <-> B and B <-> C
-            console.log('Establishing peering A <-> B')
-            const netAResult = await clientA.getNetworkClient('valid-secret')
-            const netBResult = await clientB.getNetworkClient('valid-secret')
-            const netCResult = await clientC.getNetworkClient('valid-secret')
+    nodeA = await startNode('node-a.somebiz.local.io', 'node-a')
+    nodeB = await startNode('node-b.somebiz.local.io', 'node-b')
+    nodeC = await startNode('node-c.somebiz.local.io', 'node-c')
 
-            if (!netAResult.success || !netBResult.success || !netCResult.success) {
-                throw new Error('Failed to get network client')
-            }
+    console.log('All nodes started.')
+  }, TIMEOUT)
 
-            const netA = netAResult.client
-            const netB = netBResult.client
-            const netC = netCResult.client
+  afterAll(async () => {
+    console.log('Teardown: Starting...')
+    try {
+      if (nodeA) await nodeA.stop()
+      if (nodeB) await nodeB.stop()
+      if (nodeC) await nodeC.stop()
+      if (network) await network.stop()
+      console.log('Teardown: Success')
+    } catch (e) {
+      console.error('Teardown: Error during stop (ignoring for test result)', e)
+    }
+  })
 
-            // Setup B to accept A first, then A connects to B (Ensures A->B capability)
-            await netB.addPeer({
-                name: 'node-a.somebiz.local.io',
-                endpoint: 'ws://node-a:3000/rpc',
-                domains: ['somebiz.local.io']
-            })
-            await netA.addPeer({
-                name: 'node-b.somebiz.local.io',
-                endpoint: 'ws://node-b:3000/rpc',
-                domains: ['somebiz.local.io']
-            })
+  const getClient = (node: StartedTestContainer): PublicApi => {
+    const port = node.getMappedPort(3000)
+    return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+  }
 
-            // Wait for handshake
-            console.log('Waiting for peering A <-> B to resolve...')
-            const waitForConnected = async (client: any, peerName: string) => {
-                for (let i = 0; i < 20; i++) {
-                    const peers = await (await client.getInspector()).listPeers()
-                    const peer = peers.find((p: any) => p.name === peerName)
-                    if (peer && peer.connectionStatus === 'connected') return
-                    await new Promise(r => setTimeout(r, 500))
-                }
-                throw new Error(`Peer ${peerName} failed to connect`)
-            }
-            await waitForConnected(clientA, 'node-b.somebiz.local.io')
-            await waitForConnected(clientB, 'node-a.somebiz.local.io')
+  it(
+    'Transit Topology: A <-> B <-> C propagation, sync, and withdrawal',
+    async () => {
+      if (skipTests) return
 
-            // 2. A adds a local route
-            console.log('Node A adding local route')
-            const dataAResult = await clientA.getDataCustodianClient('valid-secret')
-            if (!dataAResult.success) throw new Error('Failed to get data client')
-            await dataAResult.client.addRoute({
-                name: 'service-a', protocol: 'http', endpoint: 'http://a:8080'
-            })
+      const clientA = getClient(nodeA)
+      const clientB = getClient(nodeB)
+      const clientC = getClient(nodeC)
 
-            // Check B learned it
-            let learnedOnB = false
-            for (let i = 0; i < 40; i++) {
-                const inspector = await clientB.getInspector()
-                const routes = await inspector.listRoutes()
-                if (routes.internal.some(r => r.name === 'service-a')) {
-                    learnedOnB = true
-                    break
-                }
-                await new Promise(r => setTimeout(r, 500))
-            }
-            expect(learnedOnB).toBe(true)
+      // const adminAuth = { userId: 'admin', roles: ['*'] }
 
-            // 3. NOW peer B with C (Initial Sync test)
-            console.log('Establishing peering B <-> C')
-            // Setup C to accept B first, then B connects to C (Ensures B->C capability)
-            await netC.addPeer({
-                name: 'node-b.somebiz.local.io',
-                endpoint: 'ws://node-b:3000/rpc',
-                domains: ['somebiz.local.io']
-            })
-            await netB.addPeer({
-                name: 'node-c.somebiz.local.io',
-                endpoint: 'ws://node-c:3000/rpc',
-                domains: ['somebiz.local.io']
-            })
+      // 1. Linear Peering: A <-> B and B <-> C
+      console.log('Establishing peering A <-> B')
+      const netAResult = await clientA.getNetworkClient('valid-secret')
+      const netBResult = await clientB.getNetworkClient('valid-secret')
+      const netCResult = await clientC.getNetworkClient('valid-secret')
 
-            // Wait for B-C handshake and sync
-            await new Promise(r => setTimeout(r, 2000))
+      if (!netAResult.success || !netBResult.success || !netCResult.success) {
+        throw new Error('Failed to get network client')
+      }
 
-            // 4. C should have learned about A's route via B
-            let learnedOnC = false
-            for (let i = 0; i < 10; i++) {
-                const inspector = await clientC.getInspector()
-                const routes = await inspector.listRoutes()
-                const routeA = routes.internal.find(r => r.name === 'service-a')
-                if (routeA) {
-                    learnedOnC = true
-                    // Verify nodePath: [B, A]
-                    expect(routeA.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])
-                    break
-                }
-                await new Promise(r => setTimeout(r, 500))
-            }
-            expect(learnedOnC).toBe(true)
+      const netA = netAResult.client
+      const netB = netBResult.client
+      const netC = netCResult.client
 
-            // 5. Withdrawal Propagation: A deletes route -> B and C should remove it
-            console.log('Node A deleting route')
-            await (await clientA.getDataCustodianClient('valid-secret') as any).client.removeRoute({
-                name: 'service-a', protocol: 'http', endpoint: 'http://a:8080'
-            })
+      // Setup B to accept A first, then A connects to B (Ensures A->B capability)
+      await netB.addPeer({
+        name: 'node-a.somebiz.local.io',
+        endpoint: 'ws://node-a:3000/rpc',
+        domains: ['somebiz.local.io'],
+      })
+      await netA.addPeer({
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'ws://node-b:3000/rpc',
+        domains: ['somebiz.local.io'],
+      })
 
-            let removedOnC = false
-            for (let i = 0; i < 10; i++) {
-                const inspector = await clientC.getInspector()
-                const routes = await inspector.listRoutes()
-                if (!routes.internal.some(r => r.name === 'service-a')) {
-                    removedOnC = true
-                    break
-                }
-                await new Promise(r => setTimeout(r, 500))
-            }
-            expect(removedOnC).toBe(true)
+      // Wait for handshake
+      console.log('Waiting for peering A <-> B to resolve...')
+      const waitForConnected = async (client: ReturnType<typeof getClient>, peerName: string) => {
+        for (let i = 0; i < 20; i++) {
+          const peers = await (await client.getInspector()).listPeers()
+          const peer = peers.find((p: PeerRecord) => p.name === peerName)
+          if (peer && peer.connectionStatus === 'connected') return
+          await new Promise((r) => setTimeout(r, 500))
+        }
+        throw new Error(`Peer ${peerName} failed to connect`)
+      }
+      await waitForConnected(clientA, 'node-b.somebiz.local.io')
+      await waitForConnected(clientB, 'node-a.somebiz.local.io')
 
-            // 6. Topology Withdrawal: Disconnect A-B -> B should tell C to remove A's routes
-            console.log('Re-adding route and then disconnecting A-B')
-            await (await clientA.getDataCustodianClient('valid-secret') as any).client.addRoute({
-                name: 'service-a-v2', protocol: 'http', endpoint: 'http://a:8080'
-            })
+      // 2. A adds a local route
+      console.log('Node A adding local route')
+      const dataAResult = await clientA.getDataCustodianClient('valid-secret')
+      if (!dataAResult.success) throw new Error('Failed to get data client')
+      await dataAResult.client.addRoute({
+        name: 'service-a',
+        protocol: 'http',
+        endpoint: 'http://a:8080',
+      })
 
-            // Wait for it to reach C
-            await new Promise(r => setTimeout(r, 2000))
+      // Check B learned it
+      let learnedOnB = false
+      for (let i = 0; i < 40; i++) {
+        const inspector = await clientB.getInspector()
+        const routes = await inspector.listRoutes()
+        if (routes.internal.some((r) => r.name === 'service-a')) {
+          learnedOnB = true
+          break
+        }
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      expect(learnedOnB).toBe(true)
 
-            await netA.removePeer({ name: 'node-b.somebiz.local.io' })
+      // 3. NOW peer B with C (Initial Sync test)
+      console.log('Establishing peering B <-> C')
+      // Setup C to accept B first, then B connects to C (Ensures B->C capability)
+      await netC.addPeer({
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'ws://node-b:3000/rpc',
+        domains: ['somebiz.local.io'],
+      })
+      await netB.addPeer({
+        name: 'node-c.somebiz.local.io',
+        endpoint: 'ws://node-c:3000/rpc',
+        domains: ['somebiz.local.io'],
+      })
 
-            let disconnectedWithdrawalOnC = false
-            for (let i = 0; i < 10; i++) {
-                const inspector = await clientC.getInspector()
-                const routes = await inspector.listRoutes()
-                if (!routes.internal.some(r => r.name === 'service-a-v2')) {
-                    disconnectedWithdrawalOnC = true
-                    break
-                }
-                await new Promise(r => setTimeout(r, 500))
-            }
-            expect(disconnectedWithdrawalOnC).toBe(true)
-        },
-        TIMEOUT
-    )
+      // Wait for B-C handshake and sync
+      await new Promise((r) => setTimeout(r, 2000))
+
+      // 4. C should have learned about A's route via B
+      let learnedOnC = false
+      for (let i = 0; i < 10; i++) {
+        const inspector = await clientC.getInspector()
+        const routes = await inspector.listRoutes()
+        const routeA = routes.internal.find((r) => r.name === 'service-a')
+        if (routeA) {
+          learnedOnC = true
+          // Verify nodePath: [B, A]
+          expect(routeA.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])
+          break
+        }
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      expect(learnedOnC).toBe(true)
+
+      // 5. Withdrawal Propagation: A deletes route -> B and C should remove it
+      console.log('Node A deleting route')
+      const dataAResultA = await clientA.getDataCustodianClient('valid-secret')
+      // stop expecution if dataAResultA.success is not true
+      expect(dataAResultA.success).toBe(true)
+      if (!dataAResultA.success) throw new Error('Data client not found')
+      const removeRouteResult = await dataAResultA.client.removeRoute({
+        name: 'service-a',
+        protocol: 'http',
+        endpoint: 'http://a:8080',
+      })
+      expect(removeRouteResult.success).toBe(true)
+
+      let removedOnC = false
+      for (let i = 0; i < 10; i++) {
+        const inspector = await clientC.getInspector()
+        const routes = await inspector.listRoutes()
+        if (!routes.internal.some((r) => r.name === 'service-a')) {
+          removedOnC = true
+          break
+        }
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      expect(removedOnC).toBe(true)
+
+      // 6. Topology Withdrawal: Disconnect A-B -> B should tell C to remove A's routes
+      console.log('Re-adding route and then disconnecting A-B')
+      const dataAResultA2 = await clientA.getDataCustodianClient('valid-secret')
+      if (!dataAResultA2.success) throw new Error('Failed to get data client')
+      expect(dataAResultA2.success).toBe(true)
+      await dataAResultA2.client.addRoute({
+        name: 'service-a-v2',
+        protocol: 'http',
+        endpoint: 'http://a:8080',
+      })
+
+      // Wait for it to reach C
+      await new Promise((r) => setTimeout(r, 2000))
+
+      await netA.removePeer({ name: 'node-b.somebiz.local.io' })
+
+      let disconnectedWithdrawalOnC = false
+      for (let i = 0; i < 10; i++) {
+        const inspector = await clientC.getInspector()
+        const routes = await inspector.listRoutes()
+        if (!routes.internal.some((r) => r.name === 'service-a-v2')) {
+          disconnectedWithdrawalOnC = true
+          break
+        }
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      expect(disconnectedWithdrawalOnC).toBe(true)
+    },
+    TIMEOUT
+  )
 })
