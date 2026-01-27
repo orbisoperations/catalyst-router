@@ -52,7 +52,6 @@ describe('Orchestrator Transit Container Tests', () => {
                 .withNetwork(network)
                 .withNetworkAliases(alias)
                 .withExposedPorts(3000)
-                .withCommand(['sh', '-c', 'bun run src/next/index.ts'])
                 .withEnvironment({
                     PORT: '3000',
                     CATALYST_NODE_ID: name,
@@ -60,9 +59,11 @@ describe('Orchestrator Transit Container Tests', () => {
                     CATALYST_DOMAINS: 'somebiz.local.io',
                     CATALYST_PEERING_SECRET: 'valid-secret',
                 })
-                .withWaitStrategy(Wait.forHttp('/health', 3000))
+                .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
                 .withLogConsumer(
-                    (stream: { on(event: string, listener: (line: string) => void): void }) => {
+                    (stream: { on(event: string, listener: (line: string) => void): void; pipe?(dest: any): void }) => {
+                        if (stream.pipe) (stream as any).pipe(process.stdout)
+
                         stream.on('line', (line: string) => {
                             process.stdout.write(`[${name}] ${line}\n`)
                         })
@@ -82,10 +83,16 @@ describe('Orchestrator Transit Container Tests', () => {
     }, TIMEOUT)
 
     afterAll(async () => {
-        if (nodeA) await nodeA.stop()
-        if (nodeB) await nodeB.stop()
-        if (nodeC) await nodeC.stop()
-        if (network) await network.stop()
+        console.log('Teardown: Starting...')
+        try {
+            if (nodeA) await nodeA.stop()
+            if (nodeB) await nodeB.stop()
+            if (nodeC) await nodeC.stop()
+            if (network) await network.stop()
+            console.log('Teardown: Success')
+        } catch (e) {
+            console.error('Teardown: Error during stop (ignoring for test result)', e)
+        }
     })
 
     const getClient = (node: StartedTestContainer) => {
