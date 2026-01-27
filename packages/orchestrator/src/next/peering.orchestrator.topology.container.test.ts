@@ -51,7 +51,6 @@ describe('Orchestrator Peering Container Tests', () => {
                 .withNetwork(network)
                 .withNetworkAliases(alias)
                 .withExposedPorts(3000)
-                .withCommand(['sh', '-c', 'bun run src/next/index.ts'])
                 .withEnvironment({
                     PORT: '3000',
                     CATALYST_NODE_ID: name,
@@ -61,10 +60,8 @@ describe('Orchestrator Peering Container Tests', () => {
                 })
                 .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
                 .withLogConsumer(
-                    (stream: { on(event: string, listener: (line: string) => void): void; pipe(dest: any): void }) => {
-                        // Pipe directly to stdout/stderr to ensure capture
-                        // @ts-expect-error - stream types are fuzzy
-                        if (stream.pipe) stream.pipe(process.stdout)
+                    (stream: { on(event: string, listener: (line: string) => void): void; pipe?(dest: any): void }) => {
+                        if (stream.pipe) (stream as any).pipe(process.stdout)
 
                         stream.on('line', (line: string) => {
                             process.stdout.write(`[${name}] ${line}\n`)
@@ -84,9 +81,15 @@ describe('Orchestrator Peering Container Tests', () => {
     }, TIMEOUT)
 
     afterAll(async () => {
-        if (nodeA) await nodeA.stop()
-        if (nodeB) await nodeB.stop()
-        if (network) await network.stop()
+        console.log('Teardown: Starting...')
+        try {
+            if (nodeA) await nodeA.stop()
+            if (nodeB) await nodeB.stop()
+            if (network) await network.stop()
+            console.log('Teardown: Success')
+        } catch (e) {
+            console.error('Teardown: Error during stop (ignoring for test result)', e)
+        }
     })
 
     const getClient = (node: StartedTestContainer) => {
@@ -132,7 +135,7 @@ describe('Orchestrator Peering Container Tests', () => {
             console.log('Waiting for peering A <-> B to resolve...')
             const waitForConnected = async (client: any, peerName: string) => {
                 for (let i = 0; i < 20; i++) {
-                    const peers = await client.getInspector().listPeers()
+                    const peers = await (await client.getInspector()).listPeers()
                     const peer = peers.find((p: any) => p.name === peerName)
                     if (peer && peer.connectionStatus === 'connected') return
                     await new Promise(r => setTimeout(r, 500))
