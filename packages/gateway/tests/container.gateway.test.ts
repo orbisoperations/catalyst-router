@@ -28,7 +28,7 @@ describe('Gateway Container Integration', () => {
       if (skipTests) return
       const imageName = 'books-service:test'
       await Bun.spawn(
-        ['podman', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.books', '.'],
+        ['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.books', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -48,7 +48,7 @@ describe('Gateway Container Integration', () => {
     const startMovies = async () => {
       const imageName = 'movies-service:test'
       await Bun.spawn(
-        ['podman', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.movies', '.'],
+        ['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.movies', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -68,7 +68,7 @@ describe('Gateway Container Integration', () => {
     const startGateway = async () => {
       const imageName = 'gateway-service:test'
       await Bun.spawn(
-        ['podman', 'build', '-t', imageName, '-f', 'packages/gateway/Dockerfile', '.'],
+        ['docker', 'build', '-t', imageName, '-f', 'packages/gateway/Dockerfile', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',

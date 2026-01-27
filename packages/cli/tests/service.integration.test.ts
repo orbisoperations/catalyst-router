@@ -53,7 +53,7 @@ describe('CLI E2E with Containers', () => {
     const buildBooks = async () => {
       await Bun.spawn(
         [
-          'podman',
+          'docker',
           'build',
           '-t',
           'books-service:test',
@@ -72,7 +72,7 @@ describe('CLI E2E with Containers', () => {
     const buildMovies = async () => {
       await Bun.spawn(
         [
-          'podman',
+          'docker',
           'build',
           '-t',
           'movies-service:test',
@@ -90,7 +90,7 @@ describe('CLI E2E with Containers', () => {
 
     const buildGateway = async () => {
       await Bun.spawn(
-        ['podman', 'build', '-t', 'gateway-service:test', '-f', 'packages/gateway/Dockerfile', '.'],
+        ['docker', 'build', '-t', 'gateway-service:test', '-f', 'packages/gateway/Dockerfile', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -102,7 +102,7 @@ describe('CLI E2E with Containers', () => {
     const buildOrchestrator = async () => {
       await Bun.spawn(
         [
-          'podman',
+          'docker',
           'build',
           '-t',
           'orchestrator-service:test',

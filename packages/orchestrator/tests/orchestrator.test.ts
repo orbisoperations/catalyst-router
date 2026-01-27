@@ -7,6 +7,8 @@ import {
   type StartedNetwork,
 } from 'testcontainers'
 
+import path from 'path'
+import { spawnSync } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '../src/orchestrator.js'
@@ -19,16 +21,28 @@ describe('Orchestrator Container Tests (Next)', () => {
   let nodeB: StartedTestContainer
   let nodeC: StartedTestContainer
 
-  const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
+  const orchestratorImage = 'catalyst-node:next-topology-e2e'
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
     if (skipTests) {
-      console.warn('Skipping container tests: Podman runtime not detected')
+      console.warn('Skipping container tests: Docker runtime not detected')
       return
     }
 
-    // Base image already built by script
+    // Build image if not exists
+    const checkImage = spawnSync('docker', ['image', 'inspect', orchestratorImage])
+    if (checkImage.status !== 0) {
+      console.log('Building Orchestrator image for Container tests...')
+      const repoRoot = path.resolve(__dirname, '../../../')
+      const orchestratorBuild = spawnSync(
+        'docker',
+        ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
+        { cwd: repoRoot, stdio: 'inherit' }
+      )
+      if (orchestratorBuild.status !== 0) throw new Error('Docker build orchestrator failed')
+    }
+
     network = await new Network().start()
 
     const startNode = async (name: string, alias: string) => {

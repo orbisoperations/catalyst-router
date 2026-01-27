@@ -7,8 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "test": "bun test",
-    "test:podman": "./src/next/test_with_podman.sh"
+    "test": "bun test"
   },
   "dependencies": {
     "@hono/capnweb": "catalog:",

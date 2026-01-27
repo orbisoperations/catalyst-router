@@ -81,29 +81,23 @@ bun test packages/orchestrator/src/next/*.topology.test.ts
 
 #### 3. Container Integration Tests
 
-End-to-end tests that spin up actual node containers using Podman and `testcontainers`. These are used for validating network-level handshakes and gateway synchronization.
+End-to-end tests that spin up actual node containers using Docker and `testcontainers`. These are used for validating network-level handshakes and gateway synchronization.
 
 ```bash
 # Run container-based integration tests
 bun test packages/**/*.container.test.ts
 ```
 
-### Podman Environment Setup
+### Docker Environment Setup
 
-Container-based tests are disabled by default to prevent environment-related failures. To enable them, you must configure your local Podman environment:
+Container-based tests are disabled by default to prevent environment-related failures. To enable them, you must have a working Docker installation and set the following environment variable:
 
-1.  **Initialize Environment**:
-    Run the following command in your terminal to export the necessary socket paths and activation flags:
-
-    ```bash
-    source podman-env.sh
-    ```
-
-2.  **Verify Configuration**:
-    The script dynamically detects your Podman socket and sets `CATALYST_CONTAINER_TESTS_ENABLED=true`.
+```bash
+export CATALYST_CONTAINER_TESTS_ENABLED=true
+```
 
 > [!TIP]
-> You can add `source path/to/podman-env.sh` to your shell profile (~/.zshrc or ~/.bashrc) if you frequently run integration tests.
+> You can add `export CATALYST_CONTAINER_TESTS_ENABLED=true` to your shell profile (~/.zshrc or ~/.bashrc) if you frequently run integration tests.
 
 ### Running Tests by Package
 

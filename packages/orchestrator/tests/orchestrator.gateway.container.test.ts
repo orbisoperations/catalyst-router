@@ -22,35 +22,35 @@ describe('Orchestrator Gateway Container Tests', () => {
   let books: StartedTestContainer
   const peerBLogs: string[] = []
 
-  const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
-  const gatewayImage = 'localhost/catalyst-gateway:test'
-  const booksImage = 'localhost/catalyst-example-books:test'
+  const orchestratorImage = 'catalyst-node:next-topology-e2e'
+  const gatewayImage = 'catalyst-gateway:test'
+  const booksImage = 'catalyst-example-books:test'
   const repoRoot = path.resolve(__dirname, '../../../')
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
     if (skipTests) {
-      console.warn('Skipping container tests: Podman runtime not detected')
+      console.warn('Skipping container tests: Docker runtime not detected')
       return
     }
 
     // Build images (rely on cache)
     console.log('Building Gateway image...')
-    spawnSync('podman', ['build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'], {
+    spawnSync('docker', ['build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'], {
       cwd: repoRoot,
       stdio: 'inherit',
     })
 
     console.log('Building Books service image...')
     spawnSync(
-      'podman',
+      'docker',
       ['build', '-f', 'packages/examples/Dockerfile.books', '-t', booksImage, '.'],
       { cwd: repoRoot, stdio: 'inherit' }
     )
 
     console.log('Building Orchestrator image...')
     spawnSync(
-      'podman',
+      'docker',
       ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
       { cwd: repoRoot, stdio: 'inherit' }
     )

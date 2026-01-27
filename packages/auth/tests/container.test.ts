@@ -20,7 +20,7 @@ describe('Auth Service Container', () => {
     console.log('Building Docker image from', repoRoot)
 
     const proc = Bun.spawn(
-      ['podman', 'build', '-t', 'auth-service:test', '-f', 'packages/auth/Dockerfile', '.'],
+      ['docker', 'build', '-t', 'auth-service:test', '-f', 'packages/auth/Dockerfile', '.'],
       {
         cwd: repoRoot,
         // stdout: 'inherit', // Uncomment for debugging build
