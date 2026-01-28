@@ -110,19 +110,27 @@ describe('Orchestrator Gateway Container Tests', () => {
     async () => {
       const portA = peerA.getMappedPort(3000)
       const clientA = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portA}/rpc`)
-      const mgmtA = clientA.getManagerConnection()
 
       const portB = peerB.getMappedPort(3000)
       const clientB = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portB}/rpc`)
-      const mgmtB = clientB.getManagerConnection()
+
+      const netAResult = await clientA.getNetworkClient('valid-secret')
+      const netBResult = await clientB.getNetworkClient('valid-secret')
+
+      if (!netAResult.success || !netBResult.success) {
+        throw new Error('Failed to get network client')
+      }
+
+      const netA = netAResult.client
+      const netB = netBResult.client
 
       // 1. Peer A and B
-      await mgmtB.addPeer({
+      await netB.addPeer({
         name: 'peer-a.somebiz.local.io',
         endpoint: 'ws://peer-a:3000/rpc',
         domains: ['somebiz.local.io'],
       })
-      await mgmtA.addPeer({
+      await netA.addPeer({
         name: 'peer-b.somebiz.local.io',
         endpoint: 'ws://peer-b:3000/rpc',
         domains: ['somebiz.local.io'],
@@ -132,7 +140,7 @@ describe('Orchestrator Gateway Container Tests', () => {
       await new Promise((r) => setTimeout(r, 2000))
 
       // 2. A adds a GraphQL route
-      const adminAuth = { userId: 'admin', roles: ['*'] }
+      const adminAuth = { userId: 'admin', roles: ['admin'] }
       await clientA.dispatch(
         {
           action: 'local:route:create',

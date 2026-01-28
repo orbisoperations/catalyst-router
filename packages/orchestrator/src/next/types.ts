@@ -5,6 +5,7 @@ import { z } from 'zod'
 export const AuthContextSchema = z.object({
   userId: z.string(),
   roles: z.array(z.string()),
+  permissions: z.array(z.string()).optional(),
 })
 export type AuthContext = z.infer<typeof AuthContextSchema>
 

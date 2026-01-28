@@ -19,10 +19,10 @@ class MockConnectionPool extends ConnectionPool {
 
   get(_endpoint: string) {
     return {
-      getPeerConnection: async (_secret: string) => {
+      getIBGPClient: async (_secret: string) => {
         return {
           success: true,
-          connection: {
+          client: {
             open: async (_peer: PeerInfo) => {
               return { success: true }
             },
@@ -92,8 +92,10 @@ describe('CatalystNodeBus', () => {
       }
 
       const result = await bus.dispatch({ action: Actions.LocalPeerCreate, data: peer }, ADMIN_AUTH)
-
       expect(result).toEqual({ success: true })
+
+      // Wait for async side effects (connection status update)
+      if (bus.lastNotificationPromise) await bus.lastNotificationPromise
 
       const state = (bus as unknown as TestBus).state
       expect(state.internal.peers).toHaveLength(1)
@@ -192,6 +194,7 @@ describe('CatalystNodeBus', () => {
         domains: ['somebiz.local.io'],
       }
       await bus.dispatch({ action: Actions.LocalPeerCreate, data: peer2 }, ADMIN_AUTH)
+      if (bus.lastNotificationPromise) await bus.lastNotificationPromise
 
       // 2. Receive update from remote-peer
       const update = {
@@ -212,6 +215,9 @@ describe('CatalystNodeBus', () => {
         ADMIN_AUTH
       )
 
+      // Wait for propagation
+      if (bus.lastNotificationPromise) await bus.lastNotificationPromise
+
       // 3. Verify update sent to peer2 has prepended nodePath
       const pool = (bus as unknown as { connectionPool: MockConnectionPool }).connectionPool
       const calls = pool.updateMock.mock.calls
@@ -225,13 +231,13 @@ describe('CatalystNodeBus', () => {
     })
   })
 
-  describe('getPeerConnection', () => {
-    it('should allow BGP handshake if PSK matches', () => {
+  describe('getIBGPClient', () => {
+    it('should allow BGP handshake if PSK matches', async () => {
       const busWithSecret = new CatalystNodeBus({
         config: { node: MOCK_NODE, ibgp: { secret: 'secret123' } },
       })
       const api = busWithSecret.publicApi()
-      const result = api.getPeerConnection('secret123')
+      const result = await api.getIBGPClient('secret123')
       expect(result.success).toBe(true)
     })
   })

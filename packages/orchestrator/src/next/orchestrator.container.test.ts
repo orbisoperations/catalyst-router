@@ -92,17 +92,25 @@ describe('Orchestrator Container Tests (Next)', () => {
     'A <-> B: peering and route sync',
     async () => {
       const clientA = getClient(peerA)
-      const mgmtA = clientA.getManagerConnection()
       const clientB = getClient(peerB)
-      const mgmtB = clientB.getManagerConnection()
+
+      const netAResult = await clientA.getNetworkClient('valid-secret')
+      const netBResult = await clientB.getNetworkClient('valid-secret')
+
+      if (!netAResult.success || !netBResult.success) {
+        throw new Error('Failed to get network client')
+      }
+
+      const netA = netAResult.client
+      const netB = netBResult.client
 
       // 1. Configure BOTH nodes for peering
-      await mgmtB.addPeer({
+      await netB.addPeer({
         name: 'peer-a.somebiz.local.io',
         endpoint: 'ws://peer-a:3000/rpc',
         domains: ['somebiz.local.io'],
       })
-      await mgmtA.addPeer({
+      await netA.addPeer({
         name: 'peer-b.somebiz.local.io',
         endpoint: 'ws://peer-b:3000/rpc',
         domains: ['somebiz.local.io'],
@@ -112,9 +120,10 @@ describe('Orchestrator Container Tests (Next)', () => {
       await new Promise((r) => setTimeout(r, 2000))
 
       // 2. A adds a local route
-      await clientA.dispatch({
-        action: 'local:route:create',
-        data: { name: 'service-a', endpoint: 'http://a:8080', protocol: 'http' },
+      const dataAResult = await clientA.getDataCustodianClient('valid-secret')
+      if (!dataAResult.success) throw new Error('Failed to get data client')
+      await dataAResult.client.addRoute({
+        name: 'service-a', endpoint: 'http://a:8080', protocol: 'http'
       })
 
       // 3. Verify B sees the route
@@ -141,29 +150,29 @@ describe('Orchestrator Container Tests (Next)', () => {
       const clientB = getClient(peerB)
       const clientC = getClient(peerC)
 
-      const mgmtA = clientA.getManagerConnection()
-      const mgmtB = clientB.getManagerConnection()
-      const mgmtC = clientC.getManagerConnection()
+      const netA = (await clientA.getNetworkClient('valid-secret') as any).client
+      const netB = (await clientB.getNetworkClient('valid-secret') as any).client
+      const netC = (await clientC.getNetworkClient('valid-secret') as any).client
 
       // Configure A-B peering
-      await mgmtB.addPeer({
+      await netB.addPeer({
         name: 'peer-a.somebiz.local.io',
         endpoint: 'ws://peer-a:3000/rpc',
         domains: ['somebiz.local.io'],
       })
-      await mgmtA.addPeer({
+      await netA.addPeer({
         name: 'peer-b.somebiz.local.io',
         endpoint: 'ws://peer-b:3000/rpc',
         domains: ['somebiz.local.io'],
       })
 
       // Configure B-C peering
-      await mgmtC.addPeer({
+      await netC.addPeer({
         name: 'peer-b.somebiz.local.io',
         endpoint: 'ws://peer-b:3000/rpc',
         domains: ['somebiz.local.io'],
       })
-      await mgmtB.addPeer({
+      await netB.addPeer({
         name: 'peer-c.somebiz.local.io',
         endpoint: 'ws://peer-c:3000/rpc',
         domains: ['somebiz.local.io'],
@@ -172,9 +181,9 @@ describe('Orchestrator Container Tests (Next)', () => {
       await new Promise((r) => setTimeout(r, 2000))
 
       // A adds a route
-      await clientA.dispatch({
-        action: 'local:route:create',
-        data: { name: 'service-transit', endpoint: 'http://a:9090', protocol: 'http' },
+      const dataA = (await clientA.getDataCustodianClient('valid-secret') as any).client
+      await dataA.addRoute({
+        name: 'service-transit', endpoint: 'http://a:9090', protocol: 'http'
       })
 
       // Verify C sees it with nodePath [B, A]

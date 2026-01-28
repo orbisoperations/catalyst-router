@@ -124,19 +124,17 @@ export class InternalBGPPlugin extends BasePlugin {
       let updatePromise: Promise<ApplyActionResult> | Promise<void> = Promise.resolve()
 
       if (routes.length > 0) {
+        console.log(`[InternalAS] Handshake SYNC: Sending ${routes.length} existing routes to ${endpoint}`)
         const updates = routes.map((route) => ({
           type: 'add' as const,
           route: route.service,
           asPath: [config.as, ...(route.asPath || [])],
         }))
-        // Use the returned peerInfo from the open promise?
-        // Actually, for pipelining, we just pass myPeerInfo again or wait?
-        // CapnProto/CapnWeb pipelining works on PROMISES.
-        // But `update` takes `PeerInfo`, not a promise.
-        // We should just fire both.
         const updatesList = updates as UpdateMessage[]
         // @ts-expect-error - TS deep instantiation error
         updatePromise = ibgpScope.update(myPeerInfo, updatesList)
+      } else {
+        console.log(`[InternalAS] Handshake SYNC: No routes to sync to ${endpoint}`)
       }
 
       // Execute batch
@@ -369,7 +367,9 @@ export class InternalBGPPlugin extends BasePlugin {
         }
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e)
-        console.error(`[InternalAS] Background sync failed for ${peerInfo.id}:`, message)
+        // Log full error stack if available
+        const stack = e instanceof Error ? e.stack : ''
+        console.error(`[InternalAS] Background sync failed for ${peerInfo.id}: ${message}\n${stack}`)
       }
     })
 
@@ -442,6 +442,8 @@ export class InternalBGPPlugin extends BasePlugin {
 
     let newState = context.state
     const routesToPropagate: { route: unknown; asPath: number[] }[] = []
+
+    console.log(`[InternalAS] Processing ${updateMessages.length} updates...`)
 
     for (const msg of updateMessages) {
       if (msg.type === 'add') {
@@ -591,7 +593,7 @@ export class InternalBGPPlugin extends BasePlugin {
     const { action } = context
 
     let updateType: 'add' | 'remove'
-    let routeData: { name: string; [key: string]: unknown } | undefined
+    let routeData: { name: string;[key: string]: unknown } | undefined
     let routeId: string | undefined
 
     if (action.resourceAction === 'create') {
@@ -633,10 +635,10 @@ export class InternalBGPPlugin extends BasePlugin {
     const updateMsg: UpdateMessage =
       updateType === 'add'
         ? {
-            type: 'add',
-            route: routeData as unknown as ServiceDefinition,
-            asPath: [getConfig().as],
-          }
+          type: 'add',
+          route: routeData as unknown as ServiceDefinition,
+          asPath: [getConfig().as],
+        }
         : { type: 'remove', routeId: routeId! }
 
     const peers = context.state.getPeers()
