@@ -23,7 +23,7 @@ describe('Gateway Integration', () => {
       const imageName = 'books-service:test'
       const dockerfile = 'packages/examples/Dockerfile.books'
       // Workaround for Bun tar-stream issue
-      const proc = Bun.spawn(['podman', 'build', '-t', imageName, '-f', dockerfile, '.'], {
+      const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
         cwd: repoRoot,
         stdout: 'ignore',
         stderr: 'inherit',
@@ -41,7 +41,7 @@ describe('Gateway Integration', () => {
       const imageName = 'movies-service:test'
       const dockerfile = 'packages/examples/Dockerfile.movies'
       // Workaround for Bun tar-stream issue
-      const proc = Bun.spawn(['podman', 'build', '-t', imageName, '-f', dockerfile, '.'], {
+      const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
         cwd: repoRoot,
         stdout: 'ignore',
         stderr: 'inherit',

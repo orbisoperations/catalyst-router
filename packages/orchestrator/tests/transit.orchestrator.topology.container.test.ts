@@ -19,26 +19,26 @@ describe('Orchestrator Transit Container Tests', () => {
   let nodeB: StartedTestContainer
   let nodeC: StartedTestContainer
 
-  const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
+  const orchestratorImage = 'catalyst-node:next-topology-e2e'
   const repoRoot = path.resolve(__dirname, '../../../')
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
     if (skipTests) {
-      console.warn('Skipping container tests: Podman runtime not detected')
+      console.warn('Skipping container tests: Docker runtime not detected')
       return
     }
 
     // Check if image exists
-    const checkImage = spawnSync('podman', ['image', 'exists', orchestratorImage])
+    const checkImage = spawnSync('docker', ['image', 'inspect', orchestratorImage])
     if (checkImage.status !== 0) {
       console.log('Building Orchestrator image for Topology tests...')
       const orchestratorBuild = spawnSync(
-        'podman',
+        'docker',
         ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
         { cwd: repoRoot, stdio: 'inherit' }
       )
-      if (orchestratorBuild.status !== 0) throw new Error('Podman build orchestrator failed')
+      if (orchestratorBuild.status !== 0) throw new Error('Docker build orchestrator failed')
     } else {
       console.log(`Using existing image: ${orchestratorImage}`)
     }
