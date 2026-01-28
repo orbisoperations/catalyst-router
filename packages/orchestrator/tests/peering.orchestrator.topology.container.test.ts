@@ -138,7 +138,9 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
       console.log('Waiting for peering A <-> B to resolve...')
       const waitForConnected = async (client: RpcStub<PublicApi>, peerName: string) => {
         for (let i = 0; i < 20; i++) {
-          const peers = await (await client.getInspector()).listPeers()
+          const netResult = await client.getNetworkClient('valid-secret')
+          if (!netResult.success) throw new Error('Failed to get network client for check')
+          const peers = await netResult.client.listPeers()
           const peer = peers.find((p) => p.name === peerName)
           if (peer && peer.connectionStatus === 'connected') return
           await new Promise((r) => setTimeout(r, 500))
@@ -167,8 +169,9 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
       // Check B learned it
       let learnedOnB = false
       for (let i = 0; i < 40; i++) {
-        const inspector = await clientB.getInspector()
-        const routes = await inspector.listRoutes()
+        const dataBResult = await clientB.getDataCustodianClient('valid-secret')
+        if (!dataBResult.success) throw new Error('Failed to get data client B')
+        const routes = await dataBResult.client.listRoutes()
         if (routes.internal.some((r) => r.name === 'service-a')) {
           learnedOnB = true
           break

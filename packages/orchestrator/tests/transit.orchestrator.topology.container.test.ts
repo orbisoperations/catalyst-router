@@ -147,7 +147,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       console.log('Waiting for peering A <-> B to resolve...')
       const waitForConnected = async (client: RpcStub<PublicApi>, peerName: string) => {
         for (let i = 0; i < 20; i++) {
-          const peers = await (await client.getInspector()).listPeers()
+          const netResult = await client.getNetworkClient('valid-secret')
+          if (!netResult.success) throw new Error('Failed to get network client for check')
+          const peers = await netResult.client.listPeers()
           const peer = peers.find((p) => p.name === peerName)
           if (peer && peer.connectionStatus === 'connected') return
           await new Promise((r) => setTimeout(r, 500))
@@ -170,8 +172,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       // Check B learned it
       let learnedOnB = false
       for (let i = 0; i < 40; i++) {
-        const inspector = await clientB.getInspector()
-        const routes = await inspector.listRoutes()
+        const dataBResult = await clientB.getDataCustodianClient('valid-secret')
+        if (!dataBResult.success) throw new Error('Failed to get data client B')
+        const routes = await dataBResult.client.listRoutes()
         if (routes.internal.some((r) => r.name === 'service-a')) {
           learnedOnB = true
           break
@@ -200,8 +203,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       // 4. C should have learned about A's route via B
       let learnedOnC = false
       for (let i = 0; i < 10; i++) {
-        const inspector = await clientC.getInspector()
-        const routes = await inspector.listRoutes()
+        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        if (!dataCResult.success) throw new Error('Failed to get data client C')
+        const routes = await dataCResult.client.listRoutes()
         const routeA = routes.internal.find((r) => r.name === 'service-a')
         if (routeA) {
           learnedOnC = true
@@ -228,8 +232,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
 
       let removedOnC = false
       for (let i = 0; i < 10; i++) {
-        const inspector = await clientC.getInspector()
-        const routes = await inspector.listRoutes()
+        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        if (!dataCResult.success) throw new Error('Failed to get data client C')
+        const routes = await dataCResult.client.listRoutes()
         if (!routes.internal.some((r) => r.name === 'service-a')) {
           removedOnC = true
           break
@@ -258,8 +263,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
 
       let disconnectedWithdrawalOnC = false
       for (let i = 0; i < 10; i++) {
-        const inspector = await clientC.getInspector()
-        const routes = await inspector.listRoutes()
+        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        if (!dataCResult.success) throw new Error('Failed to get data client C')
+        const routes = await dataCResult.client.listRoutes()
         if (!routes.internal.some((r) => r.name === 'service-a-v2')) {
           disconnectedWithdrawalOnC = true
           break

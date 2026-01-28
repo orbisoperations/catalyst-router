@@ -26,17 +26,10 @@ export interface PublicApi {
   getIBGPClient(
     token: string
   ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
-  getInspector(): Inspector
   dispatch(
     action: Action,
     auth?: AuthContext
   ): Promise<{ success: true } | { success: false; error: string }>
-}
-
-export interface Inspector {
-  listPeers(): Promise<PeerRecord[]>
-  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
-  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 
 export interface NetworkClient {
@@ -45,6 +38,7 @@ export interface NetworkClient {
   removePeer(
     peer: Pick<PeerInfo, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
+  listPeers(): Promise<PeerRecord[]>
 }
 
 export interface DataCustodian {
@@ -54,6 +48,7 @@ export interface DataCustodian {
   removeRoute(
     route: DataChannelDefinition
   ): Promise<{ success: true } | { success: false; error: string }>
+  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 
 export interface IBGPClient {
@@ -832,6 +827,9 @@ export class CatalystNodeBus extends RpcTarget {
             removePeer: async (peer: Pick<PeerInfo, 'name'>) => {
               return this.dispatch({ action: Actions.LocalPeerDelete, data: peer }, auth)
             },
+            listPeers: async () => {
+              return this.state.internal.peers
+            },
           },
         }
       },
@@ -858,6 +856,12 @@ export class CatalystNodeBus extends RpcTarget {
             },
             removeRoute: async (route: DataChannelDefinition) => {
               return this.dispatch({ action: Actions.LocalRouteDelete, data: route }, auth)
+            },
+            listRoutes: async () => {
+              return {
+                local: this.state.local.routes,
+                internal: this.state.internal.routes,
+              }
             },
           },
         }
@@ -911,15 +915,6 @@ export class CatalystNodeBus extends RpcTarget {
               )
             },
           },
-        }
-      },
-      getInspector: (): Inspector => {
-        return {
-          listPeers: async () => this.state.internal.peers,
-          listRoutes: async () => ({
-            local: this.state.local.routes,
-            internal: this.state.internal.routes,
-          }),
         }
       },
       dispatch: async (action: Action) => {

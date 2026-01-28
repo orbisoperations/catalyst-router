@@ -132,8 +132,9 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       // Check B learned it
       let learnedOnB = false
       for (let i = 0; i < 20; i++) {
-        const inspector = await clientB.getInspector()
-        const routes = await inspector.listRoutes()
+        const dataBResult = await clientB.getDataCustodianClient('valid-secret')
+        if (!dataBResult.success) throw new Error('Failed to get data client B')
+        const routes = await dataBResult.client.listRoutes()
         if (routes.internal.some((r) => r.name === 'service-a')) {
           learnedOnB = true
           break
@@ -179,8 +180,9 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       // Verify node C learned service-a via node B
       let learnedOnC = false
       for (let i = 0; i < 20; i++) {
-        const inspector = await clientC.getInspector()
-        const routes = await inspector.listRoutes()
+        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        if (!dataCResult.success) throw new Error('Failed to get data client C')
+        const routes = await dataCResult.client.listRoutes()
         const routeA = routes.internal.find((r) => r.name === 'service-a')
         if (routeA) {
           learnedOnC = true
