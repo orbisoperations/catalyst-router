@@ -3,7 +3,7 @@ FROM oven/bun:1.3.6
 WORKDIR /app
 
 # Copy root config
-COPY package.json bun.lockb ./
+COPY package.json bun.lock ./
 
 # Copy source
 COPY packages/gateway packages/gateway

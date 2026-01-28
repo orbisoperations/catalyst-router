@@ -1,7 +1,7 @@
-import type { z } from 'zod'
+import { z } from 'zod'
 import { type Action } from './schema.js'
-import type { PeerInfo } from './routing/state.js'
-import { newRouteTable, type RouteTable } from './routing/state.js'
+import type { InternalRoute, PeerInfo } from './routing/state.js'
+import { newRouteTable, PeerInfoSchema, type RouteTable } from './routing/state.js'
 import type { UpdateMessageSchema } from './routing/internal/actions.js'
 import { type AuthContext, AuthContextSchema } from './types.js'
 import { getRequiredPermission, hasPermission, isSecretValid } from './permissions.js'
@@ -13,6 +13,7 @@ import {
   type RpcStub,
   RpcTarget,
 } from 'capnweb'
+import type { DataChannelDefinition } from './routing/datachannel.js'
 
 export interface PublicApi {
   getManagerConnection(): PeerManager
@@ -25,7 +26,7 @@ export interface PublicApi {
 
 export interface Inspector {
   listPeers(): Promise<PeerInfo[]>
-  listRoutes(): Promise<{ local: any[], internal: any[] }>
+  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 
 export interface PeerManager {
@@ -55,7 +56,6 @@ export interface PeerConnection {
     update: z.infer<typeof UpdateMessageSchema>
   ): Promise<{ success: true } | { success: false; error: string }>
 }
-
 
 export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
   return newHttpBatchRpcSession<API>(endpoint)
@@ -90,12 +90,15 @@ export class ConnectionPool {
   }
 }
 
-export interface OrchestratorConfig {
-  node: PeerInfo
-  ibgp?: {
-    secret?: string
-  }
-}
+export const OrchestratorConfigSchema = z.object({
+  node: PeerInfoSchema,
+  ibgp: z
+    .object({
+      secret: z.string().optional(),
+    })
+    .optional(),
+})
+export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
 
 export class CatalystNodeBus extends RpcTarget {
   private state: RouteTable
@@ -109,10 +112,18 @@ export class CatalystNodeBus extends RpcTarget {
   }) {
     super()
     this.state = opts.state ?? newRouteTable()
+    const parsedConfig = OrchestratorConfigSchema.safeParse(opts.config)
+    if (!parsedConfig.success) {
+      throw new Error(
+        `Invalid CatalystNodeBus config: ${parsedConfig.error.issues.map((a) => a.message).join(', ')}`
+      )
+    }
     this.config = opts.config
     this.connectionPool =
       opts.connectionPool?.pool ??
-      (opts.connectionPool?.type ? new ConnectionPool(opts.connectionPool.type) : new ConnectionPool())
+      (opts.connectionPool?.type
+        ? new ConnectionPool(opts.connectionPool.type)
+        : new ConnectionPool())
   }
 
   async dispatch(
@@ -120,7 +131,9 @@ export class CatalystNodeBus extends RpcTarget {
     auth?: AuthContext
   ): Promise<{ success: true } | { success: false; error: string }> {
     // Validate and default to anonymous context
-    const resolvedAuth: AuthContext = auth ? AuthContextSchema.parse(auth) : { userId: 'anonymous', roles: [] }
+    const resolvedAuth: AuthContext = auth
+      ? AuthContextSchema.parse(auth)
+      : { userId: 'anonymous', roles: [] }
 
     const prevState = this.state
     const result = await this.handleAction(sentAction, this.state, resolvedAuth)
@@ -139,9 +152,12 @@ export class CatalystNodeBus extends RpcTarget {
     auth: AuthContext
   ): Promise<{ success: true; state: RouteTable } | { success: false; error: string }> {
     // Permission check - single enforcement point
-    const permission = getRequiredPermission(action)
-    if (!hasPermission(auth.roles, permission)) {
-      return { success: false, error: `Permission denied: ${permission}` }
+    const requiredPermission = getRequiredPermission(action)
+    if (!hasPermission(auth.roles, requiredPermission)) {
+      console.error(
+        `[CatalystNodeBus] Permission denied: action:${action} roles:${auth.roles} required:${requiredPermission}`
+      )
+      return { success: false, error: `Permission denied: ${requiredPermission}` }
     }
 
     switch (action.action) {
@@ -185,12 +201,12 @@ export class CatalystNodeBus extends RpcTarget {
             peers: peerList.map((p) =>
               p.name === action.data.name
                 ? {
-                  ...p,
-                  endpoint: action.data.endpoint,
-                  domains: action.data.domains,
-                  connectionStatus: 'initializing',
-                  lastConnected: undefined,
-                }
+                    ...p,
+                    endpoint: action.data.endpoint,
+                    domains: action.data.domains,
+                    connectionStatus: 'initializing',
+                    lastConnected: undefined,
+                  }
                 : p
             ),
           },
@@ -370,7 +386,10 @@ export class CatalystNodeBus extends RpcTarget {
           }
         } catch (e) {
           // Connection failed, leave as initializing (or could transition to error state)
-          console.error(`[${this.config.node.name}] Failed to open connection to ${action.data.name}`, e)
+          console.error(
+            `[${this.config.node.name}] Failed to open connection to ${action.data.name}`,
+            e
+          )
         }
         break
       }
@@ -388,7 +407,10 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(`[${this.config.node.name}] Failed to sync route back to ${action.data.peerInfo.name}`, e)
+            console.error(
+              `[${this.config.node.name}] Failed to sync route back to ${action.data.peerInfo.name}`,
+              e
+            )
           }
         }
         break
@@ -407,7 +429,10 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(`[${this.config.node.name}] Failed to sync route to ${action.data.peerInfo.name}`, e)
+            console.error(
+              `[${this.config.node.name}] Failed to sync route to ${action.data.peerInfo.name}`,
+              e
+            )
           }
         }
         break
@@ -425,13 +450,18 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(`[${this.config.node.name}] Failed to close connection to ${peer.name}`, e)
+            console.error(
+              `[${this.config.node.name}] Failed to close connection to ${peer.name}`,
+              e
+            )
           }
         }
         break
       }
       case Actions.LocalRouteCreate: {
-        for (const peer of _state.internal.peers.filter((p) => p.connectionStatus === 'connected')) {
+        for (const peer of _state.internal.peers.filter(
+          (p) => p.connectionStatus === 'connected'
+        )) {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
@@ -449,7 +479,9 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       case Actions.LocalRouteDelete: {
-        for (const peer of _state.internal.peers.filter((p) => p.connectionStatus === 'connected')) {
+        for (const peer of _state.internal.peers.filter(
+          (p) => p.connectionStatus === 'connected'
+        )) {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
@@ -461,7 +493,10 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(`[${this.config.node.name}] Failed to broadcast route removal to ${peer.name}`, e)
+            console.error(
+              `[${this.config.node.name}] Failed to broadcast route removal to ${peer.name}`,
+              e
+            )
           }
         }
         break
@@ -480,7 +515,10 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(`[${this.config.node.name}] Failed to propagate update to ${peer.name}`, e)
+            console.error(
+              `[${this.config.node.name}] Failed to propagate update to ${peer.name}`,
+              e
+            )
           }
         }
         break

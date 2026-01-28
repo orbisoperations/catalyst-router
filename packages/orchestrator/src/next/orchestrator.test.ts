@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
-import type { PeerManager, PublicApi, Inspector } from './orchestrator'
+import type { PeerManager, PublicApi } from './orchestrator'
 import { CatalystNodeBus, ConnectionPool } from './orchestrator'
 import type { PeerInfo, RouteTable } from './routing/state'
 import { newRouteTable } from './routing/state'
@@ -411,7 +411,10 @@ describe('CatalystNodeBus', () => {
         endpoint: 'http://localhost:3000',
       }
 
-      const result = await bus.dispatch({ action: Actions.LocalRouteCreate, data: route }, ADMIN_AUTH)
+      const result = await bus.dispatch(
+        { action: Actions.LocalRouteCreate, data: route },
+        ADMIN_AUTH
+      )
 
       expect(result).toEqual({ success: true })
       const state = (bus as unknown as TestBus).state
@@ -427,7 +430,10 @@ describe('CatalystNodeBus', () => {
       }
       await bus.dispatch({ action: Actions.LocalRouteCreate, data: route }, ADMIN_AUTH)
 
-      const result = await bus.dispatch({ action: Actions.LocalRouteDelete, data: route }, ADMIN_AUTH)
+      const result = await bus.dispatch(
+        { action: Actions.LocalRouteDelete, data: route },
+        ADMIN_AUTH
+      )
 
       expect(result).toEqual({ success: true })
       const state = (bus as unknown as TestBus).state
@@ -719,7 +725,7 @@ describe('CatalystNodeBus', () => {
 
     beforeEach(() => {
       busWithSecret = new CatalystNodeBus({
-        config: { ibgp: { secret: 'correct-psk-secret' } },
+        config: { node: MOCK_NODE, ibgp: { secret: 'correct-psk-secret' } },
       })
     })
 
@@ -753,7 +759,9 @@ describe('CatalystNodeBus', () => {
 
     it('should reject when no secret configured', () => {
       // Bus without secret config
-      const busNoSecret = new CatalystNodeBus({})
+      const busNoSecret = new CatalystNodeBus({
+        config: { node: MOCK_NODE },
+      })
       const api = busNoSecret.publicApi()
       const result = api.getPeerConnection('any-secret')
 
@@ -815,7 +823,9 @@ describe('CatalystNodeBus', () => {
         })
         expect(openResult.success).toBe(false)
         // Error should be about peer not configured, NOT permission denied
-        expect((openResult as { error: string }).error).toBe('Peer not configured')
+        expect((openResult as { error: string }).error).toBe(
+          "Peer 'unconfigured-peer' is not configured on this node"
+        )
       }
     })
   })
