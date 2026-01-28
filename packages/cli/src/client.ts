@@ -1,10 +1,14 @@
 import type { RpcPromise, RpcStub } from 'capnweb'
 import { newWebSocketRpcSession } from 'capnweb'
-import type {
-  ListLocalRoutesResult,
-  ApplyActionResult,
-} from '../../orchestrator/src/rpc/schema/index.js'
-import type { ListPeersResult } from '../../orchestrator/src/rpc/schema/peering.js'
+import type { PeerInfo } from '../../orchestrator/src/orchestrator.js'
+import type { DataChannelDefinition } from '../../orchestrator/src/routing/datachannel.js'
+import type { InternalRoute } from '../../orchestrator/src/routing/state.js'
+
+export type ApplyActionResult = { success: true } | { success: false; error: string }
+export type ListLocalRoutesResult = {
+  routes: { local: DataChannelDefinition[]; internal: InternalRoute[] }
+}
+export type ListPeersResult = { peers: PeerInfo[] }
 
 // Polyfill Symbol.asyncDispose if necessary (TypeScript < 5.2 or older environments)
 // @ts-expect-error - polyfilling Symbol.asyncDispose

@@ -1,9 +1,9 @@
-import { Hono } from 'hono';
-import { createYoga } from 'graphql-yoga';
-import { makeExecutableSchema } from '@graphql-tools/schema';
-import { stitchingDirectives } from '@graphql-tools/stitching-directives';
+import { Hono } from 'hono'
+import { createYoga } from 'graphql-yoga'
+import { makeExecutableSchema } from '@graphql-tools/schema'
+import { stitchingDirectives } from '@graphql-tools/stitching-directives'
 
-const { allStitchingDirectivesTypeDefs, stitchingDirectivesValidator } = stitchingDirectives();
+const { allStitchingDirectivesTypeDefs, stitchingDirectivesValidator } = stitchingDirectives()
 
 const typeDefs = `
     ${allStitchingDirectivesTypeDefs}
@@ -18,40 +18,44 @@ const typeDefs = `
       books: [Book!]!
       _sdl: String!
     }
-`;
+`
 
 const resolvers = {
-    Query: {
-        books: () => [
-            { id: '1', title: 'The Lord of the Rings', author: 'J.R.R. Tolkien' },
-            { id: '2', title: 'Pride and Prejudice', author: 'Jane Austen' },
-            { id: '3', title: 'The Hobbit', author: 'J.R.R. Tolkien' },
-        ],
-        _sdl: () => typeDefs,
-    },
-};
+  Query: {
+    books: () => [
+      { id: '1', title: 'The Lord of the Rings', author: 'J.R.R. Tolkien' },
+      { id: '2', title: 'Pride and Prejudice', author: 'Jane Austen' },
+      { id: '3', title: 'The Hobbit', author: 'J.R.R. Tolkien' },
+    ],
+    _sdl: () => typeDefs,
+  },
+}
 
-const schema = stitchingDirectivesValidator(makeExecutableSchema({
+const schema = stitchingDirectivesValidator(
+  makeExecutableSchema({
     typeDefs,
     resolvers,
-}));
+  })
+)
 
-const app = new Hono();
+const app = new Hono()
 const yoga = createYoga({
-    schema,
-    graphqlEndpoint: '/graphql',
-    landingPage: false,
-});
+  schema,
+  graphqlEndpoint: '/graphql',
+  landingPage: false,
+})
 
-app.all('/graphql', (c) => (yoga.fetch as any)(c.req.raw, c.env));
+app.all('/graphql', (c) =>
+  (yoga.fetch as unknown as (req: Request, env: unknown) => Promise<Response>)(c.req.raw, c.env)
+)
 
-app.get('/health', (c) => c.text('OK'));
+app.get('/health', (c) => c.text('OK'))
 
-const port = Number(process.env.PORT) || 8080;
-console.log(`Books service starting on port ${port}...`);
-console.log('BOOKS_STARTED');
+const port = Number(process.env.PORT) || 8080
+console.log(`Books service starting on port ${port}...`)
+console.log('BOOKS_STARTED')
 
 export default {
-    fetch: app.fetch,
-    port,
-};
+  fetch: app.fetch,
+  port,
+}

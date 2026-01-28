@@ -112,7 +112,7 @@ describe('RevocationStore', () => {
 
       const result = await revokeToken({ store, keyPair, token: otherToken, authToken })
       expect(result.success).toBe(false)
-      expect((result as any).error).toBe('Not authorized to revoke this token')
+      expect((result as { error: string }).error).toBe('Not authorized to revoke this token')
     })
 
     it('should allow admin to revoke any token', async () => {
@@ -134,18 +134,18 @@ describe('RevocationStore', () => {
       // Garbage auth token
       let result = await revokeToken({ store, keyPair, token: userToken, authToken: 'garbage' })
       expect(result.success).toBe(false)
-      expect((result as any).error).toBe('Invalid auth token')
+      expect((result as { error: string }).error).toBe('Invalid auth token')
 
       // Auth token signed with wrong key
       result = await revokeToken({ store, keyPair, token: userToken, authToken: wrongKeyToken })
       expect(result.success).toBe(false)
-      expect((result as any).error).toBe('Invalid auth token')
+      expect((result as { error: string }).error).toBe('Invalid auth token')
 
       // Malformed target token (not a JWT at all)
       const validAuth = await signToken(keyPair, { subject: 'user-123' })
       result = await revokeToken({ store, keyPair, token: 'not-a-jwt', authToken: validAuth })
       expect(result.success).toBe(false)
-      expect((result as any).error).toBe('Malformed token')
+      expect((result as { error: string }).error).toBe('Malformed token')
     })
 
     it('should allow revoking tokens signed with different keys', async () => {

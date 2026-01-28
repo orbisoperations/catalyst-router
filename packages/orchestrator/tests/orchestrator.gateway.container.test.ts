@@ -8,8 +8,9 @@ import {
 } from 'testcontainers'
 import path from 'path'
 import { spawnSync } from 'node:child_process'
+import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
-import type { PublicApi } from './orchestrator.js'
+import type { PublicApi } from '../src/orchestrator.js'
 
 describe('Orchestrator Gateway Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
@@ -60,7 +61,7 @@ describe('Orchestrator Gateway Container Tests', () => {
       name: string,
       alias: string,
       waitMsg: string,
-      env: any = {},
+      env: Record<string, string> = {},
       ports: number[] = []
     ) => {
       let image = orchestratorImage
@@ -71,8 +72,8 @@ describe('Orchestrator Gateway Container Tests', () => {
         .withNetwork(network)
         .withNetworkAliases(alias)
         .withWaitStrategy(Wait.forLogMessage(waitMsg))
-        .withLogConsumer((stream: any) => {
-          if (stream.pipe) stream.pipe(process.stdout)
+        .withLogConsumer((stream: Readable) => {
+          stream.pipe(process.stdout)
           stream.on('data', (data: Buffer | string) => {
             if (alias === 'peer-b') {
               peerBLogs.push(data.toString())
