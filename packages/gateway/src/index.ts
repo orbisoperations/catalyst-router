@@ -25,9 +25,11 @@ app.route('/api', rpcApp);
 
 const port = Number(process.env.PORT) || 4000;
 console.log(`Starting server on port ${port}...`);
+console.log('GATEWAY_STARTED');
 
 export default {
     fetch: app.fetch,
     port,
+    hostname: '0.0.0.0',
     websocket,
 };

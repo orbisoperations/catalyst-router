@@ -43,12 +43,13 @@ const yoga = createYoga({
     landingPage: false,
 });
 
-app.all('/graphql', (c) => yoga.fetch(c.req.raw as unknown as Request, c.env));
+app.all('/graphql', (c) => (yoga.fetch as any)(c.req.raw, c.env));
 
 app.get('/health', (c) => c.text('OK'));
 
 const port = Number(process.env.PORT) || 8080;
 console.log(`Books service starting on port ${port}...`);
+console.log('BOOKS_STARTED');
 
 export default {
     fetch: app.fetch,

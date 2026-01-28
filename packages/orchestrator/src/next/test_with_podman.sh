@@ -1,41 +1,45 @@
 #!/bin/bash
+set -e
 
-# Attempt to detect the Podman socket path on the host
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # On Mac, we need the host-side socket linked to the VM
-    MACHINE_NAME=$(podman machine list --format '{{.Name}} {{.Default}}' | grep 'true' | cut -d' ' -f1)
-    if [ -z "$MACHINE_NAME" ]; then
-        # Fallback to the first machine if none is marked default but one exists
-        MACHINE_NAME=$(podman machine list --format '{{.Name}}' | head -n 1)
+# Detect Podman socket
+if [ -z "$DOCKER_HOST" ]; then
+    PODMAN_SOCK="/var/folders/q5/zpx662k93sgb7srpmbb4s9xm0000gn/T/podman/podman-machine-default-api.sock"
+    if [ -S "$PODMAN_SOCK" ]; then
+        echo "Podman socket detected: $PODMAN_SOCK"
+        export DOCKER_HOST="unix://$PODMAN_SOCK"
+    else
+        echo "Warning: Podman socket not found at $PODMAN_SOCK"
     fi
+fi
+
+# Build shared image once to avoid race conditions
+echo "Ensuring Orchestrator base image exists..."
+podman build -f packages/orchestrator/Dockerfile -t localhost/catalyst-node:next-topology-e2e .
+
+# Run each test file sequentially
+FAILED=0
+TEST_FILES=(
+    "packages/orchestrator/src/next/peering.orchestrator.topology.container.test.ts"
+    "packages/orchestrator/src/next/transit.orchestrator.topology.container.test.ts"
+    "packages/orchestrator/src/next/orchestrator.test.ts"
+    "packages/orchestrator/src/next/orchestrator.gateway.container.test.ts"
+)
+
+for test in "${TEST_FILES[@]}"; do
+    echo "Running test: $test"
+    # Clean up before each test file
+    podman ps -aq | xargs podman rm -f || true
     
-    if [ -n "$MACHINE_NAME" ]; then
-        PODMAN_SOCKET=$(podman machine inspect "$MACHINE_NAME" --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null)
+    if ! bun test "$test"; then
+        echo "Test failed: $test"
+        FAILED=1
     fi
-fi
+done
 
-# Fallback to podman info if Mac detection failed or not on Mac
-if [ -z "$PODMAN_SOCKET" ] || [[ ! "$PODMAN_SOCKET" == /* ]]; then
-    PODMAN_SOCKET=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null | sed 's|^unix://||')
-fi
-
-# Final fallback for known paths if detection resulted in an internal VM path (which starts with /run)
-if [[ "$PODMAN_SOCKET" == /run/* ]] && [[ "$OSTYPE" == "darwin"* ]]; then
-    if [ -S "$HOME/.local/share/containers/podman/machine/qemu/podman.sock" ]; then
-        PODMAN_SOCKET="$HOME/.local/share/containers/podman/machine/qemu/podman.sock"
-    fi
-fi
-
-if [ -z "$PODMAN_SOCKET" ]; then
-    echo "Warning: Podman socket not detected. Container tests may skip."
+if [ $FAILED -ne 0 ]; then
+    echo "One or more tests failed."
+    exit 1
 else
-    echo "Podman socket detected: $PODMAN_SOCKET"
-    export DOCKER_HOST="unix://$PODMAN_SOCKET"
+    echo "All container tests passed!"
+    exit 0
 fi
-
-# Required environment variables for testcontainers with Podman
-export TESTCONTAINERS_RYUK_DISABLED=true
-export TESTCONTAINERS_CHECKS_DISABLE=true
-
-# Execute bun test with any passed arguments
-exec bun test "$@"
