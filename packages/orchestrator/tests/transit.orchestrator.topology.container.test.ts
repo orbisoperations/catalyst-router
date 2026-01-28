@@ -16,7 +16,7 @@ if (skipTests) {
   console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED not set')
 }
 
-describe('Orchestrator Transit Container Tests', () => {
+describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
