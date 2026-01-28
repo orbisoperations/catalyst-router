@@ -1,20 +1,27 @@
 # Runtime stage (use bun directly)
-FROM oven/bun:1.3.6
+FROM oven/bun:1.3.6-alpine
+
 WORKDIR /app
 
 # Copy root config
 COPY package.json bun.lock ./
 
-# Copy source
-COPY packages/gateway packages/gateway
+# Copy gateway package dependencies
+COPY packages/gateway/package.json packages/gateway/package.json
 
-# Remove host node_modules to avoid broken symlinks
-RUN rm -rf packages/gateway/node_modules
-
-# Install dependencies from root
-RUN bun install
+# Install production dependencies
+RUN bun install --ignore-scripts --omit=dev
 
 WORKDIR /app/packages/gateway
+
+# Copy source code
+COPY packages/gateway .
+
 ENV PORT=4000
 EXPOSE 4000
+
+# User
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
 CMD ["bun", "run", "src/index.ts"]

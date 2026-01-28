@@ -1,7 +1,7 @@
 **/node_modules
 **/dist
 **/.git
-***/.gitignore
+**/.gitignore
 **/*.md
 **/tests
 **.tests.ts
