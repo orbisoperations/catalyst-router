@@ -93,7 +93,11 @@ describe('hasPermission', () => {
   })
 
   describe('category wildcard', () => {
-    it.skip('should grant permission when category wildcard matches', () => {
+    // @JTaylor: this is kinda weird.
+    // the first argument is not a role, but a wildcard permission scope.
+    // this is not very intuitive and seems to be a legacy feature. is it used anywhere?
+    // we should probably remove this and require the user to pass in a role instead.
+    it('should grant permission when category wildcard matches', () => {
       expect(hasPermission(['peer:*'], 'peer:create')).toBe(true)
       expect(hasPermission(['peer:*'], 'peer:update')).toBe(true)
       expect(hasPermission(['peer:*'], 'peer:delete')).toBe(true)

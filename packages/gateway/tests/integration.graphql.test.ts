@@ -6,31 +6,35 @@ import path from 'path'
 import type { GatewayGraphqlServer } from '../src/graphql/server.ts'
 import { createGatewayHandler } from '../src/graphql/server.ts'
 
-describe('Gateway Integration', () => {
+const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+
+describe.skipIf(skipTests)('Gateway Integration', () => {
   const TIMEOUT = 120000
-  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
   let booksContainer: StartedTestContainer
   let moviesContainer: StartedTestContainer
   let gatewayServer: GatewayGraphqlServer
   let gatewayApp: Hono
 
   beforeAll(async () => {
-    if (skipTests) return
+    console.log('Starting Gateway Integration Test')
     const repoRoot = path.resolve(__dirname, '../../..')
+    console.log('Repo root:', repoRoot)
 
     // 1. Start Books Service
     {
+      console.log('Starting Books Service')
       const imageName = 'books-service:test'
       const dockerfile = 'packages/examples/Dockerfile.books'
       // Workaround for Bun tar-stream issue
-      const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
+      const proc = Bun.spawn([CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', dockerfile, '.'], {
         cwd: repoRoot,
-        stdout: 'ignore',
+        stdout: 'inherit',
         stderr: 'inherit',
       })
       await proc.exited
 
-      const container = await new GenericContainer(imageName)
+      const container = new GenericContainer(imageName)
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))
       booksContainer = await container.start()
@@ -38,17 +42,18 @@ describe('Gateway Integration', () => {
 
     // 2. Start Movies Service
     {
+      console.log('Starting Movies Service')
       const imageName = 'movies-service:test'
       const dockerfile = 'packages/examples/Dockerfile.movies'
       // Workaround for Bun tar-stream issue
-      const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
+      const proc = Bun.spawn([CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', dockerfile, '.'], {
         cwd: repoRoot,
-        stdout: 'ignore',
+        stdout: 'inherit',
         stderr: 'inherit',
       })
       await proc.exited
 
-      const container = await new GenericContainer(imageName)
+      const container = new GenericContainer(imageName)
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))
       moviesContainer = await container.start()
@@ -62,7 +67,6 @@ describe('Gateway Integration', () => {
   }, TIMEOUT)
 
   afterAll(async () => {
-    if (skipTests) return
     if (booksContainer) await booksContainer.stop()
     if (moviesContainer) await moviesContainer.stop()
   })
@@ -70,7 +74,6 @@ describe('Gateway Integration', () => {
   it(
     'should federate books and movies',
     async () => {
-      if (skipTests) return
       const booksPort = booksContainer.getMappedPort(8080)
       const booksHost = booksContainer.getHost()
       const moviesPort = moviesContainer.getMappedPort(8080)

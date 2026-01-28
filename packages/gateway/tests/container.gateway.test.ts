@@ -4,7 +4,10 @@ import { GenericContainer, Wait, Network } from 'testcontainers'
 import path from 'path'
 import { newWebSocketRpcSession } from 'capnweb'
 
-describe('Gateway Container Integration', () => {
+const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+
+describe.skipIf(skipTests)('Gateway Container Integration', () => {
   const TIMEOUT = 180000 // 3 minutes for builds
   // Containers
   let booksContainer: StartedTestContainer
@@ -15,20 +18,25 @@ describe('Gateway Container Integration', () => {
   // Gateway Access
   let gatewayPort: number
   let rpcClient: { updateConfig(config: unknown): Promise<{ success: boolean }> } | null = null
-  let ws: any
+  let ws: WebSocket
   const repoRoot = path.resolve(__dirname, '../../..')
-  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
-    if (skipTests) return
     network = await new Network().start()
 
     // 1. Build & Start Books (Background)
     const startBooks = async () => {
-      if (skipTests) return
       const imageName = 'books-service:test'
       await Bun.spawn(
-        ['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.books', '.'],
+        [
+          CONTAINER_RUNTIME,
+          'build',
+          '-t',
+          imageName,
+          '-f',
+          'packages/examples/Dockerfile.books',
+          '.',
+        ],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -48,7 +56,15 @@ describe('Gateway Container Integration', () => {
     const startMovies = async () => {
       const imageName = 'movies-service:test'
       await Bun.spawn(
-        ['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.movies', '.'],
+        [
+          CONTAINER_RUNTIME,
+          'build',
+          '-t',
+          imageName,
+          '-f',
+          'packages/examples/Dockerfile.movies',
+          '.',
+        ],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -68,7 +84,7 @@ describe('Gateway Container Integration', () => {
     const startGateway = async () => {
       const imageName = 'gateway-service:test'
       await Bun.spawn(
-        ['docker', 'build', '-t', imageName, '-f', 'packages/gateway/Dockerfile', '.'],
+        [CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', 'packages/gateway/Dockerfile', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -103,7 +119,7 @@ describe('Gateway Container Integration', () => {
     ws = new WebSocket(url)
     await new Promise<void>((resolve, reject) => {
       ws.addEventListener('open', () => resolve())
-      ws.addEventListener('error', (_e) => reject(_e))
+      ws.addEventListener('error', (e: Event) => reject(e))
     })
     rpcClient = newWebSocketRpcSession(ws as unknown as WebSocket) as unknown as {
       updateConfig(config: unknown): Promise<{ success: boolean }>
@@ -121,7 +137,6 @@ describe('Gateway Container Integration', () => {
   }
 
   it('should be in initial state (waiting for config)', async () => {
-    if (skipTests) return
     // The current implementation might return 404 or empty schema if no config.
     // Based on previous tests, it might just have an empty schema or basic query.
     // Let's assume the status query or just introspection works but returns nothing useful yet.
@@ -133,7 +148,6 @@ describe('Gateway Container Integration', () => {
   })
 
   it('should add Books service successfully', async () => {
-    if (skipTests) return
     const client = await getRpcClient()
     const config = {
       services: [
@@ -156,7 +170,6 @@ describe('Gateway Container Integration', () => {
   })
 
   it('should add Movies service (incremental)', async () => {
-    if (skipTests) return
     const client = await getRpcClient()
     const config = {
       services: [
@@ -183,7 +196,6 @@ describe('Gateway Container Integration', () => {
   })
 
   it('should reset to empty config', async () => {
-    if (skipTests) return
     const client = await getRpcClient()
     // Sending empty services list
     // Note: The schema might complain if 'services' is required to be non-empty or if schema stitching fails with 0 subschemas.

@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/.git
+***/.gitignore
+**/*.md
+**/tests
+**.tests.ts
+**/.env
+**/.env.*
+**/Dockerfile
+**/.dockerignore
+**/coverage
+.vscode
+.cursor
+.husky
