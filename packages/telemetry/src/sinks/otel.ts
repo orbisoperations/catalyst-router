@@ -11,22 +11,30 @@ import { getOpenTelemetrySink } from '@logtape/otel'
 import { sanitizeAttributes } from '../sanitizers'
 
 interface OtelSinkOptions {
-  loggerProvider?: LoggerProvider
+  loggerProvider: LoggerProvider
 }
 
 let _loggerProvider: LoggerProvider | null = null
 
 /**
+ * Track the LoggerProvider for shutdown.
+ *
+ * WHY separate from createOtelSink: The provider is created in logger.ts
+ * (either test-injected or production OTLP), but shutdown needs to happen
+ * here where the provider reference is stored. This explicit setter makes
+ * the lifecycle clearer than having createOtelSink implicitly track it.
+ */
+export function setLoggerProvider(provider: LoggerProvider): void {
+  _loggerProvider = provider
+}
+
+/**
  * Create a LogTape sink that forwards log records to OTEL via @logtape/otel,
  * with PII sanitization applied to log properties.
  */
-export function createOtelSink(opts?: OtelSinkOptions): Sink {
-  if (opts?.loggerProvider) {
-    _loggerProvider = opts.loggerProvider
-  }
-
+export function createOtelSink(opts: OtelSinkOptions): Sink {
   const otelSink = getOpenTelemetrySink({
-    loggerProvider: opts?.loggerProvider,
+    loggerProvider: opts.loggerProvider,
   })
 
   return (record) => {
