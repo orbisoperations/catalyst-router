@@ -62,9 +62,11 @@ export interface BatchConfig {
 
 /**
  * Options for `telemetryMiddleware()`.
+ *
+ * @see https://opentelemetry.io/docs/specs/semconv/http/http-spans/ — HTTP span conventions
  */
 export interface MiddlewareOptions {
-  /** Paths to skip instrumentation for (e.g., ["/health", "/ready"]). */
+  /** Paths to skip instrumentation for (e.g., ["/health", "/ready"]). Exact match only. */
   ignorePaths?: string[]
 
   /** Custom span name prefix. Defaults to "HTTP". */
