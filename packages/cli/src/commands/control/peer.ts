@@ -1,6 +1,6 @@
 
 import { Command } from 'commander';
-import { createClient } from '../client.js';
+import { createClient } from '../../client.js';
 import chalk from 'chalk';
 
 export const peerCommands = () => {

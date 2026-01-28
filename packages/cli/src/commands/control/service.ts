@@ -1,9 +1,9 @@
 import { Command } from 'commander'
-import { createClient } from '../client.js'
+import { createClient } from '../../client.js'
 import chalk from 'chalk'
-import type { CliResult } from '../types.js'
+import type { CliResult } from '../../types.js'
 
-import { AddServiceInputSchema, ListServicesInputSchema, type AddServiceInput } from '../types.js'
+import { AddServiceInputSchema, ListServicesInputSchema, type AddServiceInput } from '../../types.js'
 
 export async function addService(params: AddServiceInput): Promise<CliResult<void>> {
   try {

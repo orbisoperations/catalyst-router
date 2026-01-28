@@ -1,6 +1,6 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
-import { addService, listServices } from '../src/commands/service.js'
-import { AddServiceInputSchema } from '../src/types.js'
+import { addService, listServices } from '../../src/commands/control/service.js'
+import { AddServiceInputSchema } from '../../src/types.js'
 
 // Mock the client creation
 const mockApplyAction = mock((_action: unknown) =>
@@ -22,7 +22,7 @@ const mockCreateClient = mock(() =>
   } as unknown)
 )
 
-mock.module('../src/client.js', () => {
+mock.module('../../src/client.js', () => {
   return {
     createClient: mockCreateClient,
   }
@@ -80,21 +80,13 @@ describe('Service Commands', () => {
       )
       const result = await addService({
         name: 'fail',
-        endpoint: 'err', // Invalid URL but valid string type. Logic validation? Zod type enforces URL!
-        // Wait. 'err' is NOT a valid URL.
-        // If addService takes AddServiceInput, expecting VALID data.
-        // But in unit test I am bypassing Zod parser.
-        // So I pass manual object.
-        // If I pass 'err', and AddServiceInput.endpoint is `string`. It IS string.
-        // Zod "brand" types? No, just string.
-        // So TS allows 'err'.
+        endpoint: 'http://valid-url-for-this-test',
         protocol: 'http:graphql',
         orchestratorUrl: 'ws://localhost:3000/rpc',
         logLevel: 'info',
       })
       expect(result.success).toBe(false)
       if (!result.success) {
-        // logic check
         expect(result.error).toBe('Failed')
       }
     })
@@ -103,7 +95,7 @@ describe('Service Commands', () => {
       mockCreateClient.mockRejectedValueOnce(new Error('Connect Error'))
       const result = await addService({
         name: 'fail',
-        endpoint: 'http://valid-url-for-this-test', // updated to avoid confusion, though logic is mocked
+        endpoint: 'http://valid-url-for-this-test',
         protocol: 'http:graphql',
         orchestratorUrl: 'ws://localhost:3000/rpc',
         logLevel: 'info',
@@ -129,8 +121,6 @@ describe('Service Commands', () => {
 })
 
 describe('Validation Schema', () => {
-  // Schema now imported at top level
-
   it('should validate correct input', () => {
     const input = { name: 'valid', endpoint: 'http://valid.com', protocol: 'http:graphql' }
     const result = AddServiceInputSchema.safeParse(input)
