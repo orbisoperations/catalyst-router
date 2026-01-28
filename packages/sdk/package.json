@@ -9,9 +9,11 @@
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "test": "vitest",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/bun": "catalog:dev",
     "@vitest/coverage-v8": "catalog:testing",
     "tsup": "catalog:dev",
     "typescript": "catalog:dev",
@@ -19,7 +21,17 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
+    "@opentelemetry/api": "catalog:",
     "graphql": "catalog:",
-    "graphql-yoga": "catalog:"
+    "graphql-yoga": "catalog:",
+    "hono": "catalog:"
+  },
+  "peerDependencies": {
+    "@catalyst/telemetry": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@catalyst/telemetry": {
+      "optional": true
+    }
   }
 }
