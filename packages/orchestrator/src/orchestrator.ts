@@ -5,7 +5,7 @@ export type { PeerInfo, InternalRoute }
 import { newRouteTable, type RouteTable, type PeerRecord } from './routing/state.js'
 import type { DataChannelDefinition } from './routing/datachannel.js'
 import type { UpdateMessageSchema } from './routing/internal/actions.js'
-import { type AuthContext, AuthContextSchema } from './types.js'
+import { type AuthContext, AuthContextSchema, type OrchestratorConfig } from './types.js'
 import { getRequiredPermission, hasPermission, isSecretValid } from './permissions.js'
 import { Actions } from './action-types.js'
 import {
@@ -94,16 +94,6 @@ export class ConnectionPool {
         return stub
       }
     }
-  }
-}
-
-export interface OrchestratorConfig {
-  node: PeerInfo
-  ibgp?: {
-    secret?: string
-  }
-  gqlGatewayConfig?: {
-    endpoint: string
   }
 }
 
