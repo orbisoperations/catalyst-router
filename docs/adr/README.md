@@ -16,8 +16,8 @@ An ADR is a document that captures an important architectural decision made alon
 | ADR                                                   | Title                                       | Status   | Date       |
 | ----------------------------------------------------- | ------------------------------------------- | -------- | ---------- |
 | [0001](./0001-unified-opentelemetry-observability.md) | Unified OpenTelemetry Observability         | Accepted | 2026-01-26 |
-| [0002](./0002-logging-library-selection.md)           | Logging Library Selection (LogTape vs Pino) | Proposed | 2026-01-26 |
-| [0003](./0003-observability-backends.md)              | Observability Backend Selection             | Accepted | 2026-01-26 |
+| [0002](./0002-logging-library-selection.md)           | Logging Library Selection (LogTape vs Pino) | Accepted | 2026-01-26 |
+| [0003](./0003-observability-backends.md)              | Observability Backend Selection             | Proposed | 2026-01-26 |
 | [0004](./0004-sqlite-storage-backend.md)              | SQLite as Unified Storage Backend           | Accepted | 2026-01-26 |
 
 ## Statuses
