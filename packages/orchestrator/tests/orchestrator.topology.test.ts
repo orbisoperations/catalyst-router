@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { CatalystNodeBus, type NetworkClient, type DataCustodian } from '../src/orchestrator.js'
+import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
 import type { PeerInfo, RouteTable } from '../src/routing/state.js'
 import { newRouteTable } from '../src/routing/state.js'
 
@@ -66,9 +66,9 @@ describe('Orchestrator Topology Tests', () => {
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataCustodianClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
         success: true
-        client: DataCustodian
+        client: DataChannel
       }
     ).client
 
@@ -135,9 +135,9 @@ describe('Orchestrator Topology Tests', () => {
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataCustodianClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
         success: true
-        client: DataCustodian
+        client: DataChannel
       }
     ).client
 
@@ -212,9 +212,9 @@ describe('Orchestrator Topology Tests', () => {
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataCustodianClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
         success: true
-        client: DataCustodian
+        client: DataChannel
       }
     ).client
 
@@ -270,9 +270,9 @@ describe('Orchestrator Topology Tests', () => {
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataCustodianClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
         success: true
-        client: DataCustodian
+        client: DataChannel
       }
     ).client
 

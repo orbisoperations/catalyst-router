@@ -9,7 +9,7 @@ import {
 import path from 'path'
 import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import type { PublicApi, NetworkClient, DataCustodian } from '../src/orchestrator.js'
+import type { PublicApi, NetworkClient, DataChannel } from '../src/orchestrator.js'
 
 const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 if (skipTests) {
@@ -161,7 +161,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
 
       // 2. A adds a local route
       console.log('Node A adding local route')
-      const dataAResult = await clientA.getDataCustodianClient('valid-secret')
+      const dataAResult = await clientA.getDataChannelClient('valid-secret')
       if (!dataAResult.success) throw new Error('Failed to get data client')
       await dataAResult.client.addRoute({
         name: 'service-a',
@@ -172,7 +172,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       // Check B learned it
       let learnedOnB = false
       for (let i = 0; i < 40; i++) {
-        const dataBResult = await clientB.getDataCustodianClient('valid-secret')
+        const dataBResult = await clientB.getDataChannelClient('valid-secret')
         if (!dataBResult.success) throw new Error('Failed to get data client B')
         const routes = await dataBResult.client.listRoutes()
         if (routes.internal.some((r) => r.name === 'service-a')) {
@@ -203,7 +203,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       // 4. C should have learned about A's route via B
       let learnedOnC = false
       for (let i = 0; i < 10; i++) {
-        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        const dataCResult = await clientC.getDataChannelClient('valid-secret')
         if (!dataCResult.success) throw new Error('Failed to get data client C')
         const routes = await dataCResult.client.listRoutes()
         const routeA = routes.internal.find((r) => r.name === 'service-a')
@@ -220,9 +220,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       // 5. Withdrawal Propagation: A deletes route -> B and C should remove it
       console.log('Node A deleting route')
       await (
-        (await clientA.getDataCustodianClient('valid-secret')) as {
+        (await clientA.getDataChannelClient('valid-secret')) as {
           success: true
-          client: DataCustodian
+          client: DataChannel
         }
       ).client.removeRoute({
         name: 'service-a',
@@ -232,7 +232,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
 
       let removedOnC = false
       for (let i = 0; i < 10; i++) {
-        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        const dataCResult = await clientC.getDataChannelClient('valid-secret')
         if (!dataCResult.success) throw new Error('Failed to get data client C')
         const routes = await dataCResult.client.listRoutes()
         if (!routes.internal.some((r) => r.name === 'service-a')) {
@@ -246,9 +246,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       // 6. Topology Withdrawal: Disconnect A-B -> B should tell C to remove A's routes
       console.log('Re-adding route and then disconnecting A-B')
       await (
-        (await clientA.getDataCustodianClient('valid-secret')) as {
+        (await clientA.getDataChannelClient('valid-secret')) as {
           success: true
-          client: DataCustodian
+          client: DataChannel
         }
       ).client.addRoute({
         name: 'service-a-v2',
@@ -263,7 +263,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
 
       let disconnectedWithdrawalOnC = false
       for (let i = 0; i < 10; i++) {
-        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        const dataCResult = await clientC.getDataChannelClient('valid-secret')
         if (!dataCResult.success) throw new Error('Failed to get data client C')
         const routes = await dataCResult.client.listRoutes()
         if (!routes.internal.some((r) => r.name === 'service-a-v2')) {
