@@ -43,7 +43,8 @@
       "@opentelemetry/core": "^2.5.0",
       "@opentelemetry/semantic-conventions": "^1.39.0",
       "@logtape/logtape": "^2.0.0",
-      "@logtape/otel": "^2.0.0"
+      "@logtape/otel": "^2.0.0",
+      "@envelop/opentelemetry": "^9.1.0"
     },
     "catalogs": {
       "dev": {
