@@ -10,16 +10,23 @@ describe('Auth Service Container', () => {
   let container: StartedTestContainer
   let port: number
 
-  beforeAll(async () => {
-    // Build image
-    const buildContext = resolve(__dirname, '..')
-    console.log('Building Docker image from', buildContext)
+  const repoRoot = resolve(__dirname, '../../../')
+  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
-    const proc = Bun.spawn(['docker', 'build', '-t', 'auth-service:test', '.'], {
-      cwd: buildContext,
-      // stdout: 'inherit', // Uncomment for debugging build
-      stderr: 'inherit',
-    })
+  beforeAll(async () => {
+    if (skipTests) return
+
+    // Build image
+    console.log('Building Docker image from', repoRoot)
+
+    const proc = Bun.spawn(
+      ['podman', 'build', '-t', 'auth-service:test', '-f', 'packages/auth/Dockerfile', '.'],
+      {
+        cwd: repoRoot,
+        // stdout: 'inherit', // Uncomment for debugging build
+        stderr: 'inherit',
+      }
+    )
     await proc.exited
 
     if (proc.exitCode !== 0) {
@@ -40,10 +47,12 @@ describe('Auth Service Container', () => {
   }, TIMEOUT)
 
   afterAll(async () => {
+    if (skipTests) return
     await container?.stop()
   })
 
   it('should expose RPC and sign/verify tokens', async () => {
+    if (skipTests) return
     const url = `ws://localhost:${port}/rpc`
     console.log(`Connecting to RPC at ${url}`)
 

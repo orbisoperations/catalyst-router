@@ -25,7 +25,7 @@ describe('Orchestrator Gateway Container Tests', () => {
   const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
   const gatewayImage = 'localhost/catalyst-gateway:test'
   const booksImage = 'localhost/catalyst-example-books:test'
-  const repoRoot = path.resolve(__dirname, '../../../../')
+  const repoRoot = path.resolve(__dirname, '../../../')
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {

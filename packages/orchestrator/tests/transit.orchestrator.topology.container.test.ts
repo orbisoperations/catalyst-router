@@ -20,7 +20,7 @@ describe('Orchestrator Transit Container Tests', () => {
   let nodeC: StartedTestContainer
 
   const orchestratorImage = 'localhost/catalyst-node:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../../')
+  const repoRoot = path.resolve(__dirname, '../../../')
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {

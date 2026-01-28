@@ -15,17 +15,20 @@ describe('Gateway Container Integration', () => {
   // Gateway Access
   let gatewayPort: number
   let rpcClient: { updateConfig(config: unknown): Promise<{ success: boolean }> } | null = null
-  let ws: WebSocket
+  let ws: any
+  const repoRoot = path.resolve(__dirname, '../../..')
+  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
+    if (skipTests) return
     network = await new Network().start()
-    const repoRoot = path.resolve(__dirname, '../../..')
 
     // 1. Build & Start Books (Background)
     const startBooks = async () => {
+      if (skipTests) return
       const imageName = 'books-service:test'
       await Bun.spawn(
-        ['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.books', '.'],
+        ['podman', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.books', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -45,7 +48,7 @@ describe('Gateway Container Integration', () => {
     const startMovies = async () => {
       const imageName = 'movies-service:test'
       await Bun.spawn(
-        ['docker', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.movies', '.'],
+        ['podman', 'build', '-t', imageName, '-f', 'packages/examples/Dockerfile.movies', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -65,7 +68,7 @@ describe('Gateway Container Integration', () => {
     const startGateway = async () => {
       const imageName = 'gateway-service:test'
       await Bun.spawn(
-        ['docker', 'build', '-t', imageName, '-f', 'packages/gateway/Dockerfile', '.'],
+        ['podman', 'build', '-t', imageName, '-f', 'packages/gateway/Dockerfile', '.'],
         {
           cwd: repoRoot,
           stdout: 'ignore',
@@ -118,6 +121,7 @@ describe('Gateway Container Integration', () => {
   }
 
   it('should be in initial state (waiting for config)', async () => {
+    if (skipTests) return
     // The current implementation might return 404 or empty schema if no config.
     // Based on previous tests, it might just have an empty schema or basic query.
     // Let's assume the status query or just introspection works but returns nothing useful yet.
@@ -129,6 +133,7 @@ describe('Gateway Container Integration', () => {
   })
 
   it('should add Books service successfully', async () => {
+    if (skipTests) return
     const client = await getRpcClient()
     const config = {
       services: [
@@ -151,6 +156,7 @@ describe('Gateway Container Integration', () => {
   })
 
   it('should add Movies service (incremental)', async () => {
+    if (skipTests) return
     const client = await getRpcClient()
     const config = {
       services: [
@@ -177,6 +183,7 @@ describe('Gateway Container Integration', () => {
   })
 
   it('should reset to empty config', async () => {
+    if (skipTests) return
     const client = await getRpcClient()
     // Sending empty services list
     // Note: The schema might complain if 'services' is required to be non-empty or if schema stitching fails with 0 subschemas.
