@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { type Action } from './schema.js'
-import type { InternalRoute, PeerInfo } from './routing/state.js'
-import { newRouteTable, PeerInfoSchema, type RouteTable } from './routing/state.js'
+import type { PeerInfo, InternalRoute } from './routing/state.js'
+import { newRouteTable, type RouteTable } from './routing/state.js'
+import type { DataChannelDefinition } from './routing/datachannel.js'
 import type { UpdateMessageSchema } from './routing/internal/actions.js'
 import { type AuthContext, AuthContextSchema } from './types.js'
 import { getRequiredPermission, hasPermission, isSecretValid } from './permissions.js'
@@ -13,7 +14,6 @@ import {
   type RpcStub,
   RpcTarget,
 } from 'capnweb'
-import type { DataChannelDefinition } from './routing/datachannel.js'
 
 export interface PublicApi {
   getManagerConnection(): PeerManager
@@ -26,6 +26,7 @@ export interface PublicApi {
 
 export interface Inspector {
   listPeers(): Promise<PeerInfo[]>
+  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
   listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 
@@ -124,6 +125,21 @@ export class CatalystNodeBus extends RpcTarget {
       (opts.connectionPool?.type
         ? new ConnectionPool(opts.connectionPool.type)
         : new ConnectionPool())
+
+    this.validateNodeConfig()
+  }
+
+  private validateNodeConfig() {
+    const { name, domains } = this.config.node
+    if (!name.endsWith('.somebiz.local.io')) {
+      throw new Error(`Invalid node name: ${name}. Must end with .somebiz.local.io`)
+    }
+    const domainMatch = domains.some((d) => name.endsWith(`.${d}`))
+    if (!domainMatch && domains.length > 0) {
+      throw new Error(
+        `Node name ${name} does not match any configured domains: ${domains.join(', ')}`
+      )
+    }
   }
 
   async dispatch(
@@ -131,6 +147,9 @@ export class CatalystNodeBus extends RpcTarget {
     auth?: AuthContext
   ): Promise<{ success: true } | { success: false; error: string }> {
     // Validate and default to anonymous context
+    const resolvedAuth: AuthContext = auth
+      ? AuthContextSchema.parse(auth)
+      : { userId: 'anonymous', roles: [] }
     const resolvedAuth: AuthContext = auth
       ? AuthContextSchema.parse(auth)
       : { userId: 'anonymous', roles: [] }
@@ -171,7 +190,7 @@ export class CatalystNodeBus extends RpcTarget {
         const newState = {
           ...state,
           internal: {
-            routes: state.internal.routes,
+            ...state.internal,
             peers: [
               ...state.internal.peers,
               {
@@ -197,10 +216,16 @@ export class CatalystNodeBus extends RpcTarget {
         state = {
           ...state,
           internal: {
-            routes: state.internal.routes,
+            ...state.internal,
             peers: peerList.map((p) =>
               p.name === action.data.name
                 ? {
+                    ...p,
+                    endpoint: action.data.endpoint,
+                    domains: action.data.domains,
+                    connectionStatus: 'initializing',
+                    lastConnected: undefined,
+                  }
                     ...p,
                     endpoint: action.data.endpoint,
                     domains: action.data.domains,
@@ -222,7 +247,7 @@ export class CatalystNodeBus extends RpcTarget {
         state = {
           ...state,
           internal: {
-            routes: state.internal.routes,
+            ...state.internal,
             peers: peerList.filter((p) => p.name !== action.data.name),
           },
         }
@@ -238,6 +263,7 @@ export class CatalystNodeBus extends RpcTarget {
           state = {
             ...state,
             internal: {
+              ...state.internal,
               routes: state.internal.routes.filter((r) => r.peerName !== action.data.peerInfo.name),
               peers: peerList.filter((p) => p.name !== action.data.peerInfo.name),
             },
@@ -317,9 +343,22 @@ export class CatalystNodeBus extends RpcTarget {
 
         for (const update of action.data.update.updates) {
           if (update.action === 'add') {
-            // Add if not exists (keyed by route name + peer name)
+            const nodePath = update.nodePath ?? []
 
-            const routeToAdd = { ...update.route, peer: peerInfo, peerName: peerInfo.name }
+            // Loop Prevention
+            if (nodePath.includes(this.config.node.name)) {
+              console.log(
+                `[${this.config.node.name}] Drop update from ${peerInfo.name}: loop detected in path [${nodePath.join(', ')}]`
+              )
+              continue
+            }
+
+            const routeToAdd = {
+              ...update.route,
+              peer: peerInfo,
+              peerName: peerInfo.name,
+              nodePath,
+            }
 
             // Remove existing if any (upsert)
             currentInternalRoutes = currentInternalRoutes.filter(
@@ -390,6 +429,10 @@ export class CatalystNodeBus extends RpcTarget {
             `[${this.config.node.name}] Failed to open connection to ${action.data.name}`,
             e
           )
+          console.error(
+            `[${this.config.node.name}] Failed to open connection to ${action.data.name}`,
+            e
+          )
         }
         break
       }
@@ -402,11 +445,15 @@ export class CatalystNodeBus extends RpcTarget {
               const connectionResult = await stub.getPeerConnection('secret')
               if (connectionResult.success) {
                 await connectionResult.connection.update(this.config.node, {
-                  updates: [{ action: 'add', route }],
+                  updates: [{ action: 'add', route, nodePath: [this.config.node.name] }],
                 })
               }
             }
           } catch (e) {
+            console.error(
+              `[${this.config.node.name}] Failed to sync route back to ${action.data.peerInfo.name}`,
+              e
+            )
             console.error(
               `[${this.config.node.name}] Failed to sync route back to ${action.data.peerInfo.name}`,
               e
@@ -424,11 +471,15 @@ export class CatalystNodeBus extends RpcTarget {
               const connectionResult = await stub.getPeerConnection('secret')
               if (connectionResult.success) {
                 await connectionResult.connection.update(this.config.node, {
-                  updates: [{ action: 'add', route }],
+                  updates: [{ action: 'add', route, nodePath: [this.config.node.name] }],
                 })
               }
             }
           } catch (e) {
+            console.error(
+              `[${this.config.node.name}] Failed to sync route to ${action.data.peerInfo.name}`,
+              e
+            )
             console.error(
               `[${this.config.node.name}] Failed to sync route to ${action.data.peerInfo.name}`,
               e
@@ -454,11 +505,18 @@ export class CatalystNodeBus extends RpcTarget {
               `[${this.config.node.name}] Failed to close connection to ${peer.name}`,
               e
             )
+            console.error(
+              `[${this.config.node.name}] Failed to close connection to ${peer.name}`,
+              e
+            )
           }
         }
         break
       }
       case Actions.LocalRouteCreate: {
+        for (const peer of _state.internal.peers.filter(
+          (p) => p.connectionStatus === 'connected'
+        )) {
         for (const peer of _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected'
         )) {
@@ -468,7 +526,9 @@ export class CatalystNodeBus extends RpcTarget {
               const connectionResult = await stub.getPeerConnection('secret')
               if (connectionResult.success) {
                 await connectionResult.connection.update(this.config.node, {
-                  updates: [{ action: 'add', route: action.data }],
+                  updates: [
+                    { action: 'add', route: action.data, nodePath: [this.config.node.name] },
+                  ],
                 })
               }
             }
@@ -479,6 +539,9 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       case Actions.LocalRouteDelete: {
+        for (const peer of _state.internal.peers.filter(
+          (p) => p.connectionStatus === 'connected'
+        )) {
         for (const peer of _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected'
         )) {
@@ -497,6 +560,10 @@ export class CatalystNodeBus extends RpcTarget {
               `[${this.config.node.name}] Failed to broadcast route removal to ${peer.name}`,
               e
             )
+            console.error(
+              `[${this.config.node.name}] Failed to broadcast route removal to ${peer.name}`,
+              e
+            )
           }
         }
         break
@@ -511,10 +578,26 @@ export class CatalystNodeBus extends RpcTarget {
             if (stub) {
               const connectionResult = await stub.getPeerConnection('secret')
               if (connectionResult.success) {
-                await connectionResult.connection.update(this.config.node, action.data.update)
+                // Prepend my FQDN to the path of propagated updates
+                const updatesWithPrepend = {
+                  updates: action.data.update.updates.map((u) => {
+                    if (u.action === 'add') {
+                      return {
+                        ...u,
+                        nodePath: [this.config.node.name, ...(u.nodePath ?? [])],
+                      }
+                    }
+                    return u
+                  }),
+                }
+                await connectionResult.connection.update(this.config.node, updatesWithPrepend)
               }
             }
           } catch (e) {
+            console.error(
+              `[${this.config.node.name}] Failed to propagate update to ${peer.name}`,
+              e
+            )
             console.error(
               `[${this.config.node.name}] Failed to propagate update to ${peer.name}`,
               e

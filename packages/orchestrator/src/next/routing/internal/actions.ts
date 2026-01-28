@@ -15,6 +15,7 @@ export const UpdateMessageSchema = z.object({
     z.object({
       action: z.enum(['add', 'remove']),
       route: DataChannelDefinitionSchema,
+      nodePath: z.array(z.string()).optional(),
     })
   ),
 })
