@@ -1,0 +1,64 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.92.0
+    command: ['--config=/etc/otel-collector-config.yaml']
+    volumes:
+      - ../services/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+      - '8888:8888' # Collector metrics
+    depends_on:
+      - jaeger
+      - prometheus
+      - influxdb
+    networks:
+      - observability
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    ports:
+      - '16687:16686' # Jaeger UI (mapped to 16687 to avoid conflicts)
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - observability
+
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yaml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    ports:
+      - '9091:9090' # Prometheus UI (mapped to 9091 to avoid conflicts)
+    networks:
+      - observability
+
+  influxdb:
+    image: influxdb:2.7
+    ports:
+      - '8087:8086' # InfluxDB UI and API (mapped to 8087 to avoid conflicts)
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
+      - DOCKER_INFLUXDB_INIT_ORG=catalyst
+      - DOCKER_INFLUXDB_INIT_BUCKET=logs
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=catalyst-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - observability
+
+volumes:
+  prometheus-data:
+  influxdb-data:
+
+networks:
+  observability:
+    driver: bridge
