@@ -13,9 +13,18 @@ import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '../src/orchestrator.js'
 
-const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+const isDockerRunning = () => {
+  try {
+    const result = Bun.spawnSync(['docker', 'info'])
+    return result.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+const skipTests = !isDockerRunning()
 if (skipTests) {
-  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED not set')
+  console.warn('Skipping container tests: Docker is not running')
 }
 
 describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
