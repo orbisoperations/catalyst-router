@@ -13,7 +13,12 @@ import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '../src/orchestrator.js'
 
-describe('Orchestrator Container Tests (Next)', () => {
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+if (skipTests) {
+  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED not set')
+}
+
+describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
@@ -22,14 +27,8 @@ describe('Orchestrator Container Tests (Next)', () => {
   let nodeC: StartedTestContainer
 
   const orchestratorImage = 'catalyst-node:next-topology-e2e'
-  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
-    if (skipTests) {
-      console.warn('Skipping container tests: Docker runtime not detected')
-      return
-    }
-
     // Build image if not exists
     const checkImage = spawnSync('docker', ['image', 'inspect', orchestratorImage])
     if (checkImage.status !== 0) {
@@ -92,7 +91,6 @@ describe('Orchestrator Container Tests (Next)', () => {
   it(
     'A <-> B: peering and route sync',
     async () => {
-      if (skipTests) return
       const clientA = getClient(nodeA)
       const clientB = getClient(nodeB)
 
@@ -150,7 +148,6 @@ describe('Orchestrator Container Tests (Next)', () => {
   it(
     'A <-> B <-> C: transit route propagation with nodePath',
     async () => {
-      if (skipTests) return
       const clientB = getClient(nodeB)
       const clientC = getClient(nodeC)
 

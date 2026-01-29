@@ -11,7 +11,12 @@ import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { PublicApi, NetworkClient, DataCustodian } from '../src/orchestrator.js'
 
-describe('Orchestrator Transit Container Tests', () => {
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+if (skipTests) {
+  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED not set')
+}
+
+describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
@@ -21,14 +26,8 @@ describe('Orchestrator Transit Container Tests', () => {
 
   const orchestratorImage = 'catalyst-node:next-topology-e2e'
   const repoRoot = path.resolve(__dirname, '../../../')
-  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
-    if (skipTests) {
-      console.warn('Skipping container tests: Docker runtime not detected')
-      return
-    }
-
     // Check if image exists
     const checkImage = spawnSync('docker', ['image', 'inspect', orchestratorImage])
     if (checkImage.status !== 0) {
@@ -105,8 +104,6 @@ describe('Orchestrator Transit Container Tests', () => {
   it(
     'Transit Topology: A <-> B <-> C propagation, sync, and withdrawal',
     async () => {
-      if (skipTests) return
-
       const clientA = getClient(nodeA)
       const clientB = getClient(nodeB)
       const clientC = getClient(nodeC)

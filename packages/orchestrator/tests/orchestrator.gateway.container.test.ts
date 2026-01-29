@@ -7,12 +7,17 @@ import {
   type StartedNetwork,
 } from 'testcontainers'
 import path from 'path'
-import { spawnSync } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '../src/orchestrator.js'
 
-describe('Orchestrator Gateway Container Tests', () => {
+const containerRuntime = process.env.CONTAINER_RUNTIME || 'docker'
+const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+if (skipTests) {
+  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED not set')
+}
+
+describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
@@ -26,34 +31,58 @@ describe('Orchestrator Gateway Container Tests', () => {
   const gatewayImage = 'catalyst-gateway:test'
   const booksImage = 'catalyst-example-books:test'
   const repoRoot = path.resolve(__dirname, '../../../')
-  const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
-    if (skipTests) {
-      console.warn('Skipping container tests: Docker runtime not detected')
-      return
-    }
-
     // Build images (rely on cache)
     console.log('Building Gateway image...')
-    spawnSync('docker', ['build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'], {
-      cwd: repoRoot,
-      stdio: 'inherit',
-    })
+    const gatewayBuild = Bun.spawnSync(
+      [containerRuntime, 'build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'],
+      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    )
+    if (gatewayBuild.exitCode !== 0) {
+      throw new Error(`${containerRuntime} build gateway failed: ${gatewayBuild.exitCode}`)
+    }
+
+    if (gatewayBuild.exitCode !== 0) {
+      throw new Error(`${containerRuntime} build gateway failed: ${gatewayBuild.exitCode}`)
+    }
 
     console.log('Building Books service image...')
-    spawnSync(
-      'docker',
-      ['build', '-f', 'packages/examples/Dockerfile.books', '-t', booksImage, '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
+    const booksBuild = Bun.spawnSync(
+      [
+        containerRuntime,
+        'build',
+        '-f',
+        'packages/examples/Dockerfile.books',
+        '-t',
+        booksImage,
+        '.',
+      ],
+      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
     )
+    if (booksBuild.exitCode !== 0) {
+      throw new Error(`${containerRuntime} build books failed: ${booksBuild.exitCode}`)
+    }
 
     console.log('Building Orchestrator image...')
-    spawnSync(
-      'docker',
-      ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
+    const orchestratorBuild = Bun.spawnSync(
+      [
+        containerRuntime,
+        'build',
+        '-f',
+        'packages/orchestrator/Dockerfile',
+        '-t',
+        orchestratorImage,
+        '.',
+      ],
+      // ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
+      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
     )
+    if (orchestratorBuild.exitCode !== 0) {
+      throw new Error(
+        `${containerRuntime} build orchestrator failed: ${orchestratorBuild.exitCode}`
+      )
+    }
 
     network = await new Network().start()
 
@@ -137,7 +166,6 @@ describe('Orchestrator Gateway Container Tests', () => {
   it(
     'Mesh-wide GraphQL Sync: A -> B -> Gateway',
     async () => {
-      if (skipTests) return
       console.log('Inside Mesh-wide Sync test')
       const portA = peerA.getMappedPort(3000)
       const clientA = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portA}/rpc`)
