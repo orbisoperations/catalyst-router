@@ -20,9 +20,9 @@ export interface PublicApi {
   getNetworkClient(
     token: string
   ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }>
-  getDataCustodianClient(
+  getDataChannelClient(
     token: string
-  ): Promise<{ success: true; client: DataCustodian } | { success: false; error: string }>
+  ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }>
   getIBGPClient(
     token: string
   ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
@@ -41,7 +41,7 @@ export interface NetworkClient {
   listPeers(): Promise<PeerRecord[]>
 }
 
-export interface DataCustodian {
+export interface DataChannel {
   addRoute(
     route: DataChannelDefinition
   ): Promise<{ success: true } | { success: false; error: string }>
@@ -833,9 +833,9 @@ export class CatalystNodeBus extends RpcTarget {
           },
         }
       },
-      getDataCustodianClient: async (
+      getDataChannelClient: async (
         token: string
-      ): Promise<{ success: true; client: DataCustodian } | { success: false; error: string }> => {
+      ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }> => {
         // TODO: Parse token to extract authorization context
         const expectedSecret = this.config?.ibgp?.secret
         if (!expectedSecret || !isSecretValid(token, expectedSecret)) {

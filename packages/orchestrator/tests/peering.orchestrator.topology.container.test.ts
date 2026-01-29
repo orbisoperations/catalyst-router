@@ -152,7 +152,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
 
       // 2. A adds a local route
       console.log('Node A adding local route')
-      const dataAResult = await clientA.getDataCustodianClient('valid-secret')
+      const dataAResult = await clientA.getDataChannelClient('valid-secret')
       if (!dataAResult.success) throw new Error('Failed to get data client')
 
       const routeResult = await dataAResult.client.addRoute({
@@ -169,7 +169,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
       // Check B learned it
       let learnedOnB = false
       for (let i = 0; i < 40; i++) {
-        const dataBResult = await clientB.getDataCustodianClient('valid-secret')
+        const dataBResult = await clientB.getDataChannelClient('valid-secret')
         if (!dataBResult.success) throw new Error('Failed to get data client B')
         const routes = await dataBResult.client.listRoutes()
         if (routes.internal.some((r) => r.name === 'service-a')) {

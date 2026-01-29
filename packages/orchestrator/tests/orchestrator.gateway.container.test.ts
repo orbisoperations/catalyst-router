@@ -202,7 +202,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
 
       // 2. A adds a GraphQL route
       console.log('Adding GraphQL route to A...')
-      const dataAResult = await clientA.getDataCustodianClient('valid-secret')
+      const dataAResult = await clientA.getDataChannelClient('valid-secret')
       if (!dataAResult.success) throw new Error(`Failed to get data client: ${dataAResult.error}`)
 
       await dataAResult.client.addRoute({

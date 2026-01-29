@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { CatalystNodeBus, type NetworkClient, type DataCustodian } from '../src/orchestrator.js'
+import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
 import type { PeerInfo, RouteTable } from '../src/routing/state.js'
 import { newRouteTable } from '../src/routing/state.js'
 import { MockConnectionPool } from './mock-connection-pool.js'
@@ -83,7 +83,7 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
     console.log('Node A adding local route')
     const routeA = { name: 'service-a', protocol: 'http' as const, endpoint: 'http://a:8080' }
     const dataA = (
-      (await apiA.getDataCustodianClient('secret')) as { success: true; client: DataCustodian }
+      (await apiA.getDataChannelClient('secret')) as { success: true; client: DataChannel }
     ).client
     await dataA.addRoute(routeA)
 

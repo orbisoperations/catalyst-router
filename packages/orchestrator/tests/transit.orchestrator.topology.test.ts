@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { CatalystNodeBus, type NetworkClient, type DataCustodian } from '../src/orchestrator.js'
+import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
 import type { PeerInfo, RouteTable } from '../src/routing/state.js'
 import { newRouteTable } from '../src/routing/state.js'
 import { MockConnectionPool } from './mock-connection-pool.js'
@@ -90,9 +90,9 @@ describe('Orchestrator Transit Tests (Mocked Container Logic)', () => {
     console.log('Node A adding local route')
     const routeA = { name: 'service-a', protocol: 'http' as const, endpoint: 'http://a:8080' }
     const dataA = (
-      (await nodeA.publicApi().getDataCustodianClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
         success: true
-        client: DataCustodian
+        client: DataChannel
       }
     ).client
     await dataA.addRoute(routeA)
@@ -114,9 +114,9 @@ describe('Orchestrator Transit Tests (Mocked Container Logic)', () => {
     // 4. Withdrawal Propagation
     console.log('Node A deleting route')
     await (
-      (await nodeA.publicApi().getDataCustodianClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
         success: true
-        client: DataCustodian
+        client: DataChannel
       }
     ).client.removeRoute(routeA)
 
@@ -132,9 +132,9 @@ describe('Orchestrator Transit Tests (Mocked Container Logic)', () => {
     // 5. Disconnect Propagation
     // Re-add route
     await (
-      (await nodeA.publicApi().getDataCustodianClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
         success: true
-        client: DataCustodian
+        client: DataChannel
       }
     ).client.addRoute(routeA)
     await waitForNotification(nodeA)

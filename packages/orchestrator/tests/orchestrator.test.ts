@@ -120,7 +120,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       await new Promise((r) => setTimeout(r, 2000))
 
       // A adds a route
-      const dataAResult = await clientA.getDataCustodianClient('valid-secret')
+      const dataAResult = await clientA.getDataChannelClient('valid-secret')
       if (!dataAResult.success) throw new Error(`Failed to get data client: ${dataAResult.error}`)
 
       await dataAResult.client.addRoute({
@@ -132,7 +132,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       // Check B learned it
       let learnedOnB = false
       for (let i = 0; i < 20; i++) {
-        const dataBResult = await clientB.getDataCustodianClient('valid-secret')
+        const dataBResult = await clientB.getDataChannelClient('valid-secret')
         if (!dataBResult.success) throw new Error('Failed to get data client B')
         const routes = await dataBResult.client.listRoutes()
         if (routes.internal.some((r) => r.name === 'service-a')) {
@@ -180,7 +180,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       // Verify node C learned service-a via node B
       let learnedOnC = false
       for (let i = 0; i < 20; i++) {
-        const dataCResult = await clientC.getDataCustodianClient('valid-secret')
+        const dataCResult = await clientC.getDataChannelClient('valid-secret')
         if (!dataCResult.success) throw new Error('Failed to get data client C')
         const routes = await dataCResult.client.listRoutes()
         const routeA = routes.internal.find((r) => r.name === 'service-a')
