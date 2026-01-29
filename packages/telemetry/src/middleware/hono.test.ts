@@ -1,18 +1,26 @@
 import { afterEach, describe, expect, it } from 'bun:test'
-import { propagation, trace } from '@opentelemetry/api'
+import { metrics, propagation, trace } from '@opentelemetry/api'
 import {
   InMemorySpanExporter,
   NodeTracerProvider,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-node'
+import {
+  AggregationTemporality,
+  InMemoryMetricExporter,
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics'
 import { W3CTraceContextPropagator } from '@opentelemetry/core'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import {
+  ATTR_ERROR_TYPE,
   ATTR_HTTP_REQUEST_METHOD,
   ATTR_HTTP_RESPONSE_STATUS_CODE,
   ATTR_HTTP_ROUTE,
   ATTR_SERVICE_NAME,
   ATTR_URL_PATH,
+  ATTR_URL_SCHEME,
 } from '@opentelemetry/semantic-conventions'
 import { Hono } from 'hono'
 import { telemetryMiddleware } from './hono'
@@ -26,6 +34,27 @@ function setupTracer() {
   provider.register()
   propagation.setGlobalPropagator(new W3CTraceContextPropagator())
   return { exporter, provider }
+}
+
+function setupMetrics() {
+  const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE)
+  const reader = new PeriodicExportingMetricReader({
+    exporter,
+    exportIntervalMillis: 50, // Short interval for tests
+  })
+  const provider = new MeterProvider({
+    resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: 'test' }),
+    readers: [reader],
+  })
+  metrics.setGlobalMeterProvider(provider)
+
+  // Helper to collect metrics - waits for export cycle
+  const collectMetrics = async () => {
+    await reader.forceFlush()
+    return exporter.getMetrics()
+  }
+
+  return { exporter, provider, reader, collectMetrics }
 }
 
 function createApp(options?: Parameters<typeof telemetryMiddleware>[0]) {
@@ -204,6 +233,150 @@ describe('telemetryMiddleware', () => {
 
       expect(res.status).toBe(200)
       expect(await res.text()).toBe('ok')
+    })
+  })
+
+  describe('metrics', () => {
+    afterEach(async () => {
+      metrics.disable()
+    })
+
+    it('records http.server.request.duration histogram', async () => {
+      setupTracer()
+      const { exporter, reader } = setupMetrics()
+      const app = createApp()
+
+      await app.request('/test')
+      await app.request('/test')
+
+      await reader.forceFlush()
+
+      const resourceMetrics = exporter.getMetrics()
+      expect(resourceMetrics.length).toBeGreaterThan(0)
+
+      const scopeMetrics = resourceMetrics[0].scopeMetrics
+      const telemetryScope = scopeMetrics.find((sm) => sm.scope.name === '@catalyst/telemetry')
+      expect(telemetryScope).toBeDefined()
+
+      const histogramMetric = telemetryScope!.metrics.find(
+        (m) => m.descriptor.name === 'http.server.request.duration'
+      )
+      expect(histogramMetric).toBeDefined()
+      expect(histogramMetric!.descriptor.unit).toBe('s')
+
+      const dataPoints = histogramMetric!.dataPoints
+      expect(dataPoints.length).toBeGreaterThan(0)
+
+      // Histogram data point should have count and sum
+      const dp = dataPoints[0] as { value: { count: number; sum: number } }
+      expect(dp.value.count).toBe(2) // Two requests
+      expect(dp.value.sum).toBeGreaterThan(0)
+      expect(dp.value.sum).toBeLessThan(1) // Should be well under 1 second
+    })
+
+    it('includes required OTEL semconv attributes', async () => {
+      setupTracer()
+      const { exporter, reader } = setupMetrics()
+      const app = createApp()
+
+      await app.request('/items', { method: 'POST' })
+
+      await reader.forceFlush()
+
+      const resourceMetrics = exporter.getMetrics()
+      const scopeMetrics = resourceMetrics[0].scopeMetrics
+      const telemetryScope = scopeMetrics.find((sm) => sm.scope.name === '@catalyst/telemetry')
+      const histogramMetric = telemetryScope!.metrics.find(
+        (m) => m.descriptor.name === 'http.server.request.duration'
+      )
+
+      const dp = histogramMetric!.dataPoints[0]
+      expect(dp.attributes[ATTR_HTTP_REQUEST_METHOD]).toBe('POST')
+      expect(dp.attributes[ATTR_HTTP_ROUTE]).toBe('/items')
+      expect(dp.attributes[ATTR_HTTP_RESPONSE_STATUS_CODE]).toBe(201)
+      expect(dp.attributes[ATTR_URL_SCHEME]).toBe('http')
+    })
+
+    it('sets error.type attribute on 4xx/5xx responses', async () => {
+      setupTracer()
+      const { exporter, reader } = setupMetrics()
+      const app = new Hono()
+      app.use(telemetryMiddleware())
+      app.get('/not-found', (c) => c.text('not found', 404))
+      app.get('/error', (c) => c.text('server error', 500))
+
+      await app.request('/not-found')
+      await app.request('/error')
+
+      await reader.forceFlush()
+
+      const resourceMetrics = exporter.getMetrics()
+      const scopeMetrics = resourceMetrics[0].scopeMetrics
+      const telemetryScope = scopeMetrics.find((sm) => sm.scope.name === '@catalyst/telemetry')
+      const histogramMetric = telemetryScope!.metrics.find(
+        (m) => m.descriptor.name === 'http.server.request.duration'
+      )
+
+      const notFoundDp = histogramMetric!.dataPoints.find(
+        (dp) => dp.attributes[ATTR_HTTP_RESPONSE_STATUS_CODE] === 404
+      )
+      expect(notFoundDp).toBeDefined()
+      expect(notFoundDp!.attributes[ATTR_ERROR_TYPE]).toBe('404')
+
+      const errorDp = histogramMetric!.dataPoints.find(
+        (dp) => dp.attributes[ATTR_HTTP_RESPONSE_STATUS_CODE] === 500
+      )
+      expect(errorDp).toBeDefined()
+      expect(errorDp!.attributes[ATTR_ERROR_TYPE]).toBe('500')
+    })
+
+    it('does not set error.type on successful responses', async () => {
+      setupTracer()
+      const { exporter, reader } = setupMetrics()
+      const app = createApp()
+
+      await app.request('/test')
+
+      await reader.forceFlush()
+
+      const resourceMetrics = exporter.getMetrics()
+      const scopeMetrics = resourceMetrics[0].scopeMetrics
+      const telemetryScope = scopeMetrics.find((sm) => sm.scope.name === '@catalyst/telemetry')
+      const histogramMetric = telemetryScope!.metrics.find(
+        (m) => m.descriptor.name === 'http.server.request.duration'
+      )
+
+      const dp = histogramMetric!.dataPoints[0]
+      expect(dp.attributes[ATTR_ERROR_TYPE]).toBeUndefined()
+    })
+
+    it('skips metrics for ignored paths', async () => {
+      setupTracer()
+      const { exporter, reader } = setupMetrics()
+      const app = createApp({ ignorePaths: ['/health'] })
+
+      await app.request('/health')
+      await app.request('/test')
+
+      await reader.forceFlush()
+
+      const resourceMetrics = exporter.getMetrics()
+      const scopeMetrics = resourceMetrics[0].scopeMetrics
+      const telemetryScope = scopeMetrics.find((sm) => sm.scope.name === '@catalyst/telemetry')
+      const histogramMetric = telemetryScope!.metrics.find(
+        (m) => m.descriptor.name === 'http.server.request.duration'
+      )
+
+      // Should only have /test, not /health
+      const healthPoint = histogramMetric!.dataPoints.find(
+        (dp) => dp.attributes[ATTR_HTTP_ROUTE] === '/health'
+      )
+      expect(healthPoint).toBeUndefined()
+
+      const testPoint = histogramMetric!.dataPoints.find(
+        (dp) => dp.attributes[ATTR_HTTP_ROUTE] === '/test'
+      )
+      expect(testPoint).toBeDefined()
     })
   })
 })
