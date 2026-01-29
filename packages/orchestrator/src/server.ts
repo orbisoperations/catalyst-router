@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { upgradeWebSocket, websocket } from 'hono/bun'
 import { newRpcResponse } from '@hono/capnweb'
 import { CatalystNodeBus } from './orchestrator.js'
+import { OrchestratorConfigSchema } from './types.js'
 
 const app = new Hono()
 
@@ -18,7 +19,7 @@ const domains = process.env.CATALYST_DOMAINS
   : []
 
 const bus = new CatalystNodeBus({
-  config: {
+  config: OrchestratorConfigSchema.parse({
     node: {
       name: nodeId,
       endpoint: peeringEndpoint,
@@ -30,7 +31,7 @@ const bus = new CatalystNodeBus({
     gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
       ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
       : undefined,
-  },
+  }),
   connectionPool: { type: 'ws' },
 })
 

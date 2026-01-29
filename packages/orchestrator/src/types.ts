@@ -1,6 +1,23 @@
 import type { Action } from './schema.js'
 import type { RouteTable } from './routing/state.js'
 import { z } from 'zod'
+import { PeerInfoSchema } from './routing/state.js'
+
+export const OrchestratorConfigSchema = z.object({
+  node: PeerInfoSchema,
+  ibgp: z
+    .object({
+      secret: z.string().optional(),
+    })
+    .optional(),
+  gqlGatewayConfig: z
+    .object({
+      endpoint: z.string(),
+    })
+    .optional(),
+})
+
+export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
 
 export const AuthContextSchema = z.object({
   userId: z.string(),
