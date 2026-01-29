@@ -67,10 +67,26 @@ export function getRequiredPermission(action: Action): Permission | undefined {
 }
 
 /**
+ * Internal helper to check if a permission pattern matches a required permission.
+ * Supports:
+ * - Exact matches (e.g., 'peer:create')
+ * - Global wildcard ('*')
+ * - Category wildcards (e.g., 'peer:*')
+ */
+function matchesPermission(pattern: string, required: string): boolean {
+  if (pattern === '*' || pattern === required) return true
+  if (pattern.endsWith(':*')) {
+    const prefix = pattern.slice(0, -1) // e.g., 'peer:'
+    return required.startsWith(prefix)
+  }
+  return false
+}
+
+/**
  * Checks if the given roles include the required permission.
  *
  * Permission is granted if the user has a role that contains
- * the exact permission string.
+ * the exact permission string or a matching wildcard.
  */
 export function hasPermission(
   userRoles: string[],
@@ -78,15 +94,17 @@ export function hasPermission(
   userPermissions?: string[]
 ): boolean {
   // 1. Check direct permissions if provided
-  if (userPermissions?.includes('*') || userPermissions?.includes(requiredPermission)) {
+  if (userPermissions?.some((p) => matchesPermission(p, requiredPermission))) {
     return true
   }
 
   // 2. Check permissions inherited from roles
   for (const roleName of userRoles) {
-    if (roleName === '*') return true // Support legacy wildcard role
+    // Support legacy wildcard role or category wildcard in roles array
+    if (matchesPermission(roleName, requiredPermission)) return true
+
     const permissions = ROLES[roleName] || []
-    if (permissions.includes('*') || permissions.includes(requiredPermission)) {
+    if (permissions.some((p) => matchesPermission(p, requiredPermission))) {
       return true
     }
   }
