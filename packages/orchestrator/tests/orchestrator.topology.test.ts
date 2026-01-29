@@ -183,11 +183,10 @@ describe('Orchestrator Topology Tests', () => {
 
     await new Promise((r) => setTimeout(r, 100))
 
-    // 4. C should learn A's route via B (Initial Sync)
+    // C should learn A's route via B (Initial Sync)
     const stateC = (nodeC as unknown as { state: RouteTable }).state
     const hasA = stateC.internal.routes.some((r) => r.name === 'service-a')
 
-    // THIS IS EXPECTED TO FAIL CURRENTLY based on my audit
     expect(hasA).toBe(true)
   })
 
