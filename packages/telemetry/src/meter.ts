@@ -65,6 +65,9 @@ export async function shutdownMeter(): Promise<void> {
   if (!meterProvider) return
   const p = meterProvider
   meterProvider = null
-  await p.shutdown()
-  metrics.disable()
+  try {
+    await p.shutdown()
+  } finally {
+    metrics.disable()
+  }
 }
