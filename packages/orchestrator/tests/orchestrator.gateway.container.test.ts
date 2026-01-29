@@ -11,10 +11,18 @@ import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '../src/orchestrator.js'
 
-const containerRuntime = process.env.CONTAINER_RUNTIME || 'docker'
-const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+const isDockerRunning = () => {
+  try {
+    const result = Bun.spawnSync(['docker', 'info'])
+    return result.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+const skipTests = !isDockerRunning()
 if (skipTests) {
-  console.warn('Skipping container tests: CATALYST_CONTAINER_TESTS_ENABLED not set')
+  console.warn('Skipping container tests: Docker is not running')
 }
 
 describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
@@ -36,52 +44,34 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
     // Build images (rely on cache)
     console.log('Building Gateway image...')
     const gatewayBuild = Bun.spawnSync(
-      [containerRuntime, 'build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'],
+      ['docker', 'build', '-f', 'packages/gateway/Dockerfile', '-t', gatewayImage, '.'],
       { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
     )
     if (gatewayBuild.exitCode !== 0) {
-      throw new Error(`${containerRuntime} build gateway failed: ${gatewayBuild.exitCode}`)
+      throw new Error(`docker build gateway failed: ${gatewayBuild.exitCode}`)
     }
 
     if (gatewayBuild.exitCode !== 0) {
-      throw new Error(`${containerRuntime} build gateway failed: ${gatewayBuild.exitCode}`)
+      throw new Error(`docker build gateway failed: ${gatewayBuild.exitCode}`)
     }
 
     console.log('Building Books service image...')
     const booksBuild = Bun.spawnSync(
-      [
-        containerRuntime,
-        'build',
-        '-f',
-        'packages/examples/Dockerfile.books',
-        '-t',
-        booksImage,
-        '.',
-      ],
+      ['docker', 'build', '-f', 'packages/examples/Dockerfile.books', '-t', booksImage, '.'],
       { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
     )
     if (booksBuild.exitCode !== 0) {
-      throw new Error(`${containerRuntime} build books failed: ${booksBuild.exitCode}`)
+      throw new Error(`docker build books failed: ${booksBuild.exitCode}`)
     }
 
     console.log('Building Orchestrator image...')
     const orchestratorBuild = Bun.spawnSync(
-      [
-        containerRuntime,
-        'build',
-        '-f',
-        'packages/orchestrator/Dockerfile',
-        '-t',
-        orchestratorImage,
-        '.',
-      ],
+      ['docker', 'build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
       // ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
       { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
     )
     if (orchestratorBuild.exitCode !== 0) {
-      throw new Error(
-        `${containerRuntime} build orchestrator failed: ${orchestratorBuild.exitCode}`
-      )
+      throw new Error(`docker build orchestrator failed: ${orchestratorBuild.exitCode}`)
     }
 
     network = await new Network().start()
