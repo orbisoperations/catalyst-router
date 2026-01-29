@@ -42,7 +42,7 @@ These issues were not individually insurmountable, but the cumulative debugging 
 
 **Chosen Option: Docker Desktop (with Docker Engine on Linux CI)**
 
-Use Docker Desktop as the standard container runtime for local development on macOS( ok macOs has their new one but its too fresh) /Windows, and Docker Engine on Linux-based CI runners. All team members install Docker Desktop and the project standardizes on the Docker CLI and Docker Compose v2.
+Use Docker Desktop as the standard container runtime for local development on macOS/Windows, and Docker Engine on Linux-based CI runners. All team members install Docker Desktop and the project standardizes on the Docker CLI and Docker Compose v2.
 
 ### Rationale
 
