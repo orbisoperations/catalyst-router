@@ -2,113 +2,38 @@ import { timingSafeEqual } from 'node:crypto'
 import type { Action } from './schema.js'
 import { Actions } from './action-types.js'
 
-/**
- * Permission types for RBAC.
- * Actions map to these permissions via ACTION_PERMISSION_MAP.
- */
-export type Permission =
-  | 'peer:create'
-  | 'peer:update'
-  | 'peer:delete'
-  | 'route:create'
-  | 'route:delete'
-  | 'ibgp:connect'
-  | 'ibgp:disconnect'
-  | 'ibgp:update'
-  | '*'
+import { Permission } from '@catalyst/auth'
 
 /**
  * Maps action types to their required permissions.
  * Unknown actions require explicit admin privileges.
  */
 const ACTION_PERMISSION_MAP: Record<string, Permission> = {
-  [Actions.LocalPeerCreate]: 'peer:create',
-  [Actions.LocalPeerUpdate]: 'peer:update',
-  [Actions.LocalPeerDelete]: 'peer:delete',
-  [Actions.LocalRouteCreate]: 'route:create',
-  [Actions.LocalRouteDelete]: 'route:delete',
-  [Actions.InternalProtocolOpen]: 'ibgp:connect',
-  [Actions.InternalProtocolClose]: 'ibgp:disconnect',
-  [Actions.InternalProtocolConnected]: 'ibgp:connect',
-  [Actions.InternalProtocolUpdate]: 'ibgp:update',
+  [Actions.LocalPeerCreate]: Permission.PeerCreate,
+  [Actions.LocalPeerUpdate]: Permission.PeerUpdate,
+  [Actions.LocalPeerDelete]: Permission.PeerDelete,
+  [Actions.LocalRouteCreate]: Permission.RouteCreate,
+  [Actions.LocalRouteDelete]: Permission.RouteDelete,
+  [Actions.InternalProtocolOpen]: Permission.IbgpConnect,
+  [Actions.InternalProtocolClose]: Permission.IbgpDisconnect,
+  [Actions.InternalProtocolConnected]: Permission.IbgpConnect,
+  [Actions.InternalProtocolUpdate]: Permission.IbgpUpdate,
 }
 
 /**
  * Discrete roles and their associated permissions.
  */
-export const ROLES: Record<string, Permission[]> = {
-  admin: [
-    'peer:create',
-    'peer:update',
-    'peer:delete',
-    'route:create',
-    'route:delete',
-    'ibgp:connect',
-    'ibgp:disconnect',
-    'ibgp:update',
-  ],
-  networkcustodian: [
-    'peer:create',
-    'peer:update',
-    'peer:delete',
-    'ibgp:connect',
-    'ibgp:disconnect',
-    'ibgp:update',
-  ],
-  datacustodian: ['route:create', 'route:delete'],
-  networkpeer: ['ibgp:connect', 'ibgp:disconnect', 'ibgp:update'],
+export function getRequiredPermission(action: Action): Permission {
+  return ACTION_PERMISSION_MAP[action.action] ?? Permission.Admin
 }
 
-/**
- * Returns the permission required to execute the given action.
- */
-export function getRequiredPermission(action: Action): Permission | undefined {
-  return ACTION_PERMISSION_MAP[action.action]
-}
-
-/**
- * Internal helper to check if a permission pattern matches a required permission.
- * Supports:
- * - Exact matches (e.g., 'peer:create')
- * - Global wildcard ('*')
- * - Category wildcards (e.g., 'peer:*')
- */
-function matchesPermission(pattern: string, required: string): boolean {
-  if (pattern === '*' || pattern === required) return true
-  if (pattern.endsWith(':*')) {
-    const prefix = pattern.slice(0, -1) // e.g., 'peer:'
-    return required.startsWith(prefix)
-  }
-  return false
-}
+import { hasPermission as authHasPermission } from '@catalyst/auth'
 
 /**
  * Checks if the given roles include the required permission.
- *
- * Permission is granted if the user has a role that contains
- * the exact permission string or a matching wildcard.
  */
-export function hasPermission(
-  userRoles: string[],
-  requiredPermission: Permission,
-  userPermissions?: string[]
-): boolean {
-  // 1. Check direct permissions if provided
-  if (userPermissions?.some((p) => matchesPermission(p, requiredPermission))) {
-    return true
-  }
-
-  // 2. Check permissions inherited from roles
-  for (const roleName of userRoles) {
-    // Support legacy wildcard role or category wildcard in roles array
-    if (matchesPermission(roleName, requiredPermission)) return true
-
-    const permissions = ROLES[roleName] || []
-    if (permissions.some((p) => matchesPermission(p, requiredPermission))) {
-      return true
-    }
-  }
-  return false
+export function hasPermission(roles: string[], required: Permission): boolean {
+  return authHasPermission(roles, required)
 }
 
 /**
