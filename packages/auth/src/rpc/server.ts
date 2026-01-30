@@ -23,6 +23,16 @@ import {
 } from './schema.js'
 
 export class AuthRpcServer extends RpcTarget {
+  private systemToken?: string
+
+  setSystemToken(token: string) {
+    this.systemToken = token
+  }
+
+  getSystemToken(): string | undefined {
+    return this.systemToken
+  }
+
   constructor(
     private keyManager: IKeyManager,
     private revocationStore?: RevocationStore,
