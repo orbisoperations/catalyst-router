@@ -1,13 +1,7 @@
 import { describe, it, expect } from 'bun:test'
-<<<<<<< HEAD:packages/orchestrator/tests/permissions.test.ts
 import { getRequiredPermission, hasPermission, isSecretValid } from '../src/permissions'
 import type { Action } from '../src/schema'
 import { Actions } from '../src/action-types'
-=======
-import { getRequiredPermission, hasPermission, isSecretValid } from './permissions.js'
-import type { Action } from './schema'
-import { Actions } from './action-types'
->>>>>>> 5726238 (chore: move permissions file into auth package):packages/orchestrator/src/next/permissions.test.ts
 
 describe('getRequiredPermission', () => {
   it('should return peer:create for LocalPeerCreate', () => {
@@ -88,8 +82,8 @@ describe('hasPermission', () => {
 
   describe('direct permission', () => {
     it('should grant permission when permission matches exactly', () => {
-      expect(hasPermission([], 'peer:create', ['peer:create'])).toBe(true)
-      expect(hasPermission([], 'route:delete', ['route:delete'])).toBe(true)
+      expect(hasPermission(['peer:create'], 'peer:create')).toBe(true)
+      expect(hasPermission(['route:delete'], 'route:delete')).toBe(true)
     })
 
     it('should deny permission when role does not match', () => {
@@ -98,23 +92,11 @@ describe('hasPermission', () => {
     })
   })
 
-<<<<<<< HEAD:packages/orchestrator/tests/permissions.test.ts
-  describe('category wildcard', () => {
-    // @JTaylor: this is kinda weird.
-    // the first argument is not a role, but a wildcard permission scope.
-    // this is not very intuitive and seems to be a legacy feature. is it used anywhere?
-    // we should probably remove this and require the user to pass in a role instead.
-    it('should grant permission when category wildcard matches', () => {
-      expect(hasPermission(['peer:*'], 'peer:create')).toBe(true)
-      expect(hasPermission(['peer:*'], 'peer:update')).toBe(true)
-      expect(hasPermission(['peer:*'], 'peer:delete')).toBe(true)
-=======
   describe('roles', () => {
     it('should grant permissions associated with the role', () => {
       expect(hasPermission(['peer'], 'ibgp:connect')).toBe(true)
       expect(hasPermission(['peer_custodian'], 'peer:create')).toBe(true)
       expect(hasPermission(['data_custodian'], 'route:create')).toBe(true)
->>>>>>> 5726238 (chore: move permissions file into auth package):packages/orchestrator/src/next/permissions.test.ts
     })
 
     it('should deny permissions not associated with the role', () => {
@@ -124,9 +106,8 @@ describe('hasPermission', () => {
   })
 
   describe('multiple roles', () => {
-    it('should grant permission if any role or permission matches', () => {
-      expect(hasPermission(['viewer'], 'peer:create', ['peer:create'])).toBe(true)
-      expect(hasPermission(['datacustodian', 'networkcustodian'], 'peer:create')).toBe(true)
+    it('should grant permission if any role matches', () => {
+      expect(hasPermission(['data_custodian', 'peer_custodian'], 'peer:create')).toBe(true)
     })
   })
 
@@ -137,10 +118,10 @@ describe('hasPermission', () => {
     })
   })
 
-  describe('viewer role (no permissions)', () => {
-    it('should deny write permissions to viewer', () => {
-      expect(hasPermission(['viewer'], 'peer:create')).toBe(false)
-      expect(hasPermission(['viewer'], 'route:delete')).toBe(false)
+  describe('user role (no permissions)', () => {
+    it('should deny write permissions to user', () => {
+      expect(hasPermission(['user'], 'peer:create')).toBe(false)
+      expect(hasPermission(['user'], 'route:delete')).toBe(false)
     })
   })
 })

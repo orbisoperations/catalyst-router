@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import { type Action } from './schema.js'
 import type { PeerInfo, InternalRoute } from './routing/state.js'
 export type { PeerInfo, InternalRoute }
@@ -145,9 +145,6 @@ export class CatalystNodeBus extends RpcTarget {
   ): Promise<{ success: true } | { success: false; error: string }> {
     console.log(`[${this.config.node.name}] dispatch called. Auth provided:`, JSON.stringify(auth))
     // Validate and default to anonymous context
-    const resolvedAuth: AuthContext = auth
-      ? AuthContextSchema.parse(auth)
-      : { userId: 'anonymous', roles: [] }
     const resolvedAuth: AuthContext = auth
       ? AuthContextSchema.parse(auth)
       : { userId: 'anonymous', roles: [] }
@@ -650,9 +647,6 @@ export class CatalystNodeBus extends RpcTarget {
         for (const peer of _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected'
         )) {
-        for (const peer of _state.internal.peers.filter(
-          (p) => p.connectionStatus === 'connected'
-        )) {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
@@ -666,10 +660,6 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(
-              `[${this.config.node.name}] Failed to broadcast route removal to ${peer.name}`,
-              e
-            )
             console.error(
               `[${this.config.node.name}] Failed to broadcast route removal to ${peer.name}`,
               e

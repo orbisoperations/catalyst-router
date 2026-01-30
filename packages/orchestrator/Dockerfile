@@ -4,10 +4,10 @@ WORKDIR /app
 
 # Copy root config
 COPY package.json bun.lock ./
-COPY package.json bun.lock ./
 
-# Copy orchestrator only package.json to cache dependencies
+# Copy workspace package.json files needed for dependency resolution
 COPY packages/orchestrator/package.json packages/orchestrator/package.json
+COPY packages/auth/package.json packages/auth/package.json
 
 # Install dependencies
 WORKDIR /app/packages/orchestrator
