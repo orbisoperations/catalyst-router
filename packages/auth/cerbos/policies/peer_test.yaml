@@ -1,0 +1,66 @@
+name: Peer Resource Policy Test
+
+principals:
+  admin:
+    id: admin_user
+    roles: ['admin']
+
+  data_custodian:
+    id: data_custodian_user
+    roles: ['data_custodian']
+
+  network_operator:
+    id: network_operator_user
+    roles: ['network_operator']
+
+  peer_custodian:
+    id: peer_custodian_user
+    roles: ['peer_custodian']
+
+  user:
+    id: user_user
+    roles: ['user']
+
+resources:
+  peer_resource:
+    kind: peer
+    id: peer_resource_01
+
+tests:
+  - name: Only Admin and Peer Custodian can create, update, and delete, list, and view peers
+    input:
+      principals: ['admin', 'peer_custodian']
+      resources: ['peer_resource']
+      actions: ['create', 'update', 'delete', 'list', 'view']
+    expected:
+      - principal: admin
+        resource: peer_resource
+        actions:
+          create: EFFECT_ALLOW
+          delete: EFFECT_ALLOW
+          update: EFFECT_ALLOW
+          list: EFFECT_ALLOW
+          view: EFFECT_ALLOW
+      - principal: peer_custodian
+        resource: peer_resource
+        actions:
+          create: EFFECT_ALLOW
+          delete: EFFECT_ALLOW
+          update: EFFECT_ALLOW
+          list: EFFECT_ALLOW
+          view: EFFECT_ALLOW
+
+  - name: Rest of the principals cannot create, update, and delete, list, and view peers
+    input:
+      principals: ['data_custodian', 'network_operator', 'user']
+      resources: ['peer_resource']
+      actions: ['create', 'update', 'delete', 'list', 'view']
+    expected:
+      - principal: data_custodian
+        resource: peer_resource
+        actions:
+          create: EFFECT_DENY
+          delete: EFFECT_DENY
+          update: EFFECT_DENY
+          list: EFFECT_DENY
+          view: EFFECT_DENY

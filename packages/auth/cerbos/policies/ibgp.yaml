@@ -1,0 +1,11 @@
+apiVersion: api.cerbos.dev/v1
+
+resourcePolicy:
+  resource: 'ibgp'
+  version: 'default'
+  rules:
+    - actions: ['open', 'close', 'update']
+      effect: EFFECT_ALLOW
+      roles:
+        - admin
+        - peer

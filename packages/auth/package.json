@@ -12,21 +12,24 @@
     "dev": "bun run --watch src/server.ts",
     "build": "tsc",
     "test": "bun test",
-    "start": "bun run src/server.ts"
+    "start": "bun run src/server.ts",
+    "policy:test": "bunx cerbos compile cerbos/policies --test-output=tree 2> /dev/null"
   },
   "dependencies": {
-    "@hono/capnweb": "^0.1.0",
+    "@cerbos/grpc": "^0.24.2",
+    "@hono/capnweb": "catalog:",
     "argon2": "^0.44.0",
-    "capnweb": "^0.4.0",
-    "hono": "^4.11.3",
-    "jose": "^6.0.0",
-    "zod": "^4.0.0"
+    "capnweb": "catalog:",
+    "hono": "catalog:",
+    "jose": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@cerbos/core": "^0.27.1",
     "@types/bun": "catalog:dev",
-    "@types/node": "^20.11.0",
+    "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing",
-    "typescript": "^5.3.3",
-    "vitest": "^1.2.1"
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
   }
 }

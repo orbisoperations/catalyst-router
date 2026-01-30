@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { Role } from '../permissions.js'
+import type { CatalystResource, Permission, Role } from '../permissions.js'
 
 /**
  * SignToken Request/Response schemas
@@ -333,6 +333,11 @@ export interface ValidationHandlers {
   getJWKS(): Promise<GetJwksResponse>
   getRevocationList(): Promise<string[]>
   validate(request: { token: string }): Promise<VerifyTokenResponse>
+  isAuthorized(request: {
+    token: string
+    resource: CatalystResource
+    action: Permission
+  }): Promise<boolean>
 }
 
 /**
