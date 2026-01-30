@@ -1,0 +1,17 @@
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: 'route'
+  version: 'default'
+  rules:
+    - actions: ['create', 'delete']
+      effect: EFFECT_ALLOW
+      roles:
+        - admin
+        - data_custodian
+
+    - actions: ['list', 'view']
+      effect: EFFECT_ALLOW
+      roles:
+        - admin
+        - data_custodian
+        - user

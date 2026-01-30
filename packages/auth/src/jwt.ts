@@ -17,6 +17,22 @@ export const CLOCK_TOLERANCE = 30
 // Reserved JWT claims that cannot be overridden via custom claims
 const RESERVED_CLAIMS = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'] as const
 
+export const SignOptionsClaimsSchema = z
+  .object({
+    // TODO: sone male roles[] types based on Role enum
+    // TODO: or use z.enum(Object.keys(ROLE_PERMISSIONS) as [Role, ...Role[]])
+    // TODO: propagate through the system and the JWT signing/verification process
+    roles: z.array(z.string()).optional(),
+    orgId: z.string().optional(),
+    attr: z.record(z.string(), z.unknown()).optional(),
+    name: z.string().optional(),
+    // can be deep nested objects, arrays, strings, numbers, booleans, etc.
+    metadata: z.unknown().optional(),
+  })
+  // allow any other claims
+  .loose()
+export type CatalystClaims = z.infer<typeof SignOptionsClaimsSchema> & Record<string, unknown>
+
 /**
  * Options for signing a JWT
  */
@@ -24,7 +40,7 @@ export const SignOptionsSchema = z.object({
   subject: z.string(),
   audience: z.string().or(z.array(z.string())).optional(),
   expiresIn: z.string().optional(), // e.g., '1h', '7d', '30m'
-  claims: z.record(z.string(), z.unknown()).optional(),
+  claims: SignOptionsClaimsSchema.optional(),
 })
 
 export type SignOptions = z.infer<typeof SignOptionsSchema>
@@ -35,7 +51,7 @@ export type SignOptions = z.infer<typeof SignOptionsSchema>
 export const VerifyResultSchema = z.discriminatedUnion('valid', [
   z.object({
     valid: z.literal(true),
-    payload: z.record(z.string(), z.unknown()),
+    payload: SignOptionsClaimsSchema,
   }),
   z.object({
     valid: z.literal(false),
@@ -142,7 +158,7 @@ export async function verifyToken(
 
     return {
       valid: true,
-      payload: payload as Record<string, unknown>,
+      payload: payload as CatalystClaims,
     }
   } catch (error) {
     // Return generic error to avoid leaking information to attackers

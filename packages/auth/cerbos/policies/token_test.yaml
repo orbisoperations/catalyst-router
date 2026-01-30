@@ -1,0 +1,72 @@
+name: Token Resource Policy Test
+
+principals:
+  admin:
+    id: admin_user
+    roles: ['admin']
+
+  data_custodian:
+    id: data_custodian_user
+    roles: ['data_custodian']
+
+  network_operator:
+    id: network_operator_user
+    roles: ['network_operator']
+
+  peer_custodian:
+    id: peer_custodian_user
+    roles: ['peer_custodian']
+
+  user:
+    id: user_user
+    roles: ['user']
+
+resources:
+  token_resource:
+    kind: token
+    id: token_resource_01
+
+tests:
+  - name: Only Admin can create, revoke, and list tokens
+    input:
+      principals: ['admin']
+      resources: ['token_resource']
+      actions: ['create', 'revoke', 'list']
+    expected:
+      - principal: admin
+        resource: token_resource
+        actions:
+          create: EFFECT_ALLOW
+          revoke: EFFECT_ALLOW
+          list: EFFECT_ALLOW
+
+  - name: Non-admin principals cannot create, revoke, and list tokens
+    input:
+      principals: ['data_custodian', 'network_operator', 'peer_custodian', 'user']
+      resources: ['token_resource']
+      actions: ['create', 'revoke', 'list']
+    expected:
+      - principal: 'data_custodian'
+        resource: token_resource
+        actions:
+          create: EFFECT_DENY
+          revoke: EFFECT_DENY
+          list: EFFECT_DENY
+      - principal: 'network_operator'
+        resource: token_resource
+        actions:
+          create: EFFECT_DENY
+          revoke: EFFECT_DENY
+          list: EFFECT_DENY
+      - principal: 'peer_custodian'
+        resource: token_resource
+        actions:
+          create: EFFECT_DENY
+          revoke: EFFECT_DENY
+          list: EFFECT_DENY
+      - principal: 'user'
+        resource: token_resource
+        actions:
+          create: EFFECT_DENY
+          revoke: EFFECT_DENY
+          list: EFFECT_DENY

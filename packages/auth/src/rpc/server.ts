@@ -8,19 +8,17 @@ import { type RevocationStore } from '../revocation.js'
 import type { BootstrapService } from '../bootstrap.js'
 import type { LoginService } from '../login.js'
 import type { ApiKeyService } from '../api-key-service.js'
-import { Permission, Role } from '../permissions.js'
+import type { CatalystResource, Permission, PermissionService, Role } from '../permissions.js'
 import {
-  VerifyTokenRequestSchema,
   CreateFirstAdminRequestSchema,
   LoginRequestSchema,
-  type VerifyTokenResponse,
-  type GetJwksResponse,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
   type LoginResponse,
   type AdminHandlers,
   type ValidationHandlers,
 } from './schema.js'
+import type { Value } from '@cerbos/core'
 
 export class AuthRpcServer extends RpcTarget {
   private systemToken?: string
@@ -38,7 +36,8 @@ export class AuthRpcServer extends RpcTarget {
     private revocationStore?: RevocationStore,
     private bootstrapService?: BootstrapService,
     private loginService?: LoginService,
-    private apiKeyService?: ApiKeyService
+    private apiKeyService?: ApiKeyService,
+    private permissionService?: PermissionService
   ) {
     super()
   }
@@ -158,6 +157,28 @@ export class AuthRpcServer extends RpcTarget {
         }
 
         return { valid: true, payload: result.payload }
+      },
+      isAuthorized: async (req: {
+        token: string
+        resource: CatalystResource
+        action: Permission
+      }): Promise<boolean> => {
+        if (!this.permissionService) {
+          return false
+        }
+        const auth = await this.keyManager.verify(req.token)
+        if (!auth.valid) {
+          return false
+        }
+        return this.permissionService.isAuthorized(
+          {
+            id: auth.payload.sub as string,
+            roles: auth.payload.roles as Role[],
+            attr: auth.payload.attr as Record<string, Value>,
+          },
+          req.resource,
+          req.action
+        )
       },
     }
   }

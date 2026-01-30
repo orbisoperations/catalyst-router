@@ -1,0 +1,11 @@
+apiVersion: api.cerbos.dev/v1
+
+resourcePolicy:
+  resource: 'peer'
+  version: 'default'
+  rules:
+    - actions: ['create', 'update', 'delete', 'list', 'view']
+      effect: EFFECT_ALLOW
+      roles:
+        - admin
+        - peer_custodian
