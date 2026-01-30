@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 
 /**
  * Explicit enumerated set of permissions.
@@ -104,21 +104,10 @@ export function hasPermission(
 
 /**
  * Timing-safe secret comparison.
+ * Hashes both inputs to fixed-length digests before comparing,
+ * eliminating any timing signal from input length differences.
  */
 export function isSecretValid(provided: string, expected: string): boolean {
-  const providedBuf = Buffer.from(provided)
-  const expectedBuf = Buffer.from(expected)
-
-  if (providedBuf.length !== expectedBuf.length) {
-    const maxLen = Math.max(providedBuf.length, expectedBuf.length)
-    const paddedProvided = Buffer.alloc(maxLen)
-    const paddedExpected = Buffer.alloc(maxLen)
-    providedBuf.copy(paddedProvided)
-    expectedBuf.copy(paddedExpected)
-
-    timingSafeEqual(paddedProvided, paddedExpected)
-    return false
-  }
-
-  return timingSafeEqual(providedBuf, expectedBuf)
+  const hash = (s: string) => createHash('sha256').update(s).digest()
+  return timingSafeEqual(hash(provided), hash(expected))
 }
