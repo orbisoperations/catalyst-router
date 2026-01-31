@@ -2,6 +2,7 @@ import type { Action } from './schema.js'
 import type { RouteTable } from './routing/state.js'
 import { z } from 'zod'
 import { PeerInfoSchema } from './routing/state.js'
+import { Permission, type Role } from '@catalyst/auth'
 
 export const OrchestratorConfigSchema = z.object({
   node: PeerInfoSchema,
@@ -21,8 +22,9 @@ export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
 
 export const AuthContextSchema = z.object({
   userId: z.string(),
-  roles: z.array(z.string()),
-  permissions: z.array(z.string()).optional(),
+  // roles is an array of Role from @catalyst/auth
+  roles: z.array(z.enum<Role[]>(['admin', 'peer', 'peer_custodian', 'data_custodian', 'user'])),
+  permissions: z.array(z.enum<Permission[]>(Object.values(Permission))).optional(),
 })
 export type AuthContext = z.infer<typeof AuthContextSchema>
 

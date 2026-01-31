@@ -1,13 +1,18 @@
 import type { z } from 'zod'
 import { type Action } from './schema.js'
+import { Actions } from './action-types.js'
 import type { PeerInfo, InternalRoute } from './routing/state.js'
 export type { PeerInfo, InternalRoute }
 import { newRouteTable, type RouteTable, type PeerRecord } from './routing/state.js'
 import type { DataChannelDefinition } from './routing/datachannel.js'
 import type { UpdateMessageSchema } from './routing/internal/actions.js'
-import { type AuthContext, AuthContextSchema, type OrchestratorConfig } from './types.js'
-import { getRequiredPermission, hasPermission, isSecretValid } from './permissions.js'
-import { Actions } from './action-types.js'
+import {
+  type AuthContext,
+  AuthContextSchema,
+  type OrchestratorConfig,
+  OrchestratorConfigSchema,
+} from './types.js'
+import { getRequiredPermission, hasPermission, isSecretValid, Permission } from './permissions.js'
 import {
   newHttpBatchRpcSession,
   newWebSocketRpcSession,
@@ -193,7 +198,7 @@ export class CatalystNodeBus extends RpcTarget {
     if (!permission) {
       return { success: false, error: `Unauthorized action: ${action.action}` }
     }
-    if (!hasPermission(auth.roles, permission, auth.permissions)) {
+    if (!hasPermission(auth.roles, permission)) {
       return { success: false, error: `Permission denied: ${permission}` }
     }
 
@@ -790,9 +795,9 @@ export class CatalystNodeBus extends RpcTarget {
         }
 
         const auth: AuthContext = {
-          userId: 'networkmgmt',
-          roles: ['networkcustodian'],
-          permissions: ['peer:create', 'peer:update', 'peer:delete'],
+          userId: 'peermgmt',
+          roles: ['peer_custodian'],
+          permissions: [Permission.PeerCreate, Permission.PeerUpdate, Permission.PeerDelete],
         }
 
         return {
@@ -824,8 +829,8 @@ export class CatalystNodeBus extends RpcTarget {
 
         const auth: AuthContext = {
           userId: 'datamgmt',
-          roles: ['datacustodian'],
-          permissions: ['route:create', 'route:delete'],
+          roles: ['data_custodian'],
+          permissions: [Permission.RouteCreate, Permission.RouteDelete],
         }
 
         return {
@@ -857,8 +862,8 @@ export class CatalystNodeBus extends RpcTarget {
 
         const auth: AuthContext = {
           userId: 'ibgppeer',
-          roles: ['networkpeer'],
-          permissions: ['ibgp:connect', 'ibgp:disconnect', 'ibgp:update'],
+          roles: ['peer'],
+          permissions: [Permission.IbgpConnect, Permission.IbgpDisconnect, Permission.IbgpUpdate],
         }
 
         return {

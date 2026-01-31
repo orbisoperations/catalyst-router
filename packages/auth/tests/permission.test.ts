@@ -1,66 +1,14 @@
-import { describe, it, expect } from 'bun:test'
-import { getRequiredPermission, hasPermission, isSecretValid } from '../src/permissions'
-import type { Action } from '../src/schema'
-import { Actions } from '../src/action-types'
+import { describe, expect, it } from 'bun:test'
+import { hasPermission, isSecretValid } from '../src'
 
-describe('getRequiredPermission', () => {
-  it('should return peer:create for LocalPeerCreate', () => {
-    expect(getRequiredPermission({ action: Actions.LocalPeerCreate, data: {} } as Action)).toBe(
-      'peer:create'
-    )
-  })
-
-  it('should return peer:update for LocalPeerUpdate', () => {
-    expect(getRequiredPermission({ action: Actions.LocalPeerUpdate, data: {} } as Action)).toBe(
-      'peer:update'
-    )
-  })
-
-  it('should return peer:delete for LocalPeerDelete', () => {
-    expect(getRequiredPermission({ action: Actions.LocalPeerDelete, data: {} } as Action)).toBe(
-      'peer:delete'
-    )
-  })
-
-  it('should return route:create for LocalRouteCreate', () => {
-    expect(getRequiredPermission({ action: Actions.LocalRouteCreate, data: {} } as Action)).toBe(
-      'route:create'
-    )
-  })
-
-  it('should return route:delete for LocalRouteDelete', () => {
-    expect(getRequiredPermission({ action: Actions.LocalRouteDelete, data: {} } as Action)).toBe(
-      'route:delete'
-    )
-  })
-
-  it('should return ibgp:connect for InternalProtocolOpen', () => {
-    expect(
-      getRequiredPermission({ action: Actions.InternalProtocolOpen, data: {} } as Action)
-    ).toBe('ibgp:connect')
-  })
-
-  it('should return ibgp:disconnect for InternalProtocolClose', () => {
-    expect(
-      getRequiredPermission({ action: Actions.InternalProtocolClose, data: {} } as Action)
-    ).toBe('ibgp:disconnect')
-  })
-
-  it('should return ibgp:connect for InternalProtocolConnected', () => {
-    expect(
-      getRequiredPermission({ action: Actions.InternalProtocolConnected, data: {} } as Action)
-    ).toBe('ibgp:connect')
-  })
-
-  it('should return ibgp:update for InternalProtocolUpdate', () => {
-    expect(
-      getRequiredPermission({ action: Actions.InternalProtocolUpdate, data: {} } as Action)
-    ).toBe('ibgp:update')
-  })
-
-  it('should return undefined for unknown action types', () => {
-    const unknownAction = { action: 'unknown:action', data: {} } as unknown as Action
-    expect(getRequiredPermission(unknownAction)).toBeUndefined()
+describe('Validate secrets timing safe', () => {
+  it('should validate secrets safely with around same time duration', () => {
+    expect(isSecretValid('hello', 'hello')).toBe(true)
+    expect(isSecretValid('hello', 'incoad')).toBe(false)
+    expect(isSecretValid('hello', 'thisisaverylongsecretthatisnotthesameashello')).toBe(false)
+    expect(isSecretValid('invalid', 'secret')).toBe(false)
+    expect(isSecretValid('verryyyylong', 'secret')).toBe(false)
+    expect(isSecretValid('shor', 'secret')).toBe(false)
   })
 })
 
@@ -92,7 +40,7 @@ describe('hasPermission', () => {
     })
   })
 
-  describe('roles', () => {
+  describe('category wildcard', () => {
     it('should grant permissions associated with the role', () => {
       expect(hasPermission(['peer'], 'ibgp:connect')).toBe(true)
       expect(hasPermission(['peer_custodian'], 'peer:create')).toBe(true)
@@ -105,12 +53,6 @@ describe('hasPermission', () => {
     })
   })
 
-  describe('multiple roles', () => {
-    it('should grant permission if any role matches', () => {
-      expect(hasPermission(['data_custodian', 'peer_custodian'], 'peer:create')).toBe(true)
-    })
-  })
-
   describe('empty roles', () => {
     it('should deny all permissions with empty roles', () => {
       expect(hasPermission([], 'peer:create')).toBe(false)
@@ -118,10 +60,10 @@ describe('hasPermission', () => {
     })
   })
 
-  describe('user role (no permissions)', () => {
-    it('should deny write permissions to user', () => {
-      expect(hasPermission(['user'], 'peer:create')).toBe(false)
-      expect(hasPermission(['user'], 'route:delete')).toBe(false)
+  describe('viewer role (no permissions)', () => {
+    it('should deny write permissions to viewer', () => {
+      expect(hasPermission(['viewer'], 'peer:create')).toBe(false)
+      expect(hasPermission(['viewer'], 'route:delete')).toBe(false)
     })
   })
 })

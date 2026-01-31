@@ -11,13 +11,15 @@ RUN cd /temp/dev && bun install
 # Install with --production (exclude devDependencies)
 RUN mkdir -p /temp/prod
 COPY package.json /temp/prod/
-RUN cd /temp/prod && bun install --production
+# cant use production flag becuase of frozen-lockfile error: for now just omit dev dependencies
+# manually but let lockfile changes
+RUN cd /temp/prod && bun install --omit=dev --ignore-scripts
 
 # Copy node_modules from temp directory
 # Then copy all (non-ignored) project files into the image
 FROM base AS prerelease
 COPY --from=install /temp/dev/node_modules node_modules
-COPY . .
+COPY packages/auth packages/auth
 
 # [optional] tests & build
 ENV NODE_ENV=production
@@ -26,9 +28,9 @@ ENV NODE_ENV=production
 # copy production dependencies and source code into final image
 FROM base AS release
 COPY --from=install /temp/prod/node_modules node_modules
-COPY --from=prerelease /app/src src
-COPY --from=prerelease /app/package.json .
-COPY --from=prerelease /app/tsconfig.json .
+COPY --from=prerelease /app/packages/auth/src src
+COPY --from=prerelease /app/packages/auth/package.json .
+COPY --from=prerelease /app/packages/auth/tsconfig.json .
 
 # run the app
 USER bun

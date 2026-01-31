@@ -3,6 +3,7 @@ import { Actions } from '../src/action-types.js'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
 import type { PeerInfo } from '../src/routing/state.js'
+import type { AuthContext } from '../src/types.js'
 
 const MOCK_NODE: PeerInfo = {
   name: 'node-a.somebiz.local.io',
@@ -46,7 +47,7 @@ class MockConnectionPool extends ConnectionPool {
   }
 }
 
-const ADMIN_AUTH = { userId: 'admin', roles: ['*'] }
+const ADMIN_AUTH: AuthContext = { userId: 'admin', roles: ['admin'] }
 
 describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
   let bus: CatalystNodeBus
