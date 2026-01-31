@@ -60,10 +60,10 @@ describe('hasPermission', () => {
     })
   })
 
-  describe('viewer role (no permissions)', () => {
-    it('should deny write permissions to viewer', () => {
-      expect(hasPermission(['viewer'], 'peer:create')).toBe(false)
-      expect(hasPermission(['viewer'], 'route:delete')).toBe(false)
+  describe('user role (no permissions)', () => {
+    it('should deny write permissions to user', () => {
+      expect(hasPermission(['user'], 'peer:create')).toBe(false)
+      expect(hasPermission(['user'], 'route:delete')).toBe(false)
     })
   })
 })
