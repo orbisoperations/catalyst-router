@@ -16,7 +16,8 @@
     "commander": "catalog:",
     "inquirer": "^9.2.14",
     "ws": "^8.19.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@catalyst/orchestrator": "workspace:*"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.7",

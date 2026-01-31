@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeEach, mock, beforeAll, afterAll } from 'bun:test'
 import {
   GenericContainer,
   Wait,
@@ -8,10 +8,12 @@ import {
 } from 'testcontainers'
 
 import path from 'path'
-import { spawnSync } from 'node:child_process'
 import type { Readable } from 'node:stream'
-import { newWebSocketRpcSession } from 'capnweb'
-import type { PublicApi } from '../src/orchestrator.js'
+import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
+import type { PublicApi, PeerInfo } from '../src/orchestrator'
+import { Actions } from '../src/action-types'
+import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
+import type { AuthContext } from '../src/types'
 
 const isDockerRunning = () => {
   try {
@@ -36,20 +38,22 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   let nodeC: StartedTestContainer
 
   const orchestratorImage = 'catalyst-node:next-topology-e2e'
+  const authImage = 'catalyst-auth:next-topology-e2e'
 
   beforeAll(async () => {
-    // Build image if not exists
-    const checkImage = spawnSync('docker', ['image', 'inspect', orchestratorImage])
-    if (checkImage.status !== 0) {
-      console.log('Building Orchestrator image for Container tests...')
-      const repoRoot = path.resolve(__dirname, '../../../')
-      const orchestratorBuild = spawnSync(
-        'docker',
-        ['build', '-f', 'packages/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-        { cwd: repoRoot, stdio: 'inherit' }
+    const repoRoot = path.resolve(__dirname, '../../../')
+
+    const buildImage = async (dockerfilePath: string, imageName: string) => {
+      console.log(`Building ${imageName} image for Container tests...`)
+      const buildResult = Bun.spawnSync(
+        ['docker', 'build', '-f', dockerfilePath, '-t', imageName, '.'],
+        { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
       )
-      if (orchestratorBuild.status !== 0) throw new Error('Docker build orchestrator failed')
+      if (buildResult.exitCode !== 0) throw new Error(`Docker build ${imageName} failed`)
     }
+
+    await buildImage('packages/orchestrator/Dockerfile', orchestratorImage)
+    await buildImage('packages/auth/Dockerfile', authImage)
 
     network = await new Network().start()
 
@@ -204,4 +208,154 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
     },
     TIMEOUT
   )
+})
+
+const MOCK_NODE: PeerInfo = {
+  name: 'node-a.somebiz.local.io',
+  endpoint: 'http://node-a:3000',
+  domains: ['somebiz.local.io'],
+}
+
+const GATEWAY_ENDPOINT = 'http://gateway:4000'
+
+interface GatewayService {
+  name: string
+  url: string
+}
+
+interface GatewayConfig {
+  services: GatewayService[]
+}
+
+class MockConnectionPool extends ConnectionPool {
+  public calls: { endpoint: string; config: GatewayConfig }[] = []
+  public mockStubs: Map<string, Record<string, unknown>> = new Map()
+
+  get(endpoint: string) {
+    if (!this.mockStubs.has(endpoint)) {
+      const stub = {
+        updateConfig: mock(async (config: GatewayConfig) => {
+          this.calls.push({ endpoint, config })
+          return { success: true }
+        }),
+        getIBGPClient: mock(async () => ({
+          success: true,
+          client: {
+            update: mock(async () => ({ success: true })),
+            open: mock(async () => ({ success: true })),
+          },
+        })),
+      }
+      this.mockStubs.set(endpoint, stub as Record<string, unknown>)
+    }
+    return this.mockStubs.get(endpoint) as unknown as RpcStub<PublicApi>
+  }
+}
+
+const ADMIN_AUTH: AuthContext = { userId: 'admin', roles: ['admin'] }
+
+describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
+  let bus: CatalystNodeBus
+  let pool: MockConnectionPool
+
+  beforeEach(() => {
+    pool = new MockConnectionPool('http')
+    bus = new CatalystNodeBus({
+      config: {
+        node: MOCK_NODE,
+        ibgp: { secret: 'secret' },
+        gqlGatewayConfig: { endpoint: GATEWAY_ENDPOINT },
+      },
+      connectionPool: { pool },
+    })
+  })
+
+  it('should sync local GraphQL routes to gateway', async () => {
+    const route = {
+      name: 'books',
+      protocol: 'http:graphql' as const,
+      endpoint: 'http://books:8080',
+    }
+
+    await bus.dispatch(
+      {
+        action: Actions.LocalRouteCreate,
+        data: route,
+      },
+      ADMIN_AUTH
+    )
+
+    // Give some time for async handleNotify/syncGateway
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(pool.calls.length).toBe(1)
+    expect(pool.calls[0].endpoint).toBe(GATEWAY_ENDPOINT)
+    expect(pool.calls[0].config.services).toEqual([{ name: 'books', url: 'http://books:8080' }])
+  })
+
+  it('should NOT sync non-GraphQL routes', async () => {
+    const route = {
+      name: 'grpc-service',
+      protocol: 'http:grpc' as const,
+      endpoint: 'http://grpc:5000',
+    }
+
+    await bus.dispatch({
+      action: Actions.LocalRouteCreate,
+      data: route,
+    })
+
+    await new Promise((r) => setTimeout(r, 10))
+
+    // console.log('Calls:', JSON.stringify(pool.calls));
+    // It shouldn't trigger sync if no graphql routes exist
+    // Or it might trigger but find 0 routes.
+    // In my impl, I added a check: if (graphqlRoutes.length === 0) return
+    expect(pool.calls.length).toBe(0)
+  })
+
+  it('should sync mesh-wide GraphQL routes (local + internal)', async () => {
+    // 1. Add local route
+    await bus.dispatch(
+      {
+        action: Actions.LocalRouteCreate,
+        data: { name: 'local-books', protocol: 'http:graphql', endpoint: 'http://lb:8080' },
+      },
+      ADMIN_AUTH
+    )
+
+    // 2. Add internal route (from peer)
+    const peerInfo: PeerInfo = {
+      name: 'peer-b.somebiz.local.io',
+      endpoint: 'http://pb',
+      domains: [],
+    }
+    await bus.dispatch(
+      {
+        action: Actions.InternalProtocolUpdate,
+        data: {
+          peerInfo,
+          update: {
+            updates: [
+              {
+                action: 'add',
+                route: { name: 'remote-movies', protocol: 'http:gql', endpoint: 'http://rm:8080' },
+                nodePath: ['peer-b.somebiz.local.io'],
+              },
+            ],
+          },
+        },
+      },
+      ADMIN_AUTH
+    )
+
+    await new Promise((r) => setTimeout(r, 10))
+
+    // Expect 2 calls (one for each action)
+    expect(pool.calls.length).toBe(2)
+    const lastSync = pool.calls[1].config.services
+    expect(lastSync).toHaveLength(2)
+    expect(lastSync).toContainEqual({ name: 'local-books', url: 'http://lb:8080' })
+    expect(lastSync).toContainEqual({ name: 'remote-movies', url: 'http://rm:8080' })
+  })
 })
