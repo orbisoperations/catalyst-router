@@ -5,7 +5,6 @@ export {
   verifyToken,
   decodeToken,
   SignOptionsSchema,
-  VerifyResultSchema,
 } from './jwt.js'
 export type { SignOptions, VerifyOptions, VerifyResult } from './jwt.js'
 export * from './revocation.js'

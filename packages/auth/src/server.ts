@@ -8,6 +8,10 @@ import {
     InMemoryServiceAccountStore,
     InMemoryBootstrapStore,
 } from './stores/memory.js'
+import {
+    LocalTokenManager,
+    BunSqliteTokenStore
+} from '@catalyst/authorization'
 import { BootstrapService } from './bootstrap.js'
 import { LoginService } from './login.js'
 import { ApiKeyService } from './api-key-service.js'
@@ -31,9 +35,18 @@ export async function startServer() {
     const currentKid = await keyManager.getCurrentKeyId()
     console.log(JSON.stringify({ level: 'info', msg: 'KeyManager initialized', kid: currentKid }))
 
+    // Initialize token tracking
+    const tokenStore = new BunSqliteTokenStore(process.env.CATALYST_AUTH_DB || 'auth.db')
+    const tokenManager = new LocalTokenManager(keyManager, tokenStore)
+
     // Mint system admin token
-    systemToken = await keyManager.sign({
+    systemToken = await tokenManager.mint({
         subject: 'system-admin',
+        entity: {
+            id: 'system',
+            name: 'System Admin',
+            type: 'service',
+        },
         claims: {
             role: 'admin',
             permissions: [
@@ -78,7 +91,7 @@ export async function startServer() {
 
     // Initialize services
     const bootstrapService = new BootstrapService(userStore, bootstrapStore)
-    const loginService = new LoginService(userStore, keyManager)
+    const loginService = new LoginService(userStore, tokenManager)
     const apiKeyService = new ApiKeyService(serviceAccountStore)
 
     // Initialize bootstrap with env token or generate new one
@@ -111,6 +124,7 @@ export async function startServer() {
     const app = new Hono()
     const rpcServer = new AuthRpcServer(
         keyManager,
+        tokenManager,
         revocationStore,
         bootstrapService,
         loginService,

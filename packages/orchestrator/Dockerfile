@@ -8,11 +8,13 @@ COPY package.json bun.lock ./
 # Copy workspace package.json files needed for dependency resolution
 COPY packages/orchestrator/package.json packages/orchestrator/package.json
 COPY packages/auth/package.json packages/auth/package.json
+COPY packages/authorization/package.json packages/authorization/package.json
 
 # Install dependencies (cache dependencies)
 RUN bun install --omit=dev --ignore-scripts
 
 COPY packages/auth packages/auth
+COPY packages/authorization packages/authorization
 
 # Install dependencies
 WORKDIR /app/packages/orchestrator

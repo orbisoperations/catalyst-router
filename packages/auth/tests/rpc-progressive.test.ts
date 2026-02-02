@@ -2,9 +2,11 @@ import { describe, it, expect, beforeAll } from 'bun:test'
 import { AuthRpcServer } from '../src/rpc/server.js'
 import { EphemeralKeyManager } from '../src/key-manager/ephemeral.js'
 import { InMemoryRevocationStore } from '../src/revocation.js'
+import { LocalTokenManager, BunSqliteTokenStore } from '@catalyst/authorization'
 
 describe('Auth Progressive API', () => {
   let keyManager: EphemeralKeyManager
+  let tokenManager: LocalTokenManager
   let rpcServer: AuthRpcServer
   let adminToken: string
   let userToken: string
@@ -13,18 +15,23 @@ describe('Auth Progressive API', () => {
     keyManager = new EphemeralKeyManager()
     await keyManager.initialize()
 
+    const tokenStore = new BunSqliteTokenStore(':memory:')
+    tokenManager = new LocalTokenManager(keyManager, tokenStore)
+
     // Sign tokens for testing
-    adminToken = await keyManager.sign({
+    adminToken = await tokenManager.mint({
       subject: 'admin-user',
+      entity: { id: 'admin-user', name: 'Admin', type: 'user' },
       claims: { roles: ['admin'] },
     })
 
-    userToken = await keyManager.sign({
+    userToken = await tokenManager.mint({
       subject: 'regular-user',
+      entity: { id: 'regular-user', name: 'User', type: 'user' },
       claims: { roles: ['user'] },
     })
 
-    rpcServer = new AuthRpcServer(keyManager, new InMemoryRevocationStore())
+    rpcServer = new AuthRpcServer(keyManager, tokenManager, new InMemoryRevocationStore())
   })
 
   describe('admin sub-api', () => {
