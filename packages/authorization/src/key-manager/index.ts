@@ -50,7 +50,7 @@ export interface IKeyManager {
   sign(options: SignOptions): Promise<string>
 
   /** Verify a JWT against managed keys */
-  verify(token: string, options?: VerifyOptions): Promise<ValidationResult<T>>
+  verify(token: string, options?: VerifyOptions): Promise<VerifyResult>
 
   /** Get the JSON Web Key Set containing all valid public keys */
   getJwks(): Promise<JSONWebKeySet>
