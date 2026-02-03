@@ -1,25 +1,5 @@
 import type { AuthorizationDomain, AuthorizationEngine } from '@catalyst/authorization'
-import type { User as UserEntity } from '../models'
-
-/***
- *
- * TODO:
- * - Add the missing entities and actions to the domain.
- *
- * NOTE: This is a temporary type definition for the Catalyst Policy Domain.
- * It is not final and will be replaced with a more permanent solution in the future.
- *
- * We need to centralize the Data Models in one place. We could import them from the orchestrator
- * package or elsewhere. Currently this entities below duplicate/replicating the values in orchestrator package.
- *
- *
- */
-
-export type { UserEntity }
-
-export type RoleEntity = {
-  name: string
-}
+import { Action, Role } from '@catalyst/authorization'
 
 export type IBGPEntity = {
   name: string
@@ -53,15 +33,22 @@ export type RouteEntity = {
   tags?: string[] | undefined
 }
 
-// Domain
+/**
+ * Catalyst Policy Domain definition.
+ * Aligns Cedar roles and actions with TypeScript types.
+ */
 export interface CatalystPolicyDomain extends AuthorizationDomain {
-  Actions: 'login' | 'open' | 'close' | 'update' | 'create' | 'delete' | 'list' | 'view' | 'revoke'
+  Actions: Action
   Entities: {
-    User: UserEntity
-    Role: RoleEntity
+    [Role.ADMIN]: Record<string, unknown>
+    [Role.NODE]: Record<string, unknown>
+    [Role.DATA_CUSTODIAN]: Record<string, unknown>
+    [Role.NODE_CUSTODIAN]: Record<string, unknown>
+    [Role.USER]: Record<string, unknown>
     IBGP: IBGPEntity
     Peer: PeerEntity
     Route: RouteEntity
+    Token: Record<string, unknown>
     AdminPanel: Record<string, unknown>
   }
 }
