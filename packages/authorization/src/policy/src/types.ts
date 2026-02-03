@@ -1,6 +1,55 @@
 import type { DetailedError } from '@cedar-policy/cedar-wasm/nodejs'
 import type { EntityCollection } from './entity-collection.js'
 
+/**
+ * Standardized roles for the Catalyst system.
+ * These serve as primary Principal Types in Cedar.
+ */
+export enum Role {
+  ADMIN = 'ADMIN',
+  NODE = 'NODE',
+  NODE_CUSTODIAN = 'NODE_CUSTODIAN',
+  DATA_CUSTODIAN = 'DATA_CUSTODIAN',
+  USER = 'USER',
+}
+
+/**
+ * Standardized actions for the Catalyst system.
+ */
+export enum Action {
+  LOGIN = 'LOGIN',
+  IBGP_CONNECT = 'IBGP_CONNECT',
+  IBGP_DISCONNECT = 'IBGP_DISCONNECT',
+  IBGP_UPDATE = 'IBGP_UPDATE',
+  PEER_CREATE = 'PEER_CREATE',
+  PEER_UPDATE = 'PEER_UPDATE',
+  PEER_DELETE = 'PEER_DELETE',
+  ROUTE_CREATE = 'ROUTE_CREATE',
+  ROUTE_DELETE = 'ROUTE_DELETE',
+  TOKEN_CREATE = 'TOKEN_CREATE',
+  TOKEN_REVOKE = 'TOKEN_REVOKE',
+  TOKEN_LIST = 'TOKEN_LIST',
+}
+
+/**
+ * Default role-to-action permissions mapping.
+ * Used as a reference for policy generation and documentation.
+ */
+export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
+  [Role.ADMIN]: Object.values(Action),
+  [Role.NODE]: [Action.IBGP_CONNECT, Action.IBGP_DISCONNECT, Action.IBGP_UPDATE],
+  [Role.NODE_CUSTODIAN]: [
+    Action.PEER_CREATE,
+    Action.PEER_UPDATE,
+    Action.PEER_DELETE,
+    Action.IBGP_CONNECT,
+    Action.IBGP_DISCONNECT,
+    Action.IBGP_UPDATE,
+  ],
+  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE],
+  [Role.USER]: [Action.LOGIN],
+}
+
 // Base interface for defining a specific Domain's schema
 /**
  * Defines the structure of an Authorization Domain, specifying valid Actions and Entity types.
@@ -90,8 +139,8 @@ export type ActionContext<
   TActionID extends ActionId<TDomain>,
 > =
   TDomain['Actions'] extends Record<string, unknown>
-    ? TDomain['Actions'][TActionID]
-    : Record<string, unknown>
+  ? TDomain['Actions'][TActionID]
+  : Record<string, unknown>
 
 /**
  * Represents an authorization request to be evaluated by the engine.
@@ -118,17 +167,17 @@ export type AuthorizationRequest<
   entities: Entity<TDomain>[] | EntityCollection<TDomain>
 } & (Record<string, never> extends ActionContext<TDomain, TActionID>
   ? {
-      /**
-       * Contextual information for the request (optional if the action requires no context).
-       */
-      context?: ActionContext<TDomain, TActionID>
-    }
+    /**
+     * Contextual information for the request (optional if the action requires no context).
+     */
+    context?: ActionContext<TDomain, TActionID>
+  }
   : {
-      /**
-       * Contextual information for the request (required if the action defines a context shape).
-       */
-      context: ActionContext<TDomain, TActionID>
-    })
+    /**
+     * Contextual information for the request (required if the action defines a context shape).
+     */
+    context: ActionContext<TDomain, TActionID>
+  })
 
 /**
  * Raw response from the authorization evaluation (internal use).
@@ -145,23 +194,23 @@ export interface AuthorizationResponse {
  */
 export type AuthorizationEngineResult =
   | {
-      /** Indicates a failure in the engine execution (e.g., internal error). */
-      type: 'failure'
-      /** List of error messages explaining the failure. */
-      errors: string[]
-    }
+    /** Indicates a failure in the engine execution (e.g., internal error). */
+    type: 'failure'
+    /** List of error messages explaining the failure. */
+    errors: string[]
+  }
   | {
-      /** Indicates the request was successfully evaluated. */
-      type: 'evaluated'
-      /** The authorization decision ('allow' or 'deny'). */
-      decision: 'allow' | 'deny'
-      /** Boolean shorthand for decision === 'allow'. */
-      allowed: boolean
-      /** IDs of the policies that determined the decision. */
-      reasons: string[]
-      /** Detailed diagnostics or warnings from the engine. */
-      diagnostics: DetailedError[]
-    }
+    /** Indicates the request was successfully evaluated. */
+    type: 'evaluated'
+    /** The authorization decision ('allow' or 'deny'). */
+    decision: 'allow' | 'deny'
+    /** Boolean shorthand for decision === 'allow'. */
+    allowed: boolean
+    /** IDs of the policies that determined the decision. */
+    reasons: string[]
+    /** Detailed diagnostics or warnings from the engine. */
+    diagnostics: DetailedError[]
+  }
 
 /**
  * Interface for the Authorization Engine.
