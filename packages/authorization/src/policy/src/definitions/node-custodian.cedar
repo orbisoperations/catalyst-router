@@ -9,4 +9,8 @@ permit (
         CATALYST::Action::"IBGP_UPDATE"
     ],
     resource
-);
+)
+when {
+    principal.trustedDomains.contains(resource.domainId) &&
+    (principal.trustedNodes.isEmpty() || principal.trustedNodes.contains(resource.nodeId))
+};

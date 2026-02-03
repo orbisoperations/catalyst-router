@@ -1,15 +1,65 @@
 namespace CATALYST {
-    entity ADMIN;
-    entity NODE;
-    entity DATA_CUSTODIAN;
-    entity NODE_CUSTODIAN;
-    entity USER;
+    entity ADMIN {
+        id: String,
+        name: String,
+        type: String,
+        role: String,
+        trustedNodes: Set<String>,
+        trustedDomains: Set<String>
+    };
+    entity NODE {
+        id: String,
+        name: String,
+        type: String,
+        role: String,
+        trustedNodes: Set<String>,
+        trustedDomains: Set<String>
+    };
+    entity DATA_CUSTODIAN {
+        id: String,
+        name: String,
+        type: String,
+        role: String,
+        trustedNodes: Set<String>,
+        trustedDomains: Set<String>
+    };
+    entity NODE_CUSTODIAN {
+        id: String,
+        name: String,
+        type: String,
+        role: String,
+        trustedNodes: Set<String>,
+        trustedDomains: Set<String>
+    };
+    entity USER {
+        id: String,
+        name: String,
+        type: String,
+        role: String,
+        trustedNodes: Set<String>,
+        trustedDomains: Set<String>
+    };
 
-    entity IBGP;
-    entity Peer;
-    entity Route;
-    entity Token;
-    entity AdminPanel;
+    entity IBGP {
+        nodeId: String,
+        domainId: String
+    };
+    entity Peer {
+        nodeId: String,
+        domainId: String
+    };
+    entity Route {
+        nodeId: String,
+        domainId: String
+    };
+    entity Token {
+        nodeId: String,
+        domainId: String
+    };
+    entity AdminPanel {
+        nodeId: String,
+        domainId: String
+    };
 
     action LOGIN appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
@@ -69,5 +119,10 @@ namespace CATALYST {
     action TOKEN_LIST appliesTo {
         principal: ADMIN,
         resource: Token
+    };
+
+    action MANAGE appliesTo {
+        principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
+        resource: AdminPanel
     };
 }

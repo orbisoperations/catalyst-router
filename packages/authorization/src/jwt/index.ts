@@ -50,6 +50,12 @@ export interface MintOptions {
     type: EntityType
     /** Primary role for principal type mapping (ADR 0007/Cedar) */
     role: Role
+    /** The node ID that issued/minted this token */
+    nodeId?: string
+    /** Set of nodes that are trusted to use this token */
+    trustedNodes?: string[]
+    /** Set of domains that are trusted to use this token */
+    trustedDomains?: string[]
   }
 }
 
@@ -94,7 +100,15 @@ export interface TokenManager {
  * // Resulting principal: CATALYST::ADMIN::"alice"
  */
 export function jwtToEntity(payload: Record<string, unknown>): CedarEntity {
-  const entity = payload.entity as { id: string; name: string; type: string; role: Role }
+  const entity = payload.entity as {
+    id: string
+    name: string
+    type: string
+    role: Role
+    nodeId?: string
+    trustedNodes?: string[]
+    trustedDomains?: string[]
+  }
   const roles = (payload.roles as Role[]) || []
   const primaryRole = entity?.role || roles[0] || Role.USER
 
@@ -102,16 +116,23 @@ export function jwtToEntity(payload: Record<string, unknown>): CedarEntity {
   const principalId = entity?.name || entity?.id || (payload.sub as string)
 
   const builder = new EntityBuilder()
-  builder.entity(primaryRole, principalId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  builder.entity(`CATALYST::${primaryRole}` as any, principalId)
 
   if (entity) {
-    builder.setAttributes({
+    const attributes: Record<string, unknown> = {
       id: entity.id,
       name: entity.name,
       type: entity.type,
       role: entity.role,
       ...((payload.claims as Record<string, unknown>) || {}),
-    })
+    }
+
+    // Map 'nodes' and 'domains' from entity OR top-level payload claims to trusted sets
+    attributes.trustedNodes = entity.trustedNodes || (payload.nodes as string[]) || []
+    attributes.trustedDomains = entity.trustedDomains || (payload.domains as string[]) || []
+
+    builder.setAttributes(attributes)
   }
 
   // Add other roles as parents if needed, or stick to primary role principal

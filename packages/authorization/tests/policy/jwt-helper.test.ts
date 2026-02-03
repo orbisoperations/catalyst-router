@@ -11,6 +11,7 @@ describe('jwtToEntity', () => {
         name: 'alice',
         type: 'user',
         role: Role.ADMIN,
+        nodeId: 'node-a',
       },
       roles: [Role.ADMIN, Role.USER],
       claims: {
@@ -20,11 +21,12 @@ describe('jwtToEntity', () => {
 
     const entity = jwtToEntity(payload as Record<string, unknown>)
 
-    expect(entity.uid.type).toBe('ADMIN')
+    expect(entity.uid.type).toBe('CATALYST::ADMIN')
     expect(entity.uid.id).toBe('alice')
     expect(entity.attrs.id).toBe('user-123')
     expect(entity.attrs.name).toBe('alice')
     expect(entity.attrs.orgId).toBe('org-456')
+    // nodeId is no longer mapped directly
   })
 
   it('should fallback to first role if primaryRole is missing', () => {
@@ -40,7 +42,7 @@ describe('jwtToEntity', () => {
 
     const entity = jwtToEntity(payload as Record<string, unknown>)
 
-    expect(entity.uid.type).toBe('NODE')
+    expect(entity.uid.type).toBe('CATALYST::NODE')
     expect(entity.uid.id).toBe('catalyst-node-01')
   })
 
@@ -52,7 +54,7 @@ describe('jwtToEntity', () => {
 
     const entity = jwtToEntity(payload as Record<string, unknown>)
 
-    expect(entity.uid.type).toBe('USER')
+    expect(entity.uid.type).toBe('CATALYST::USER')
     expect(entity.uid.id).toBe('user-789')
   })
 })
