@@ -69,3 +69,13 @@ export interface IKeyManager {
     /** Check if the key manager has been initialized */
     isInitialized(): boolean
 }
+
+/**
+ * Interface for persisting key material.
+ */
+export interface IKeyStore {
+    /** Save all keys as a JWKS */
+    saveKeys(jwks: JSONWebKeySet): Promise<void>
+    /** Load keys as a JWKS */
+    loadKeys(): Promise<JSONWebKeySet | null>
+}

@@ -15,25 +15,31 @@ export class BunSqliteTokenStore implements TokenStore {
         jti TEXT PRIMARY KEY,
         expiry INTEGER NOT NULL,
         cfn TEXT,
+        sans TEXT NOT NULL, -- JSON array
         entity_id TEXT NOT NULL,
         entity_name TEXT NOT NULL,
-        entity_type TEXT NOT NULL
+        entity_type TEXT NOT NULL,
+        revoked INTEGER NOT NULL DEFAULT 0 -- 0=false, 1=true
       )
     `)
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_tokens_expiry ON tokens(expiry)`)
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_tokens_cfn ON tokens(cfn)`)
     }
 
     async recordToken(record: TokenRecord): Promise<void> {
         const stmt = this.db.prepare(`
-      INSERT INTO tokens (jti, expiry, cfn, entity_id, entity_name, entity_type)
-      VALUES ($jti, $expiry, $cfn, $entityId, $entityName, $entityType)
+      INSERT INTO tokens (jti, expiry, cfn, sans, entity_id, entity_name, entity_type, revoked)
+      VALUES ($jti, $expiry, $cfn, $sans, $entityId, $entityName, $entityType, $revoked)
     `)
         stmt.run({
             $jti: record.jti,
             $expiry: record.expiry,
             $cfn: record.cfn ?? null,
+            $sans: JSON.stringify(record.sans),
             $entityId: record.entityId,
             $entityName: record.entityName,
             $entityType: record.entityType,
+            $revoked: record.revoked ? 1 : 0,
         })
     }
 
@@ -46,20 +52,60 @@ export class BunSqliteTokenStore implements TokenStore {
             jti: result.jti,
             expiry: result.expiry,
             cfn: result.cfn || undefined,
+            sans: JSON.parse(result.sans),
             entityId: result.entity_id,
             entityName: result.entity_name,
             entityType: result.entity_type as EntityType,
+            revoked: result.revoked === 1,
         }
     }
 
-    async isRevoked(jti: string): Promise<boolean> {
-        // Basic implementation: if it's not in our DB, it might be revoked or just tracked elsewhere.
-        // In a more robust implementation, we might have a specific revocation table.
-        // For now, we'll just check if it exists and hasn't expired.
-        const token = await this.findToken(jti)
-        if (!token) return true // Treat unknown tokens as revoked for safety
+    async revokeToken(jti: string): Promise<void> {
+        this.db.run('UPDATE tokens SET revoked = 1 WHERE jti = ?', [jti])
+    }
 
+    async revokeBySan(san: string): Promise<void> {
+        // Simple LIKE search for JSON array string
+        this.db.run("UPDATE tokens SET revoked = 1 WHERE sans LIKE ?", [`%${san}%`])
+    }
+
+    async isRevoked(jti: string): Promise<boolean> {
+        const stmt = this.db.prepare('SELECT revoked FROM tokens WHERE jti = $jti')
+        const row = stmt.get({ $jti: jti }) as any
+        return row ? row.revoked === 1 : false
+    }
+
+    async getRevocationList(): Promise<string[]> {
         const now = Math.floor(Date.now() / 1000)
-        return token.expiry < now
+        const rows = this.db.query('SELECT jti FROM tokens WHERE revoked = 1 AND expiry > ?').all(now) as any[]
+        return rows.map(r => r.jti)
+    }
+
+    async listTokens(filter?: { certificateFingerprint?: string; san?: string }): Promise<TokenRecord[]> {
+        let query = 'SELECT * FROM tokens WHERE 1=1'
+        const params: Record<string, any> = {}
+
+        if (filter?.certificateFingerprint) {
+            query += ' AND cfn = $cfn'
+            params.$cfn = filter.certificateFingerprint
+        }
+
+        if (filter?.san) {
+            query += ' AND sans LIKE $san'
+            params.$san = `%${filter.san}%`
+        }
+
+        const stmt = this.db.prepare(query)
+        const rows = stmt.all(params) as any[]
+        return rows.map(row => ({
+            jti: row.jti,
+            expiry: row.expiry,
+            cfn: row.cfn || undefined,
+            sans: JSON.parse(row.sans),
+            entityId: row.entity_id,
+            entityName: row.entity_name,
+            entityType: row.entity_type as EntityType,
+            revoked: row.revoked === 1,
+        }))
     }
 }

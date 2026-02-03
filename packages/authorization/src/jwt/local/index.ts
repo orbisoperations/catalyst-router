@@ -15,7 +15,11 @@ export class LocalTokenManager implements TokenManager {
     ) { }
 
     async mint(options: MintOptions): Promise<string> {
-        const claims = { ...options.claims }
+        const claims: Record<string, unknown> = {
+            ...options.claims,
+            entity: options.entity,
+            roles: options.roles
+        }
 
         // Support certificate binding (ADR 0007)
         if (options.certificateFingerprint) {
@@ -40,14 +44,25 @@ export class LocalTokenManager implements TokenManager {
             jti: decoded.jti,
             expiry: decoded.exp,
             cfn: options.certificateFingerprint,
+            sans: options.sans ?? [],
             entityId: options.entity.id,
             entityName: options.entity.name,
             entityType: options.entity.type,
+            revoked: false,
         }
 
         await this.store.recordToken(record)
 
         return token
+    }
+
+    async revoke(options: { jti?: string; san?: string }): Promise<void> {
+        if (options.jti) {
+            await this.store.revokeToken(options.jti)
+        }
+        if (options.san) {
+            await this.store.revokeBySan(options.san)
+        }
     }
 
     async verify(token: string, options?: { audience?: string | string[] }): Promise<VerifyResult> {
@@ -59,21 +74,11 @@ export class LocalTokenManager implements TokenManager {
             return { valid: false, error: 'Token missing jti' }
         }
 
-        // Check tracking store
-        const record = await this.store.findToken(jti)
-        if (!record) {
-            return { valid: false, error: 'Token not found in tracking store' }
+        // Check if token is revoked in the store
+        const isRevoked = await this.store.isRevoked(jti)
+        if (isRevoked) {
+            return { valid: false, error: 'Token is revoked' }
         }
-
-        // Check expiration (optional redundancy)
-        const now = Math.floor(Date.now() / 1000)
-        if (record.expiry < now) {
-            return { valid: false, error: 'Token expired' }
-        }
-
-        // In a real mTLS scenario, the caller would pass the fingerprint from the cert
-        // and we would compare it here against result.payload.cnf['x5t#S256']
-        // For this refactor, we are ensuring the persistence and tracking works.
 
         return result
     }

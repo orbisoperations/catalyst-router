@@ -2,8 +2,12 @@ import { describe, it, expect, beforeEach } from 'bun:test'
 import { LoginService } from '../src/login.js'
 import { InMemoryUserStore } from '../src/stores/memory.js'
 import { hashPassword } from '../src/password.js'
-import { EphemeralKeyManager } from '../src/key-manager/ephemeral.js'
-import { LocalTokenManager, BunSqliteTokenStore } from '@catalyst/authorization'
+import {
+  LocalTokenManager,
+  BunSqliteTokenStore,
+  BunSqliteKeyStore,
+  PersistentLocalKeyManager
+} from '@catalyst/authorization'
 import type { IKeyManager } from '../src/key-manager/types.js'
 
 describe('LoginService', () => {
@@ -14,8 +18,10 @@ describe('LoginService', () => {
 
   beforeEach(async () => {
     userStore = new InMemoryUserStore()
-    keyManager = new EphemeralKeyManager()
-    await keyManager.initialize()
+    const keyStore = new BunSqliteKeyStore(':memory:')
+    const pm = new PersistentLocalKeyManager(keyStore)
+    await pm.initialize()
+    keyManager = pm
 
     const tokenStore = new BunSqliteTokenStore(':memory:')
     tokenManager = new LocalTokenManager(keyManager, tokenStore)
@@ -98,7 +104,7 @@ describe('LoginService', () => {
       await userStore.create({
         email: 'admin@example.com',
         passwordHash,
-        roles: ['admin', 'operator'],
+        roles: ['ADMIN', 'OPERATOR'],
         orgId: 'default',
       })
 
@@ -116,7 +122,7 @@ describe('LoginService', () => {
       }
       expect(verifyResult.valid).toBe(true)
       expect(verifyResult.payload.sub).toMatch(/^usr_/)
-      expect(verifyResult.payload.roles).toEqual(['admin', 'operator'])
+      expect(verifyResult.payload.roles).toEqual(['ADMIN', 'OPERATOR'])
       expect(verifyResult.payload.orgId).toBe('default')
     })
 
@@ -125,7 +131,7 @@ describe('LoginService', () => {
       const user = await userStore.create({
         email: 'user@example.com',
         passwordHash,
-        roles: ['admin'],
+        roles: ['ADMIN'],
         orgId: 'default',
       })
 

@@ -6,8 +6,9 @@ describe('System Admin Token', () => {
     let systemToken: string
 
     beforeAll(async () => {
-        // Ensure we don't try to write to disk in this environment
-        process.env.KEY_MANAGER_TYPE = 'ephemeral'
+        // Use in-memory databases for tests
+        process.env.CATALYST_AUTH_KEYS_DB = ':memory:'
+        process.env.CATALYST_AUTH_TOKENS_DB = ':memory:'
 
         // Import and start server to trigger minting
         const { startServer } = await import('../src/server.js')
@@ -27,31 +28,9 @@ describe('System Admin Token', () => {
         const payload = result?.payload as any
         expect(payload).toBeDefined()
 
-        expect(payload.sub).toBe('system-admin')
-        expect(payload.role).toBe('admin')
-        expect(Array.isArray(payload.permissions)).toBe(true)
-
-        const permissions = payload.permissions
-
-        // Comprehensive list of expected discrete permissions
-        const expectedPermissions = [
-            Permission.TokenCreate,
-            Permission.TokenRevoke,
-            Permission.TokenList,
-            Permission.PeerCreate,
-            Permission.PeerUpdate,
-            Permission.PeerDelete,
-            Permission.RouteCreate,
-            Permission.RouteDelete,
-            Permission.IbgpConnect,
-            Permission.IbgpDisconnect,
-            Permission.IbgpUpdate,
-        ]
-
-        for (const perm of expectedPermissions) {
-            expect(permissions).toContain(perm)
-        }
-
-        expect(permissions).toHaveLength(expectedPermissions.length)
+        expect(payload.sub).toBe('bootstrap')
+        expect(payload.roles).toEqual(['ADMIN'])
+        expect(payload.entity?.id).toBe('system')
+        expect(payload.entity?.type).toBe('service')
     })
 })

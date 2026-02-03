@@ -1,5 +1,12 @@
 import { z } from 'zod'
-import { Role } from '../permissions.js'
+
+export const RoleSchema = z.enum([
+  'ADMIN',
+  'NODE',
+  'NODE_CUSTODIAN',
+  'DATA_CUSTODIAN',
+  'USER',
+])
 
 /**
  * SignToken Request/Response schemas
@@ -324,21 +331,44 @@ export type AuthenticateApiKeyResponse = z.infer<typeof AuthenticateApiKeyRespon
 /**
  * progressive API handler interfaces
  */
-export interface AdminHandlers {
-  createToken(request: { role: Role; name: string }): Promise<string>
-  revokeToken(request: { target: string }): Promise<void>
+export interface TokenHandlers {
+  /** Create a new token with optional SANs and entity info */
+  create(request: {
+    subject: string
+    entity: { id: string; name: string; type: 'user' | 'service' }
+    roles: z.infer<typeof RoleSchema>[]
+    sans?: string[]
+    expiresIn?: string
+  }): Promise<string>
+  /** Revoke a token by JTI or SAN */
+  revoke(request: { jti?: string; san?: string }): Promise<void>
+  /** List tokens with optional filters */
+  list(request: { certificateFingerprint?: string; san?: string }): Promise<any[]>
+}
+
+export interface CertHandlers {
+  /** List all active public keys/certs */
+  list(): Promise<GetJwksResponse>
+  /** Rotate to a new signing key */
+  rotate(request?: { immediate?: boolean; gracePeriodMs?: number }): Promise<RotateResponse>
+  /** List all tokens minted against a specific certificate */
+  getTokensByCert(request: { fingerprint: string }): Promise<any[]>
 }
 
 export interface ValidationHandlers {
-  getJWKS(): Promise<GetJwksResponse>
+  /** Core JWT validation */
+  validate(request: { token: string; audience?: string }): Promise<VerifyTokenResponse>
+  /** Get full revocation list (JTIs of all unexpired revoked tokens) */
   getRevocationList(): Promise<string[]>
-  validate(request: { token: string }): Promise<VerifyTokenResponse>
+  /** Public JWKS endpoint */
+  getJWKS(): Promise<GetJwksResponse>
 }
 
 /**
  * PublicAPI (AuthRpcServer) schemas
  */
-export const AdminApiRequestSchema = z.string() // token
+export const TokenApiRequestSchema = z.string() // token
+export const CertApiRequestSchema = z.string() // token
 export const ValidationApiRequestSchema = z.string() // token
 
 export const CreateTokenRequestSchema = z.object({
