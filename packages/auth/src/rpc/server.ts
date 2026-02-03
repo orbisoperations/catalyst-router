@@ -1,25 +1,23 @@
+import { newRpcResponse } from '@hono/capnweb'
+import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
-import { RpcTarget } from 'capnweb'
-import { newRpcResponse } from '@hono/capnweb'
 
-import type { IKeyManager } from '../key-manager/types.js'
 import type { TokenManager } from '@catalyst/authorization'
-import { type RevocationStore } from '../revocation.js'
-import type { BootstrapService } from '../bootstrap.js'
-import type { LoginService } from '../login.js'
 import type { ApiKeyService } from '../api-key-service.js'
-import { Permission, Role } from '../permissions.js'
+import type { BootstrapService } from '../bootstrap.js'
+import type { IKeyManager } from '../key-manager/types.js'
+import type { LoginService } from '../login.js'
+import type { Role } from '../permissions.js'
+import type { CatalystPolicyEngine } from '../policies/types.js'
+import { type RevocationStore } from '../revocation.js'
 import {
-  VerifyTokenRequestSchema,
   CreateFirstAdminRequestSchema,
   LoginRequestSchema,
-  type VerifyTokenResponse,
-  type GetJwksResponse,
+  type AdminHandlers,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
   type LoginResponse,
-  type AdminHandlers,
   type ValidationHandlers,
 } from './schema.js'
 
@@ -40,7 +38,8 @@ export class AuthRpcServer extends RpcTarget {
     private revocationStore?: RevocationStore,
     private bootstrapService?: BootstrapService,
     private loginService?: LoginService,
-    private apiKeyService?: ApiKeyService
+    private apiKeyService?: ApiKeyService,
+    private policyService?: CatalystPolicyEngine
   ) {
     super()
   }
@@ -58,6 +57,9 @@ export class AuthRpcServer extends RpcTarget {
     const result = await this.loginService.login(parsed.data)
     if (!result.success) {
       return { success: false, error: result.error ?? 'Login failed' }
+    }
+    if (!this.policyService) {
+      return { success: false, error: 'Policy service not configured' }
     }
     return {
       success: true,
@@ -114,6 +116,55 @@ export class AuthRpcServer extends RpcTarget {
     const auth = await this.tokenManager.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
+    }
+
+    // For @team:
+    // A simple Demo/light integration with the policy service
+    //
+    // for @GABRIEL; TODO:
+    // just realized that (MAYBE) I can abstract this a bit more
+    // and do another class on top and be like:
+    //
+    // Ill give it some thought and see if it makes sense to do so.
+    //
+    // seems like the pattern of builder, authorized, will be very repetitive
+    const builder = this.policyService?.entityBuilderFactory.createEntityBuilder()
+    if (!builder) {
+      return { error: 'Policy service not configured' }
+    }
+    builder.add('User', auth.payload)
+    const entities = builder.build()
+    const autorizedResult = this.policyService?.isAuthorized({
+      principal: entities.entityRef('User', auth.payload.id as string),
+      action: { type: 'Action', id: 'login' },
+      resource: { type: 'AdminPanel', id: 'admin-panel' },
+      entities: entities.getAll(),
+      context: {},
+    })
+    if (autorizedResult?.type === 'failure') {
+      // log for telemetry
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          msg: 'Error on policy service',
+          error: autorizedResult.errors,
+        })
+      )
+      return { error: 'Error authorizing request' }
+    }
+    if (!autorizedResult?.allowed) {
+      // log for telemetry
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          msg: 'Error authorizing request',
+          diagnostics: autorizedResult?.diagnostics,
+          reasons: autorizedResult?.reasons,
+          decision: autorizedResult?.decision,
+          allowed: autorizedResult?.allowed,
+        })
+      )
+      return { error: 'Permission denied: admin role required' }
     }
 
     const roles = (auth.payload.roles as string[]) || []
