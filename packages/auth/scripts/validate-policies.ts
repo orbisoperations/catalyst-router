@@ -1,16 +1,6 @@
-import { AuthorizationEngine } from '@catalyst/authorization'
-import fs from 'fs'
+import { AuthorizationEngine, CATALYST_SCHEMA, ALL_POLICIES } from '@catalyst/authorization'
 
-const schemaPath = process.env.CATALYST_AUTH_SCHEMA || './src/policies/schema.cedar'
-const policiesPath = process.env.CATALYST_AUTH_POLICIES || './src/policies/policies.cedar'
-
-const schema = fs.readFileSync(schemaPath, 'utf8')
-const policies = fs.readFileSync(policiesPath, 'utf8')
-
-console.log('Schema path:', schemaPath)
-console.log('Policies path:', policiesPath)
-
-const engine = new AuthorizationEngine(schema, policies)
+const engine = new AuthorizationEngine(CATALYST_SCHEMA, ALL_POLICIES)
 
 try {
   engine.validatePolicies()
