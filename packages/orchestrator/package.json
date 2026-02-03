@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@catalyst/auth": "workspace:*",
+    "@catalyst/config": "workspace:*",
     "@hono/capnweb": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",

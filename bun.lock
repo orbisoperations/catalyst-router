@@ -106,6 +106,13 @@
         "typescript": "catalog:dev",
       },
     },
+    "packages/config": {
+      "name": "@catalyst/config",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "catalog:",
+      },
+    },
     "packages/examples": {
       "name": "@catalyst/examples",
       "version": "0.0.0",
@@ -170,6 +177,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@catalyst/auth": "workspace:*",
+        "@catalyst/config": "workspace:*",
         "@hono/capnweb": "catalog:",
         "capnweb": "catalog:",
         "hono": "catalog:",
@@ -340,6 +348,8 @@
     "@catalyst/authorization": ["@catalyst/authorization@workspace:packages/authorization"],
 
     "@catalyst/cli": ["@catalyst/cli@workspace:packages/cli"],
+
+    "@catalyst/config": ["@catalyst/config@workspace:packages/config"],
 
     "@catalyst/examples": ["@catalyst/examples@workspace:packages/examples"],
 
