@@ -4,25 +4,20 @@ import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
 import type { IKeyManager } from '../key-manager/types.js'
-import { type TokenManager, type Role, LocalTokenManager } from '@catalyst/authorization'
+import { type TokenManager, Role, Action, LocalTokenManager } from '@catalyst/authorization'
 import type { BootstrapService } from '../bootstrap.js'
-import type { IKeyManager } from '../key-manager/types.js'
+import type { ApiKeyService } from '../api-key-service.js'
 import type { LoginService } from '../login.js'
-import type { Role } from '../permissions.js'
 import type { CatalystPolicyEngine } from '../policies/types.js'
-import { type RevocationStore } from '../revocation.js'
 import {
   CreateFirstAdminRequestSchema,
   LoginRequestSchema,
-  type AdminHandlers,
-  type RotateResponse,
   type TokenHandlers,
   type CertHandlers,
   type ValidationHandlers,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
   type LoginResponse,
-  type ValidationHandlers,
 } from './schema.js'
 
 export class AuthRpcServer extends RpcTarget {
@@ -87,11 +82,12 @@ export class AuthRpcServer extends RpcTarget {
     const token = await this.tokenManager.mint({
       subject: result.userId!,
       expiresIn: '1h',
-      roles: ['ADMIN'],
+      roles: [Role.ADMIN],
       entity: {
         id: result.userId!,
         name: 'First Admin',
         type: 'user',
+        role: Role.ADMIN,
       },
       claims: {
         orgId: 'default',
@@ -139,11 +135,11 @@ export class AuthRpcServer extends RpcTarget {
     if (!builder) {
       return { error: 'Policy service not configured' }
     }
-    builder.add('User', auth.payload)
+    builder.add(Role.USER, auth.payload)
     const entities = builder.build()
     const autorizedResult = this.policyService?.isAuthorized({
-      principal: entities.entityRef('User', auth.payload.id as string),
-      action: { type: 'Action', id: 'login' },
+      principal: entities.entityRef(Role.USER, auth.payload.id as string),
+      action: { type: 'Action', id: Action.LOGIN },
       resource: { type: 'AdminPanel', id: 'admin-panel' },
       entities: entities.getAll(),
       context: {},
@@ -183,7 +179,10 @@ export class AuthRpcServer extends RpcTarget {
       create: async (request) => {
         return this.tokenManager.mint({
           subject: request.subject,
-          entity: request.entity,
+          entity: {
+            ...request.entity,
+            role: (request.roles as Role[])[0] || Role.USER, // Use primary role
+          },
           roles: request.roles as Role[],
           sans: request.sans,
           expiresIn: request.expiresIn,
