@@ -170,12 +170,22 @@ app.use(
 app.get('/api/users', (c) => c.json({ users: [] }))
 ```
 
-Each request creates a span with:
+**Spans** — Each request creates a span with:
 
 - `http.request.method`
 - `http.route`
 - `http.response.status_code`
 - `url.path`
+
+**Metrics** — Records `http.server.request.duration` histogram (seconds) with:
+
+- `http.request.method`
+- `http.route`
+- `http.response.status_code`
+- `url.scheme`
+- `error.type` (on 4xx/5xx responses)
+
+The histogram's internal `_count` provides request totals in Prometheus.
 
 ## GraphQL Middleware (Yoga)
 
@@ -198,6 +208,39 @@ const yoga = createYoga({
 ```
 
 **Important**: Call `initTelemetry()` before creating the Yoga instance.
+
+## RPC Middleware (capnweb)
+
+Instruments RPC method calls via a Proxy wrapper.
+
+```typescript
+import { instrumentRpcTarget } from '@catalyst/telemetry/middleware/capnweb'
+
+// Your RPC handler object
+const authService = {
+  async login(username: string, password: string) {
+    // ... implementation
+    return { success: true, token: '...' }
+  },
+  async logout(token: string) {
+    return { success: true }
+  },
+}
+
+// Wrap with instrumentation
+const instrumentedService = instrumentRpcTarget(authService, {
+  serviceName: 'auth', // Required: prefix for span names
+  recordArguments: false, // Optional: log args (PII-sanitized)
+})
+```
+
+Each RPC call creates a span with:
+
+- `rpc.system.name`: `"capnweb"`
+- `rpc.method`: Method name (e.g., `"login"`)
+- `error.type`: Error class name on failure
+
+Detects capnweb-style `{ success: false, error }` responses and marks spans as errors.
 
 ## Trace Context Propagation
 
@@ -257,10 +300,6 @@ normalizePath('/orders/550e8400-e29b-41d4-..') // → '/orders/:uuid'
 
 This package is designed for Bun runtime:
 
-- Uses OTLP HTTP (not gRPC) — Bun's gRPC support is limited
-- No auto-instrumentation — Bun doesn't support Node.js require hooks
+- Uses OTLP HTTP — simpler than gRPC, works everywhere (gRPC also supported since Bun 1.2)
+- No auto-instrumentation — Bun doesn't support Node.js `--require` hooks, so manual instrumentation via middleware is required
 - AsyncLocalStorage works since Bun 1.0 — required for trace context propagation
-
-## License
-
-MIT
