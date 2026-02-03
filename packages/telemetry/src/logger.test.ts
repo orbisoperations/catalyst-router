@@ -42,7 +42,7 @@ describe('logger', () => {
   describe('initLogger', () => {
     it('configures LogTape with OTEL sink', async () => {
       const { logExporter, loggerProvider } = createTestProviders()
-      await initLogger({ loggerProvider, enableConsole: false })
+      await initLogger({ _testLoggerProvider: loggerProvider, enableConsole: false })
 
       const logger = getLogger('test-module')
       logger.info('hello from logger')
@@ -56,7 +56,7 @@ describe('logger', () => {
   describe('getLogger', () => {
     it('returns a logger for a single category', async () => {
       const { loggerProvider } = createTestProviders()
-      await initLogger({ loggerProvider, enableConsole: false })
+      await initLogger({ _testLoggerProvider: loggerProvider, enableConsole: false })
 
       const logger = getLogger('gateway')
       expect(logger).toBeDefined()
@@ -65,7 +65,7 @@ describe('logger', () => {
 
     it('returns a logger for nested categories', async () => {
       const { logExporter, loggerProvider } = createTestProviders()
-      await initLogger({ loggerProvider, enableConsole: false })
+      await initLogger({ _testLoggerProvider: loggerProvider, enableConsole: false })
 
       const logger = getLogger('gateway', 'federation')
       logger.info('nested log')
@@ -80,7 +80,7 @@ describe('logger', () => {
   describe('trace context injection', () => {
     it('includes traceId and spanId when logging within an active span', async () => {
       const { logExporter, loggerProvider } = createTestProviders()
-      await initLogger({ loggerProvider, enableConsole: false })
+      await initLogger({ _testLoggerProvider: loggerProvider, enableConsole: false })
 
       const tracer = trace.getTracer('test')
       const span = tracer.startSpan('test-op')
@@ -104,7 +104,7 @@ describe('logger', () => {
   describe('edge cases', () => {
     it('handles undefined properties without throwing', async () => {
       const { loggerProvider } = createTestProviders()
-      await initLogger({ loggerProvider, enableConsole: false })
+      await initLogger({ _testLoggerProvider: loggerProvider, enableConsole: false })
 
       const logger = getLogger('test')
       logger.info('value is {value}', { value: undefined })
@@ -112,7 +112,7 @@ describe('logger', () => {
 
     it('handles empty string messages', async () => {
       const { logExporter, loggerProvider } = createTestProviders()
-      await initLogger({ loggerProvider, enableConsole: false })
+      await initLogger({ _testLoggerProvider: loggerProvider, enableConsole: false })
 
       const logger = getLogger('test')
       logger.info('')

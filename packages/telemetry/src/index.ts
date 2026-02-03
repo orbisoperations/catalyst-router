@@ -75,7 +75,11 @@ async function performInit(opts: InitOptions): Promise<void> {
     })
 
     await initLogger({
-      loggerProvider: opts._testLoggerProvider,
+      serviceName: opts.serviceName,
+      serviceVersion: opts.serviceVersion,
+      environment: opts.environment,
+      otlpEndpoint: opts.otlpEndpoint,
+      _testLoggerProvider: opts._testLoggerProvider,
       logLevel: opts.logLevel,
       enableConsole: opts.enableConsole,
     })

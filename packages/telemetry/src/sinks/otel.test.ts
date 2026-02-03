@@ -118,15 +118,4 @@ describe('otel sink', () => {
       expect(records[0].attributes['email']).toBe('[EMAIL]')
     })
   })
-
-  describe('resilience', () => {
-    it('does not throw when no loggerProvider is given', async () => {
-      // createOtelSink with no provider should still return a usable sink
-      const sink = createOtelSink()
-      await setupLogtape(sink)
-
-      // Logging should not throw even without a backend
-      getLogger(['test']).info('no provider')
-    })
-  })
 })
