@@ -136,6 +136,10 @@ export { normalizePath } from './normalize'
 // Re-export propagation helpers
 export { injectTraceHeaders, extractTraceContext, getTraceId, getSpanId } from './propagation/w3c'
 
+// Re-export RPC instrumentation
+export { instrumentRpcTarget, instrumentPublicApi } from './middleware/capnweb'
+export type { RpcInstrumentationOptions } from './middleware/capnweb'
+
 // Re-export types
 export type {
   TelemetryOptions,
