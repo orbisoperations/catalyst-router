@@ -29,6 +29,6 @@
     "graphql": "catalog:",
     "graphql-yoga": "catalog:",
     "hono": "catalog:",
-    "ip": "^2.0.1"
+    "ip": "catalog:"
   }
 }

@@ -16,5 +16,9 @@
   },
   "dependencies": {
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:dev",
+    "@types/node": "catalog:dev"
   }
 }

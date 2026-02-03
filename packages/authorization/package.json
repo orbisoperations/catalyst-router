@@ -9,13 +9,13 @@
   },
   "private": true,
   "dependencies": {
-    "jose": "^6.0.0",
+    "jose": "catalog:",
     "zod": "catalog:",
-    "@cedar-policy/cedar-wasm": "^4.8.2"
+    "@cedar-policy/cedar-wasm": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.3"
+    "@types/node": "catalog:dev",
+    "typescript": "catalog:dev"
   }
 }
