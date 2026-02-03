@@ -7,18 +7,17 @@ import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { ApiKeyService } from './api-key-service.js'
 import { BootstrapService } from './bootstrap.js'
-import { createKeyManagerFromEnv } from './key-manager/factory.js'
 import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
 import {
-    InMemoryUserStore,
-    InMemoryServiceAccountStore,
-    InMemoryBootstrapStore,
+  InMemoryUserStore,
+  InMemoryServiceAccountStore,
+  InMemoryBootstrapStore,
 } from './stores/memory.js'
 import {
-    LocalTokenManager,
-    BunSqliteTokenStore,
-    BunSqliteKeyStore,
-    PersistentLocalKeyManager,
+  LocalTokenManager,
+  BunSqliteTokenStore,
+  BunSqliteKeyStore,
+  PersistentLocalKeyManager,
 } from '@catalyst/authorization'
 import { BootstrapService } from './bootstrap.js'
 import { LoginService } from './login.js'
@@ -44,10 +43,10 @@ export let systemToken: string | undefined
  * Initializes and starts the Auth service.
  */
 export async function startServer() {
-    // Initialize Key persistence
-    const keyStore = new BunSqliteKeyStore(process.env.CATALYST_AUTH_KEYS_DB || 'keys.db')
-    const keyManager = new PersistentLocalKeyManager(keyStore)
-    await keyManager.initialize()
+  // Initialize Key persistence
+  const keyStore = new BunSqliteKeyStore(process.env.CATALYST_AUTH_KEYS_DB || 'keys.db')
+  const keyManager = new PersistentLocalKeyManager(keyStore)
+  await keyManager.initialize()
 
   const currentKid = await keyManager.getCurrentKeyId()
   console.log(JSON.stringify({ level: 'info', msg: 'KeyManager initialized', kid: currentKid }))
@@ -67,21 +66,21 @@ export async function startServer() {
   // CatalystDataModel and converts them into entities for the CatalystPolicyDomain
   policyService.entityBuilderFactory.registerMapper('User', userModelToEntityMapper)
 
-    // Initialize token tracking
-    const tokenStore = new BunSqliteTokenStore(process.env.CATALYST_AUTH_TOKENS_DB || 'tokens.db')
-    const tokenManager = new LocalTokenManager(keyManager, tokenStore)
+  // Initialize token tracking
+  const tokenStore = new BunSqliteTokenStore(process.env.CATALYST_AUTH_TOKENS_DB || 'tokens.db')
+  const tokenManager = new LocalTokenManager(keyManager, tokenStore)
 
-    // Mint system admin token
-    systemToken = await tokenManager.mint({
-        subject: 'bootstrap',
-        entity: {
-            id: 'system',
-            name: 'System Admin',
-            type: 'service',
-        },
-        roles: ['ADMIN'],
-        expiresIn: '365d',
-    })
+  // Mint system admin token
+  systemToken = await tokenManager.mint({
+    subject: 'bootstrap',
+    entity: {
+      id: 'system',
+      name: 'System Admin',
+      type: 'service',
+    },
+    roles: ['ADMIN'],
+    expiresIn: '365d',
+  })
 
   console.log(
     JSON.stringify({ level: 'info', msg: 'System Admin Token minted', token: systemToken })
@@ -108,7 +107,15 @@ export async function startServer() {
   const userStore = new InMemoryUserStore()
   const serviceAccountStore = new InMemoryServiceAccountStore()
   const bootstrapStore = new InMemoryBootstrapStore()
+  // Initialize stores
+  const userStore = new InMemoryUserStore()
+  const serviceAccountStore = new InMemoryServiceAccountStore()
+  const bootstrapStore = new InMemoryBootstrapStore()
 
+  // Initialize services
+  const bootstrapService = new BootstrapService(userStore, bootstrapStore)
+  const loginService = new LoginService(userStore, tokenManager)
+  const apiKeyService = new ApiKeyService(serviceAccountStore)
   // Initialize services
   const bootstrapService = new BootstrapService(userStore, bootstrapStore)
   const loginService = new LoginService(userStore, tokenManager)
@@ -117,7 +124,32 @@ export async function startServer() {
   // Initialize bootstrap with env token or generate new one
   const envBootstrapToken = process.env.CATALYST_BOOTSTRAP_TOKEN
   const bootstrapTtl = Number(process.env.CATALYST_BOOTSTRAP_TTL) || 24 * 60 * 60 * 1000 // 24h default
+  // Initialize bootstrap with env token or generate new one
+  const envBootstrapToken = process.env.CATALYST_BOOTSTRAP_TOKEN
+  const bootstrapTtl = Number(process.env.CATALYST_BOOTSTRAP_TTL) || 24 * 60 * 60 * 1000 // 24h default
 
+  if (envBootstrapToken) {
+    const tokenHash = await hashPassword(envBootstrapToken)
+    const expiresAt = new Date(Date.now() + bootstrapTtl)
+    await bootstrapStore.set({ tokenHash, expiresAt, used: false })
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        msg: 'Bootstrap initialized from env',
+        expiresAt: expiresAt.toISOString(),
+      })
+    )
+  } else {
+    const result = await bootstrapService.initializeBootstrap({ expiresInMs: bootstrapTtl })
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        msg: 'Bootstrap token generated',
+        token: result.token,
+        expiresAt: result.expiresAt.toISOString(),
+      })
+    )
+  }
   if (envBootstrapToken) {
     const tokenHash = await hashPassword(envBootstrapToken)
     const expiresAt = new Date(Date.now() + bootstrapTtl)
@@ -145,11 +177,11 @@ export async function startServer() {
   const rpcServer = new AuthRpcServer(
     keyManager,
     tokenManager,
-    revocationStore,
     bootstrapService,
     loginService,
     apiKeyService,
-    policyService
+    policyService,
+    
   )
   rpcServer.setSystemToken(systemToken)
   const rpcApp = createAuthRpcHandler(rpcServer)
@@ -162,7 +194,17 @@ export async function startServer() {
     return c.json(jwks)
   })
   app.route('/rpc', rpcApp)
+  app.get('/', (c) => c.text('Catalyst Auth Service'))
+  app.get('/health', (c) => c.json({ status: 'ok' }))
+  app.get('/.well-known/jwks.json', async (c) => {
+    const jwks = await keyManager.getJwks()
+    c.header('Cache-Control', 'public, max-age=300')
+    return c.json(jwks)
+  })
+  app.route('/rpc', rpcApp)
 
+  const port = Number(process.env.PORT) || 4001
+  console.log(JSON.stringify({ level: 'info', msg: 'Auth service started', port }))
   const port = Number(process.env.PORT) || 4001
   console.log(JSON.stringify({ level: 'info', msg: 'Auth service started', port }))
 
@@ -172,7 +214,19 @@ export async function startServer() {
     await keyManager.shutdown()
     process.exit(0)
   })
+  // Graceful shutdown
+  process.on('SIGTERM', async () => {
+    console.log(JSON.stringify({ level: 'info', msg: 'Shutting down...' }))
+    await keyManager.shutdown()
+    process.exit(0)
+  })
 
+  return {
+    app,
+    port,
+    websocket,
+    systemToken,
+  }
   return {
     app,
     port,
