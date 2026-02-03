@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "typecheck": "bunx tsc --noEmit -p packages/telemetry/tsconfig.json && bunx tsc --noEmit -p packages/sdk/tsconfig.json"
   },
   "workspaces": {
     "packages": [
