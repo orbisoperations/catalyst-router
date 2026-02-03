@@ -10,7 +10,8 @@
   "private": true,
   "dependencies": {
     "jose": "^6.0.0",
-    "zod": "^4.0.0"
+    "zod": "catalog:",
+    "@cedar-policy/cedar-wasm": "^4.8.2"
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",
