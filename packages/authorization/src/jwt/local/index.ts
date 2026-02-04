@@ -86,4 +86,15 @@ export class LocalTokenManager implements TokenManager {
 
     return result
   }
+
+  async listTokens(filter?: {
+    certificateFingerprint?: string
+    san?: string
+  }): Promise<TokenRecord[]> {
+    return this.store.listTokens(filter)
+  }
+
+  async getRevocationList(): Promise<string[]> {
+    return this.store.getRevocationList()
+  }
 }
