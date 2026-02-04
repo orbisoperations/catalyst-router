@@ -35,6 +35,20 @@ Use "Orbi" when you want guided workflow execution with subagents. For general c
 
 When invoked with "Orbi [task]", follow these steps EXACTLY:
 
+**MANDATORY CHECKLIST - You MUST complete ALL steps:**
+
+- [ ] STEP 1: Classify task type (output classification block)
+- [ ] STEP 2: Ask clarifying questions (use AskUserQuestion if needed)
+- [ ] STEP 3: Spawn pre-work agents IN PARALLEL (use Task tool, NOT Grep/Read/Edit)
+- [ ] STEP 4: Wait for agent results, then implement
+- [ ] STEP 5: Run verification
+- [ ] STEP 6: Check doc sync (if behavior changed)
+- [ ] STEP 7: Provide commit guidance
+
+**If you skip STEP 3 (spawning agents), you are NOT following the protocol.**
+
+---
+
 ### STEP 1: Classify Task Type
 
 Analyze the user's request and classify using this decision tree:
@@ -147,7 +161,22 @@ Based on task type, gather context using AskUserQuestion. Each task type has spe
 
 ### STEP 3: Run Pre-Work (Parallel)
 
+**CRITICAL: You MUST spawn agents using the Task tool. Do NOT use Grep, Read, or Edit directly.**
+
 Based on task type, spawn appropriate agents IN PARALLEL using a SINGLE message with MULTIPLE Task tool calls.
+
+**Example: PR Fix spawns Stack Scope agent only**
+
+You must call Task tool with:
+
+- subagent_type: "Explore" (for Stack Scope) or "general-purpose" (for Documentation/ADR)
+- description: Short 3-5 word description
+- model: "haiku", "sonnet", or "opus" (see matrix below)
+- prompt: Copy the exact prompt from "Pre-Work Agent Prompts" section below
+
+**Example: New Feature spawns 3 agents in parallel (Stack Scope + Documentation + ADR Compliance)**
+
+Send ONE message with THREE Task tool calls - one for each agent.
 
 #### Task-Specific Pre-Work Matrix
 
