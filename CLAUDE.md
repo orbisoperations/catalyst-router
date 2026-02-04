@@ -275,18 +275,27 @@ gt branch info        # Info about current branch
 ### Common Workflow
 
 ```bash
-gt create -m "feat: add feature"   # Create new stacked branch (stages all changes)
+# Stage changes first (gt create doesn't auto-stage in current version)
+git add <files>
+
+# Create new stacked branch/commit
+gt create -m "feat: add feature"
+
+# IMPORTANT: Submit immediately after creating to push draft PR for team visibility
+gt submit  # or gt s for short
+
+# Other useful commands
 gt modify -m "update message"      # Amend current branch (stages all changes)
-gt submit                          # Push stack to GitHub
 gt sync                            # Sync with trunk and restack
 ```
 
 **Key Points:**
 
-- `gt create` automatically stages ALL changes when creating a new branch/commit
+- **Always run `gt submit` (or `gt s`) immediately after `gt create`** - PRs are created as drafts and submitting them provides team visibility
+- Stage changes with `git add` before `gt create` (current Graphite version doesn't auto-stage)
 - `gt modify` automatically stages ALL changes when amending the current branch
-- **Never use `git add` before `gt create` or `gt modify`** - changes are staged automatically
 - Use `gt` commands exclusively for commits to maintain stack integrity
+- Draft PRs allow the team to see work in progress without blocking reviews
 
 ### Fixing Empty or Duplicate PRs
 
@@ -417,19 +426,19 @@ ADRs live in `docs/adr/` and define technical standards. **Always check relevant
 
 > **Full details:** See `CLAUDE_AGENTS.md` for complete agent definitions, prompt templates, and workflow examples.
 >
-> **Invoke with:** `Orbi [task description]` — The orchestrator will identify task type and guide you through the appropriate workflow.
+> **Invoke with:** `/orbi [task description]` (explicit) or `Orbi [task description]` (natural language) — The orchestrator will identify task type and guide you through the appropriate workflow.
 
 ### Task Types
 
-| Trigger                  | Type             | Pre-Work     | Verification |
-| ------------------------ | ---------------- | ------------ | ------------ |
-| `orbi fix PR comment...` | 🔧 PR Fix        | Stack scope  | Minimal      |
-| `orbi add feature...`    | ✨ New Feature   | Full         | Full         |
-| `orbi migrate...`        | 🔄 Migration     | Impact + ADR | Full         |
-| `orbi how does...`       | 🔍 Exploration   | None         | None         |
-| `orbi should we...`      | 🏗️ Architecture  | Docs + ADR   | None         |
-| `orbi document...`       | 📝 Documentation | Doc sync     | Minimal      |
-| `orbi cleanup...`        | 🧹 Cleanup       | Impact       | Full         |
+| Trigger                   | Type             | Pre-Work     | Verification |
+| ------------------------- | ---------------- | ------------ | ------------ |
+| `/orbi fix PR comment...` | 🔧 PR Fix        | Stack scope  | Minimal      |
+| `/orbi add feature...`    | ✨ New Feature   | Full         | Full         |
+| `/orbi migrate...`        | 🔄 Migration     | Impact + ADR | Full         |
+| `/orbi how does...`       | 🔍 Exploration   | None         | None         |
+| `/orbi should we...`      | 🏗️ Architecture  | Docs + ADR   | None         |
+| `/orbi document...`       | 📝 Documentation | Doc sync     | Minimal      |
+| `/orbi cleanup...`        | 🧹 Cleanup       | Impact       | Full         |
 
 ### Pre-Work Phase (ALWAYS)
 

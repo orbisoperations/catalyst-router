@@ -150,6 +150,17 @@
       }
     ]
   },
+  "skills": {
+    "directory": ".claude/skills",
+    "catalog": [
+      {
+        "name": "orbi",
+        "file": "orbi.md",
+        "command": "/orbi",
+        "description": "Invoke Orbi orchestrator for guided workflow execution"
+      }
+    ]
+  },
   "workflows": {
     "directory": ".claude/agents/workflows",
     "catalog": [
