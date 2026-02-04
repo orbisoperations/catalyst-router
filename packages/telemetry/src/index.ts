@@ -45,12 +45,6 @@ export type { InstrumentUpgradeOptions } from './middleware/capnweb-transport.js
 // to avoid requiring hono for consumers that only need logs/metrics/tracing.
 
 // ---------------------------------------------------------------------------
-// Builder + DI
-// ---------------------------------------------------------------------------
-export { TelemetryBuilder } from './builder.js'
-export type { ServiceTelemetry, InstrumentRpcOptions } from './types.js'
-
-// ---------------------------------------------------------------------------
 // Unified init / shutdown
 // ---------------------------------------------------------------------------
 
