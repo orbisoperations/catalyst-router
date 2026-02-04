@@ -92,6 +92,10 @@ export interface TokenManager {
   revoke(options: { jti?: string; san?: string }): Promise<void>
   /** Verify a token and check its tracking status */
   verify(token: string, options?: { audience?: string | string[] }): Promise<VerifyResult>
+  /** List tokens, optionally filtered by certificate fingerprint or SAN */
+  listTokens(filter?: { certificateFingerprint?: string; san?: string }): Promise<TokenRecord[]>
+  /** Get all unexpired revoked tokens (for CRL/VRL) */
+  getRevocationList(): Promise<string[]>
 }
 
 /**
