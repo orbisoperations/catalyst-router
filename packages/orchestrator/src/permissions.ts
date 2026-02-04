@@ -28,7 +28,10 @@ export function getRequiredPermission(action: Action): Permission {
   return ACTION_PERMISSION_MAP[action.action] ?? Permission.Admin
 }
 
-import { hasPermission as authHasPermission, isSecretValid as authIsSecretValid } from '@catalyst/auth'
+import {
+  hasPermission as authHasPermission,
+  isSecretValid as authIsSecretValid,
+} from '@catalyst/auth'
 
 /**
  * Checks if the given roles include the required permission.

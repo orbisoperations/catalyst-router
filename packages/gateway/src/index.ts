@@ -1,35 +1,32 @@
-import { Hono } from 'hono';
-import { websocket } from 'hono/bun';
-import { createGatewayHandler } from './graphql/server.js';
-import { GatewayRpcServer, createRpcHandler } from './rpc/server.js';
+import { Hono } from 'hono'
+import { websocket } from 'hono/bun'
+import { createGatewayHandler } from './graphql/server.js'
+import { GatewayRpcServer, createRpcHandler } from './rpc/server.js'
 
+const app = new Hono()
 
-const app = new Hono();
-
-
-
-const { app: graphqlApp, server: gateway } = createGatewayHandler();
+const { app: graphqlApp, server: gateway } = createGatewayHandler()
 
 // Initialize the RPC server logic
 const rpcServer = new GatewayRpcServer(async (config) => {
-    return gateway.reload(config);
-});
-const rpcApp = createRpcHandler(rpcServer);
+  return gateway.reload(config)
+})
+const rpcApp = createRpcHandler(rpcServer)
 
 // Root endpoint
-app.get('/', (c) => c.text('Catalyst GraphQL Gateway is running.'));
+app.get('/', (c) => c.text('Catalyst GraphQL Gateway is running.'))
 
 // Mount the sub-apps
-app.route('/graphql', graphqlApp);
-app.route('/api', rpcApp);
+app.route('/graphql', graphqlApp)
+app.route('/api', rpcApp)
 
-const port = Number(process.env.PORT) || 4000;
-console.log(`Starting server on port ${port}...`);
-console.log('GATEWAY_STARTED');
+const port = Number(process.env.PORT) || 4000
+console.log(`Starting server on port ${port}...`)
+console.log('GATEWAY_STARTED')
 
 export default {
-    fetch: app.fetch,
-    port,
-    hostname: '0.0.0.0',
-    websocket,
-};
+  fetch: app.fetch,
+  port,
+  hostname: '0.0.0.0',
+  websocket,
+}

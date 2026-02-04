@@ -1,9 +1,9 @@
-import { Hono } from 'hono';
-import { createYoga } from 'graphql-yoga';
-import { makeExecutableSchema } from '@graphql-tools/schema';
-import { stitchingDirectives } from '@graphql-tools/stitching-directives';
+import { Hono } from 'hono'
+import { createYoga } from 'graphql-yoga'
+import { makeExecutableSchema } from '@graphql-tools/schema'
+import { stitchingDirectives } from '@graphql-tools/stitching-directives'
 
-const { allStitchingDirectivesTypeDefs, stitchingDirectivesValidator } = stitchingDirectives();
+const { allStitchingDirectivesTypeDefs, stitchingDirectivesValidator } = stitchingDirectives()
 
 const typeDefs = `
     ${allStitchingDirectivesTypeDefs}
@@ -18,39 +18,45 @@ const typeDefs = `
       movies: [Movie!]!
       _sdl: String!
     }
-`;
+`
 
 const resolvers = {
-    Query: {
-        movies: () => [
-            { id: '1', title: 'The Lord of the Rings: The Fellowship of the Ring', director: 'Peter Jackson' },
-            { id: '2', title: 'Super Mario Bros.', director: 'Rocky Morton, Annabel Jankel' },
-            { id: '3', title: 'Pride & Prejudice', director: 'Joe Wright' },
-        ],
-        _sdl: () => typeDefs,
-    },
-};
+  Query: {
+    movies: () => [
+      {
+        id: '1',
+        title: 'The Lord of the Rings: The Fellowship of the Ring',
+        director: 'Peter Jackson',
+      },
+      { id: '2', title: 'Super Mario Bros.', director: 'Rocky Morton, Annabel Jankel' },
+      { id: '3', title: 'Pride & Prejudice', director: 'Joe Wright' },
+    ],
+    _sdl: () => typeDefs,
+  },
+}
 
-const schema = stitchingDirectivesValidator(makeExecutableSchema({
+const schema = stitchingDirectivesValidator(
+  makeExecutableSchema({
     typeDefs,
     resolvers,
-}));
+  })
+)
 
-const app = new Hono();
+const app = new Hono()
 const yoga = createYoga({
-    schema,
-    graphqlEndpoint: '/graphql',
-    landingPage: false,
-});
+  schema,
+  graphqlEndpoint: '/graphql',
+  landingPage: false,
+})
 
-app.all('/graphql', (c) => yoga.fetch(c.req.raw as unknown as Request, c.env));
+app.all('/graphql', (c) => yoga.fetch(c.req.raw as unknown as Request, c.env))
 
-app.get('/health', (c) => c.text('OK'));
+app.get('/health', (c) => c.text('OK'))
 
-const port = Number(process.env.PORT) || 8080;
-console.log(`Movies service starting on port ${port}...`);
+const port = Number(process.env.PORT) || 8080
+console.log(`Movies service starting on port ${port}...`)
 
 export default {
-    fetch: app.fetch,
-    port,
-};
+  fetch: app.fetch,
+  port,
+}

@@ -35,23 +35,23 @@ sequenceDiagram
 
     Note over Orchestrator, ServiceB: Initialization
     Orchestrator->>RPC: Connect (WebSocket /api)
-    
+
     Note over Orchestrator, ServiceB: Configuration Update
     Orchestrator->>RPC: updateConfig({ services: [A, B] })
     RPC->>Core: reload(config)
-    
+
     par Fetch Schemas
         Core->>ServiceA: Introspection Query
         Core->>ServiceB: Introspection Query
     end
-    
+
     ServiceA-->>Core: Schema A
     ServiceB-->>Core: Schema B
-    
+
     Core->>Core: Stitch Schemas
     Core-->>RPC: { success: true }
     RPC-->>Orchestrator: { success: true }
-    
+
     Note over Orchestrator, ServiceB: Traffic
     Client->>Core: Query { A, B }
     Core->>ServiceA: Delegate Query
@@ -67,15 +67,13 @@ sequenceDiagram
 ```typescript
 type GatewayConfig = {
   services: {
-    name: string;
-    url: string;
-    token?: string; // Optional Bearer token
-  }[];
-};
+    name: string
+    url: string
+    token?: string // Optional Bearer token
+  }[]
+}
 
-type GatewayUpdateResult = 
-  | { success: true } 
-  | { success: false; error: string };
+type GatewayUpdateResult = { success: true } | { success: false; error: string }
 ```
 
 ## 🧪 Testing Architecture
@@ -124,6 +122,6 @@ docker run -p 4000:4000 catalyst-gateway
 
 ### Environment Variables
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `PORT` | The HTTP port to listen on. | `4000` |
+| Variable | Description                 | Default |
+| :------- | :-------------------------- | :------ |
+| `PORT`   | The HTTP port to listen on. | `4000`  |

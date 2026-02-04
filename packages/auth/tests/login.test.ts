@@ -6,7 +6,7 @@ import {
   LocalTokenManager,
   BunSqliteTokenStore,
   BunSqliteKeyStore,
-  PersistentLocalKeyManager
+  PersistentLocalKeyManager,
 } from '@catalyst/authorization'
 import type { IKeyManager } from '../src/key-manager/types.js'
 
