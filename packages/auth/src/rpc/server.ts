@@ -3,8 +3,8 @@ import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
-import type { IKeyManager } from '../key-manager/types.js'
 import {
+  type IKeyManager,
   type TokenManager,
   Role,
   Action,
