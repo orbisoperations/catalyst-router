@@ -21,6 +21,7 @@ Traffic is routed via Envoy proxies, not at the IP layer. The "Next Hop" is a ca
 ### Route Tables
 
 Nodes maintain two primary routing tables:
+
 - **Internal Table**: Contains all services known within the local AS.
 - **External Table**: Contains services learned from external peers.
 
@@ -35,9 +36,9 @@ Sent immediately upon connection establishment to negotiate parameters and capab
 - **Version**: Protocol version.
 - **AS Number**: The logical AS ID of the sender.
 - **Hold Time**: Max time (in seconds) between KEEPALIVEs/UPDATEs.
-    - The session Hold Time is negotiated to the lower of the two peers' values.
-    - Default is **180 seconds**.
-    - If negotiated to 0, Keepalives are disabled.
+  - The session Hold Time is negotiated to the lower of the two peers' values.
+  - Default is **180 seconds**.
+  - If negotiated to 0, Keepalives are disabled.
 - **BGP Identifier**: Unique ID of the sending node.
 - **Capabilities**: Supported features (e.g., specific service types).
 - **JWKS** (Optional): JSON Web Key Set (`{ keys: [...] }`) used for verifying signatures if mTLS is not sufficient or for application-layer integrity.
@@ -45,7 +46,8 @@ Sent immediately upon connection establishment to negotiate parameters and capab
 
 ### 2. KEEPALIVE
 
-Sent periodically to maintain the session. 
+Sent periodically to maintain the session.
+
 - Must be sent at a frequency of **Hold Time / 3**.
 - Example: If Hold Time is 180s, Keepalive is sent every 60s.
 - If no message (Keepalive, Update, or Notification) is received within the Hold Time, the peer is considered dead.
@@ -56,11 +58,11 @@ The core message for advertising and withdrawing routes.
 
 - **Withdrawn Routes**: List of service prefixes that are no longer reachable.
 - **Path Attributes**:
-    - `AS_PATH`: List of ASes the route has traversed (loop detection).
-    - `NEXT_HOP`: The Node ID to forward traffic to.
-    - `LOCAL_PREF`: (iBGP only) Preferred exit point.
-    - `COMMUNITIES`: Tags for policy control (e.g., "production", "latency-sensitive").
-    - `ORIGIN_SIGNATURE`: Cryptographic signature of the route payload using the Origin Node's private key.
+  - `AS_PATH`: List of ASes the route has traversed (loop detection).
+  - `NEXT_HOP`: The Node ID to forward traffic to.
+  - `LOCAL_PREF`: (iBGP only) Preferred exit point.
+  - `COMMUNITIES`: Tags for policy control (e.g., "production", "latency-sensitive").
+  - `ORIGIN_SIGNATURE`: Cryptographic signature of the route payload using the Origin Node's private key.
 - **Network Layer Reachability Information (NLRI)**: The service prefixes being advertised (e.g., `users.dc01.orbis`).
 
 ### 4. NOTIFICATION
@@ -106,12 +108,12 @@ sequenceDiagram
     participant B as Node B
 
     Note over A, B: Session Idle (Negotiated HoldTime = 60s)
-    
+
     loop Every 20s (HoldTime / 3)
         A->>B: KEEPALIVE
         B->>A: KEEPALIVE
     end
-    
+
     Note right of A: If no msg received in 60s,<br/>Close Session
 ```
 
@@ -127,7 +129,7 @@ sequenceDiagram
 
     Note over Svc, A: New Service Registered
     Svc->>A: Register "api.hq.corp"
-    
+
     Note over A, B: Announcement
     A->>B: UPDATE (NLRI=["api.hq.corp"], NextHop=A)
     B->>B: Install Route "api.hq.corp" -> A
@@ -150,12 +152,12 @@ sequenceDiagram
     participant B as Node B
 
     A->>B: UPDATE (Malformed Data)
-    
+
     Note right of B: Detects Error (Header Error)
-    
+
     B->>A: NOTIFICATION (Code=1, Subcode=2)
     B->>B: Close TCP Connection
-    
+
     Note left of A: Receives NOTIFICATION
     A->>A: Close TCP Connection
 ```
@@ -163,13 +165,14 @@ sequenceDiagram
 ## Data Structures
 
 ### Service Route
+
 ```typescript
 interface ServiceRoute {
-  prefix: string; // e.g., "users.dc01.orbis"
-  path: number[]; // AS_PATH: [100, 200]
-  nextHop: string; // Node ID of the peer
-  attributes: Record<string, any>;
-  signature: string; // Cryptographic signature by the origin
-  timestamp: number; // Unix timestamp of route creation (Replay Protection)
+  prefix: string // e.g., "users.dc01.orbis"
+  path: number[] // AS_PATH: [100, 200]
+  nextHop: string // Node ID of the peer
+  attributes: Record<string, any>
+  signature: string // Cryptographic signature by the origin
+  timestamp: number // Unix timestamp of route creation (Replay Protection)
 }
 ```

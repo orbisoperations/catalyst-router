@@ -1,11 +1,6 @@
 // Re-export for library usage
 export * from './keys.js'
-export {
-  signToken,
-  verifyToken,
-  decodeToken,
-  SignOptionsSchema,
-} from './jwt.js'
+export { signToken, verifyToken, decodeToken, SignOptionsSchema } from './jwt.js'
 export type { SignOptions, VerifyOptions, VerifyResult } from './jwt.js'
 export * from './revocation.js'
 export * from './key-manager/index.js'

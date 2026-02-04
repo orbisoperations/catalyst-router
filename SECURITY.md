@@ -7,6 +7,7 @@ Peering security uses a Defense-in-Depth approach, layering Transport Security (
 ## 1. Transport Security (mTLS)
 
 **Requirement**: Mandatory for all connections.
+
 - All BGP sessions MUST run over TLS 1.3.
 - Mutual Authentication (mTLS) is required: both client and server must present valid certificates signed by a trusted CA (e.g., the internal PKI of the AS).
 - The Common Name (CN) or SAN in the certificate must match the `BGP Identifier` (Node ID).
@@ -16,17 +17,19 @@ Peering security uses a Defense-in-Depth approach, layering Transport Security (
 Verified during the exchange of the `OPEN` message.
 
 ### Pre-Shared Key (PSK)
+
 - **Field**: `psk` (optional) in `OPEN` message.
 - **Usage**: Contains the Key ID.
 - **Verification**: The receiver looks up the shared secret associated with the Key ID. The message framing (or TLS exporter) is verified using this secret to ensure the peer possesses it.
 
 ### JSON Web Key Set (JWKS)
+
 - **Field**: `jwks` (optional) in `OPEN` message.
 - **Usage**: Contains the public keys (`{ keys: [...] }`) of the sending AS.
 - **Verification**:
-    - Allows the receiver to dynamically learn the peer's public keys.
-    - Subsequent messages (or the OPEN message itself via a detached signature) can be verified against these keys.
-    - Useful for **External Peerings** (eBGP) where a shared PKI might not exist.
+  - Allows the receiver to dynamically learn the peer's public keys.
+  - Subsequent messages (or the OPEN message itself via a detached signature) can be verified against these keys.
+  - Useful for **External Peerings** (eBGP) where a shared PKI might not exist.
 
 ## Open Negotiation Flow
 
@@ -34,6 +37,7 @@ Verified during the exchange of the `OPEN` message.
     - If certs are invalid, connection is dropped immediately.
 
 2.  **Initiator** sends `OPEN`:
+
     ```json
     {
       "type": "OPEN",
@@ -60,7 +64,9 @@ Verified during the exchange of the `OPEN` message.
 We support three models for Identity and JWT signing. **Strategy 2 (Root Authority)** is the current implementation for Milestones 1 & 2.
 
 ### Strategy 2: Root Node Authority (Current Implementation)
+
 **Mechanism**:
+
 - The **Root Node** acts as the centralized Signing Authority.
 - It holds the AS Private Key.
 - All other nodes proxy signing requests to the Root Node (or receive delegated keys in a simplified manner).
@@ -72,37 +78,41 @@ We support three models for Identity and JWT signing. **Strategy 2 (Root Authori
 ### Future / Alternative Strategies
 
 #### Strategy 1: External Signing (OIDC / OAuth2)
+
 **Mechanism**:
+
 - An external Identity Provider (IdP) or dedicated signing service handles all key operations.
 - The Catalyst Node is configured with a `jwks_uri` pointing to this external service.
 - **Use Case**: Integrating with existing corporate SSO (Okta, Auth0) or Cloud KMS.
 
 #### Strategy 3: Distributed PKI (Mesh Identity)
+
 **Mechanism**:
+
 - Each Node generates its own Key Pair.
 - The Node's Certificate is signed by the AS Root CA (during registration).
-- **Minting**: Any authorized node can mint JWTs for the AS, signed with its *own* private key.
+- **Minting**: Any authorized node can mint JWTs for the AS, signed with its _own_ private key.
 - **Validation**: Peers validate the JWT signature against the Node's public key, and verify the Node's Cert chain against the Root CA.
 - **Pros**: No SPOF, high availability, effectively "Mesh Identity".
 
 ## 4. Route Origin Security (PKI & Route Signing)
 
-
 To mitigate BGP hijacking and route spoofing, we implement a PKI-based Route Origin Authorization mechanism. This ensures that only authorized nodes can announce services for a given Autonomous System.
 
 ### Key Infrastructure (PKI)
+
 1.  **Root Authority (Root Node)**:
     - The first node in an Autonomous System (AS) initializes as the **Root Authority**.
     - It generates the **Root CA Certificate** and Private Key.
     - It defines the **Root Domain** (e.g., `*.example.internal`).
-    - *Future*: Users can supply their own Root CA material.
+    - _Future_: Users can supply their own Root CA material.
 
 2.  **Node Registration & Hierarchical Trust**:
     - New nodes MUST register with the Root Node to join the mesh.
     - **Response Payload**: The Root Node responds with:
-        - `jwks`: The current public key set for validation.
-        - `signing_service`: The address (URL) of the node responsible for signing JWTs (initially the Root Node itself, later a distributed service).
-        - `ca_cert`: The public CA certificate for verifying mTLS.
+      - `jwks`: The current public key set for validation.
+      - `signing_service`: The address (URL) of the node responsible for signing JWTs (initially the Root Node itself, later a distributed service).
+      - `ca_cert`: The public CA certificate for verifying mTLS.
 
 3.  **Node Keys**:
     - As **Internal Peers** come online, they generate a specific private/public key pair for route signing.
@@ -110,6 +120,7 @@ To mitigate BGP hijacking and route spoofing, we implement a PKI-based Route Ori
     - Each internal peer AS effectively maintains a CA infrastructure anchored by the Root Peer.
 
 ### Route Signing & Propagation
+
 1.  **Signing**: As services come online, the hosting node creates a service record and **signs the route payload** (NLRI + Attributes) using its private key.
 2.  **Propagation**: The signed route payload is sent to peers in the `UPDATE` message.
 3.  **Validation**:
@@ -123,10 +134,11 @@ To mitigate BGP hijacking and route spoofing, we implement a PKI-based Route Ori
 While the above measures mitigate the most critical risks, standard BGP vulnerabilities still apply. We are tracking the following for future mitigation:
 
 ### A. AS Path Manipulation
+
 - **Risk**: A compromised or malicious peer could modify the `AS_PATH` attribute (e.g., shortening it) to attract traffic through itself, even if the Origin is valid.
 - **Mitigation (Planned)**:
-    - **Peer Locking**: Static configuration of expected next-hops for critical prefixes.
-    - **Path Validation**: Future extension of the signing mechanism to include Path Signatures (similar to BGPsec).
+  - **Peer Locking**: Static configuration of expected next-hops for critical prefixes.
+  - **Path Validation**: Future extension of the signing mechanism to include Path Signatures (similar to BGPsec).
 
 ```mermaid
 sequenceDiagram
@@ -146,9 +158,10 @@ sequenceDiagram
 ```
 
 ### B. Route Leaks
+
 - **Risk**: An AS might accidentally re-advertise routes learned from one provider to another, becoming an unintended transit node.
 - **Mitigation**:
-    - **Export Policies**: All nodes MUST implement strict Export Filters (e.g., "Only export local routes to upstream", "Don't export upstream routes to other upstreams").
+  - **Export Policies**: All nodes MUST implement strict Export Filters (e.g., "Only export local routes to upstream", "Don't export upstream routes to other upstreams").
 
 ```mermaid
 sequenceDiagram
@@ -158,19 +171,20 @@ sequenceDiagram
 
     P->>C: UPDATE (Prefix=Internet)
     C->>C: Import Route
-    
+
     Note over C: Export Policy: <br/>"Do NOT export Provider routes to other Providers"
 
     C->>P2: (No Message Sent)
-    
+
     C->>C: Export Local Routes Only
     C->>P2: UPDATE (Prefix=MyService)
 ```
 
 ### C. Resource Exhaustion
+
 - **Risk**: A peer could flood the session with valid but excessive routes, causing memory exhaustion (OOM).
 - **Mitigation**:
-    - **Max-Prefix Limits**: Sessions will be configured with a maximum number of accepted routes (e.g., 1000). If this limit is exceeded, the session is dropped with a `NOTIFICATION`.
+  - **Max-Prefix Limits**: Sessions will be configured with a maximum number of accepted routes (e.g., 1000). If this limit is exceeded, the session is dropped with a `NOTIFICATION`.
 
 ```mermaid
 sequenceDiagram
@@ -182,7 +196,7 @@ sequenceDiagram
     loop Flood
         A->>V: UPDATE (Prefix=P1...P999)
     end
-    
+
     A->>V: UPDATE (Prefix=P1000)
     V->>V: Count = 1000 (Warning)
 
@@ -192,9 +206,10 @@ sequenceDiagram
 ```
 
 ### D. Replay Attacks
+
 - **Risk**: An attacker could capture a valid signed `UPDATE` message and replay it later to confusing routing state.
 - **Mitigation**:
-    - **Timestamps**: The signed payload includes a creation timestamp. Routes older than a configurable window (e.g., 24h) are considered stale and rejected, forcing a refresh.
+  - **Timestamps**: The signed payload includes a creation timestamp. Routes older than a configurable window (e.g., 24h) are considered stale and rejected, forcing a refresh.
 
 ```mermaid
 sequenceDiagram

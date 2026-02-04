@@ -262,6 +262,8 @@ chore: update dependencies
 
 This project uses **Graphite** for stacked PRs. PRs form a linked list of changes where each PR builds on the previous one.
 
+**IMPORTANT: Always use Graphite (`gt`) commands instead of raw `git` commands for branching, committing, and pushing.**
+
 ### Understanding the Stack
 
 ```bash
@@ -273,11 +275,18 @@ gt branch info        # Info about current branch
 ### Common Workflow
 
 ```bash
-gt create -m "feat: add feature"   # Create new stacked branch
-gt modify -m "update message"      # Amend current branch
+gt create -m "feat: add feature"   # Create new stacked branch (stages all changes)
+gt modify -m "update message"      # Amend current branch (stages all changes)
 gt submit                          # Push stack to GitHub
 gt sync                            # Sync with trunk and restack
 ```
+
+**Key Points:**
+
+- `gt create` automatically stages ALL changes when creating a new branch/commit
+- `gt modify` automatically stages ALL changes when amending the current branch
+- **Never use `git add` before `gt create` or `gt modify`** - changes are staged automatically
+- Use `gt` commands exclusively for commits to maintain stack integrity
 
 ### Scoping Changes
 

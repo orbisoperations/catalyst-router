@@ -1,4 +1,4 @@
-declare module "*.cedar" {
-    const content: string;
-    export default content;
+declare module '*.cedar' {
+  const content: string
+  export default content
 }
