@@ -1,3 +1,8 @@
+---
+name: Architecture Workflow
+description: Workflow for design decisions
+---
+
 # Architecture Workflow
 
 ## Description

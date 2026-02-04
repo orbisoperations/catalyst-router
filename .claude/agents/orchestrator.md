@@ -1,3 +1,8 @@
+---
+name: orchestrator
+description: Main entry point
+---
+
 # Orbi - Catalyst Development Orchestrator
 
 ## Description

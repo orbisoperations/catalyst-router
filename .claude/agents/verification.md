@@ -1,3 +1,8 @@
+---
+name: Verification
+description: Run verification chain
+---
+
 # Verification Agent
 
 ## Description

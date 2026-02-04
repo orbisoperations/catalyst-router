@@ -1,3 +1,8 @@
+---
+name: Pre-Work
+description: Run full pre-work phase
+---
+
 # Pre-Work Agent (Composite)
 
 ## Description

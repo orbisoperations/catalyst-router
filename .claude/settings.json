@@ -1,5 +1,5 @@
 {
-  "$schema": "https://claude.ai/schemas/claude-code-settings.json",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "projectName": "catalyst-node",
   "description": "Distributed control and data plane system for secure service peering",
   "orchestrator": {
@@ -18,7 +18,8 @@
       "workflow": ".claude/agents/workflows/pr-fix.md",
       "triggers": ["PR comment", "fix feedback", "reviewer asked", "address comment", "PR review"],
       "preWork": ["stack-scope"],
-      "verification": "minimal"
+      "verification": "minimal",
+      "model": "sonnet"
     },
     {
       "id": "new-feature",
@@ -28,7 +29,8 @@
       "workflow": ".claude/agents/workflows/new-feature.md",
       "triggers": ["add", "implement", "create new", "build", "new feature"],
       "preWork": ["stack-scope", "documentation", "adr-compliance"],
-      "verification": "full"
+      "verification": "full",
+      "model": "opus"
     },
     {
       "id": "migration",
@@ -38,7 +40,8 @@
       "workflow": ".claude/agents/workflows/migration.md",
       "triggers": ["migrate", "refactor", "move", "rename across", "update pattern"],
       "preWork": ["cross-package-impact", "adr-compliance"],
-      "verification": "full"
+      "verification": "full",
+      "model": "opus"
     },
     {
       "id": "exploration",
@@ -48,7 +51,9 @@
       "workflow": ".claude/agents/workflows/exploration.md",
       "triggers": ["understand", "investigate", "how does", "find", "research", "explain"],
       "preWork": [],
-      "verification": "none"
+      "verification": "none",
+      "model": "sonnet",
+      "modelNote": "Use opus for deep architectural exploration"
     },
     {
       "id": "architecture",
@@ -58,7 +63,8 @@
       "workflow": ".claude/agents/workflows/architecture.md",
       "triggers": ["design", "should we", "trade-offs", "approach for", "RFC", "decide"],
       "preWork": ["documentation", "adr-compliance"],
-      "verification": "none"
+      "verification": "none",
+      "model": "opus"
     },
     {
       "id": "documentation",
@@ -68,7 +74,8 @@
       "workflow": ".claude/agents/workflows/documentation.md",
       "triggers": ["document", "clarify docs", "update readme", "explain in docs"],
       "preWork": ["doc-sync"],
-      "verification": "minimal"
+      "verification": "minimal",
+      "model": "sonnet"
     },
     {
       "id": "cleanup",
@@ -78,7 +85,8 @@
       "workflow": ".claude/agents/workflows/cleanup.md",
       "triggers": ["remove", "delete unused", "dead code", "simplify", "cruft", "clean up"],
       "preWork": ["cross-package-impact"],
-      "verification": "full"
+      "verification": "full",
+      "model": "sonnet"
     }
   ],
   "agents": {
@@ -88,49 +96,57 @@
         "name": "orchestrator",
         "description": "Main entry point - identifies task type and guides workflow",
         "type": "Explore",
-        "file": "orchestrator.md"
+        "file": "orchestrator.md",
+        "model": "sonnet"
       },
       {
         "name": "pre-work",
         "description": "Run full pre-work phase (stack scope + docs + ADR compliance)",
         "type": "Explore",
-        "file": "pre-work.md"
+        "file": "pre-work.md",
+        "model": "sonnet"
       },
       {
         "name": "stack-scope",
         "description": "Understand current Graphite stack boundaries",
         "type": "Explore",
-        "file": "stack-scope.md"
+        "file": "stack-scope.md",
+        "model": "haiku"
       },
       {
         "name": "documentation",
         "description": "Read and synthesize relevant documentation",
         "type": "Explore",
-        "file": "documentation.md"
+        "file": "documentation.md",
+        "model": "sonnet"
       },
       {
         "name": "adr-compliance",
         "description": "Check Architecture Decision Record compliance",
         "type": "Explore",
-        "file": "adr-compliance.md"
+        "file": "adr-compliance.md",
+        "model": "sonnet"
       },
       {
         "name": "verification",
         "description": "Run lint, format, typecheck, and tests",
         "type": "Bash",
-        "file": "verification.md"
+        "file": "verification.md",
+        "model": "haiku"
       },
       {
         "name": "cross-package-impact",
         "description": "Assess ripple effects of shared code changes",
         "type": "Explore",
-        "file": "cross-package-impact.md"
+        "file": "cross-package-impact.md",
+        "model": "opus"
       },
       {
         "name": "doc-sync",
         "description": "Check if documentation needs updates",
         "type": "Explore",
-        "file": "doc-sync.md"
+        "file": "doc-sync.md",
+        "model": "sonnet"
       }
     ]
   },

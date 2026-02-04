@@ -1,3 +1,8 @@
+---
+name: Stack Scope
+description: Understand stack boundaries
+---
+
 # Stack Scope Agent
 
 ## Description

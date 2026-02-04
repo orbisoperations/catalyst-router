@@ -1,3 +1,8 @@
+---
+name: Cross-Package Impact
+description: Assess ripple effects of shared code changes
+---
+
 # Cross-Package Impact Agent
 
 ## Description

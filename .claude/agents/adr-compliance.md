@@ -1,3 +1,8 @@
+---
+name: ADR Compliance
+description: Check Architecture Decision Record compliance
+---
+
 # ADR Compliance Agent
 
 ## Description
@@ -68,25 +73,22 @@ ADR Compliance Check: User Activity Logging
    import { getLogger } from '@catalyst/telemetry'
    const logger = getLogger(['auth', 'activity'])
    logger.info`User ${userId} performed ${action}`
-````
+   ```
 
 ❌ Non-Compliant: ADR-0004 (SQLite Storage Backend)
-Issue: Storing logs in JSON file instead of SQLite
-Required: All persistent state must use SQLite via bun:sqlite
-Fix: Create ActivityLogStore implementing the Store interface
-with SqliteStore backend
+   Issue: Storing logs in JSON file instead of SQLite
+   Required: All persistent state must use SQLite via bun:sqlite
+   Fix: Create ActivityLogStore implementing the Store interface
+   with SqliteStore backend
 
 ✅ Compliant: ADR-0001 (OpenTelemetry)
-Using @catalyst/telemetry satisfies OTEL requirements
+   Using @catalyst/telemetry satisfies OTEL requirements
 
 N/A: ADR-0007 (Certificate-Bound Tokens)
-Activity logging doesn't involve JWT tokens
+   Activity logging doesn't involve JWT tokens
 
 N/A: ADR-0008 (Permission Policy Schema)
-Activity logging doesn't require authorization checks
+   Activity logging doesn't require authorization checks
 
 Recommendation: Refactor to use LogTape + SQLite. No ADR amendments needed.
-
-```
-
-```
+````

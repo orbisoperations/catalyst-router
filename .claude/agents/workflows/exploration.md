@@ -1,3 +1,8 @@
+---
+name: Exploration Workflow
+description: Read-only workflow for understanding code
+---
+
 # Exploration Workflow
 
 ## Description
@@ -192,7 +197,7 @@ export async function verifyToken(
 ): Promise<VerifyResult> {
   // ... [shows relevant code]
 }
-````
+```
 
 Patterns Used:
 
@@ -211,13 +216,11 @@ Open Questions:
 - Certificate binding only checked if cnf claim present
 
 Want me to dive deeper into any part of this?
-
-```
+````
 
 ## Output Format
 
 ```
-
 🔍 Exploration: [Topic]
 ═══════════════════════════════════════
 
@@ -228,15 +231,12 @@ Code Analysis:
 [What code does]
 
 Key Files:
-
 - [file]: [purpose]
 
 Patterns:
-
 - [patterns observed]
 
 Insights:
-
 - [key learnings]
 
 Questions Answered:
@@ -245,7 +245,4 @@ Questions Answered:
 
 Remaining Questions:
 ❓ [anything still unclear]
-
-```
-
 ```

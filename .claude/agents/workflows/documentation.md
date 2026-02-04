@@ -1,3 +1,8 @@
+---
+name: Documentation Workflow
+description: Workflow for documentation updates
+---
+
 # Documentation Workflow
 
 ## Description
@@ -109,17 +114,17 @@ For README sections:
 ```typescript
 // Example code
 ```
-````
 
 ### Configuration
 
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
 | [opt]  | [t]  | [def]   | [desc]      |
-
-```
+````
 
 For ADR updates:
+
+```
 [Draft following ADR template]
 ```
 
@@ -210,7 +215,7 @@ The auth service supports seamless key rotation with zero-downtime.
 
 ### Grace Period
 [explanation of overlap]
-````
+```
 
 2. Add to SECURITY.md:
 
@@ -235,18 +240,16 @@ The auth service supports seamless key rotation with zero-downtime.
 ```
 
 Want me to apply these documentation improvements?
-
-```
+````
 
 ## Documentation Types Reference
 
-| Type | Location | When to Use |
-|------|----------|-------------|
-| JSDoc | In code | Function/class documentation |
-| README | packages/*/README.md | Package overview and usage |
-| Architecture | ARCHITECTURE.md | System design |
-| Security | SECURITY.md | Security-related docs |
-| ADR | docs/adr/*.md | Decision records |
-| CLAUDE.md | CLAUDE.md | AI assistant patterns |
-| Inline | Code comments | Complex logic explanation |
-```
+| Type         | Location              | When to Use                  |
+| ------------ | --------------------- | ---------------------------- |
+| JSDoc        | In code               | Function/class documentation |
+| README       | packages/\*/README.md | Package overview and usage   |
+| Architecture | ARCHITECTURE.md       | System design                |
+| Security     | SECURITY.md           | Security-related docs        |
+| ADR          | docs/adr/\*.md        | Decision records             |
+| CLAUDE.md    | CLAUDE.md             | AI assistant patterns        |
+| Inline       | Code comments         | Complex logic explanation    |
