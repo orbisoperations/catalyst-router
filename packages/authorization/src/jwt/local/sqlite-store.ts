@@ -3,13 +3,13 @@ import type { TokenStore, TokenRecord, EntityType } from '../index.js'
 
 interface TokenRow {
   jti: string
-  expiry: number
-  cfn: string | null
-  sans: string
+  expires_at: number
+  certificate_fingerprint: string | null
+  subject_alternative_names: string
   entity_id: string
   entity_name: string
   entity_type: string
-  revoked: number
+  is_revoked: number
 }
 
 export class BunSqliteTokenStore implements TokenStore {
@@ -22,74 +22,78 @@ export class BunSqliteTokenStore implements TokenStore {
 
   private initialize() {
     this.db.run(`
-      CREATE TABLE IF NOT EXISTS tokens (
+      CREATE TABLE IF NOT EXISTS token (
         jti TEXT PRIMARY KEY,
-        expiry INTEGER NOT NULL,
-        cfn TEXT,
-        sans TEXT NOT NULL, -- JSON array
+        expires_at INTEGER NOT NULL,
+        certificate_fingerprint TEXT,
+        subject_alternative_names TEXT NOT NULL, -- JSON array
         entity_id TEXT NOT NULL,
         entity_name TEXT NOT NULL,
         entity_type TEXT NOT NULL,
-        revoked INTEGER NOT NULL DEFAULT 0 -- 0=false, 1=true
+        is_revoked INTEGER NOT NULL DEFAULT 0 -- 0=false, 1=true
       )
     `)
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_tokens_expiry ON tokens(expiry)`)
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_tokens_cfn ON tokens(cfn)`)
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_token_expires_at ON token(expires_at)`)
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_token_certificate_fingerprint ON token(certificate_fingerprint)`
+    )
   }
 
   async recordToken(record: TokenRecord): Promise<void> {
     const stmt = this.db.prepare(`
-      INSERT INTO tokens (jti, expiry, cfn, sans, entity_id, entity_name, entity_type, revoked)
-      VALUES ($jti, $expiry, $cfn, $sans, $entityId, $entityName, $entityType, $revoked)
+      INSERT INTO token (jti, expires_at, certificate_fingerprint, subject_alternative_names, entity_id, entity_name, entity_type, is_revoked)
+      VALUES ($jti, $expires_at, $certificate_fingerprint, $subject_alternative_names, $entity_id, $entity_name, $entity_type, $is_revoked)
     `)
     stmt.run({
       $jti: record.jti,
-      $expiry: record.expiry,
-      $cfn: record.cfn ?? null,
-      $sans: JSON.stringify(record.sans),
-      $entityId: record.entityId,
-      $entityName: record.entityName,
-      $entityType: record.entityType,
-      $revoked: record.revoked ? 1 : 0,
+      $expires_at: record.expiry,
+      $certificate_fingerprint: record.cfn ?? null,
+      $subject_alternative_names: JSON.stringify(record.sans),
+      $entity_id: record.entityId,
+      $entity_name: record.entityName,
+      $entity_type: record.entityType,
+      $is_revoked: record.revoked ? 1 : 0,
     })
   }
 
   async findToken(jti: string): Promise<TokenRecord | null> {
-    const stmt = this.db.prepare('SELECT * FROM tokens WHERE jti = $jti')
+    const stmt = this.db.prepare('SELECT * FROM token WHERE jti = $jti')
     const result = stmt.get({ $jti: jti }) as TokenRow | null
     if (!result) return null
 
     return {
       jti: result.jti,
-      expiry: result.expiry,
-      cfn: result.cfn || undefined,
-      sans: JSON.parse(result.sans),
+      expiry: result.expires_at,
+      cfn: result.certificate_fingerprint || undefined,
+      sans: JSON.parse(result.subject_alternative_names),
       entityId: result.entity_id,
       entityName: result.entity_name,
       entityType: result.entity_type as EntityType,
-      revoked: result.revoked === 1,
+      revoked: result.is_revoked === 1,
     }
   }
 
   async revokeToken(jti: string): Promise<void> {
-    this.db.run('UPDATE tokens SET revoked = 1 WHERE jti = ?', [jti])
+    this.db.run('UPDATE token SET is_revoked = 1 WHERE jti = ?', [jti])
   }
 
   async revokeBySan(san: string): Promise<void> {
     // Simple LIKE search for JSON array string
-    this.db.run('UPDATE tokens SET revoked = 1 WHERE sans LIKE ?', [`%${san}%`])
+    this.db.run('UPDATE token SET is_revoked = 1 WHERE subject_alternative_names LIKE ?', [
+      `%${san}%`,
+    ])
   }
 
   async isRevoked(jti: string): Promise<boolean> {
-    const stmt = this.db.prepare('SELECT revoked FROM tokens WHERE jti = $jti')
-    const row = stmt.get({ $jti: jti }) as { revoked: number } | null
-    return row ? row.revoked === 1 : false
+    const stmt = this.db.prepare('SELECT is_revoked FROM token WHERE jti = $jti')
+    const row = stmt.get({ $jti: jti }) as { is_revoked: number } | null
+    return row ? row.is_revoked === 1 : false
   }
 
   async getRevocationList(): Promise<string[]> {
     const now = Math.floor(Date.now() / 1000)
     const rows = this.db
-      .query('SELECT jti FROM tokens WHERE revoked = 1 AND expiry > ?')
+      .query('SELECT jti FROM token WHERE is_revoked = 1 AND expires_at > ?')
       .all(now) as { jti: string }[]
     return rows.map((r) => r.jti)
   }
@@ -98,16 +102,16 @@ export class BunSqliteTokenStore implements TokenStore {
     certificateFingerprint?: string
     san?: string
   }): Promise<TokenRecord[]> {
-    let query = 'SELECT * FROM tokens WHERE 1=1'
+    let query = 'SELECT * FROM token WHERE 1=1'
     const params: Record<string, string | number | null> = {}
 
     if (filter?.certificateFingerprint) {
-      query += ' AND cfn = $cfn'
+      query += ' AND certificate_fingerprint = $cfn'
       params.$cfn = filter.certificateFingerprint
     }
 
     if (filter?.san) {
-      query += ' AND sans LIKE $san'
+      query += ' AND subject_alternative_names LIKE $san'
       params.$san = `%${filter.san}%`
     }
 
@@ -115,13 +119,13 @@ export class BunSqliteTokenStore implements TokenStore {
     const rows = stmt.all(params) as TokenRow[]
     return rows.map((row) => ({
       jti: row.jti,
-      expiry: row.expiry,
-      cfn: row.cfn || undefined,
-      sans: JSON.parse(row.sans),
+      expiry: row.expires_at,
+      cfn: row.certificate_fingerprint || undefined,
+      sans: JSON.parse(row.subject_alternative_names),
       entityId: row.entity_id,
       entityName: row.entity_name,
       entityType: row.entity_type as EntityType,
-      revoked: row.revoked === 1,
+      revoked: row.is_revoked === 1,
     }))
   }
 }
