@@ -1,3 +1,10 @@
+/**
+ * @deprecated This entire file should be replaced with Cedar policy engine
+ * TODO: Migrate orchestrator authorization to use Cedar (@catalyst/authorization/policy)
+ *       After migration, this file can be deleted
+ * See ADR-0008 for Cedar migration plan
+ */
+
 import type { Action } from './schema.js'
 import { Actions } from './action-types.js'
 
@@ -6,6 +13,7 @@ export { Permission } from '@catalyst/auth'
 export type { Role } from '@catalyst/auth'
 
 /**
+ * @deprecated Use Cedar policies instead
  * Maps action types to their required permissions.
  * Unknown actions require explicit admin privileges.
  */
