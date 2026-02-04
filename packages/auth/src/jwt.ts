@@ -2,11 +2,11 @@ import * as jose from 'jose'
 import { z } from 'zod'
 import { ALGORITHM, type KeyPair } from './keys.js'
 
-// Default token expiration (1 hour)
-const DEFAULT_EXPIRATION = '1h'
+// Default token expiration (1 hour) in milliseconds
+const DEFAULT_EXPIRATION_MS = 60 * 60 * 1000
 
-// Maximum allowed token lifetime (52 weeks in seconds)
-const MAX_LIFETIME_SECONDS = 52 * 7 * 24 * 60 * 60
+// Maximum allowed token lifetime (52 weeks in milliseconds)
+const MAX_LIFETIME_MS = 52 * 7 * 24 * 60 * 60 * 1000
 
 // Default issuer
 const DEFAULT_ISSUER = process.env.CATALYST_AUTH_ISSUER || 'catalyst-auth'
@@ -23,7 +23,7 @@ const RESERVED_CLAIMS = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'] as con
 export const SignOptionsSchema = z.object({
   subject: z.string(),
   audience: z.string().or(z.array(z.string())).optional(),
-  expiresIn: z.string().optional(), // e.g., '1h', '7d', '30m'
+  expiresAt: z.number().int().positive().optional(), // Unix timestamp in ms
   claims: z.record(z.string(), z.unknown()).optional(),
 })
 
@@ -31,31 +31,6 @@ export type SignOptions = z.infer<typeof SignOptionsSchema>
 
 import type { VerifyResult } from '@catalyst/authorization'
 export type { VerifyResult }
-
-/**
- * Parse a duration string (e.g., '1h', '7d', '30m') to seconds
- * Returns null if the format is invalid
- */
-function parseDurationToSeconds(duration: string): number | null {
-  const match = duration.match(/^(\d+)([smhd])$/)
-  if (!match) return null
-
-  const value = parseInt(match[1], 10)
-  const unit = match[2]
-
-  switch (unit) {
-    case 's':
-      return value
-    case 'm':
-      return value * 60
-    case 'h':
-      return value * 60 * 60
-    case 'd':
-      return value * 24 * 60 * 60
-    default:
-      return null
-  }
-}
 
 /**
  * Generate a unique token ID (jti) for replay protection
@@ -71,14 +46,17 @@ export async function signToken(keyPair: KeyPair, options: SignOptions): Promise
   // Validate input
   const validated = SignOptionsSchema.parse(options)
 
-  // Validate and enforce maximum token lifetime
-  const expiresIn = validated.expiresIn ?? DEFAULT_EXPIRATION
-  const lifetimeSeconds = parseDurationToSeconds(expiresIn)
-  if (lifetimeSeconds === null) {
-    throw new Error(`Invalid expiration format: ${expiresIn}. Use format like '1h', '30m', '7d'`)
+  const now = Date.now()
+  const expiresAt = validated.expiresAt ?? now + DEFAULT_EXPIRATION_MS
+
+  // Validate expiration is in the future
+  if (expiresAt <= now) {
+    throw new Error(`Expiration time ${expiresAt} must be in the future (now: ${now})`)
   }
-  if (lifetimeSeconds > MAX_LIFETIME_SECONDS) {
-    throw new Error(`Token lifetime ${expiresIn} exceeds maximum allowed (52 weeks)`)
+
+  // Validate max lifetime
+  if (expiresAt - now > MAX_LIFETIME_MS) {
+    throw new Error(`Token lifetime exceeds maximum allowed (52 weeks)`)
   }
 
   // Strip reserved claims to prevent override of standard JWT claims
@@ -98,7 +76,8 @@ export async function signToken(keyPair: KeyPair, options: SignOptions): Promise
     builder.setAudience(validated.audience)
   }
 
-  builder.setExpirationTime(expiresIn)
+  // jose expects seconds for numeric input
+  builder.setExpirationTime(Math.floor(expiresAt / 1000))
 
   return builder.sign(keyPair.privateKey)
 }

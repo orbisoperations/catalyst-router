@@ -125,7 +125,7 @@ export class PersistentLocalKeyManager implements IKeyManager {
       .setSubject(options.subject)
       .setIssuedAt()
       .setJti(crypto.randomUUID())
-      .setExpirationTime(options.expiresIn ?? '1h')
+      .setExpirationTime(Math.floor((options.expiresAt ?? Date.now() + 3600000) / 1000))
       .setAudience(options.audience ?? [])
 
     return builder.sign(this.currentKey.privateKey)

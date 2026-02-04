@@ -2,11 +2,6 @@ import type { UserStore } from './stores/types.js'
 import { type TokenManager, type Role } from '@catalyst/authorization'
 import { verifyPassword, DUMMY_HASH } from './password.js'
 
-/**
- * Default JWT expiry: 1 hour
- */
-const DEFAULT_TOKEN_EXPIRY = '1h'
-
 export interface LoginInput {
   /** User email address */
   email: string
@@ -54,23 +49,24 @@ export class LoginService {
     // Update lastLoginAt
     await this.userStore.update(user.id, { lastLoginAt: new Date() })
 
+    // Calculate expiry (1 hour from now)
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+
     // Issue JWT with user claims
     const token = await this.tokenManager.mint({
       subject: user.id,
-      expiresIn: DEFAULT_TOKEN_EXPIRY,
+      expiresAt: expiresAt.getTime(),
       roles: user.roles as Role[],
       entity: {
         id: user.id,
         name: user.email,
         type: 'user',
+        role: user.roles[0] as Role,
       },
       claims: {
         orgId: user.orgId,
       },
     })
-
-    // Calculate expiry (1 hour from now)
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
 
     return { success: true, token, expiresAt }
   }
