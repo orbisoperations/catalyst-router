@@ -155,11 +155,15 @@
     "catalog": [
       {
         "name": "orbi",
-        "file": "orbi.md",
+        "file": "orbi/SKILL.md",
         "command": "/orbi",
-        "description": "Invoke Orbi orchestrator for guided workflow execution"
+        "description": "Invoke Orbi orchestrator for guided workflow execution. Use for PR fixes, new features, migrations, exploration, architecture decisions, documentation, and cleanup tasks."
       }
     ]
+  },
+  "commands": {
+    "directory": ".claude/commands",
+    "note": "Slash commands are also available at .claude/commands/orbi.md as fallback"
   },
   "workflows": {
     "directory": ".claude/agents/workflows",
