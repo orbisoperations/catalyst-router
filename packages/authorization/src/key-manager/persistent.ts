@@ -38,7 +38,20 @@ export class PersistentLocalKeyManager implements IKeyManager {
     if (this.initialized) return
 
     const savedJwks = await this.store.loadKeys()
-    if (savedJwks && savedJwks.keys.length > 0) {
+    const hadExistingKeys = savedJwks && savedJwks.keys.length > 0
+
+    if (hadExistingKeys) {
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          msg: 'Loading existing keys from persistent storage',
+          keyCount: savedJwks.keys.length,
+        })
+      )
+
+      const now = Date.now()
+      let expiredCount = 0
+
       // Load existing keys
       for (const jwk of savedJwks.keys) {
         const privateKey = (await jose.importJWK(jwk, ALGORITHM)) as jose.CryptoKey
@@ -63,15 +76,84 @@ export class PersistentLocalKeyManager implements IKeyManager {
 
         if (!managed.expiresAt) {
           this.currentKey = managed
+          console.log(
+            JSON.stringify({
+              level: 'info',
+              msg: 'Loaded current key',
+              kid: managed.kid,
+              createdAt: new Date(managed.createdAt).toISOString(),
+            })
+          )
         } else {
+          const isExpired = managed.expiresAt <= now
+          if (isExpired) {
+            expiredCount++
+            console.warn(
+              JSON.stringify({
+                level: 'warn',
+                msg: 'Found expired key in storage',
+                kid: managed.kid,
+                createdAt: new Date(managed.createdAt).toISOString(),
+                expiredAt: new Date(managed.expiresAt).toISOString(),
+              })
+            )
+          } else {
+            console.log(
+              JSON.stringify({
+                level: 'info',
+                msg: 'Loaded previous key',
+                kid: managed.kid,
+                createdAt: new Date(managed.createdAt).toISOString(),
+                expiresAt: new Date(managed.expiresAt).toISOString(),
+              })
+            )
+          }
           this.previousKeys.push(managed)
         }
+      }
+
+      if (expiredCount > 0) {
+        console.warn(
+          JSON.stringify({
+            level: 'warn',
+            msg: 'Expired keys detected during initialization',
+            expiredKeyCount: expiredCount,
+            totalKeyCount: savedJwks.keys.length,
+          })
+        )
       }
     }
 
     if (!this.currentKey) {
-      // Generate initial key
+      if (!hadExistingKeys) {
+        console.warn(
+          JSON.stringify({
+            level: 'warn',
+            msg: 'No keys found in storage - new deployment or storage was cleared',
+            action: 'Generating new key',
+          })
+        )
+      } else {
+        console.warn(
+          JSON.stringify({
+            level: 'warn',
+            msg: 'No current key found - only expired/previous keys in storage',
+            action: 'Generating new key',
+            previousKeyCount: this.previousKeys.length,
+          })
+        )
+      }
+
       await this.generateNewKey()
+
+      console.warn(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'New key generated during initialization',
+          kid: this.currentKey!.kid,
+          createdAt: new Date(this.currentKey!.createdAt).toISOString(),
+        })
+      )
     }
 
     this.initialized = true
