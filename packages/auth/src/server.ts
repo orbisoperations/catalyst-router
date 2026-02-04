@@ -35,6 +35,11 @@ export let systemToken: string | undefined
  * Initializes and starts the Auth service.
  */
 export async function startServer() {
+  // Initialize logging
+  const { configureLogging, getAuthLogger } = await import('./logger.js')
+  configureLogging()
+  const logger = getAuthLogger()
+
   const config = loadDefaultConfig()
 
   // Initialize Key persistence
@@ -43,13 +48,13 @@ export async function startServer() {
   await keyManager.initialize()
 
   const currentKid = await keyManager.getCurrentKeyId()
-  console.log(JSON.stringify({ level: 'info', msg: 'KeyManager initialized', kid: currentKid }))
+  void logger.info`KeyManager initialized with kid: ${currentKid}`
 
   // initialize the policy authorization engine using the standard Catalyst domain
   const policyService = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
   const validationResult = policyService.validatePolicies()
   if (!validationResult) {
-    console.error(JSON.stringify({ level: 'error', msg: 'Invalid policies' }))
+    void logger.error`Invalid policies - policy validation failed`
     process.exit(1)
   }
 
@@ -73,9 +78,7 @@ export async function startServer() {
     expiresIn: '365d',
   })
 
-  console.log(
-    JSON.stringify({ level: 'info', msg: 'System Admin Token minted', token: systemToken })
-  )
+  void logger.info`System Admin Token minted: ${systemToken}`
 
   // Initialize revocation store if enabled
   const revocationEnabled = config.auth?.revocation?.enabled === true
