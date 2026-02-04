@@ -1,5 +1,6 @@
 import type { ValidationResult } from '@catalyst/types'
 import type { JSONWebKeySet } from 'jose'
+import type { ValidationResult } from '@catalyst/types'
 
 /**
  * Options for signing a JWT
