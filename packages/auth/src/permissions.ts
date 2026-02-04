@@ -1,6 +1,16 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 
 /**
+ * @deprecated This permission system is deprecated in favor of Cedar policy engine.
+ * Auth service has migrated to Cedar (see @catalyst/authorization/policy).
+ * Orchestrator still depends on this - DO NOT REMOVE until orchestrator migration is complete.
+ * See ADR-0008 for Cedar migration details.
+ *
+ * TODO: Remove this file after orchestrator migrates to Cedar
+ */
+
+/**
+ * @deprecated Use Cedar Action enum from @catalyst/authorization instead
  * Explicit enumerated set of permissions.
  * Aligned with orchestrator requirements and new token management.
  */
@@ -29,11 +39,13 @@ export enum Permission {
 }
 
 /**
+ * @deprecated Use Cedar Role enum from @catalyst/authorization instead
  * Available roles in the system.
  */
 export type Role = 'admin' | 'peer' | 'peer_custodian' | 'data_custodian' | 'user'
 
 /**
+ * @deprecated Use Cedar policies instead - see packages/authorization/src/policy/
  * Mapping between roles and their explicit permissions.
  */
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -65,6 +77,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 }
 
 /**
+ * @deprecated Use Cedar policy engine instead
  * Resolves a list of permissions for a given set of roles.
  */
 export function getPermissionsForRoles(roles: string[]): Permission[] {
@@ -84,7 +97,15 @@ export function getPermissionsForRoles(roles: string[]): Permission[] {
 }
 
 /**
+ * @deprecated Use Cedar AuthorizationEngine.isAuthorized() instead
  * Checks if the given roles or permissions grant the required permission.
+ *
+ * Migration: Replace with Cedar policy checks
+ * Example:
+ *   const result = policyService.isAuthorized({
+ *     principal, action, resource, entities, context
+ *   })
+ *   if (result.allowed) { ... }
  */
 export function hasPermission(
   rolesOrPermissions: string[],
