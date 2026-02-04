@@ -206,6 +206,8 @@
       "version": "0.0.1",
       "dependencies": {
         "@aws-sdk/client-s3": "catalog:",
+        "@catalyst/auth": "workspace:*",
+        "capnweb": "catalog:",
         "graphql": "catalog:",
         "graphql-yoga": "catalog:",
       },
