@@ -26,6 +26,12 @@ export const OrchestratorConfigSchema = z.object({
       endpoint: z.string(),
     })
     .optional(),
+  auth: z
+    .object({
+      endpoint: z.string(),
+      systemToken: z.string(),
+    })
+    .optional(),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -96,6 +102,13 @@ export function loadDefaultConfig(): CatalystConfig {
       gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
         ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
         : undefined,
+      auth:
+        process.env.CATALYST_AUTH_ENDPOINT && process.env.CATALYST_SYSTEM_TOKEN
+          ? {
+              endpoint: process.env.CATALYST_AUTH_ENDPOINT,
+              systemToken: process.env.CATALYST_SYSTEM_TOKEN,
+            }
+          : undefined,
     },
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,

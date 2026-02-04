@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
+
+// Bypass auth for unit tests
+process.env.CATALYST_SKIP_AUTH = 'true'
 import { Actions } from '../src/action-types.js'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
