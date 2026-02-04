@@ -84,6 +84,14 @@ export class BunSqliteTokenStore implements TokenStore {
     ])
   }
 
+  /**
+   * Check if a token is revoked.
+   *
+   * Performance: Optimized for high-throughput (1000s req/sec).
+   * - Uses PRIMARY KEY lookup on jti (O(log n))
+   * - Selects only is_revoked field, not all columns
+   * - Single round-trip to SQLite
+   */
   async isRevoked(jti: string): Promise<boolean> {
     const stmt = this.db.prepare('SELECT is_revoked FROM token WHERE jti = $jti')
     const row = stmt.get({ $jti: jti }) as { is_revoked: number } | null
