@@ -1,184 +1,126 @@
 import type { DetailedError } from '@cedar-policy/cedar-wasm/nodejs'
+import type { z } from 'zod'
 import type { EntityCollection } from './entity-collection.js'
-
-/**
- * Standardized roles for the Catalyst system.
- * These serve as primary Principal Types in Cedar.
- */
-export enum Role {
-  ADMIN = 'ADMIN',
-  NODE = 'NODE',
-  NODE_CUSTODIAN = 'NODE_CUSTODIAN',
-  DATA_CUSTODIAN = 'DATA_CUSTODIAN',
-  USER = 'USER',
-}
-
-/**
- * Standardized actions for the Catalyst system.
- */
-export enum Action {
-  LOGIN = 'LOGIN',
-  MANAGE = 'MANAGE',
-  IBGP_CONNECT = 'IBGP_CONNECT',
-  IBGP_DISCONNECT = 'IBGP_DISCONNECT',
-  IBGP_UPDATE = 'IBGP_UPDATE',
-  PEER_CREATE = 'PEER_CREATE',
-  PEER_UPDATE = 'PEER_UPDATE',
-  PEER_DELETE = 'PEER_DELETE',
-  ROUTE_CREATE = 'ROUTE_CREATE',
-  ROUTE_DELETE = 'ROUTE_DELETE',
-  TOKEN_CREATE = 'TOKEN_CREATE',
-  TOKEN_REVOKE = 'TOKEN_REVOKE',
-  TOKEN_LIST = 'TOKEN_LIST',
-}
-
-/**
- * Default role-to-action permissions mapping.
- * Used as a reference for policy generation and documentation.
- */
-export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
-  [Role.ADMIN]: Object.values(Action),
-  [Role.NODE]: [Action.IBGP_CONNECT, Action.IBGP_DISCONNECT, Action.IBGP_UPDATE],
-  [Role.NODE_CUSTODIAN]: [
-    Action.PEER_CREATE,
-    Action.PEER_UPDATE,
-    Action.PEER_DELETE,
-    Action.IBGP_CONNECT,
-    Action.IBGP_DISCONNECT,
-    Action.IBGP_UPDATE,
-  ],
-  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE],
-  [Role.USER]: [Action.LOGIN],
-}
 
 // Base interface for defining a specific Domain's schema
 /**
- * Defines the structure of an Authorization Domain, specifying valid Actions and Entity types.
+ * Defines the structure of an Authorization Domain, specifying valid Actions and PolicyEntity types.
  * This interface is meant to be extended to provide type safety for the Authorization Engine.
  *
  * @example
  * ```typescript
- * interface MyDomain {
+ * type MyDomains = [{
+ *   Namespace: 'MyDomain';
  *   Actions: 'view' | 'edit' | 'delete';
  *   Entities: {
  *     User: { role: string; department: string };
  *     Document: { ownerId: string; public: boolean };
  *   };
- * }
+ * }]
  * ```
  */
-export interface AuthorizationDomain {
+export type AuthorizationDomain = Array<{
+  /**
+   * The namespace of the domain.
+   */
+  Namespace: string | null
   /**
    * Defines the valid Actions within the domain.
    * Can be a union of string literals (simple actions) or a Record mapping Action IDs to their Context shape.
    */
-  Actions: string | Record<string, unknown> // Union of valid action IDs OR Map of Action ID -> Context Shape
+  Actions: string | Record<string, unknown> | null // Union of valid action IDs OR Map of Action ID -> Context Shape
   /**
-   * Defines the valid Entity types and their attribute shapes.
-   * Map of Entity Type -> Attributes interface.
+   * Defines the valid PolicyEntity types and their attribute shapes.
+   * Map of PolicyEntity Type -> Attributes interface.
    */
-  Entities: Record<string, Record<string, unknown>> // Map of Type -> Attributes
-}
+  Entities: Record<string, Record<string, unknown>> | null // Map of Type -> Attributes
+}>
 
 // Default domain if none is specified (permissive fallback)
 /**
  * A default, permissive domain used when no specific domain is provided.
- * Allows any string for Actions and any object structure for Entity attributes.
+ * Allows any string for Actions and any object structure for PolicyEntity attributes.
  */
-export interface DefaultDomain extends AuthorizationDomain {
-  Actions: string
-  Entities: Record<string, Record<string, unknown>>
-}
+export type DefaultPolicyDomain = [
+  {
+    Namespace: null
+    Actions: string
+    Entities: Record<string, Record<string, unknown>>
+  },
+]
+
+export type PolicyEntityType<TDomain extends AuthorizationDomain> = TDomain[number] extends infer D
+  ? D extends { Namespace: infer N; Entities: infer E }
+    ? N extends null
+      ? `${keyof E & string}`
+      : `${N & string}::${keyof E & string}`
+    : never
+  : never
 
 /**
- * Represents a unique identifier for an Entity in the Cedar policy engine.
+ * Represents a unique identifier for an PolicyEntity in the Cedar policy engine.
  * Consists of a Type and an ID.
  *
  * @template TDomain - The authorization domain this entity belongs to.
  * @template K - The specific entity type key from the domain.
  */
-export interface EntityUid<
-  TDomain extends AuthorizationDomain = DefaultDomain,
-  K extends keyof TDomain['Entities'] = keyof TDomain['Entities'],
-> {
+export type PolicyEntityUid<TDomain extends AuthorizationDomain> = {
   /** The type of the entity (e.g., "User", "Document"). */
-  type: K & string // Ensure it's compatible with string
+  type: PolicyEntityType<TDomain> // Ensure it's compatible with string
   /** The unique ID of the entity within its type. */
   id: string
 }
 
 /**
- * Represents a full Entity object with its attributes and parent relationships.
+ * Represents a full PolicyEntity object with its attributes and parent relationships.
  *
  * @template TDomain - The authorization domain this entity belongs to.
  */
-export interface Entity<TDomain extends AuthorizationDomain = DefaultDomain> {
+export type PolicyEntity<TDomain extends AuthorizationDomain> = {
   /** The unique identifier of the entity. */
-  uid: EntityUid<TDomain>
+  uid: PolicyEntityUid<TDomain>
   /** Key-value pairs representing the attributes of the entity. */
   attrs: Record<string, unknown>
   /** List of parent entities (e.g., UserGroup::"admin") this entity belongs to. */
-  parents: EntityUid<TDomain>[]
+  parents: PolicyEntityUid<TDomain>[]
 }
 
-// Helper type to extract Action IDs
-/**
- * Helper type to extract valid Action IDs from an Authorization Domain.
- * Handles both simple string unions and Record definitions.
- */
-export type ActionId<TDomain extends AuthorizationDomain> = TDomain['Actions'] extends string
-  ? TDomain['Actions']
-  : keyof TDomain['Actions'] & string
-
-// Helper type to extract Context for a given Action ID
-/**
- * Helper type to extract the required Context shape for a specific Action ID.
- * Returns `Record<string, unknown>` (any object) if actions are defined as simple strings.
- */
-export type ActionContext<
-  TDomain extends AuthorizationDomain,
-  TActionID extends ActionId<TDomain>,
-> =
-  TDomain['Actions'] extends Record<string, unknown>
-    ? TDomain['Actions'][TActionID]
-    : Record<string, unknown>
+export type PolicyActionType<N, A> = N extends null
+  ? `Action::${A & string}`
+  : N extends string
+    ? `${N}::Action::${A & string}`
+    : never
 
 /**
  * Represents an authorization request to be evaluated by the engine.
  *
  * @template TDomain - The authorization domain.
- * @template TActionID - The specific action being requested.
  */
-export type AuthorizationRequest<
-  TDomain extends AuthorizationDomain = DefaultDomain,
-  TActionID extends ActionId<TDomain> = ActionId<TDomain>,
-> = {
-  /** The entity performing the action (who?). */
-  principal: EntityUid<TDomain>
-  /** The action being performed (what?). */
-  action: { type: 'Action'; id: TActionID }
-  /** The entity the action is being performed on (on what?). */
-  resource: EntityUid<TDomain>
-  // entities: Array<EntityUid>;
-  // context: AuthorizationCall["context"];
-  /**
-   * Additional entities to include in the evaluation context.
-   * Can be a raw array of Entities or an `EntityCollection`.
-   */
-  entities: Entity<TDomain>[] | EntityCollection<TDomain>
-} & (Record<string, never> extends ActionContext<TDomain, TActionID>
-  ? {
-      /**
-       * Contextual information for the request (optional if the action requires no context).
-       */
-      context?: ActionContext<TDomain, TActionID>
-    }
-  : {
-      /**
-       * Contextual information for the request (required if the action defines a context shape).
-       */
-      context: ActionContext<TDomain, TActionID>
-    })
+export type AuthorizationRequest<TDomain extends AuthorizationDomain = DefaultPolicyDomain> =
+  TDomain[number] extends infer D
+    ? D extends { Namespace: infer N; Actions: infer A }
+      ? A extends string
+        ? {
+            principal: PolicyEntityUid<TDomain>
+            // action: `${N & string}::Action::${A}`
+            action: PolicyActionType<N, A>
+            resource: PolicyEntityUid<TDomain>
+            entities: PolicyEntity<TDomain>[] | EntityCollection<TDomain>
+            context?: Record<string, unknown>
+          }
+        : A extends Record<string, unknown>
+          ? {
+              [K in keyof A]: {
+                principal: PolicyEntityUid<TDomain>
+                // action: `${N & string}::Action::${K & string}`
+                action: PolicyActionType<N, K>
+                resource: PolicyEntityUid<TDomain>
+                entities: PolicyEntity<TDomain>[] | EntityCollection<TDomain>
+              } & (Record<string, never> extends A[K] ? { context?: A[K] } : { context: A[K] })
+            }[keyof A]
+          : never
+      : never
+    : never
 
 /**
  * Raw response from the authorization evaluation (internal use).
@@ -218,7 +160,7 @@ export type AuthorizationEngineResult =
  *
  * @template TDomain - The authorization domain type.
  */
-export interface IAuthorizationEngine<TDomain extends AuthorizationDomain = DefaultDomain> {
+export interface IAuthorizationEngine<TDomain extends AuthorizationDomain = DefaultPolicyDomain> {
   /**
    * Validates the loaded policies against the schema.
    * @returns true if valid.
@@ -230,19 +172,47 @@ export interface IAuthorizationEngine<TDomain extends AuthorizationDomain = Defa
    * @param request - The authorization request containing principal, action, resource, context, and entities.
    * @returns The evaluation result (allowed/denied or failure).
    */
-  isAuthorized<TActionID extends ActionId<TDomain>>(
-    request: AuthorizationRequest<TDomain, TActionID>
-  ): AuthorizationEngineResult
+  isAuthorized(request: AuthorizationRequest<TDomain>): AuthorizationEngineResult
 }
 
 /**
  * Interface for objects that can provide a set of entities.
  * Implemented by `EntityBuilder` and custom data providers.
  */
-export interface EntityProvider<TDomain extends AuthorizationDomain = DefaultDomain> {
+export interface EntityProvider<TDomain extends AuthorizationDomain = DefaultPolicyDomain> {
   /**
    * Builds and returns the list of entities.
-   * @returns An array of `Entity` objects or an `EntityCollection`.
+   * @returns An array of `PolicyEntity` objects or an `EntityCollection`.
    */
-  build(): Entity<TDomain>[] | EntityCollection<TDomain>
+  build(): PolicyEntity<TDomain>[] | EntityCollection<TDomain>
 }
+
+/**
+ * A function that maps arbitrary data into an entity structure (id, attributes, and parents).
+ */
+export type Mapper<TDomain extends AuthorizationDomain, T = unknown> = (data: T) => {
+  id: string
+  attrs: Record<string, unknown>
+  parents?: PolicyEntityUid<TDomain>[]
+}
+
+/**
+ * Registry of mappers for a given domain.
+ */
+export type MapperRegistry<TDomain extends AuthorizationDomain> = Map<
+  PolicyEntityType<TDomain>,
+  Mapper<TDomain>
+>
+
+/**
+ * Configuration for adding an entity from a Zod schema.
+ */
+export interface ZodAddConfig<T extends z.ZodTypeAny, TDomain extends AuthorizationDomain> {
+  idField: keyof z.infer<T>
+  parents?: PolicyEntityUid<TDomain>[]
+}
+
+/**
+ * Key used in EntityCollection map.
+ */
+export type EntityKey = string

@@ -3,20 +3,22 @@ import z from 'zod'
 import { EntityBuilder, EntityBuilderFactory } from '../../src/policy/src/entity-builder.js'
 import { EntityCollection } from '../../src/policy/src/entity-collection.js'
 import { GenericZodModel } from '../../src/policy/src/providers/GenericZodModel.js'
-import type { AuthorizationDomain } from '../../src/policy/src/types.js'
 
 describe('EntityFactory', () => {
-  interface TestDomain extends AuthorizationDomain {
-    Actions: 'view' | 'edit' | 'delete'
-    Entities: {
-      User: {
-        name: string
-        age: number
-        email: string
-        role: string
+  type TestDomain = [
+    {
+      Namespace: 'Test'
+      Actions: 'view' | 'edit' | 'delete'
+      Entities: {
+        User: {
+          name: string
+          age: number
+          email: string
+          role: string
+        }
       }
-    }
-  }
+    },
+  ]
 
   const TestUserSchema = z.object({
     name: z.string(),
@@ -40,7 +42,7 @@ describe('EntityFactory', () => {
     const entities = builder
       .add(
         new GenericZodModel(
-          'User',
+          'Test::User',
           TestUserSchema,
           { name: 'alice', age: 30, email: 'alice@example.com', role: 'admin' },
           'name'
@@ -48,7 +50,7 @@ describe('EntityFactory', () => {
       )
       .add(
         new GenericZodModel(
-          'User',
+          'Test::User',
           TestUserSchema,
           { name: 'bob', age: 25, email: 'bob@example.com', role: 'user' },
           'name'
@@ -58,19 +60,19 @@ describe('EntityFactory', () => {
 
     expect(entities).toBeInstanceOf(EntityCollection<TestDomain>)
     expect(entities.getAll()).toHaveLength(2)
-    expect(entities.get('User', 'alice')).toBeDefined()
-    expect(entities.get('User', 'bob')).toBeDefined()
-    expect(entities.get('User', 'non-existing')).toBeUndefined()
+    expect(entities.get('Test::User', 'alice')).toBeDefined()
+    expect(entities.get('Test::User', 'bob')).toBeDefined()
+    expect(entities.get('Test::User', 'non-existing')).toBeUndefined()
 
     // correct typesafety
-    const aliceEntityentityRef = entities.entityRef('User', 'alice')
-    const bobEntityentityRef = entities.entityRef('User', 'bob')
+    const aliceEntityentityRef = entities.entityRef('Test::User', 'alice')
+    const bobEntityentityRef = entities.entityRef('Test::User', 'bob')
     expect(aliceEntityentityRef).toBeDefined()
     expect(bobEntityentityRef).toBeDefined()
 
     // currently it creates an entity entityRef regardless of if the entity exists
     // TODO: should throw an error if the entity does not exist?
-    const nonExistingEntityentityRef = entities.entityRef('User', 'non-existing')
+    const nonExistingEntityentityRef = entities.entityRef('Test::User', 'non-existing')
     expect(nonExistingEntityentityRef).toBeDefined()
   })
 

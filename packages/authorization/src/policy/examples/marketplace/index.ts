@@ -1,20 +1,17 @@
-/* eslint-disable */
-
-import {
-  AuthorizationEngine,
-  EntityBuilderFactory,
-  type AuthorizationDomain,
-} from '../../src/index.js'
+import { AuthorizationEngine, EntityBuilderFactory } from '../../src/index.js'
 
 // 1. Define Domain
-interface MarketDomain extends AuthorizationDomain {
-  Actions: 'buy' | 'sell' | 'view_analytics'
-  Entities: {
-    User: { balance: number; kycVerified: boolean }
-    Product: { price: number; sellerId: string; category: string }
-    Order: { status: string; buyerId: string }
-  }
-}
+type MarketDomain = [
+  {
+    Namespace: null
+    Actions: 'buy' | 'sell' | 'view_analytics'
+    Entities: {
+      User: { balance: number; kycVerified: boolean }
+      Product: { price: number; sellerId: string; category: string }
+      Order: { status: string; buyerId: string }
+    }
+  },
+]
 
 // 2. Define Policies
 const policies = `
@@ -94,7 +91,12 @@ dbProducts.forEach((p) => builder.add('Product', p))
 const entities = builder.build()
 
 // 6. Check Authorization
-const requests = [
+const requests: {
+  user: string
+  action: 'buy' | 'sell' | 'view_analytics'
+  resource: string
+  desc: string
+}[] = [
   { user: 'u1', action: 'buy', resource: 'p1', desc: 'Verified user buying' },
   { user: 'u2', action: 'buy', resource: 'p1', desc: 'Unverified user buying' },
   {
@@ -110,7 +112,7 @@ console.log('--- Marketplace Access Checks ---')
 requests.forEach((req) => {
   const result = engine.isAuthorized({
     principal: { type: 'User', id: req.user },
-    action: { type: 'Action', id: req.action as any },
+    action: `Action::${req.action}`,
     resource: { type: 'Product', id: req.resource },
     entities,
   })

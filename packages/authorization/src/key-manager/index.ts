@@ -1,5 +1,5 @@
-import type { JSONWebKeySet } from 'jose'
 import type { ValidationResult } from '@catalyst/types'
+import type { JSONWebKeySet } from 'jose'
 
 /**
  * Options for signing a JWT
@@ -50,7 +50,7 @@ export interface IKeyManager {
   sign(options: SignOptions): Promise<string>
 
   /** Verify a JWT against managed keys */
-  verify(token: string, options?: VerifyOptions): Promise<VerifyResult>
+  verify(token: string, options?: VerifyOptions): Promise<ValidationResult<T>>
 
   /** Get the JSON Web Key Set containing all valid public keys */
   getJwks(): Promise<JSONWebKeySet>

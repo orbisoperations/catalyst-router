@@ -1,20 +1,19 @@
 /* eslint-disable */
 
-import {
-  AuthorizationEngine,
-  EntityBuilderFactory,
-  type AuthorizationDomain,
-} from '../../src/index.js'
+import { AuthorizationEngine, EntityBuilderFactory } from '../../src/index.js'
 
 // 1. Define the Domain
-interface TodoDomain extends AuthorizationDomain {
-  Actions: 'view' | 'create' | 'update' | 'delete'
-  Entities: {
-    User: { role: string }
-    List: { owner: string; isPublic: boolean }
-    Todo: { completed: boolean }
-  }
-}
+type TodoDomain = [
+  {
+    Namespace: 'TodoApp'
+    Actions: 'view' | 'create' | 'update' | 'delete'
+    Entities: {
+      User: { role: string }
+      List: { owner: string; isPublic: boolean }
+      Todo: { completed: boolean }
+    }
+  },
+]
 
 // 2. Define Policies
 const policies = `
@@ -64,40 +63,40 @@ const factory = new EntityBuilderFactory<TodoDomain>()
 
 // Register Mappers to transform raw data into Cedar entities
 factory
-  .registerMapper('User', (user: (typeof users)[0]) => ({
+  .registerMapper('TodoApp::User', (user: (typeof users)[0]) => ({
     id: user.id,
     attrs: { role: user.role },
   }))
-  .registerMapper('List', (list: (typeof todoLists)[0]) => ({
+  .registerMapper('TodoApp::List', (list: (typeof todoLists)[0]) => ({
     id: list.id,
     attrs: { owner: list.owner, isPublic: list.isPublic },
   }))
-  .registerMapper('Todo', (todo: (typeof todos)[0]) => ({
+  .registerMapper('TodoApp::Todo', (todo: (typeof todos)[0]) => ({
     id: todo.id,
     attrs: { completed: todo.completed },
-    parents: [{ type: 'List', id: todo.listId }], // Link Todo to its List
+    parents: [{ type: 'TodoApp::List', id: todo.listId }], // Link Todo to its List
   }))
 
 // 5. Build Entity Store
 const builder = factory.createEntityBuilder()
 
 // Add all data using the registered mappers
-users.forEach((u) => builder.add('User', u))
-todoLists.forEach((l) => builder.add('List', l))
-todos.forEach((t) => builder.add('Todo', t))
+users.forEach((u) => builder.add('TodoApp::User', u))
+todoLists.forEach((l) => builder.add('TodoApp::List', l))
+todos.forEach((t) => builder.add('TodoApp::Todo', t))
 
 const entities = builder.build()
 
 // 6. Run Checks
 async function checkAccess(
   principalId: string,
-  actionId: string,
+  actionId: 'view' | 'create' | 'update' | 'delete',
   resourceType: string,
   resourceId: string
 ) {
   const result = engine.isAuthorized({
-    principal: { type: 'User', id: principalId },
-    action: { type: 'Action', id: actionId as any },
+    principal: { type: 'TodoApp::User', id: principalId },
+    action: `TodoApp::Action::${actionId}`,
     resource: { type: resourceType as any, id: resourceId },
     entities,
   })

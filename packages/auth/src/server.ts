@@ -1,11 +1,12 @@
 import {
-  AuthorizationEngine,
-  BunSqliteTokenStore,
-  LocalTokenManager,
-  BunSqliteKeyStore,
-  PersistentLocalKeyManager,
-  CATALYST_SCHEMA,
   ALL_POLICIES,
+  AuthorizationEngine,
+  BunSqliteKeyStore,
+  BunSqliteTokenStore,
+  CATALYST_SCHEMA,
+  type CatalystPolicyDomain,
+  LocalTokenManager,
+  PersistentLocalKeyManager,
   Role,
 } from '@catalyst/authorization'
 import { loadDefaultConfig } from '@catalyst/config'
@@ -13,17 +14,15 @@ import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { ApiKeyService } from './api-key-service.js'
 import { BootstrapService } from './bootstrap.js'
-import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
-import {
-  InMemoryUserStore,
-  InMemoryServiceAccountStore,
-  InMemoryBootstrapStore,
-} from './stores/memory.js'
 import { LoginService } from './login.js'
 import { hashPassword } from './password.js'
-import { userModelToEntityMapper } from './policies/mappers/index.js'
-import type { CatalystPolicyDomain } from './policies/types.js'
 import { InMemoryRevocationStore } from './revocation.js'
+import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
+import {
+  InMemoryBootstrapStore,
+  InMemoryServiceAccountStore,
+  InMemoryUserStore,
+} from './stores/memory.js'
 
 /**
  * The system-wide administrative token minted at startup.
@@ -58,9 +57,6 @@ export async function startServer() {
     process.exit(1)
   }
 
-  // Register user mapper
-  policyService.entityBuilderFactory.registerMapper(Role.USER, userModelToEntityMapper)
-
   // Initialize token tracking
   const tokenStore = new BunSqliteTokenStore(config.auth?.tokensDb || 'tokens.db')
   const tokenManager = new LocalTokenManager(keyManager, tokenStore, config.node.name)
@@ -75,7 +71,8 @@ export async function startServer() {
       role: Role.ADMIN,
     },
     roles: [Role.ADMIN],
-    expiresIn: '365d',
+    // 365days in milliseconds unix timestamp
+    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
   })
 
   void logger.info`System Admin Token minted: ${systemToken}`
