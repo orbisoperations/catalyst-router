@@ -17,7 +17,8 @@
     "inquirer": "catalog:",
     "ws": "catalog:",
     "zod": "catalog:",
-    "@catalyst/orchestrator": "catalog:"
+    "@catalyst/orchestrator": "catalog:",
+    "@catalyst/authorization": "catalog:"
   },
   "devDependencies": {
     "@types/inquirer": "catalog:dev",
