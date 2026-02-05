@@ -67,7 +67,7 @@ const result = engine.isAuthorized({
   resource: entities.entityRef('Document', 'doc1'),
   entities: entities, // Pass the collection directly
   context: { ... } // Optional context
-}, entities);
+});
 ```
 
 ## Generic Model Integration (`GenericZodModel`)
@@ -107,16 +107,21 @@ The engine supports strong static typing for Action IDs and Entity Types/Referen
 
 ### Defining a Domain
 
+You define a domain as an array of namespace configurations. This supports splitting definitions across files or namespaces, similar to Cedar schemas.
+
 ```typescript
 import { AuthorizationDomain } from '@catalyst/authorization'
 
-interface MyDomain extends AuthorizationDomain {
-  Actions: 'view' | 'edit' | 'delete'
-  Entities: {
-    User: { name: string; role: string }
-    Document: { owner: string }
-  }
-}
+type MyDomain = [
+  {
+    Namespace: 'MyApp'
+    Actions: 'view' | 'edit' | 'delete'
+    Entities: {
+      User: { name: string; role: string }
+      Document: { owner: string }
+    }
+  },
+]
 ```
 
 ### Using Strongly Typed Engine
@@ -125,23 +130,20 @@ When you initialize the engine or collection with this domain, TypeScript will e
 
 ```typescript
 const engine = new AuthorizationEngine<MyDomain>(schema, policies)
-const entities = new EntityBuilder().build() as unknown as EntityCollection<MyDomain>
+const entities = new EntityBuilder<MyDomain>().build()
 
-engine.isAuthorized(
-  {
-    action: { type: 'Action', id: 'view' }, // 'destroy' would cause a TS error
-    principal: entities.entityRef('User', 'alice'), // 'Account' would cause a TS error
-    resource: entities.entityRef('Document', 'doc1'),
-    // ...
-  },
-  entities.getAll()
-)
+engine.isAuthorized({
+  action: 'MyApp::Action::view', // Strongly typed string
+  principal: entities.entityRef('User', 'alice'),
+  resource: entities.entityRef('Document', 'doc1'),
+  entities: entities, // Pass entity list
+})
 ```
 
 ## Decoupling Strategy
 
-1.  **No Hard Dependencies**: The Authorization Engine does not import types or schemas from `auth` or `orchestrator` packages directly.
-2.  **Schema Adaptation**: Applications using this engine are responsible for providing the Zod schemas and data. The engine simply validates and maps them.
-3.  **Flexible Attributes**: The `GenericZodModel` maps all schema fields (except the ID field) to Cedar attributes. Complex types like `Date` are converted to strings to be compatible with Cedar.
+1. **No Hard Dependencies**: The Authorization Engine does not import types or schemas from `auth` or `orchestrator` packages directly.
+2. **Schema Adaptation**: Applications using this engine are responsible for providing the Zod schemas and data. The engine simply validates and maps them.
+3. **Flexible Attributes**: The `GenericZodModel` maps all schema fields (except the ID field) to Cedar attributes. Complex types like `Date` are converted to strings to be compatible with Cedar.
 
 This design allows the Authorization Engine to evolve independently of the domain models it authorizes.

@@ -4,29 +4,29 @@ import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
 import {
-  type IKeyManager,
-  type TokenManager,
-  Role,
   Action,
   jwtToEntity,
+  Role,
+  type CatalystPolicyEngine,
+  type IKeyManager,
+  type TokenManager,
 } from '@catalyst/authorization'
-import type { BootstrapService } from '../bootstrap.js'
 import type { ApiKeyService } from '../api-key-service.js'
-import type { LoginService } from '../login.js'
-import type { CatalystPolicyEngine } from '../policies/types.js'
+import type { BootstrapService } from '../bootstrap.js'
 import { getAuthLogger } from '../logger.js'
+import type { LoginService } from '../login.js'
 import {
   CreateFirstAdminRequestSchema,
   LoginRequestSchema,
-  type TokenHandlers,
-  type CertHandlers,
-  type ValidationHandlers,
-  type PermissionsHandlers,
   type AuthorizeActionRequest,
   type AuthorizeActionResult,
+  type CertHandlers,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
   type LoginResponse,
+  type PermissionsHandlers,
+  type TokenHandlers,
+  type ValidationHandlers,
 } from './schema.js'
 
 export class AuthRpcServer extends RpcTarget {
@@ -92,7 +92,7 @@ export class AuthRpcServer extends RpcTarget {
 
     const token = await this.tokenManager.mint({
       subject: result.userId!,
-      expiresIn: '1h',
+      expiresAt: Date.now() + 3600000,
       roles: [Role.ADMIN],
       entity: {
         id: result.userId!,
@@ -147,15 +147,15 @@ export class AuthRpcServer extends RpcTarget {
     if (!builder) {
       return { error: 'Policy service not configured' }
     }
-    builder.entity(principal.uid.type as any, principal.uid.id).setAttributes(principal.attrs)
+    builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
     builder
-      .entity('CATALYST::AdminPanel' as any, 'admin-panel')
+      .entity('CATALYST::AdminPanel', 'admin-panel')
       .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
     const entities = builder.build()
     const autorizedResult = this.policyService?.isAuthorized({
-      principal: principal.uid as any,
-      action: { type: 'CATALYST::Action' as any, id: Action.MANAGE as any },
-      resource: { type: 'CATALYST::AdminPanel' as any, id: 'admin-panel' },
+      principal: principal.uid,
+      action: 'CATALYST::Action::MANAGE',
+      resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
       entities: entities.getAll(),
       context: {},
     })
@@ -224,15 +224,15 @@ export class AuthRpcServer extends RpcTarget {
     if (!builder) {
       return { error: 'Policy service not configured' }
     }
-    builder.entity(principal.uid.type as any, principal.uid.id).setAttributes(principal.attrs)
+    builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
     builder
-      .entity('CATALYST::AdminPanel' as any, 'admin-panel')
+      .entity('CATALYST::AdminPanel', 'admin-panel')
       .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
     const entities = builder.build()
     const autorizedResult = this.policyService?.isAuthorized({
-      principal: principal.uid as any,
-      action: { type: 'CATALYST::Action' as any, id: Action.MANAGE as any },
-      resource: { type: 'CATALYST::AdminPanel' as any, id: 'admin-panel' },
+      principal: principal.uid,
+      action: { type: 'CATALYST::Action', id: Action.MANAGE },
+      resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
       entities: entities.getAll(),
       context: {},
     })
@@ -322,8 +322,8 @@ export class AuthRpcServer extends RpcTarget {
 
         // Build resource entity (AdminPanel for now, can be extended)
         const builder = this.policyService!.entityBuilderFactory.createEntityBuilder()
-        builder.entity(principal.uid.type as any, principal.uid.id).setAttributes(principal.attrs)
-        builder.entity('CATALYST::AdminPanel' as any, 'admin-panel').setAttributes({
+        builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
+        builder.entity('CATALYST::AdminPanel', 'admin-panel').setAttributes({
           nodeId: request.nodeContext.nodeId,
           domains: request.nodeContext.domains,
         })
@@ -332,9 +332,9 @@ export class AuthRpcServer extends RpcTarget {
 
         // Perform Cedar authorization
         const result = this.policyService!.isAuthorized({
-          principal: principal.uid as any,
-          action: { type: 'CATALYST::Action' as any, id: actionId as any },
-          resource: { type: 'CATALYST::AdminPanel' as any, id: 'admin-panel' },
+          principal: principal.uid,
+          action: `CATALYST::Action::${actionId}`,
+          resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
           entities: entities.getAll(),
           context: {},
         })

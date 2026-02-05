@@ -1,7 +1,9 @@
 import { z } from 'zod'
-import { type VerifyResult } from '../key-manager/index.js'
-import { Role, type Entity as CedarEntity } from '../policy/src/types.js'
+import type { VerifyResult } from '../key-manager/index.js'
+import { Role } from '../policy/src/definitions/models.js'
 import { EntityBuilder } from '../policy/src/entity-builder.js'
+import type { CatalystPolicyDomain } from '../policy/src/index.js'
+import type { PolicyEntity as CedarEntity } from '../policy/src/types.js'
 
 /**
  * Entity types that can own a token
@@ -12,7 +14,7 @@ export type EntityType = z.infer<typeof EntityTypeEnum>
 /**
  * Standardized roles for the system (Zod schema for validation)
  */
-export const RoleEnum = z.nativeEnum(Role)
+export const RoleEnum = z.enum(Role)
 export type RoleType = z.infer<typeof RoleEnum>
 
 /**
@@ -90,10 +92,6 @@ export interface TokenManager {
   revoke(options: { jti?: string; san?: string }): Promise<void>
   /** Verify a token and check its tracking status */
   verify(token: string, options?: { audience?: string | string[] }): Promise<VerifyResult>
-  /** List tokens, optionally filtered by certificate fingerprint or SAN */
-  listTokens(filter?: { certificateFingerprint?: string; san?: string }): Promise<TokenRecord[]>
-  /** Get all unexpired revoked tokens (for CRL/VRL) */
-  getRevocationList(): Promise<string[]>
 }
 
 /**
@@ -104,7 +102,7 @@ export interface TokenManager {
  * // If role is ADMIN and entity.name is 'alice'
  * // Resulting principal: CATALYST::ADMIN::"alice"
  */
-export function jwtToEntity(payload: Record<string, unknown>): CedarEntity {
+export function jwtToEntity(payload: Record<string, unknown>): CedarEntity<CatalystPolicyDomain> {
   const entity = payload.entity as {
     id: string
     name: string

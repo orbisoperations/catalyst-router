@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'bun:test'
-import { Role } from '../../src/policy/src/types.js'
+import { describe, expect, it } from 'bun:test'
 import { jwtToEntity } from '../../src/jwt/index.js'
+import { Role } from '../../src/policy/src/definitions/models.js'
 
 describe('jwtToEntity', () => {
   it('should map a JWT payload to a Cedar Entity with primary role and name', () => {
@@ -40,7 +40,7 @@ describe('jwtToEntity', () => {
       roles: [Role.NODE],
     }
 
-    const entity = jwtToEntity(payload as Record<string, unknown>)
+    const entity = jwtToEntity(payload)
 
     expect(entity.uid.type).toBe('CATALYST::NODE')
     expect(entity.uid.id).toBe('catalyst-node-01')
@@ -52,7 +52,7 @@ describe('jwtToEntity', () => {
       roles: [Role.USER],
     }
 
-    const entity = jwtToEntity(payload as Record<string, unknown>)
+    const entity = jwtToEntity(payload)
 
     expect(entity.uid.type).toBe('CATALYST::USER')
     expect(entity.uid.id).toBe('user-789')

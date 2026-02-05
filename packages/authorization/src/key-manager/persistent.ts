@@ -1,12 +1,12 @@
+import type { ValidationResult } from '@catalyst/types'
 import * as jose from 'jose'
 import type {
   IKeyManager,
   IKeyStore,
-  SignOptions,
-  VerifyOptions,
-  VerifyResult,
   RotateOptions,
   RotationResult,
+  SignOptions,
+  VerifyOptions,
 } from './index.js'
 
 const ALGORITHM = 'ES384'
@@ -213,7 +213,10 @@ export class PersistentLocalKeyManager implements IKeyManager {
     return builder.sign(this.currentKey.privateKey)
   }
 
-  async verify(token: string, options?: VerifyOptions): Promise<VerifyResult> {
+  async verify(
+    token: string,
+    options?: VerifyOptions
+  ): Promise<ValidationResult<Record<string, unknown>>> {
     try {
       const result = await jose.jwtVerify(
         token,

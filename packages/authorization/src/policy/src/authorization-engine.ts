@@ -7,11 +7,10 @@ import * as cedar from '@cedar-policy/cedar-wasm/nodejs'
 import { type EntityBuilder, EntityBuilderFactory } from './entity-builder.js'
 import { EntityCollection } from './entity-collection.js'
 import type {
-  ActionId,
   AuthorizationDomain,
   AuthorizationEngineResult,
   AuthorizationRequest,
-  DefaultDomain,
+  DefaultPolicyDomain,
   IAuthorizationEngine,
 } from './types.js'
 
@@ -22,7 +21,7 @@ import type {
  * @template TDomain - The authorization domain structure (Actions and Entities).
  */
 export class AuthorizationEngine<
-  TDomain extends AuthorizationDomain = DefaultDomain,
+  TDomain extends AuthorizationDomain = DefaultPolicyDomain,
 > implements IAuthorizationEngine<TDomain> {
   private schema: string
   private policies: string
@@ -63,10 +62,20 @@ export class AuthorizationEngine<
     const hasWarning = validationAnswer.validationWarnings.length > 0
     const hasOtherWarnings = validationAnswer.otherWarnings.length > 0
 
-    if (hasError) console.error(JSON.stringify(validationAnswer.validationErrors, null, 2))
-    if (hasWarning) console.warn(JSON.stringify(validationAnswer.validationWarnings, null, 2))
-    if (hasOtherWarnings) console.warn(JSON.stringify(validationAnswer.otherWarnings, null, 2))
-    if (opts.failOnWarnings && (hasWarning || hasOtherWarnings)) {
+    if (hasError) {
+      console.error(
+        'Validation errors: ' + JSON.stringify(validationAnswer.validationErrors, null, 2)
+      )
+    }
+    if (hasWarning) {
+      console.warn(
+        'Validation warnings: ' + JSON.stringify(validationAnswer.validationWarnings, null, 2)
+      )
+    }
+    if (hasOtherWarnings) {
+      console.warn('Other warnings: ' + JSON.stringify(validationAnswer.otherWarnings, null, 2))
+    }
+    if (hasWarning || hasOtherWarnings) {
       throw new Error(
         'Policies have warnings: Cedar validation returned warnings. Use `failOnWarnings: false` to ignore warnings.'
       )
@@ -80,26 +89,45 @@ export class AuthorizationEngine<
   /**
    * Evaluates an authorization request to determine if an action is allowed.
    *
-   * @template TActionID - The specific action ID from the domain.
    * @param request - The authorization request containing principal, action, resource, context, and entities.
    * @returns An `AuthorizationEngineResult` indicating 'allow' or 'deny', with reasons and diagnostics.
    */
-  isAuthorized<TActionID extends ActionId<TDomain>>(
-    request: AuthorizationRequest<TDomain, TActionID>
-  ): AuthorizationEngineResult {
+  isAuthorized(request: AuthorizationRequest<TDomain>): AuthorizationEngineResult {
     // Cast to specific Cedar types to bypass the strict typing mismatch with cedar-wasm types
     // The runtime structure is correct, but TS sees the generic TDomain as incompatible
     // with the stricter types expected by cedar.isAuthorized
-    const entities = request.entities
+    const req = request as AuthorizationRequest
+    const entities = req.entities
     const cedarEntities = (entities instanceof EntityCollection
       ? entities.getAll()
       : entities) as unknown as CedarEntities
-    const cedarPrincipal = request.principal as unknown as CedarEntityUid
-    const cedarAction = request.action as unknown as CedarEntityUid
-    const cedarResource = request.resource as unknown as CedarEntityUid
+
+    const cedarPrincipal = req.principal as unknown as CedarEntityUid
+
+    // We support both namespaced and non-namespaced actions.
+    // The action string is the full action identifier, including the namespace if it exists.
+    // $Namespace::Action::$ActionId or Action::$ActionId
+
+    // Parse the action string (e.g., "Shop::Action::view") into a CedarEntityUid
+    const actionString = req.action as string
+    const lastSeparatorIndex = actionString.lastIndexOf('::')
+
+    // if its namespaced, we need to parse the type and id
+    let cedarAction: CedarEntityUid
+    if (lastSeparatorIndex !== -1) {
+      const type = actionString.substring(0, lastSeparatorIndex)
+      const id = actionString.substring(lastSeparatorIndex + 2)
+      cedarAction = { type, id } as unknown as CedarEntityUid
+    } else {
+      // Fallback for malformed strings, though TS should prevent this
+      cedarAction = { type: 'Action', id: actionString } as unknown as CedarEntityUid
+    }
+
+    const cedarResource = req.resource as unknown as CedarEntityUid
+
     // Context needs explicit casting because 'unknown' values aren't assignable to CedarValueJson
     // Default to empty object if context is not provided (optional)
-    const cedarContext = (request.context || {}) as unknown as CedarContext
+    const cedarContext = (req.context || {}) as unknown as CedarContext
 
     const authorizationAnswer = cedar.isAuthorized({
       // dynamic parameters based on the request

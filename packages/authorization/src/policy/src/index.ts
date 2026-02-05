@@ -68,8 +68,8 @@
  */
 
 export * from './authorization-engine.js'
+export * from './definitions/index.js'
 export * from './entity-builder.js'
 export * from './entity-collection.js'
 export * from './providers/GenericZodModel.js'
 export * from './types.js'
-export * from './definitions/index.js'

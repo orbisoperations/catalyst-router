@@ -26,19 +26,22 @@ Here is a simple example showing how to define a domain, build entities, and che
 import { AuthorizationEngine, EntityBuilder } from 'authorization-engine'
 
 // 1. Define your Domain (optional but recommended for type safety)
-interface MyDomain {
-  Actions: 'view' | 'edit'
-  Entities: {
-    User: { role: string }
-    Document: { owner: string }
-  }
-}
+type MyDomain = [
+  {
+    Namespace: 'MyApp'
+    Actions: 'view' | 'edit'
+    Entities: {
+      User: { role: string }
+      Document: { owner: string }
+    }
+  },
+]
 
 // 2. Define Policies (Cedar syntax)
 const policies = `
   permit(
     principal,
-    action == Action::"view",
+    action == MyApp::Action::"view",
     resource
   )
   when { resource.owner == principal.id };
@@ -60,7 +63,7 @@ builder
 // 5. Check Authorization
 const result = engine.isAuthorized({
   principal: { type: 'User', id: 'alice' },
-  action: { type: 'Action', id: 'view' },
+  action: 'MyApp::Action::view',
   resource: { type: 'Document', id: 'doc1' },
   context: {}, // Optional context
   entities: builder.build(), // Convert builder state to EntityCollection
@@ -73,6 +76,37 @@ if (result.type === 'failure') {
 } else {
   console.log('Access Denied:', result.reasons)
 }
+```
+
+## Namespaces & Domain Structure
+
+The `AuthorizationDomain` type is designed to have 1:1 parity with your Cedar schema definitions. Just as a Cedar schema can be split into multiple namespace blocks, or have actions and entities defined separately, your TypeScript domain definition supports this flexibility.
+
+It supports:
+
+- **Namespaced Definitions**: Group entities and actions under a namespace (e.g., `Shop::User`).
+- **Global Definitions**: Define entities or actions at the root level (Namespace: `null`).
+- **Partial Definitions**: `Actions` or `Entities` can be `null`. This mirrors Cedar's ability to define `action` and `entity` blocks independently.
+
+This structure allows for modular and composable domain definitions.
+
+```typescript
+type MyDomain = [
+  // Namespace 'Auth' with only Entities defined
+  {
+    Namespace: 'Auth'
+    Actions: null
+    Entities: {
+      User: { email: string }
+    }
+  },
+  // Global Actions (no namespace)
+  {
+    Namespace: null
+    Actions: 'login' | 'logout'
+    Entities: null
+  },
+]
 ```
 
 ## Core Concepts & API

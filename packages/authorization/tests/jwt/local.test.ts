@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
 import * as jose from 'jose'
-import { LocalTokenManager } from '../../src/jwt/local/index.js'
-import { Role } from '../../src/policy/src/types.js'
-import { type IKeyManager } from '../../src/key-manager/index.js'
 import { type TokenStore } from '../../src/jwt/index.js'
+import { LocalTokenManager } from '../../src/jwt/local/index.js'
+import { type IKeyManager } from '../../src/key-manager/index.js'
+import { Role } from '../../src/policy/src/definitions/models.js'
 
 describe('LocalTokenManager', () => {
   const mockKeyManager: IKeyManager = {
