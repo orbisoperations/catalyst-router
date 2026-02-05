@@ -65,3 +65,46 @@ export const ListRoutesInputSchema = BaseCliConfigSchema.extend({
   token: z.string().optional(),
 })
 export type ListRoutesInput = z.infer<typeof ListRoutesInputSchema>
+
+// Auth Token Schemas
+export const MintTokenInputSchema = z.object({
+  subject: z.string().min(1),
+  role: z.enum(['ADMIN', 'NODE', 'NODE_CUSTODIAN', 'DATA_CUSTODIAN', 'USER']),
+  name: z.string().min(1),
+  type: z.enum(['user', 'service']).default('user'),
+  expiresIn: z.string().optional(),
+  nodeId: z.string().optional(),
+  trustedDomains: z.array(z.string()).optional(),
+  trustedNodes: z.array(z.string()).optional(),
+  authUrl: z.string().url().optional(),
+  token: z.string().optional(),
+})
+export type MintTokenInput = z.infer<typeof MintTokenInputSchema>
+
+export const VerifyTokenInputSchema = z.object({
+  tokenToVerify: z.string().min(1),
+  audience: z.string().optional(),
+  authUrl: z.string().url().optional(),
+  token: z.string().optional(),
+})
+export type VerifyTokenInput = z.infer<typeof VerifyTokenInputSchema>
+
+export const RevokeTokenInputSchema = z
+  .object({
+    jti: z.string().optional(),
+    san: z.string().optional(),
+    authUrl: z.string().url().optional(),
+    token: z.string().optional(),
+  })
+  .refine((data) => data.jti || data.san, {
+    message: 'Either jti or san must be provided',
+  })
+export type RevokeTokenInput = z.infer<typeof RevokeTokenInputSchema>
+
+export const ListTokensInputSchema = z.object({
+  certificateFingerprint: z.string().optional(),
+  san: z.string().optional(),
+  authUrl: z.string().url().optional(),
+  token: z.string().optional(),
+})
+export type ListTokensInput = z.infer<typeof ListTokensInputSchema>
