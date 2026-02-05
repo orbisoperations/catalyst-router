@@ -1,0 +1,125 @@
+services:
+  # --- Observability stack ---
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: catalyst-otel-collector-2n
+    command: ["--config", "/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  # --- Shared auth ---
+
+  auth:
+    build:
+      context: ..
+      dockerfile: packages/auth/Dockerfile
+    ports:
+      - "4020:4020"
+    environment:
+      - PORT=4020
+      - OTEL_SERVICE_NAME=auth
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    depends_on:
+      - otel-collector
+
+  # --- Node A: gateway-a + books ---
+
+  gateway-a:
+    build:
+      context: ..
+      dockerfile: packages/gateway/Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - OTEL_SERVICE_NAME=gateway-a
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    depends_on:
+      - otel-collector
+      - books-service
+
+  books-service:
+    build:
+      context: ..
+      dockerfile: packages/examples/Dockerfile.books
+    ports:
+      - "8081:8080"
+    environment:
+      - PORT=8080
+
+  node-a:
+    build:
+      context: ..
+      dockerfile: packages/orchestrator/Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://node-a:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_PEERING_SECRET=valid-secret
+      - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-a:4000/api
+      - OTEL_SERVICE_NAME=orchestrator-node-a
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    networks:
+      default:
+        aliases:
+          - node-a
+    depends_on:
+      - otel-collector
+      - auth
+      - gateway-a
+
+  # --- Node B: gateway-b + movies ---
+
+  gateway-b:
+    build:
+      context: ..
+      dockerfile: packages/gateway/Dockerfile
+    ports:
+      - "4001:4000"
+    environment:
+      - PORT=4000
+      - OTEL_SERVICE_NAME=gateway-b
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    depends_on:
+      - otel-collector
+      - movies-service
+
+  movies-service:
+    build:
+      context: ..
+      dockerfile: packages/examples/Dockerfile.movies
+    ports:
+      - "8082:8080"
+    environment:
+      - PORT=8080
+
+  node-b:
+    build:
+      context: ..
+      dockerfile: packages/orchestrator/Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://node-b:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_PEERING_SECRET=valid-secret
+      - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-b:4000/api
+      - OTEL_SERVICE_NAME=orchestrator-node-b
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    networks:
+      default:
+        aliases:
+          - node-b
+    depends_on:
+      - otel-collector
+      - auth
+      - gateway-b
