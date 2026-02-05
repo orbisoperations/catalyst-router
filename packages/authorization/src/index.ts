@@ -1,5 +1,3 @@
-export * from './key-manager/sqlite-key-store.js'
-export * from './key-manager/persistent.js'
 export * from './jwt/index.js'
 export * from './jwt/local/exports.js'
 export * from './key-manager/index.js'
