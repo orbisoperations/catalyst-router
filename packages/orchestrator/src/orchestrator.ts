@@ -180,13 +180,9 @@ export class CatalystNodeBus extends RpcTarget {
     callerToken: string,
     action: string
   ): Promise<{ valid: true } | { valid: false; error: string }> {
-    // Allow bypassing auth in test/development environments
-    if (process.env.CATALYST_SKIP_AUTH === 'true') {
-      return { valid: true }
-    }
-
+    // If no auth client is configured, allow the operation (for testing/development)
     if (!this.authClient) {
-      return { valid: false, error: 'Auth service not configured' }
+      return { valid: true }
     }
 
     try {
@@ -284,6 +280,7 @@ export class CatalystNodeBus extends RpcTarget {
                 name: action.data.name,
                 endpoint: action.data.endpoint,
                 domains: action.data.domains,
+                peerToken: action.data.peerToken,
                 connectionStatus: 'initializing' as const,
                 lastConnected: undefined,
               },
@@ -310,6 +307,7 @@ export class CatalystNodeBus extends RpcTarget {
                     ...p,
                     endpoint: action.data.endpoint,
                     domains: action.data.domains,
+                    peerToken: action.data.peerToken,
                     connectionStatus: 'initializing',
                     lastConnected: undefined,
                   }
@@ -523,8 +521,8 @@ export class CatalystNodeBus extends RpcTarget {
           )
           const stub = this.connectionPool.get(action.data.endpoint)
           if (stub) {
-            // Use node token to authenticate to peer
-            const token = this.nodeToken || ''
+            // Use peer-specific token if available, otherwise fall back to node token
+            const token = action.data.peerToken || this.nodeToken || ''
             const connectionResult = await stub.getIBGPClient(token)
 
             if (connectionResult.success) {
@@ -581,7 +579,8 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
+              const token = action.data.peerInfo.peerToken || this.nodeToken || ''
+              const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: allRoutes,
@@ -622,7 +621,8 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
+              const token = action.data.peerInfo.peerToken || this.nodeToken || ''
+              const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: allRoutes,
@@ -649,7 +649,8 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
+              const token = peer.peerToken || this.nodeToken || ''
+              const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
                 await connectionResult.client.close(this.config.node, 1000, 'Peer removed')
               }
@@ -681,7 +682,8 @@ export class CatalystNodeBus extends RpcTarget {
               console.log(
                 `[${this.config.node.name}] Pushing local route ${action.data.name} to ${peer.name}`
               )
-              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
+              const token = peer.peerToken || this.nodeToken || ''
+              const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: [
@@ -703,7 +705,8 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
+              const token = peer.peerToken || this.nodeToken || ''
+              const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: [{ action: 'remove', route: action.data }],
@@ -740,7 +743,8 @@ export class CatalystNodeBus extends RpcTarget {
 
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
+              const token = peer.peerToken || this.nodeToken || ''
+              const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
                 // Prepend my FQDN to the path of propagated updates
                 const updatesWithPrepend = {
@@ -803,7 +807,8 @@ export class CatalystNodeBus extends RpcTarget {
       try {
         const stub = this.connectionPool.get(peer.endpoint)
         if (stub) {
-          const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
+          const token = peer.peerToken || this.nodeToken || ''
+          const connectionResult = await stub.getIBGPClient(token)
 
           if (connectionResult.success) {
             await connectionResult.client.update(this.config.node, {

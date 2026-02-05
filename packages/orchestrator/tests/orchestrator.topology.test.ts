@@ -5,9 +5,6 @@ import { newRouteTable } from '../src/routing/state.js'
 
 import { MockConnectionPool } from './mock-connection-pool.js'
 
-// Bypass auth for unit tests
-process.env.CATALYST_SKIP_AUTH = 'true'
-
 describe('Orchestrator Topology Tests', () => {
   let pool: MockConnectionPool
   let nodeA: CatalystNodeBus

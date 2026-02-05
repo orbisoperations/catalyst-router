@@ -49,7 +49,8 @@ export class AuthorizationEngine<
    * @throws {Error} If warnings are present and `failOnWarnings` is `true`.
    * @returns {boolean} `true` if policies are valid.
    */
-  validatePolicies(): boolean {
+  validatePolicies(opts: { failOnWarnings?: boolean } = {}): boolean {
+    const failOnWarnings = opts.failOnWarnings ?? true
     const validationAnswer = cedar.validate({
       schema: this.schema,
       policies: { staticPolicies: this.policies },

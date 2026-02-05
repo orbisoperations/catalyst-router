@@ -68,42 +68,42 @@ namespace CATALYST {
 
     action IBGP_CONNECT appliesTo {
         principal: [ADMIN, NODE, NODE_CUSTODIAN],
-        resource: IBGP
+        resource: [IBGP, AdminPanel]
     };
 
     action IBGP_DISCONNECT appliesTo {
         principal: [ADMIN, NODE, NODE_CUSTODIAN],
-        resource: IBGP
+        resource: [IBGP, AdminPanel]
     };
 
     action IBGP_UPDATE appliesTo {
         principal: [ADMIN, NODE, NODE_CUSTODIAN],
-        resource: IBGP
+        resource: [IBGP, AdminPanel]
     };
 
     action PEER_CREATE appliesTo {
         principal: [ADMIN, NODE_CUSTODIAN],
-        resource: Peer
+        resource: [Peer, AdminPanel]
     };
 
     action PEER_UPDATE appliesTo {
         principal: [ADMIN, NODE_CUSTODIAN],
-        resource: Peer
+        resource: [Peer, AdminPanel]
     };
 
     action PEER_DELETE appliesTo {
         principal: [ADMIN, NODE_CUSTODIAN],
-        resource: Peer
+        resource: [Peer, AdminPanel]
     };
 
     action ROUTE_CREATE appliesTo {
         principal: [ADMIN, DATA_CUSTODIAN],
-        resource: Route
+        resource: [Route, AdminPanel]
     };
 
     action ROUTE_DELETE appliesTo {
         principal: [ADMIN, DATA_CUSTODIAN],
-        resource: Route
+        resource: [Route, AdminPanel]
     };
 
     action TOKEN_CREATE appliesTo {

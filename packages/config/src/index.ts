@@ -8,6 +8,7 @@ export const NodeConfigSchema = z.object({
   domains: z.array(z.string()),
   endpoint: z.string().optional(),
   labels: z.record(z.string(), z.string()).optional(),
+  peerToken: z.string().optional(), // Token to use when connecting to this peer
 })
 
 export type NodeConfig = z.infer<typeof NodeConfigSchema>
