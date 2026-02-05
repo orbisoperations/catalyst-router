@@ -22,3 +22,24 @@ export type AddServiceInput = z.infer<typeof AddServiceInputSchema>
 
 export const ListServicesInputSchema = BaseCliConfigSchema
 export type ListServicesInput = z.infer<typeof ListServicesInputSchema>
+
+// Node Peer Schemas
+export const CreatePeerInputSchema = BaseCliConfigSchema.extend({
+  name: z.string().min(1),
+  endpoint: z.string().url(),
+  domains: z.array(z.string()).default([]),
+  peerToken: z.string().optional(),
+  token: z.string().optional(),
+})
+export type CreatePeerInput = z.infer<typeof CreatePeerInputSchema>
+
+export const DeletePeerInputSchema = BaseCliConfigSchema.extend({
+  name: z.string().min(1),
+  token: z.string().optional(),
+})
+export type DeletePeerInput = z.infer<typeof DeletePeerInputSchema>
+
+export const ListPeersInputSchema = BaseCliConfigSchema.extend({
+  token: z.string().optional(),
+})
+export type ListPeersInput = z.infer<typeof ListPeersInputSchema>
