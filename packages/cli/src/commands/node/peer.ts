@@ -1,7 +1,11 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
-import { createOrchestratorClient } from '../../clients/orchestrator-client.js'
 import { CreatePeerInputSchema, DeletePeerInputSchema, ListPeersInputSchema } from '../../types.js'
+import {
+  createPeerHandler,
+  listPeersHandler,
+  deletePeerHandler,
+} from '../../handlers/node-peer-handlers.js'
 
 export function peerCommands(): Command {
   const peer = new Command('peer').description('Manage peer connections')
@@ -33,30 +37,13 @@ export function peerCommands(): Command {
         process.exit(1)
       }
 
-      try {
-        const client = await createOrchestratorClient(validation.data.orchestratorUrl)
-        const mgmtScope = client.connectionFromManagementSDK()
+      const result = await createPeerHandler(validation.data)
 
-        const result = await mgmtScope.applyAction({
-          resource: 'internalBGPConfig',
-          resourceAction: 'create',
-          data: {
-            name: validation.data.name,
-            endpoint: validation.data.endpoint,
-            domains: validation.data.domains,
-            peerToken: validation.data.peerToken,
-          },
-        })
-
-        if (result.success) {
-          console.log(chalk.green(`✓ Peer '${name}' created successfully.`))
-          process.exit(0)
-        } else {
-          console.error(chalk.red(`✗ Failed to create peer: ${result.error}`))
-          process.exit(1)
-        }
-      } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+      if (result.success) {
+        console.log(chalk.green(`✓ Peer '${result.data.name}' created successfully.`))
+        process.exit(0)
+      } else {
+        console.error(chalk.red(`✗ Failed to create peer: ${result.error}`))
         process.exit(1)
       }
     })
@@ -80,17 +67,14 @@ export function peerCommands(): Command {
         process.exit(1)
       }
 
-      try {
-        const client = await createOrchestratorClient(validation.data.orchestratorUrl)
-        const mgmtScope = client.connectionFromManagementSDK()
+      const result = await listPeersHandler(validation.data)
 
-        const result = await mgmtScope.listPeers()
-
-        if (result.peers.length === 0) {
+      if (result.success) {
+        if (result.data.peers.length === 0) {
           console.log(chalk.yellow('No peers found.'))
         } else {
           console.table(
-            result.peers.map((p) => ({
+            result.data.peers.map((p) => ({
               Name: p.name,
               Endpoint: p.endpoint,
               Domains: p.domains?.join(', ') || '-',
@@ -99,8 +83,8 @@ export function peerCommands(): Command {
           )
         }
         process.exit(0)
-      } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+      } else {
+        console.error(chalk.red(`✗ Error: ${result.error}`))
         process.exit(1)
       }
     })
@@ -126,21 +110,13 @@ export function peerCommands(): Command {
         process.exit(1)
       }
 
-      try {
-        const client = await createOrchestratorClient(validation.data.orchestratorUrl)
-        const mgmtScope = client.connectionFromManagementSDK()
+      const result = await deletePeerHandler(validation.data)
 
-        const result = await mgmtScope.deletePeer(validation.data.name)
-
-        if (result.success) {
-          console.log(chalk.green(`✓ Peer '${name}' deleted.`))
-          process.exit(0)
-        } else {
-          console.error(chalk.red(`✗ Failed to delete peer: ${result.error}`))
-          process.exit(1)
-        }
-      } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+      if (result.success) {
+        console.log(chalk.green(`✓ Peer '${result.data.name}' deleted.`))
+        process.exit(0)
+      } else {
+        console.error(chalk.red(`✗ Failed to delete peer: ${result.error}`))
         process.exit(1)
       }
     })
