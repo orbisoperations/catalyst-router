@@ -43,6 +43,11 @@ interface AuthRpcApi {
 }
 
 let nodeToken: string | undefined
+let tokenExpiresAt: Date | undefined
+
+// Token refresh threshold: refresh when 80% of TTL has elapsed
+const REFRESH_THRESHOLD = 0.8
+const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 
 async function mintNodeToken() {
   if (!config.orchestrator?.auth) {
@@ -70,20 +75,58 @@ async function mintNodeToken() {
         type: 'service',
         role: Role.NODE,
         nodeId: config.node.name,
+        trustedNodes: [], // Empty for now - could be populated from peer config
+        trustedDomains: config.node.domains, // Domains this node trusts
       },
       roles: [Role.NODE],
       expiresIn: '7d', // Node token valid for 7 days
     })
 
+    // Track expiry time for refresh logic
+    tokenExpiresAt = new Date(Date.now() + TOKEN_TTL_MS)
+
     console.log(`Node token minted successfully for ${config.node.name}`)
+    console.log(`Token expires at: ${tokenExpiresAt.toISOString()}`)
   } catch (error) {
     console.error('Failed to mint node token:', error)
     throw error
   }
 }
 
+/**
+ * Check if token needs refresh and re-mint if necessary.
+ * Refreshes when 80% of TTL has elapsed to avoid token expiration during operations.
+ */
+async function refreshNodeTokenIfNeeded() {
+  if (!config.orchestrator?.auth || !tokenExpiresAt) {
+    return
+  }
+
+  const now = Date.now()
+  const expiryTime = tokenExpiresAt.getTime()
+  const refreshTime = now + (expiryTime - now) * (1 - REFRESH_THRESHOLD)
+
+  if (now >= refreshTime) {
+    console.log('Node token approaching expiration, refreshing...')
+    try {
+      await mintNodeToken()
+      console.log('Node token refreshed successfully')
+    } catch (error) {
+      console.error('Failed to refresh node token:', error)
+      // Don't throw - keep using existing token until it expires
+    }
+  }
+}
+
 // Mint node token before starting the server
 await mintNodeToken()
+
+// Set up periodic token refresh check (every hour)
+if (config.orchestrator?.auth) {
+  const REFRESH_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
+  setInterval(refreshNodeTokenIfNeeded, REFRESH_CHECK_INTERVAL)
+  console.log('Token refresh check enabled (every hour)')
+}
 
 const bus = new CatalystNodeBus({
   config: config.orchestrator

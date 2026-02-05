@@ -33,9 +33,11 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
+  let auth: StartedTestContainer
   let nodeA: StartedTestContainer
   let nodeB: StartedTestContainer
   let nodeC: StartedTestContainer
+  let systemToken: string
 
   const orchestratorImage = 'catalyst-node:next-topology-e2e'
   const authImage = 'catalyst-auth:next-topology-e2e'
@@ -57,6 +59,37 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
 
     network = await new Network().start()
 
+    // Start auth service first
+    console.log('Starting auth service...')
+    const authLogs: string[] = []
+    auth = await new GenericContainer(authImage)
+      .withNetwork(network)
+      .withNetworkAliases('auth')
+      .withExposedPorts(5000)
+      .withEnvironment({
+        PORT: '5000',
+        CATALYST_BOOTSTRAP_TOKEN: 'test-bootstrap-token',
+      })
+      .withWaitStrategy(Wait.forLogMessage('System token:'))
+      .withLogConsumer((stream: Readable) => {
+        stream.on('data', (chunk) => {
+          const text = chunk.toString()
+          authLogs.push(text)
+          process.stdout.write(text)
+        })
+      })
+      .start()
+
+    console.log('Auth service started, extracting system token...')
+
+    // Extract system token from logs
+    const tokenLog = authLogs.find((line) => line.includes('System token:'))
+    if (!tokenLog) {
+      throw new Error('Failed to find system token in auth service logs')
+    }
+    systemToken = tokenLog.split('System token:')[1].trim()
+    console.log(`Extracted system token: ${systemToken.substring(0, 20)}...`)
+
     const startNode = async (name: string, alias: string) => {
       return await new GenericContainer(orchestratorImage)
         .withNetwork(network)
@@ -67,7 +100,8 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
           CATALYST_NODE_ID: name,
           CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
           CATALYST_DOMAINS: 'somebiz.local.io',
-          CATALYST_PEERING_SECRET: 'valid-secret',
+          CATALYST_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
+          CATALYST_SYSTEM_TOKEN: systemToken,
         })
         .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
         .withLogConsumer((stream: Readable) => {
@@ -89,6 +123,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       if (nodeA) await nodeA.stop()
       if (nodeB) await nodeB.stop()
       if (nodeC) await nodeC.stop()
+      if (auth) await auth.stop()
       if (network) await network.stop()
       console.log('Teardown: Success')
     } catch (e) {
@@ -107,8 +142,9 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       const clientA = getClient(nodeA)
       const clientB = getClient(nodeB)
 
-      const netAResult = await clientA.getNetworkClient('valid-secret')
-      const netBResult = await clientB.getNetworkClient('valid-secret')
+      // Use system admin token for test operations
+      const netAResult = await clientA.getNetworkClient(systemToken)
+      const netBResult = await clientB.getNetworkClient(systemToken)
 
       if (!netAResult.success || !netBResult.success) {
         throw new Error('Failed to get network client')
@@ -133,7 +169,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       await new Promise((r) => setTimeout(r, 2000))
 
       // A adds a route
-      const dataAResult = await clientA.getDataChannelClient('valid-secret')
+      const dataAResult = await clientA.getDataChannelClient(systemToken)
       if (!dataAResult.success) throw new Error(`Failed to get data client: ${dataAResult.error}`)
 
       await dataAResult.client.addRoute({
@@ -145,7 +181,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       // Check B learned it
       let learnedOnB = false
       for (let i = 0; i < 20; i++) {
-        const dataBResult = await clientB.getDataChannelClient('valid-secret')
+        const dataBResult = await clientB.getDataChannelClient(systemToken)
         if (!dataBResult.success) throw new Error('Failed to get data client B')
         const routes = await dataBResult.client.listRoutes()
         if (routes.internal.some((r) => r.name === 'service-a')) {
@@ -165,8 +201,8 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       const clientB = getClient(nodeB)
       const clientC = getClient(nodeC)
 
-      const netBResult = await clientB.getNetworkClient('valid-secret')
-      const netCResult = await clientC.getNetworkClient('valid-secret')
+      const netBResult = await clientB.getNetworkClient(systemToken)
+      const netCResult = await clientC.getNetworkClient(systemToken)
 
       if (!netBResult.success || !netCResult.success) {
         throw new Error('Failed to get network client')
@@ -193,7 +229,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       // Verify node C learned service-a via node B
       let learnedOnC = false
       for (let i = 0; i < 20; i++) {
-        const dataCResult = await clientC.getDataChannelClient('valid-secret')
+        const dataCResult = await clientC.getDataChannelClient(systemToken)
         if (!dataCResult.success) throw new Error('Failed to get data client C')
         const routes = await dataCResult.client.listRoutes()
         const routeA = routes.internal.find((r) => r.name === 'service-a')
