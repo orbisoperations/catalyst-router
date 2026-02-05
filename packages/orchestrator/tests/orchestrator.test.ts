@@ -68,9 +68,13 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       .withExposedPorts(5000)
       .withEnvironment({
         PORT: '5000',
+        CATALYST_NODE_ID: 'auth',
+        CATALYST_PEERING_ENDPOINT: 'ws://auth:5000/rpc',
         CATALYST_BOOTSTRAP_TOKEN: 'test-bootstrap-token',
+        CATALYST_AUTH_KEYS_DB: ':memory:',
+        CATALYST_AUTH_TOKENS_DB: ':memory:',
       })
-      .withWaitStrategy(Wait.forLogMessage('System token:'))
+      .withWaitStrategy(Wait.forLogMessage('System Admin Token minted:'))
       .withLogConsumer((stream: Readable) => {
         stream.on('data', (chunk) => {
           const text = chunk.toString()
@@ -82,12 +86,17 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
 
     console.log('Auth service started, extracting system token...')
 
-    // Extract system token from logs
-    const tokenLog = authLogs.find((line) => line.includes('System token:'))
+    // Extract system token from logs (with retry for race condition)
+    let tokenLog: string | undefined
+    for (let i = 0; i < 20; i++) {
+      tokenLog = authLogs.find((line) => line.includes('System Admin Token minted:'))
+      if (tokenLog) break
+      await new Promise((r) => setTimeout(r, 100))
+    }
     if (!tokenLog) {
       throw new Error('Failed to find system token in auth service logs')
     }
-    systemToken = tokenLog.split('System token:')[1].trim()
+    systemToken = tokenLog.split('System Admin Token minted:')[1].trim()
     console.log(`Extracted system token: ${systemToken.substring(0, 20)}...`)
 
     const startNode = async (name: string, alias: string) => {
