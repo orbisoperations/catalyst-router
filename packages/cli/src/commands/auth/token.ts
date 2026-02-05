@@ -1,17 +1,12 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
+import { createAuthClient } from '../../clients/auth-client.js'
 import {
   MintTokenInputSchema,
   VerifyTokenInputSchema,
   RevokeTokenInputSchema,
   ListTokensInputSchema,
 } from '../../types.js'
-import {
-  mintTokenHandler,
-  verifyTokenHandler,
-  revokeTokenHandler,
-  listTokensHandler,
-} from '../../handlers/auth-token-handlers.js'
 
 export function tokenCommands(): Command {
   const token = new Command('token').description('Token management (mint, verify, revoke, list)')
@@ -57,14 +52,35 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      const result = await mintTokenHandler(validation.data)
+      try {
+        const client = await createAuthClient(validation.data.authUrl)
+        const tokensApi = await client.tokens(validation.data.token || '')
 
-      if (result.success) {
+        if ('error' in tokensApi) {
+          console.error(chalk.red(`✗ Auth failed: ${tokensApi.error}`))
+          process.exit(1)
+        }
+
+        const newToken = await tokensApi.create({
+          subject: validation.data.subject,
+          entity: {
+            id: validation.data.subject,
+            name: validation.data.name,
+            type: validation.data.type,
+            role: validation.data.role,
+            nodeId: validation.data.nodeId,
+            trustedDomains: validation.data.trustedDomains,
+            trustedNodes: validation.data.trustedNodes,
+          },
+          roles: [validation.data.role],
+          expiresIn: validation.data.expiresIn,
+        })
+
         console.log(chalk.green('✓ Token minted successfully:'))
-        console.log(result.data.token)
+        console.log(newToken)
         process.exit(0)
-      } else {
-        console.error(chalk.red(`✗ Error: ${result.error}`))
+      } catch (error) {
+        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -98,20 +114,31 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      const result = await verifyTokenHandler(validation.data)
+      try {
+        const client = await createAuthClient(validation.data.authUrl)
+        const validationApi = await client.validation(validation.data.token || '')
 
-      if (!result.success) {
-        console.error(chalk.red(`✗ Error: ${result.error}`))
-        process.exit(1)
-      }
+        if ('error' in validationApi) {
+          console.error(chalk.red(`✗ Auth failed: ${validationApi.error}`))
+          process.exit(1)
+        }
 
-      if (result.data.valid) {
-        console.log(chalk.green('✓ Token is valid'))
-        console.log(chalk.cyan('Payload:'))
-        console.log(JSON.stringify(result.data.payload, null, 2))
-        process.exit(0)
-      } else {
-        console.log(chalk.red(`✗ Token is invalid: ${result.data.error}`))
+        const result = await validationApi.validate({
+          token: validation.data.tokenToVerify,
+          audience: validation.data.audience,
+        })
+
+        if (result.valid) {
+          console.log(chalk.green('✓ Token is valid'))
+          console.log(chalk.cyan('Payload:'))
+          console.log(JSON.stringify(result.payload, null, 2))
+          process.exit(0)
+        } else {
+          console.log(chalk.red(`✗ Token is invalid: ${result.error}`))
+          process.exit(1)
+        }
+      } catch (error) {
+        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -145,13 +172,24 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      const result = await revokeTokenHandler(validation.data)
+      try {
+        const client = await createAuthClient(validation.data.authUrl)
+        const tokensApi = await client.tokens(validation.data.token || '')
 
-      if (result.success) {
+        if ('error' in tokensApi) {
+          console.error(chalk.red(`✗ Auth failed: ${tokensApi.error}`))
+          process.exit(1)
+        }
+
+        await tokensApi.revoke({
+          jti: validation.data.jti,
+          san: validation.data.san,
+        })
+
         console.log(chalk.green('✓ Token revoked successfully.'))
         process.exit(0)
-      } else {
-        console.error(chalk.red(`✗ Error: ${result.error}`))
+      } catch (error) {
+        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -185,14 +223,25 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      const result = await listTokensHandler(validation.data)
+      try {
+        const client = await createAuthClient(validation.data.authUrl)
+        const tokensApi = await client.tokens(validation.data.token || '')
 
-      if (result.success) {
-        if (result.data.tokens.length === 0) {
+        if ('error' in tokensApi) {
+          console.error(chalk.red(`✗ Auth failed: ${tokensApi.error}`))
+          process.exit(1)
+        }
+
+        const tokens = await tokensApi.list({
+          certificateFingerprint: validation.data.certificateFingerprint,
+          san: validation.data.san,
+        })
+
+        if (tokens.length === 0) {
           console.log(chalk.yellow('No tokens found.'))
         } else {
           console.table(
-            result.data.tokens.map((t) => ({
+            tokens.map((t) => ({
               JTI: t.jti,
               Subject: t.sub,
               IssuedAt: new Date(t.iat * 1000).toISOString(),
@@ -202,8 +251,8 @@ export function tokenCommands(): Command {
           )
         }
         process.exit(0)
-      } else {
-        console.error(chalk.red(`✗ Error: ${result.error}`))
+      } catch (error) {
+        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
