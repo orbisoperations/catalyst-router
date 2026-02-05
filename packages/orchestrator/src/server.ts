@@ -43,6 +43,7 @@ interface AuthRpcApi {
 }
 
 let nodeToken: string | undefined
+let tokenIssuedAt: Date | undefined
 let tokenExpiresAt: Date | undefined
 
 // Token refresh threshold: refresh when 80% of TTL has elapsed
@@ -82,10 +83,12 @@ async function mintNodeToken() {
       expiresIn: '7d', // Node token valid for 7 days
     })
 
-    // Track expiry time for refresh logic
+    // Track issue and expiry times for refresh logic
+    tokenIssuedAt = new Date()
     tokenExpiresAt = new Date(Date.now() + TOKEN_TTL_MS)
 
     console.log(`Node token minted successfully for ${config.node.name}`)
+    console.log(`Token issued at: ${tokenIssuedAt.toISOString()}`)
     console.log(`Token expires at: ${tokenExpiresAt.toISOString()}`)
   } catch (error) {
     console.error('Failed to mint node token:', error)
@@ -98,13 +101,15 @@ async function mintNodeToken() {
  * Refreshes when 80% of TTL has elapsed to avoid token expiration during operations.
  */
 async function refreshNodeTokenIfNeeded() {
-  if (!config.orchestrator?.auth || !tokenExpiresAt) {
+  if (!config.orchestrator?.auth || !tokenIssuedAt || !tokenExpiresAt) {
     return
   }
 
   const now = Date.now()
+  const issuedTime = tokenIssuedAt.getTime()
   const expiryTime = tokenExpiresAt.getTime()
-  const refreshTime = now + (expiryTime - now) * (1 - REFRESH_THRESHOLD)
+  const totalLifetime = expiryTime - issuedTime
+  const refreshTime = issuedTime + totalLifetime * REFRESH_THRESHOLD
 
   if (now >= refreshTime) {
     console.log('Node token approaching expiration, refreshing...')
