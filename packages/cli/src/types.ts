@@ -43,3 +43,25 @@ export const ListPeersInputSchema = BaseCliConfigSchema.extend({
   token: z.string().optional(),
 })
 export type ListPeersInput = z.infer<typeof ListPeersInputSchema>
+
+// Node Route Schemas
+export const CreateRouteInputSchema = BaseCliConfigSchema.extend({
+  name: z.string().min(1),
+  endpoint: z.string().url(),
+  protocol: z.enum(['http', 'http:graphql', 'http:gql', 'http:grpc']).default('http:graphql'),
+  region: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  token: z.string().optional(),
+})
+export type CreateRouteInput = z.infer<typeof CreateRouteInputSchema>
+
+export const DeleteRouteInputSchema = BaseCliConfigSchema.extend({
+  name: z.string().min(1),
+  token: z.string().optional(),
+})
+export type DeleteRouteInput = z.infer<typeof DeleteRouteInputSchema>
+
+export const ListRoutesInputSchema = BaseCliConfigSchema.extend({
+  token: z.string().optional(),
+})
+export type ListRoutesInput = z.infer<typeof ListRoutesInputSchema>
