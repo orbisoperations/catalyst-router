@@ -1,23 +1,27 @@
 import { Command } from 'commander'
-import { serviceCommands } from './commands/service.js'
-import { metricsCommands } from './commands/metrics.js'
-import { peerCommands } from './commands/peer.js'
+import { nodeCommands } from './commands/node/index.js'
+import { authCommands } from './commands/auth/index.js'
 
 const program = new Command()
 
 program
   .name('catalyst')
-  .description('Catalyst Node CLI')
+  .description('Catalyst Node CLI - Hierarchical command structure')
   .version(process.env.VERSION || '0.0.0-dev')
   .option(
     '--orchestrator-url <url>',
     'Orchestrator RPC URL',
     process.env.CATALYST_ORCHESTRATOR_URL || 'ws://localhost:3000/rpc'
   )
+  .option(
+    '--auth-url <url>',
+    'Auth service RPC URL',
+    process.env.CATALYST_AUTH_URL || 'ws://localhost:4000/rpc'
+  )
+  .option('--token <token>', 'Auth token', process.env.CATALYST_AUTH_TOKEN)
   .option('--log-level <level>', 'Log level', 'info')
 
-program.addCommand(serviceCommands())
-program.addCommand(metricsCommands())
-program.addCommand(peerCommands())
+program.addCommand(nodeCommands())
+program.addCommand(authCommands())
 
 program.parse(process.argv)
