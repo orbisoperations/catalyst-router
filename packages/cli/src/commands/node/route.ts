@@ -1,11 +1,15 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
-import { createOrchestratorClient } from '../../clients/orchestrator-client.js'
 import {
   CreateRouteInputSchema,
   DeleteRouteInputSchema,
   ListRoutesInputSchema,
 } from '../../types.js'
+import {
+  createRouteHandler,
+  listRoutesHandler,
+  deleteRouteHandler,
+} from '../../handlers/node-route-handlers.js'
 
 export function routeCommands(): Command {
   const route = new Command('route').description('Manage local routes')
@@ -43,31 +47,13 @@ export function routeCommands(): Command {
         process.exit(1)
       }
 
-      try {
-        const client = await createOrchestratorClient(validation.data.orchestratorUrl)
-        const mgmtScope = client.connectionFromManagementSDK()
+      const result = await createRouteHandler(validation.data)
 
-        const result = await mgmtScope.applyAction({
-          resource: 'localRoute',
-          resourceAction: 'create',
-          data: {
-            name: validation.data.name,
-            endpoint: validation.data.endpoint,
-            protocol: validation.data.protocol,
-            region: validation.data.region,
-            tags: validation.data.tags,
-          },
-        })
-
-        if (result.success) {
-          console.log(chalk.green(`✓ Route '${name}' created successfully.`))
-          process.exit(0)
-        } else {
-          console.error(chalk.red(`✗ Failed to create route: ${result.error}`))
-          process.exit(1)
-        }
-      } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+      if (result.success) {
+        console.log(chalk.green(`✓ Route '${result.data.name}' created successfully.`))
+        process.exit(0)
+      } else {
+        console.error(chalk.red(`✗ Failed to create route: ${result.error}`))
         process.exit(1)
       }
     })
@@ -91,21 +77,14 @@ export function routeCommands(): Command {
         process.exit(1)
       }
 
-      try {
-        const client = await createOrchestratorClient(validation.data.orchestratorUrl)
-        const mgmtScope = client.connectionFromManagementSDK()
+      const result = await listRoutesHandler(validation.data)
 
-        const result = await mgmtScope.listLocalRoutes()
-        const allRoutes = [
-          ...result.routes.local.map((r) => ({ ...r, source: 'local' })),
-          ...result.routes.internal.map((r) => ({ ...r, source: 'internal', peer: r.peerName })),
-        ]
-
-        if (allRoutes.length === 0) {
+      if (result.success) {
+        if (result.data.routes.length === 0) {
           console.log(chalk.yellow('No routes found.'))
         } else {
           console.table(
-            allRoutes.map((r) => ({
+            result.data.routes.map((r) => ({
               Name: r.name,
               Endpoint: r.endpoint || 'N/A',
               Protocol: r.protocol,
@@ -115,8 +94,8 @@ export function routeCommands(): Command {
           )
         }
         process.exit(0)
-      } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+      } else {
+        console.error(chalk.red(`✗ Error: ${result.error}`))
         process.exit(1)
       }
     })
@@ -142,27 +121,13 @@ export function routeCommands(): Command {
         process.exit(1)
       }
 
-      try {
-        const client = await createOrchestratorClient(validation.data.orchestratorUrl)
-        const mgmtScope = client.connectionFromManagementSDK()
+      const result = await deleteRouteHandler(validation.data)
 
-        const result = await mgmtScope.applyAction({
-          resource: 'localRoute',
-          resourceAction: 'delete',
-          data: {
-            name: validation.data.name,
-          },
-        })
-
-        if (result.success) {
-          console.log(chalk.green(`✓ Route '${name}' deleted.`))
-          process.exit(0)
-        } else {
-          console.error(chalk.red(`✗ Failed to delete route: ${result.error}`))
-          process.exit(1)
-        }
-      } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+      if (result.success) {
+        console.log(chalk.green(`✓ Route '${result.data.name}' deleted.`))
+        process.exit(0)
+      } else {
+        console.error(chalk.red(`✗ Failed to delete route: ${result.error}`))
         process.exit(1)
       }
     })
