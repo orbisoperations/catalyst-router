@@ -7,7 +7,11 @@ import { type TokenStore } from '../../src/jwt/index.js'
 
 describe('LocalTokenManager', () => {
   const mockKeyManager: IKeyManager = {
-    sign: async (options: { subject: string; claims?: Record<string, unknown> }) => {
+    sign: async (options: {
+      subject: string
+      claims?: Record<string, unknown>
+      expiresAt?: number
+    }) => {
       // Create a dummy JWT for testing
       const payload = {
         sub: options.subject,
@@ -24,6 +28,8 @@ describe('LocalTokenManager', () => {
     rotate: async () => ({ previousKeyId: '', newKeyId: '' }),
     getCurrentKeyId: async () => 'test-kid',
     shutdown: async () => {},
+    initialize: async () => {},
+    isInitialized: () => true,
   }
 
   const mockStore: TokenStore = {

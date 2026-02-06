@@ -35,7 +35,7 @@ export class LocalTokenManager implements TokenManager {
     const token = await this.keyManager.sign({
       subject: options.subject,
       audience: options.audience,
-      expiresIn: options.expiresIn,
+      expiresAt: options.expiresAt,
       claims,
     })
 

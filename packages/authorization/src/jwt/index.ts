@@ -35,7 +35,8 @@ export interface TokenRecord {
 export interface MintOptions {
   subject: string
   audience?: string | string[]
-  expiresIn?: string
+  /** Expiration time in milliseconds (unix timestamp * 1000) */
+  expiresAt?: number
   claims?: Record<string, unknown>
   /** Roles assigned to the token (mandatory) */
   roles: Role[]

@@ -294,6 +294,8 @@ When reviewing or working on changes:
 - `SECURITY.md` - Security protocols, mTLS, JWT strategies
 - `BGP_PROTOCOL.md` - BGP message types and semantics
 - `TECH_STACK.md` - Technology choices and rationales
+- `CLAUDE_AGENTS.md` - Subagent definitions, prompts, and workflow examples
+- `docs/adr/` - Architecture Decision Records
 - `packages/*/README.md` - Package-specific documentation
 
 ## Important Patterns
@@ -347,3 +349,97 @@ When working on this codebase:
 9. **Security first** - mTLS, JWT validation, policy enforcement
 10. **RPC servers must extend `RpcTarget`** - Import from `capnweb`, call `super()` in constructor, public methods become RPC endpoints
 11. **Be stack-aware** - Use `gt log short` to understand current Graphite stack scope before making changes; keep changes focused to the current PR's intent
+12. **ADR compliance** - Check relevant ADRs before implementation; propose ADR updates when deviating
+
+## Architecture Decision Records (ADRs)
+
+ADRs live in `docs/adr/` and define technical standards. **Always check relevant ADRs before implementation.**
+
+| ADR  | Title                               | Status   | Key Requirement                                                                  |
+| ---- | ----------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| 0001 | Unified OpenTelemetry Observability | Accepted | Use `@catalyst/telemetry` for all observability; OTEL Collector as single egress |
+| 0002 | Logging Library Selection           | Accepted | Use LogTape with template literals: `logger.info\`message ${var}\``              |
+| 0003 | Observability Backends              | Proposed | Only Apache 2.0/MIT licensed backends (Prometheus, Jaeger, InfluxDB)             |
+| 0004 | SQLite Storage Backend              | Accepted | All persistent state in SQLite via `bun:sqlite`, not in-memory Maps              |
+| 0007 | Certificate-Bound Access Tokens     | Proposed | JWT must include `cnf` claim with cert thumbprint for BGP peering                |
+| 0008 | Permission Policy Schema            | Proposed | Use Cerbos for ABAC; policies in YAML at `packages/auth/cerbos/policies/`        |
+
+### ADR-Enforced Patterns
+
+**Observability (ADR-0001, 0002):**
+
+- Initialize telemetry first: `import { initTelemetry } from '@catalyst/telemetry'`
+- No `console.log()` — use LogTape logger
+- Hierarchical log categories: `getLogger(['service', 'component'])`
+
+**Storage (ADR-0004):**
+
+- Stores must implement abstract interface (e.g., `UserStore`)
+- Support both `InMemoryStore` (tests) and `SqliteStore` (production)
+- SQLite pragmas: WAL mode, foreign keys ON, busy_timeout 5000
+
+**Auth (ADR-0007, 0008):**
+
+- JWT `cnf` claim required for peering tokens
+- Authorization via Cerbos PDP, not scattered logic
+- Policies version-controlled in YAML
+
+## Subagent Strategy
+
+> **Full details:** See `CLAUDE_AGENTS.md` for complete agent definitions, prompt templates, and workflow examples.
+
+### Pre-Work Phase (ALWAYS)
+
+Before any implementation, spawn parallel exploration agents:
+
+```
+1. Stack Scope Agent     → `gt log short` to understand current PR scope
+2. Documentation Agent   → Read relevant docs (ARCHITECTURE.md, SECURITY.md, etc.)
+3. ADR Compliance Agent  → Read relevant ADRs in docs/adr/
+```
+
+**Goal:** Understand intent before changing anything. Either reinforce documented patterns or propose updates.
+
+### Implementation Phase
+
+Keep changes focused to current stack scope. If scope creep detected, suggest creating a new stacked PR.
+
+### Verification Phase (Sequential)
+
+Run verification in this order—stop on first failure:
+
+```
+1. bun run lint           # Lint check
+2. bun run format:check   # Format check
+3. tsc --noEmit           # Type check
+4. bun test [package]     # Unit tests (parallel across packages OK)
+5. Integration tests      # If touching cross-package boundaries
+6. Container tests        # If touching RPC/networking (CATALYST_CONTAINER_TESTS_ENABLED=true)
+7. Topology tests         # If touching orchestrator/peering logic
+```
+
+**Parallel test execution:** OK across packages, but aggregate failures clearly:
+
+```
+❌ @catalyst/auth: 2 failures
+  - signToken.test.ts: expected token to include cnf claim
+  - verifyToken.test.ts: timeout exceeded
+❌ @catalyst/gateway: 1 failure
+  - reload.test.ts: schema mismatch
+```
+
+### Documentation Sync Phase
+
+After implementation, check if docs need updates:
+
+- Did behavior change? → Update relevant `.md` files
+- Did you deviate from an ADR? → Propose ADR amendment or new ADR
+- Did you establish a new pattern? → Suggest CLAUDE.md update
+
+### Continuous Improvement
+
+When technical patterns emerge from ADRs or implementation:
+
+1. **Extract to CLAUDE.md** — If an ADR defines code patterns, add them here
+2. **Keep in sync** — When ADRs change, update corresponding CLAUDE.md sections
+3. **Suggest updates** — Proactively recommend CLAUDE.md changes when patterns solidify
