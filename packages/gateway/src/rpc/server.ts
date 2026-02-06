@@ -3,6 +3,8 @@ import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 import { RpcTarget } from 'capnweb'
 import { newRpcResponse } from '@hono/capnweb'
+import { TelemetryBuilder } from '@catalyst/telemetry'
+import type { ServiceTelemetry } from '@catalyst/telemetry'
 
 // Define the configuration schema
 export const ServiceConfigSchema = z.object({
@@ -28,27 +30,38 @@ export type GatewayUpdateResult = z.infer<typeof GatewayUpdateResultSchema>
 
 export class GatewayRpcServer extends RpcTarget {
   private updateCallback: ConfigUpdateCallback
+  private readonly logger: ServiceTelemetry['logger']
 
-  constructor(updateCallback: ConfigUpdateCallback) {
+  constructor(
+    updateCallback: ConfigUpdateCallback,
+    telemetry: ServiceTelemetry = TelemetryBuilder.noop('gateway')
+  ) {
     super()
     this.updateCallback = updateCallback
+    this.logger = telemetry.logger.getChild('rpc')
   }
 
   // The method exposed to RPC clients
   async updateConfig(config: unknown): Promise<GatewayUpdateResult> {
-    console.log('Received config update via RPC')
+    this.logger.info`Config update received via RPC`
     const result = GatewayConfigSchema.safeParse(config)
     if (!result.success) {
-      console.error('Invalid config received.')
-      return { success: false, error: 'Malformed configuration received and unable to parse' }
+      this.logger.error`Invalid config received`
+      return {
+        success: false,
+        error: 'Malformed configuration received and unable to parse',
+      }
     }
 
     try {
       return await this.updateCallback(result.data)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error('Failed to update configuration:', error)
-      return { success: false, error: `Failed to apply configuration: ${message}` }
+      this.logger.error`Config update failed: ${message}`
+      return {
+        success: false,
+        error: `Failed to apply configuration: ${message}`,
+      }
     }
   }
 }
