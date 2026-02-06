@@ -1,10 +1,16 @@
 import { describe, it, expect, beforeAll } from 'bun:test'
 import { AuthRpcServer } from '../src/rpc/server.js'
 import {
+  type TokenHandlers,
+  type CertHandlers,
+  type ValidationHandlers,
+} from '../src/rpc/schema.js'
+import {
   LocalTokenManager,
   BunSqliteTokenStore,
   BunSqliteKeyStore,
-  PersistentLocalKeyManager
+  PersistentLocalKeyManager,
+  type TokenRecord,
 } from '@catalyst/authorization'
 
 describe('Auth Progressive API', () => {
@@ -42,7 +48,7 @@ describe('Auth Progressive API', () => {
     it('should grant access to token handlers with valid admin token', async () => {
       const handlers = await rpcServer.tokens(adminToken)
       expect(handlers).not.toHaveProperty('error')
-      const tokenHandlers = handlers as any
+      const tokenHandlers = handlers as TokenHandlers
       expect(tokenHandlers.create).toBeDefined()
       expect(tokenHandlers.revoke).toBeDefined()
       expect(tokenHandlers.list).toBeDefined()
@@ -51,29 +57,32 @@ describe('Auth Progressive API', () => {
     it('should deny access to token handlers with non-admin token', async () => {
       const result = await rpcServer.tokens(userToken)
       expect(result).toHaveProperty('error')
-      expect((result as any).error).toContain('ADMIN role required')
+      expect((result as { error: string }).error).toContain('ADMIN role required')
     })
 
     it('should allow creating and revoking a token via token handlers', async () => {
-      const handlers = (await rpcServer.tokens(adminToken)) as any
+      const handlers = (await rpcServer.tokens(adminToken)) as TokenHandlers
       const newToken = await handlers.create({
         subject: 'new-service',
         entity: { id: 's1', name: 'Service', type: 'service' },
-        roles: ['NODE']
+        roles: ['NODE'],
       })
       expect(newToken).toBeString()
 
       // List and find it
       const tokens = await handlers.list({})
-      expect(tokens.some((t: any) => t.entityId === 's1')).toBe(true)
+      expect(tokens.some((t: TokenRecord) => t.entityId === 's1')).toBe(true)
 
       // Revoke it
-      const jti = tokens.find((t: any) => t.entityId === 's1').jti
+      const jti = tokens.find((t: TokenRecord) => t.entityId === 's1')!.jti
       await handlers.revoke({ jti })
 
       // Verify it is revoked
-      const validation = (await rpcServer.validation(adminToken)) as any
-      const verifyResult = await validation.validate({ token: newToken })
+      const validation = (await rpcServer.validation(adminToken)) as ValidationHandlers
+      const verifyResult = (await validation.validate({ token: newToken })) as {
+        valid: false
+        error: string
+      }
       expect(verifyResult.valid).toBe(false)
       expect(verifyResult.error).toContain('revoked')
     })
@@ -83,14 +92,17 @@ describe('Auth Progressive API', () => {
     it('should grant access to cert handlers with valid admin token', async () => {
       const handlers = await rpcServer.certs(adminToken)
       expect(handlers).not.toHaveProperty('error')
-      const certHandlers = handlers as any
+      const certHandlers = handlers as CertHandlers
       expect(certHandlers.list).toBeDefined()
       expect(certHandlers.rotate).toBeDefined()
     })
 
     it('should allow rotating keys via cert handlers', async () => {
-      const handlers = (await rpcServer.certs(adminToken)) as any
-      const result = await handlers.rotate({ immediate: false })
+      const handlers = (await rpcServer.certs(adminToken)) as CertHandlers
+      const result = (await handlers.rotate({ immediate: false })) as {
+        success: true
+        newKeyId: string
+      }
       expect(result.success).toBe(true)
       expect(result.newKeyId).toBeString()
     })
@@ -100,21 +112,24 @@ describe('Auth Progressive API', () => {
     it('should grant access to validation handlers with any valid token', async () => {
       const result = await rpcServer.validation(userToken)
       expect(result).not.toHaveProperty('error')
-      const handlers = result as any
+      const handlers = result as ValidationHandlers
       expect(handlers.validate).toBeDefined()
       expect(handlers.getJWKS).toBeDefined()
       expect(handlers.getRevocationList).toBeDefined()
     })
 
     it('should allow validating a token via validation handlers', async () => {
-      const handlers = (await rpcServer.validation(adminToken)) as any
-      const validationResult = await handlers.validate({ token: userToken })
+      const handlers = (await rpcServer.validation(adminToken)) as ValidationHandlers
+      const validationResult = (await handlers.validate({ token: userToken })) as {
+        valid: true
+        payload: Record<string, unknown>
+      }
       expect(validationResult.valid).toBe(true)
       expect(validationResult.payload.sub).toBe('regular-user')
     })
 
     it('should return revocation list', async () => {
-      const handlers = (await rpcServer.validation(adminToken)) as any
+      const handlers = (await rpcServer.validation(adminToken)) as ValidationHandlers
       const crl = await handlers.getRevocationList()
       expect(Array.isArray(crl)).toBe(true)
     })

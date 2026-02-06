@@ -1,12 +1,7 @@
 import { z } from 'zod'
+import { type TokenRecord } from '@catalyst/authorization'
 
-export const RoleSchema = z.enum([
-  'ADMIN',
-  'NODE',
-  'NODE_CUSTODIAN',
-  'DATA_CUSTODIAN',
-  'USER',
-])
+export const RoleSchema = z.enum(['ADMIN', 'NODE', 'NODE_CUSTODIAN', 'DATA_CUSTODIAN', 'USER'])
 
 /**
  * SignToken Request/Response schemas
@@ -343,7 +338,7 @@ export interface TokenHandlers {
   /** Revoke a token by JTI or SAN */
   revoke(request: { jti?: string; san?: string }): Promise<void>
   /** List tokens with optional filters */
-  list(request: { certificateFingerprint?: string; san?: string }): Promise<any[]>
+  list(request: { certificateFingerprint?: string; san?: string }): Promise<TokenRecord[]>
 }
 
 export interface CertHandlers {
@@ -352,7 +347,7 @@ export interface CertHandlers {
   /** Rotate to a new signing key */
   rotate(request?: { immediate?: boolean; gracePeriodMs?: number }): Promise<RotateResponse>
   /** List all tokens minted against a specific certificate */
-  getTokensByCert(request: { fingerprint: string }): Promise<any[]>
+  getTokensByCert(request: { fingerprint: string }): Promise<TokenRecord[]>
 }
 
 export interface ValidationHandlers {

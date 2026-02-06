@@ -3,8 +3,8 @@ import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
-import type { TokenManager } from '@catalyst/authorization'
-import type { ApiKeyService } from '../api-key-service.js'
+import type { IKeyManager } from '../key-manager/types.js'
+import { type TokenManager, type Role, LocalTokenManager } from '@catalyst/authorization'
 import type { BootstrapService } from '../bootstrap.js'
 import type { IKeyManager } from '../key-manager/types.js'
 import type { LoginService } from '../login.js'
@@ -184,7 +184,7 @@ export class AuthRpcServer extends RpcTarget {
         return this.tokenManager.mint({
           subject: request.subject,
           entity: request.entity,
-          roles: request.roles as any,
+          roles: request.roles as Role[],
           sans: request.sans,
           expiresIn: request.expiresIn,
           claims: {},
@@ -194,8 +194,10 @@ export class AuthRpcServer extends RpcTarget {
         await this.tokenManager.revoke({ jti: request.jti, san: request.san })
       },
       list: async (request) => {
-        const records = await (this.tokenManager as any).store.listTokens(request)
-        return records
+        if (this.tokenManager instanceof LocalTokenManager) {
+          return this.tokenManager.getStore().listTokens(request)
+        }
+        return []
       },
     }
   }
@@ -230,10 +232,12 @@ export class AuthRpcServer extends RpcTarget {
         }
       },
       getTokensByCert: async (request) => {
-        const records = await (this.tokenManager as any).store.listTokens({
-          certificateFingerprint: request.fingerprint,
-        })
-        return records
+        if (this.tokenManager instanceof LocalTokenManager) {
+          return this.tokenManager.getStore().listTokens({
+            certificateFingerprint: request.fingerprint,
+          })
+        }
+        return []
       },
     }
   }
@@ -255,7 +259,10 @@ export class AuthRpcServer extends RpcTarget {
         return { valid: true, payload: result.payload }
       },
       getRevocationList: async () => {
-        return (this.tokenManager as any).store.getRevocationList()
+        if (this.tokenManager instanceof LocalTokenManager) {
+          return this.tokenManager.getStore().getRevocationList()
+        }
+        return []
       },
       getJWKS: async () => {
         const jwks = await this.keyManager.getJwks()

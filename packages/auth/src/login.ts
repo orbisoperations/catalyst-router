@@ -1,5 +1,5 @@
 import type { UserStore } from './stores/types.js'
-import type { TokenManager } from '@catalyst/authorization'
+import { type TokenManager, type Role } from '@catalyst/authorization'
 import { verifyPassword, DUMMY_HASH } from './password.js'
 
 /**
@@ -33,7 +33,7 @@ export class LoginService {
   constructor(
     private userStore: UserStore,
     private tokenManager: TokenManager
-  ) { }
+  ) {}
 
   /**
    * Authenticate user and issue JWT
@@ -58,7 +58,7 @@ export class LoginService {
     const token = await this.tokenManager.mint({
       subject: user.id,
       expiresIn: DEFAULT_TOKEN_EXPIRY,
-      roles: user.roles as any,
+      roles: user.roles as Role[],
       entity: {
         id: user.id,
         name: user.email,
