@@ -1,11 +1,10 @@
-import type { JSONWebKeySet } from 'jose'
 import type {
   IKeyManager as IBaseKeyManager,
   SignOptions,
   VerifyOptions,
   VerifyResult,
   RotateOptions,
-  RotationResult
+  RotationResult,
 } from '@catalyst/authorization'
 
 // Re-export for convenience
@@ -38,4 +37,4 @@ export interface KeyManagerConfig {
 /**
  * Core KeyManager interface for all key management operations.
  */
-export interface IKeyManager extends IBaseKeyManager { }
+export type IKeyManager = IBaseKeyManager

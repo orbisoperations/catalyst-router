@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { type IKeyManager, type VerifyResult } from '../key-manager/index.js'
+import { type VerifyResult } from '../key-manager/index.js'
 import { Role, type Entity as CedarEntity } from '../policy/src/types.js'
 import { EntityBuilder } from '../policy/src/entity-builder.js'
 
@@ -33,24 +33,24 @@ export interface TokenRecord {
  * Options for minting a new token
  */
 export interface MintOptions {
-    subject: string
-    audience?: string | string[]
-    expiresIn?: string
-    claims?: Record<string, unknown>
-    /** Roles assigned to the token (mandatory) */
-    roles: Role[]
-    /** Certificate fingerprint for binding (ADR 0007) */
-    certificateFingerprint?: string
-    /** Subject Alternative Names for the token */
-    sans?: string[]
-    /** Information about the entity using the token */
-    entity: {
-        id: string
-        name: string
-        type: EntityType
-        /** Primary role for principal type mapping (ADR 0007/Cedar) */
-        role: Role
-    }
+  subject: string
+  audience?: string | string[]
+  expiresIn?: string
+  claims?: Record<string, unknown>
+  /** Roles assigned to the token (mandatory) */
+  roles: Role[]
+  /** Certificate fingerprint for binding (ADR 0007) */
+  certificateFingerprint?: string
+  /** Subject Alternative Names for the token */
+  sans?: string[]
+  /** Information about the entity using the token */
+  entity: {
+    id: string
+    name: string
+    type: EntityType
+    /** Primary role for principal type mapping (ADR 0007/Cedar) */
+    role: Role
+  }
 }
 
 /**
@@ -88,35 +88,35 @@ export interface TokenManager {
 /**
  * Helper to convert a JWT payload into a Cedar Entity.
  * Maps the identity to a principal of the primary role type.
- * 
+ *
  * @example
  * // If role is ADMIN and entity.name is 'alice'
  * // Resulting principal: CATALYST::ADMIN::"alice"
  */
 export function jwtToEntity(payload: Record<string, unknown>): CedarEntity {
-    const entity = payload.entity as { id: string; name: string; type: string; role: Role }
-    const roles = (payload.roles as Role[]) || []
-    const primaryRole = entity?.role || roles[0] || Role.USER
+  const entity = payload.entity as { id: string; name: string; type: string; role: Role }
+  const roles = (payload.roles as Role[]) || []
+  const primaryRole = entity?.role || roles[0] || Role.USER
 
-    // We use the entity name as the ID in the Cedar principal for better policy readability
-    const principalId = entity?.name || entity?.id || payload.sub as string
+  // We use the entity name as the ID in the Cedar principal for better policy readability
+  const principalId = entity?.name || entity?.id || (payload.sub as string)
 
-    const builder = new EntityBuilder()
-    builder.entity(primaryRole, principalId)
+  const builder = new EntityBuilder()
+  builder.entity(primaryRole, principalId)
 
-    if (entity) {
-        builder.setAttributes({
-            id: entity.id,
-            name: entity.name,
-            type: entity.type,
-            role: entity.role,
-            ...((payload.claims as Record<string, unknown>) || {})
-        })
-    }
+  if (entity) {
+    builder.setAttributes({
+      id: entity.id,
+      name: entity.name,
+      type: entity.type,
+      role: entity.role,
+      ...((payload.claims as Record<string, unknown>) || {}),
+    })
+  }
 
-    // Add other roles as parents if needed, or stick to primary role principal
-    // For now, we follow the requested CATALYST::ROLE::"name" model
+  // Add other roles as parents if needed, or stick to primary role principal
+  // For now, we follow the requested CATALYST::ROLE::"name" model
 
-    const collection = builder.build()
-    return collection.getAll()[0]!
+  const collection = builder.build()
+  return collection.getAll()[0]!
 }

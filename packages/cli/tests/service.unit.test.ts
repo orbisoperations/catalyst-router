@@ -7,7 +7,7 @@ const mockApplyAction = mock((_action: unknown) =>
   Promise.resolve({ success: true, error: undefined as string | undefined })
 )
 const mockListLocalRoutes = mock(() =>
-  Promise.resolve({ routes: { local: [] as any[], internal: [] as any[] } })
+  Promise.resolve({ routes: { local: [] as unknown[], internal: [] as unknown[] } })
 )
 
 const mockCreateClient = mock(() =>

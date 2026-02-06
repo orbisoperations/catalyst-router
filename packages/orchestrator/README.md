@@ -2,6 +2,10 @@
 
 The **Catalyst Orchestrator** is the central control plane for the Catalyst network. It manages the lifecycle of services, handles configuration updates via RPC, and orchestrates the stitching of GraphQL schemas across the federation.
 
+## ⚙️ Configuration
+
+The orchestrator is configured via environment variables. For a full list of available options, see the [Centralized Configuration Documentation](../config/README.md).
+
 ## 🔌 Plugins
 
 The Orchestrator uses a robust **Plugin System** to extend functionality. A pipeline of plugins processes every action received by the RPC server.

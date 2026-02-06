@@ -31,11 +31,87 @@ export const OrchestratorConfigSchema = z.object({
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
 
 /**
+ * Auth Specific Configuration
+ */
+export const AuthConfigSchema = z.object({
+  keysDb: z.string().default('keys.db'),
+  tokensDb: z.string().default('tokens.db'),
+  revocation: z
+    .object({
+      enabled: z.boolean().default(false),
+      maxSize: z.number().optional(),
+    })
+    .default({ enabled: false }),
+  bootstrap: z
+    .object({
+      token: z.string().optional(),
+      ttl: z.number().default(24 * 60 * 60 * 1000), // 24h
+    })
+    .default({}),
+})
+
+export type AuthConfig = z.infer<typeof AuthConfigSchema>
+
+/**
  * Top-level Catalyst System Configuration
  */
 export const CatalystConfigSchema = z.object({
   node: NodeConfigSchema,
   orchestrator: OrchestratorConfigSchema.optional(),
+  auth: AuthConfigSchema.optional(),
+  port: z.number().default(3000),
 })
 
 export type CatalystConfig = z.infer<typeof CatalystConfigSchema>
+
+/**
+ * Loads the default configuration from environment variables.
+ */
+export function loadDefaultConfig(): CatalystConfig {
+  const nodeName = process.env.CATALYST_NODE_ID
+  if (!nodeName) {
+    throw new Error('CATALYST_NODE_ID environment variable is required')
+  }
+
+  const peeringEndpoint = process.env.CATALYST_PEERING_ENDPOINT
+  if (!peeringEndpoint) {
+    throw new Error('CATALYST_PEERING_ENDPOINT environment variable is required')
+  }
+
+  const domains = process.env.CATALYST_DOMAINS
+    ? process.env.CATALYST_DOMAINS.split(',').map((d) => d.trim())
+    : []
+
+  return CatalystConfigSchema.parse({
+    port: Number(process.env.PORT) || 3000,
+    node: {
+      name: nodeName,
+      endpoint: peeringEndpoint,
+      domains: domains,
+    },
+    orchestrator: {
+      ibgp: {
+        secret: process.env.CATALYST_PEERING_SECRET || 'valid-secret',
+      },
+      gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
+        ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
+        : undefined,
+    },
+    auth: {
+      keysDb: process.env.CATALYST_AUTH_KEYS_DB,
+      tokensDb: process.env.CATALYST_AUTH_TOKENS_DB,
+      revocation: {
+        enabled: process.env.CATALYST_AUTH_REVOCATION === 'true',
+        maxSize: process.env.CATALYST_AUTH_REVOCATION_MAX_SIZE
+          ? Number(process.env.CATALYST_AUTH_REVOCATION_MAX_SIZE)
+          : undefined,
+      },
+      bootstrap: {
+        token: process.env.CATALYST_BOOTSTRAP_TOKEN,
+        ttl: process.env.CATALYST_BOOTSTRAP_TTL
+          ? Number(process.env.CATALYST_BOOTSTRAP_TTL)
+          : undefined,
+      },
+    },
+  })
+}

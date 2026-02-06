@@ -2,36 +2,28 @@ import { Hono } from 'hono'
 import { upgradeWebSocket, websocket } from 'hono/bun'
 import { newRpcResponse } from '@hono/capnweb'
 import { CatalystNodeBus } from './orchestrator.js'
-import { OrchestratorConfigSchema } from './types.js'
+
+import { loadDefaultConfig } from '@catalyst/config'
 
 const app = new Hono()
 
-const nodeId = process.env.CATALYST_NODE_ID
-if (!nodeId) {
-  throw new Error('CATALYST_NODE_ID is required (must be FQDN ending in .somebiz.local.io)')
-}
-const peeringEndpoint = process.env.CATALYST_PEERING_ENDPOINT
-if (!peeringEndpoint) {
-  throw new Error('CATALYST_PEERING_ENDPOINT is required (reachable endpoint for this node)')
-}
-const domains = process.env.CATALYST_DOMAINS
-  ? process.env.CATALYST_DOMAINS.split(',').map((d) => d.trim())
-  : []
+const config = loadDefaultConfig()
 
 const bus = new CatalystNodeBus({
-  config: OrchestratorConfigSchema.parse({
-    node: {
-      name: nodeId,
-      endpoint: peeringEndpoint,
-      domains: domains,
-    },
-    ibgp: {
-      secret: process.env.CATALYST_PEERING_SECRET || 'valid-secret',
-    },
-    gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
-      ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
-      : undefined,
-  }),
+  config: config.orchestrator
+    ? {
+        ...config.orchestrator,
+        node: {
+          ...config.node,
+          endpoint: config.node.endpoint!, // Orchestrator requires an endpoint
+        },
+      }
+    : {
+        node: {
+          ...config.node,
+          endpoint: config.node.endpoint!,
+        },
+      },
   connectionPool: { type: 'ws' },
 })
 
@@ -43,9 +35,10 @@ app.all('/rpc', (c) => {
 
 app.get('/health', (c) => c.text('OK'))
 
-const port = Number(process.env.PORT) || 3000
+const port = config.port
+const nodeName = config.node.name
 
-console.log(`Orchestrator (Next) running on port ${port} as ${nodeId}`)
+console.log(`Orchestrator (Next) running on port ${port} as ${nodeName}`)
 console.log('NEXT_ORCHESTRATOR_STARTED')
 
 export default {

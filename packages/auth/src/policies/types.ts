@@ -1,5 +1,5 @@
 import type { AuthorizationDomain, AuthorizationEngine } from '@catalyst/authorization'
-import { Action, Role } from '@catalyst/authorization'
+import type { Action, Role } from '@catalyst/authorization'
 
 export type IBGPEntity = {
   name: string
