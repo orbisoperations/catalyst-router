@@ -38,3 +38,10 @@ test-results/
 
 # TypeScript
 *.tsbuildinfo
+
+# Persistence
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-wal
