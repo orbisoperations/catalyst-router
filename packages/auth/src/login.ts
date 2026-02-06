@@ -1,5 +1,5 @@
 import type { UserStore } from './stores/types.js'
-import type { IKeyManager } from './key-manager/types.js'
+import type { TokenManager } from '@catalyst/authorization'
 import { verifyPassword, DUMMY_HASH } from './password.js'
 
 /**
@@ -32,8 +32,8 @@ export interface LoginResult {
 export class LoginService {
   constructor(
     private userStore: UserStore,
-    private keyManager: IKeyManager
-  ) {}
+    private tokenManager: TokenManager
+  ) { }
 
   /**
    * Authenticate user and issue JWT
@@ -55,9 +55,14 @@ export class LoginService {
     await this.userStore.update(user.id, { lastLoginAt: new Date() })
 
     // Issue JWT with user claims
-    const token = await this.keyManager.sign({
+    const token = await this.tokenManager.mint({
       subject: user.id,
       expiresIn: DEFAULT_TOKEN_EXPIRY,
+      entity: {
+        id: user.id,
+        name: user.email,
+        type: 'user',
+      },
       claims: {
         roles: user.roles,
         orgId: user.orgId,

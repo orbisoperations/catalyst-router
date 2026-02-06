@@ -4,6 +4,7 @@ import { RpcTarget } from 'capnweb'
 import { newRpcResponse } from '@hono/capnweb'
 
 import type { IKeyManager } from '../key-manager/types.js'
+import type { TokenManager } from '@catalyst/authorization'
 import { type RevocationStore } from '../revocation.js'
 import type { BootstrapService } from '../bootstrap.js'
 import type { LoginService } from '../login.js'
@@ -35,6 +36,7 @@ export class AuthRpcServer extends RpcTarget {
 
   constructor(
     private keyManager: IKeyManager,
+    private tokenManager: TokenManager,
     private revocationStore?: RevocationStore,
     private bootstrapService?: BootstrapService,
     private loginService?: LoginService,
@@ -77,9 +79,14 @@ export class AuthRpcServer extends RpcTarget {
       return { success: false, error: result.error ?? 'Bootstrap failed' }
     }
 
-    const token = await this.keyManager.sign({
+    const token = await this.tokenManager.mint({
       subject: result.userId!,
       expiresIn: '1h',
+      entity: {
+        id: result.userId!,
+        name: 'First Admin',
+        type: 'user',
+      },
       claims: {
         roles: ['admin'],
         orgId: 'default',
@@ -104,7 +111,7 @@ export class AuthRpcServer extends RpcTarget {
   // --- Progressive API Entry Points ---
 
   async admin(token: string): Promise<AdminHandlers | { error: string }> {
-    const auth = await this.keyManager.verify(token)
+    const auth = await this.tokenManager.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
     }
@@ -117,8 +124,13 @@ export class AuthRpcServer extends RpcTarget {
     return {
       createToken: async (req: { role: Role; name: string }) => {
         // In a real impl, this would probably create a service account or sign a long-lived token
-        return this.keyManager.sign({
+        return this.tokenManager.mint({
           subject: req.name,
+          entity: {
+            id: req.name, // Should be a real entity ID
+            name: req.name,
+            type: 'service',
+          },
           claims: { roles: [req.role] },
         })
       },
@@ -131,7 +143,7 @@ export class AuthRpcServer extends RpcTarget {
   }
 
   async validation(token: string): Promise<ValidationHandlers | { error: string }> {
-    const auth = await this.keyManager.verify(token)
+    const auth = await this.tokenManager.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
     }
@@ -148,7 +160,7 @@ export class AuthRpcServer extends RpcTarget {
         return []
       },
       validate: async (req: { token: string }) => {
-        const result = await this.keyManager.verify(req.token)
+        const result = await this.tokenManager.verify(req.token)
         if (!result.valid) return { valid: false, error: 'Invalid token' }
 
         if (this.revocationStore && result.payload.jti) {

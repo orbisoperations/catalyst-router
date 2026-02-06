@@ -1,16 +1,30 @@
 FROM oven/bun:1.3.6 AS base
 WORKDIR /app
 
+# Copy root config
+COPY package.json bun.lock ./
+
+# Copy workspace package.json files needed for dependency resolution
+COPY packages/auth/package.json packages/auth/package.json
+COPY packages/authorization/package.json packages/authorization/package.json
+
 # Install dependencies into temp directory
 # This will cache them and speed up future builds
 FROM base AS install
 RUN mkdir -p /temp/dev
-COPY package.json /temp/dev/
-RUN cd /temp/dev && bun install
+COPY package.json bun.lock /temp/dev/
+RUN mkdir -p /temp/dev/packages/auth /temp/dev/packages/authorization
+COPY packages/auth/package.json /temp/dev/packages/auth/
+COPY packages/authorization/package.json /temp/dev/packages/authorization/
+# ensure all workspace packages are at least defined to satisfy bun
+RUN cd /temp/dev && bun install --ignore-scripts
 
 # Install with --production (exclude devDependencies)
 RUN mkdir -p /temp/prod
-COPY package.json /temp/prod/
+COPY package.json bun.lock /temp/prod/
+RUN mkdir -p /temp/prod/packages/auth /temp/prod/packages/authorization
+COPY packages/auth/package.json /temp/prod/packages/auth/
+COPY packages/authorization/package.json /temp/prod/packages/authorization/
 # cant use production flag becuase of frozen-lockfile error: for now just omit dev dependencies
 # manually but let lockfile changes
 RUN cd /temp/prod && bun install --omit=dev --ignore-scripts
@@ -20,6 +34,7 @@ RUN cd /temp/prod && bun install --omit=dev --ignore-scripts
 FROM base AS prerelease
 COPY --from=install /temp/dev/node_modules node_modules
 COPY packages/auth packages/auth
+COPY packages/authorization packages/authorization
 
 # [optional] tests & build
 ENV NODE_ENV=production

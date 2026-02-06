@@ -29,21 +29,8 @@ export const SignOptionsSchema = z.object({
 
 export type SignOptions = z.infer<typeof SignOptionsSchema>
 
-/**
- * Result of token verification
- */
-export const VerifyResultSchema = z.discriminatedUnion('valid', [
-  z.object({
-    valid: z.literal(true),
-    payload: z.record(z.string(), z.unknown()),
-  }),
-  z.object({
-    valid: z.literal(false),
-    error: z.string(),
-  }),
-])
-
-export type VerifyResult = z.infer<typeof VerifyResultSchema>
+import type { VerifyResult } from '@catalyst/authorization'
+export type { VerifyResult }
 
 /**
  * Parse a duration string (e.g., '1h', '7d', '30m') to seconds

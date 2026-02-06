@@ -3,18 +3,23 @@ import { LoginService } from '../src/login.js'
 import { InMemoryUserStore } from '../src/stores/memory.js'
 import { hashPassword } from '../src/password.js'
 import { EphemeralKeyManager } from '../src/key-manager/ephemeral.js'
+import { LocalTokenManager, BunSqliteTokenStore } from '@catalyst/authorization'
 import type { IKeyManager } from '../src/key-manager/types.js'
 
 describe('LoginService', () => {
   let userStore: InMemoryUserStore
   let keyManager: IKeyManager
+  let tokenManager: LocalTokenManager
   let service: LoginService
 
   beforeEach(async () => {
     userStore = new InMemoryUserStore()
     keyManager = new EphemeralKeyManager()
     await keyManager.initialize()
-    service = new LoginService(userStore, keyManager)
+
+    const tokenStore = new BunSqliteTokenStore(':memory:')
+    tokenManager = new LocalTokenManager(keyManager, tokenStore)
+    service = new LoginService(userStore, tokenManager)
   })
 
   describe('login', () => {
@@ -105,7 +110,10 @@ describe('LoginService', () => {
       expect(result.success).toBe(true)
 
       // Verify token by decoding
-      const verifyResult = await keyManager.verify(result.token!)
+      const verifyResult = await tokenManager.verify(result.token!)
+      if (!verifyResult.valid) {
+        throw new Error(`Token verification failed: ${verifyResult.error}`)
+      }
       expect(verifyResult.valid).toBe(true)
       expect(verifyResult.payload.sub).toMatch(/^usr_/)
       expect(verifyResult.payload.roles).toEqual(['admin', 'operator'])
