@@ -19,7 +19,9 @@
     "graphql": "catalog:",
     "graphql-yoga": "catalog:",
     "hono": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@catalyst/telemetry": "workspace:*",
+    "@opentelemetry/api": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",

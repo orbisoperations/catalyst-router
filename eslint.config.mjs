@@ -34,6 +34,7 @@ export default tseslint.config(
       ],
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-expressions': ['error', { allowTaggedTemplates: true }],
     },
   },
 
