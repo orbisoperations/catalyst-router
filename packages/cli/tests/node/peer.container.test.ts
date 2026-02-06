@@ -66,6 +66,9 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
       .withNetworkAliases('auth')
       .withExposedPorts(5000)
       .withEnvironment({
+        CATALYST_NODE_ID: 'test-auth-node',
+        CATALYST_PEERING_ENDPOINT: 'ws://auth:5000/rpc',
+        CATALYST_DOMAINS: 'test.local',
         CATALYST_AUTH_ISSUER: 'catalyst',
         CATALYST_AUTH_KEYS_DB: ':memory:',
         CATALYST_AUTH_TOKENS_DB: ':memory:',

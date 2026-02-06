@@ -158,6 +158,7 @@ export async function startServer() {
 
   const port = config.port
   console.log(JSON.stringify({ level: 'info', msg: 'Auth service started', port }))
+  console.log('Auth service started') // Plain log for container tests
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
