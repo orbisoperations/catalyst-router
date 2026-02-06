@@ -1,7 +1,7 @@
 # Docker Compose Examples
 
 This directory contains Docker Compose configurations for running Catalyst Node in different topologies.
-TODO: Need to actually add the telemtry to the services for docker.compose.yaml and two-node.compose.yaml.
+TODO: Need to actually add the telemetry to the services for docker.compose.yaml and two-node.compose.yaml.
 
 | File | Topology | Observability | Auth Model |
 | ---- | -------- | ------------- | ---------- |
