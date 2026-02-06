@@ -295,6 +295,7 @@ When reviewing or working on changes:
 - `BGP_PROTOCOL.md` - BGP message types and semantics
 - `TECH_STACK.md` - Technology choices and rationales
 - `CLAUDE_AGENTS.md` - Subagent definitions, prompts, and workflow examples
+- `.claude/` - Agent definition files and Claude Code settings
 - `docs/adr/` - Architecture Decision Records
 - `packages/*/README.md` - Package-specific documentation
 
@@ -387,6 +388,20 @@ ADRs live in `docs/adr/` and define technical standards. **Always check relevant
 ## Subagent Strategy
 
 > **Full details:** See `CLAUDE_AGENTS.md` for complete agent definitions, prompt templates, and workflow examples.
+>
+> **Invoke with:** `Orbi [task description]` — The orchestrator will identify task type and guide you through the appropriate workflow.
+
+### Task Types
+
+| Trigger                  | Type             | Pre-Work     | Verification |
+| ------------------------ | ---------------- | ------------ | ------------ |
+| `orbi fix PR comment...` | 🔧 PR Fix        | Stack scope  | Minimal      |
+| `orbi add feature...`    | ✨ New Feature   | Full         | Full         |
+| `orbi migrate...`        | 🔄 Migration     | Impact + ADR | Full         |
+| `orbi how does...`       | 🔍 Exploration   | None         | None         |
+| `orbi should we...`      | 🏗️ Architecture  | Docs + ADR   | None         |
+| `orbi document...`       | 📝 Documentation | Doc sync     | Minimal      |
+| `orbi cleanup...`        | 🧹 Cleanup       | Impact       | Full         |
 
 ### Pre-Work Phase (ALWAYS)
 

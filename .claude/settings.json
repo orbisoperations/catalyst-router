@@ -1,0 +1,199 @@
+{
+  "$schema": "https://claude.ai/schemas/claude-code-settings.json",
+  "projectName": "catalyst-node",
+  "description": "Distributed control and data plane system for secure service peering",
+  "orchestrator": {
+    "name": "Orbi",
+    "enabled": true,
+    "entryPoint": ".claude/agents/orchestrator.md",
+    "triggerPhrases": ["Orbi", "orbi", "ORBI"],
+    "description": "Use 'Orbi' to invoke guided workflow execution with subagents. For general conversation, just talk normally."
+  },
+  "taskTypes": [
+    {
+      "id": "pr-fix",
+      "name": "PR Fix",
+      "emoji": "🔧",
+      "description": "Responding to PR comments or reviewer feedback",
+      "workflow": ".claude/agents/workflows/pr-fix.md",
+      "triggers": ["PR comment", "fix feedback", "reviewer asked", "address comment", "PR review"],
+      "preWork": ["stack-scope"],
+      "verification": "minimal"
+    },
+    {
+      "id": "new-feature",
+      "name": "New Feature",
+      "emoji": "✨",
+      "description": "Adding new functionality",
+      "workflow": ".claude/agents/workflows/new-feature.md",
+      "triggers": ["add", "implement", "create new", "build", "new feature"],
+      "preWork": ["stack-scope", "documentation", "adr-compliance"],
+      "verification": "full"
+    },
+    {
+      "id": "migration",
+      "name": "Migration",
+      "emoji": "🔄",
+      "description": "Moving/refactoring code or patterns across packages",
+      "workflow": ".claude/agents/workflows/migration.md",
+      "triggers": ["migrate", "refactor", "move", "rename across", "update pattern"],
+      "preWork": ["cross-package-impact", "adr-compliance"],
+      "verification": "full"
+    },
+    {
+      "id": "exploration",
+      "name": "Exploration",
+      "emoji": "🔍",
+      "description": "Understanding code, no changes needed",
+      "workflow": ".claude/agents/workflows/exploration.md",
+      "triggers": ["understand", "investigate", "how does", "find", "research", "explain"],
+      "preWork": [],
+      "verification": "none"
+    },
+    {
+      "id": "architecture",
+      "name": "Architecture",
+      "emoji": "🏗️",
+      "description": "Design decisions, trade-offs, RFCs",
+      "workflow": ".claude/agents/workflows/architecture.md",
+      "triggers": ["design", "should we", "trade-offs", "approach for", "RFC", "decide"],
+      "preWork": ["documentation", "adr-compliance"],
+      "verification": "none"
+    },
+    {
+      "id": "documentation",
+      "name": "Documentation",
+      "emoji": "📝",
+      "description": "Improving or adding documentation",
+      "workflow": ".claude/agents/workflows/documentation.md",
+      "triggers": ["document", "clarify docs", "update readme", "explain in docs"],
+      "preWork": ["doc-sync"],
+      "verification": "minimal"
+    },
+    {
+      "id": "cleanup",
+      "name": "Cleanup",
+      "emoji": "🧹",
+      "description": "Removing cruft, dead code, simplification",
+      "workflow": ".claude/agents/workflows/cleanup.md",
+      "triggers": ["remove", "delete unused", "dead code", "simplify", "cruft", "clean up"],
+      "preWork": ["cross-package-impact"],
+      "verification": "full"
+    }
+  ],
+  "agents": {
+    "directory": ".claude/agents",
+    "catalog": [
+      {
+        "name": "orchestrator",
+        "description": "Main entry point - identifies task type and guides workflow",
+        "type": "Explore",
+        "file": "orchestrator.md"
+      },
+      {
+        "name": "pre-work",
+        "description": "Run full pre-work phase (stack scope + docs + ADR compliance)",
+        "type": "Explore",
+        "file": "pre-work.md"
+      },
+      {
+        "name": "stack-scope",
+        "description": "Understand current Graphite stack boundaries",
+        "type": "Explore",
+        "file": "stack-scope.md"
+      },
+      {
+        "name": "documentation",
+        "description": "Read and synthesize relevant documentation",
+        "type": "Explore",
+        "file": "documentation.md"
+      },
+      {
+        "name": "adr-compliance",
+        "description": "Check Architecture Decision Record compliance",
+        "type": "Explore",
+        "file": "adr-compliance.md"
+      },
+      {
+        "name": "verification",
+        "description": "Run lint, format, typecheck, and tests",
+        "type": "Bash",
+        "file": "verification.md"
+      },
+      {
+        "name": "cross-package-impact",
+        "description": "Assess ripple effects of shared code changes",
+        "type": "Explore",
+        "file": "cross-package-impact.md"
+      },
+      {
+        "name": "doc-sync",
+        "description": "Check if documentation needs updates",
+        "type": "Explore",
+        "file": "doc-sync.md"
+      }
+    ]
+  },
+  "workflows": {
+    "directory": ".claude/agents/workflows",
+    "catalog": [
+      {
+        "id": "pr-fix",
+        "file": "pr-fix.md"
+      },
+      {
+        "id": "new-feature",
+        "file": "new-feature.md"
+      },
+      {
+        "id": "migration",
+        "file": "migration.md"
+      },
+      {
+        "id": "exploration",
+        "file": "exploration.md"
+      },
+      {
+        "id": "architecture",
+        "file": "architecture.md"
+      },
+      {
+        "id": "documentation",
+        "file": "documentation.md"
+      },
+      {
+        "id": "cleanup",
+        "file": "cleanup.md"
+      }
+    ]
+  },
+  "documentation": {
+    "primary": ["CLAUDE.md", "CLAUDE_AGENTS.md"],
+    "architecture": ["ARCHITECTURE.md", "SECURITY.md", "BGP_PROTOCOL.md", "TECH_STACK.md"],
+    "adrs": "docs/adr/",
+    "packages": "packages/*/README.md"
+  },
+  "conventions": {
+    "commits": "conventional",
+    "branches": "graphite-stacked",
+    "testing": {
+      "unit": "*.test.ts",
+      "integration": "*.integration.test.ts",
+      "container": "*.container.test.ts",
+      "topology": "*.topology.test.ts"
+    }
+  },
+  "verification": {
+    "full": [
+      "bun run lint",
+      "bun run format:check",
+      "tsc --noEmit",
+      "bun test [packages]",
+      "integration tests (if cross-package)",
+      "container tests (if RPC/networking)",
+      "topology tests (if orchestrator)"
+    ],
+    "minimal": ["bun run lint", "tsc --noEmit", "bun test [packages]"],
+    "none": []
+  }
+}
