@@ -1,3 +1,8 @@
+---
+name: Cleanup Workflow
+description: Workflow for removing dead code safely
+---
+
 # Cleanup Workflow
 
 ## Description

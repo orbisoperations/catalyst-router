@@ -1,3 +1,8 @@
+---
+name: Doc Sync
+description: Check if documentation needs updates
+---
+
 # Doc Sync Agent
 
 ## Description
@@ -77,7 +82,7 @@ Changes made:
 
 **Expected Output:**
 
-```
+````
 Documentation Sync Check
 ========================
 
@@ -90,32 +95,27 @@ Updates Required:
 
 1. CLAUDE.md - JWT Operations section
    Current:
-```
-
-// Reserved claims (iss, sub, aud, exp, nbf, iat, jti) cannot be overridden
-
-```
-Add:
-```
-
-// Certificate-bound tokens include cnf claim with x5t#S256 thumbprint
-// See ADR-0007 for certificate binding requirements
-
-````
+   ```
+   // Reserved claims (iss, sub, aud, exp, nbf, iat, jti) cannot be overridden
+   ```
+   Add:
+   ```
+   // Certificate-bound tokens include cnf claim with x5t#S256 thumbprint
+   // See ADR-0007 for certificate binding requirements
+   ```
 
 2. packages/auth/README.md - API section
-Add new endpoint documentation:
-```markdown
-### bindCertificate(request)
-Binds a client certificate to an existing token for mTLS verification.
+   Add new endpoint documentation:
+   ```markdown
+   ### bindCertificate(request)
+   Binds a client certificate to an existing token for mTLS verification.
 
-Request: { token: string, certificatePem: string }
-Response: { success: true, boundToken: string } | { success: false, error: string }
-````
+   Request: { token: string, certificatePem: string }
+   Response: { success: true, boundToken: string } | { success: false, error: string }
+   ```
 
 3. SECURITY.md - Token Security section
    Add paragraph about certificate binding:
-
    ```markdown
    ## Certificate-Bound Tokens
 
@@ -130,18 +130,13 @@ ADR Status:
 No amendment needed
 
 No Changes Needed:
-
 - ARCHITECTURE.md (no structural changes)
 - CLAUDE_AGENTS.md (agents still applicable)
 - BGP_PROTOCOL.md (peering protocol unchanged)
 
 New Pattern for CLAUDE.md:
 Consider adding to AI Guidelines:
-
 ```
 13. **Certificate-bound tokens** - Include cnf claim with x5t#S256 for peering tokens per ADR-0007
 ```
-
-```
-
-```
+````

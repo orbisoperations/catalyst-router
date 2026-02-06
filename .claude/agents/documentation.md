@@ -1,3 +1,8 @@
+---
+name: Documentation
+description: Documentation synthesis and retrieval
+---
+
 # Documentation Agent
 
 ## Description

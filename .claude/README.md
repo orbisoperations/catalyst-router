@@ -124,6 +124,18 @@ Claude: [Direct answer without workflow orchestration]
         Access tokens are short-lived tokens used for API requests...
 ```
 
+## Model Strategy
+
+Agents and workflows use different models based on task complexity:
+
+| Model      | Used For                                                                         | Rationale                                                 |
+| ---------- | -------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Haiku**  | verification, stack-scope                                                        | Fast, cheap — just running commands and parsing           |
+| **Sonnet** | orchestrator, pre-work, documentation, adr-compliance, doc-sync, pr-fix, cleanup | Good balance of speed and capability                      |
+| **Opus**   | cross-package-impact, architecture, migration, new-feature                       | Complex reasoning, trade-off analysis, multi-file changes |
+
+**Cost optimization:** Simple tasks (git commands, running tests) use Haiku. Most workflows use Sonnet. Only tasks requiring deep reasoning (architecture decisions, cross-package migrations) use Opus.
+
 ## Related Documentation
 
 - `../CLAUDE.md` - Main development guide and coding patterns

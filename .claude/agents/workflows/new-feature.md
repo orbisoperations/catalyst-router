@@ -1,3 +1,8 @@
+---
+name: New Feature Workflow
+description: Full workflow for new functionality
+---
+
 # New Feature Workflow
 
 ## Description
