@@ -5,6 +5,7 @@ This document outlines the design for the new standalone JWT service package. Th
 ## 1. System Overview
 
 The JWT Service is a standalone containerized application responsible for:
+
 1.  **Key Management**: Generating and maintaining ephemeral cryptographic keys (EdDSA) in memory.
 2.  **Token Signing**: Issuing JWTs for authenticated entities (e.g., users, services, data channels).
 3.  **Token Verification**: Validating JWT signatures and claims.
@@ -15,15 +16,17 @@ The service exposes its functionality primarily through a **CapnWeb RPC** interf
 ## 2. Architecture
 
 ### 2.1 Components
--   **KeyManager**: A specialized component responsible for all cryptographic operations. It encapsulates the key material (private keys) and exposes high-level methods (`sign`, `rotate`, `getPublicKeys`). This design allows for future replacement with a Cloud KMS (AWS KMS, Google Secret Manager) without changing the Service layer.
--   **RPC Server**: Implements the service contract to expose signing, verification, and JWKS retrieval methods.
+
+- **KeyManager**: A specialized component responsible for all cryptographic operations. It encapsulates the key material (private keys) and exposes high-level methods (`sign`, `rotate`, `getPublicKeys`). This design allows for future replacement with a Cloud KMS (AWS KMS, Google Secret Manager) without changing the Service layer.
+- **RPC Server**: Implements the service contract to expose signing, verification, and JWKS retrieval methods.
 
 ### 2.2 Key Lifecycle
--   **Startup**: The default KeyManager generates a fresh EdDSA key pair immediately upon startup.
--   **Storage**: Keys are held in memory only. Restarting the service invalidates previous tokens (mechanisms for persistence can be added later if needed, but for now, ephemeral is desired).
--   **Rotation**: Supports a method to rotate keys on demand.
-    -   **Graceful Rotation**: Moves the current key to a `deprecated` state. It remains valid for verification until a specified expiry (e.g., max token lifetime) but is no longer used for signing.
-    -   **Immediate Rotation**: Immediately invalidates the current key.
+
+- **Startup**: The default KeyManager generates a fresh EdDSA key pair immediately upon startup.
+- **Storage**: Keys are held in memory only. Restarting the service invalidates previous tokens (mechanisms for persistence can be added later if needed, but for now, ephemeral is desired).
+- **Rotation**: Supports a method to rotate keys on demand.
+  - **Graceful Rotation**: Moves the current key to a `deprecated` state. It remains valid for verification until a specified expiry (e.g., max token lifetime) but is no longer used for signing.
+  - **Immediate Rotation**: Immediately invalidates the current key.
 
 ## 3. Protocol Diagrams
 
@@ -130,14 +133,15 @@ sequenceDiagram
 We will reuse and stick to the schemas defined in `@catalyst/schemas`.
 
 **Key State (Internal):**
+
 ```typescript
 interface KeyState {
-    privateKey: KeyLike;
-    publicKey: KeyLike;
-    kid: string; // UUID
-    created: number;
-    // For rotation:
-    expiresAt?: number; // When this key should stop being used for verification
+  privateKey: KeyLike
+  publicKey: KeyLike
+  kid: string // UUID
+  created: number
+  // For rotation:
+  expiresAt?: number // When this key should stop being used for verification
 }
 ```
 
@@ -146,20 +150,20 @@ interface KeyState {
 ```typescript
 // Interface for the CapnWeb RPC
 interface IJwtService {
-    // Returns the standard JWKS (JSON Web Key Set)
-    // Includes current key, and previous key if not expired
-    getJwks(): Promise<JSONWebKeySet>;
+  // Returns the standard JWKS (JSON Web Key Set)
+  // Includes current key, and previous key if not expired
+  getJwks(): Promise<JSONWebKeySet>
 
-    // Signs a payload
-    sign(req: JWTSigningRequest): Promise<JWTSigningStandardResponse>;
+  // Signs a payload
+  sign(req: JWTSigningRequest): Promise<JWTSigningStandardResponse>
 
-    // Verifies a token string
-    verify(token: string): Promise<JWTParsingResponse>;
+  // Verifies a token string
+  verify(token: string): Promise<JWTParsingResponse>
 
-    // Rotates the key
-    // immediate: if true, old key is discarded immediately.
-    //            if false, old key is kept for verification until max token duration passes.
-    rotate(immediate: boolean): Promise<void>;
+  // Rotates the key
+  // immediate: if true, old key is discarded immediately.
+  //            if false, old key is kept for verification until max token duration passes.
+  rotate(immediate: boolean): Promise<void>
 }
 ```
 
@@ -168,20 +172,22 @@ interface IJwtService {
 The implementation will closely follow the patterns in `authx_token_api`.
 
 **Dependencies:**
+
 - `jose`: For key generation (`generateKeyPair`), signing (`SignJWT`), and verification (`jwtVerify`).
 - `zod`: For validation (using `@catalyst/schemas`).
 - `uuid`: For key IDs.
 
 **Key Generation Example:**
-```typescript
-import { generateKeyPair, exportJWK } from 'jose';
 
-const alg = 'EdDSA';
+```typescript
+import { generateKeyPair, exportJWK } from 'jose'
+
+const alg = 'EdDSA'
 
 export async function generateKey() {
-    const { publicKey, privateKey } = await generateKeyPair(alg, { extractable: true });
-    // cache these...
-    return { publicKey, privateKey };
+  const { publicKey, privateKey } = await generateKeyPair(alg, { extractable: true })
+  // cache these...
+  return { publicKey, privateKey }
 }
 ```
 
@@ -200,10 +206,10 @@ packages/
 ```
 
 ## 6. Development Plan
+
 1.  Initialize `packages/jwt`.
 2.  Implement `KeyManager` with `jose`.
 3.  Implement `JWTService` class with `sign`, `verify`, `getJwks`.
 4.  Wrap with CapnWeb RPC server.
 5.  Create Dockerfile for standalone execution.
 6.  Unit tests using the generated keys.
-
