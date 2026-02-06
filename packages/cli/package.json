@@ -12,17 +12,17 @@
   },
   "dependencies": {
     "capnweb": "catalog:",
-    "chalk": "^5.3.0",
+    "chalk": "catalog:",
     "commander": "catalog:",
-    "inquirer": "^9.2.14",
-    "ws": "^8.19.0",
+    "inquirer": "catalog:",
+    "ws": "catalog:",
     "zod": "catalog:",
-    "@catalyst/orchestrator": "workspace:*"
+    "@catalyst/orchestrator": "catalog:"
   },
   "devDependencies": {
-    "@types/inquirer": "^9.0.7",
+    "@types/inquirer": "catalog:dev",
     "@types/node": "catalog:dev",
-    "@types/ws": "^8.18.1",
+    "@types/ws": "catalog:dev",
     "@types/bun": "catalog:dev",
     "testcontainers": "catalog:testing",
     "tsx": "catalog:dev",

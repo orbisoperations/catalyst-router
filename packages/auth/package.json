@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@hono/capnweb": "^0.1.0",
-    "@catalyst/authorization": "workspace:*",
-    "@catalyst/config": "workspace:*",
-    "argon2": "^0.44.0",
+    "@catalyst/authorization": "catalog:",
+    "@catalyst/config": "catalog:",
+    "argon2": "catalog:",
     "capnweb": "^0.4.0",
     "hono": "^4.11.3",
     "jose": "^6.0.0",
@@ -26,9 +26,9 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",
-    "@types/node": "^20.11.0",
+    "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing",
-    "typescript": "^5.3.3",
+    "typescript": "catalog:dev",
     "vitest": "^1.2.1"
   }
 }
