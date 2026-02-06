@@ -1,5 +1,7 @@
 import { z } from 'zod'
-import { type VerifyResult } from '../key-manager/index.js'
+import { type IKeyManager, type VerifyResult } from '../key-manager/index.js'
+import { Role, type Entity as CedarEntity } from '../policy/src/types.js'
+import { EntityBuilder } from '../policy/src/entity-builder.js'
 
 /**
  * Entity types that can own a token
@@ -8,10 +10,10 @@ export const EntityTypeEnum = z.enum(['user', 'service'])
 export type EntityType = z.infer<typeof EntityTypeEnum>
 
 /**
- * Standardized roles for the system
+ * Standardized roles for the system (Zod schema for validation)
  */
-export const RoleEnum = z.enum(['ADMIN', 'NODE', 'NODE_CUSTODIAN', 'DATA_CUSTODIAN', 'USER'])
-export type Role = z.infer<typeof RoleEnum>
+export const RoleEnum = z.nativeEnum(Role)
+export type RoleType = z.infer<typeof RoleEnum>
 
 /**
  * Record of a minted token for tracking
@@ -31,22 +33,24 @@ export interface TokenRecord {
  * Options for minting a new token
  */
 export interface MintOptions {
-  subject: string
-  audience?: string | string[]
-  expiresIn?: string
-  claims?: Record<string, unknown>
-  /** Roles assigned to the token (mandatory) */
-  roles: Role[]
-  /** Certificate fingerprint for binding (ADR 0007) */
-  certificateFingerprint?: string
-  /** Subject Alternative Names for the token */
-  sans?: string[]
-  /** Information about the entity using the token */
-  entity: {
-    id: string
-    name: string
-    type: EntityType
-  }
+    subject: string
+    audience?: string | string[]
+    expiresIn?: string
+    claims?: Record<string, unknown>
+    /** Roles assigned to the token (mandatory) */
+    roles: Role[]
+    /** Certificate fingerprint for binding (ADR 0007) */
+    certificateFingerprint?: string
+    /** Subject Alternative Names for the token */
+    sans?: string[]
+    /** Information about the entity using the token */
+    entity: {
+        id: string
+        name: string
+        type: EntityType
+        /** Primary role for principal type mapping (ADR 0007/Cedar) */
+        role: Role
+    }
 }
 
 /**
@@ -79,4 +83,40 @@ export interface TokenManager {
   revoke(options: { jti?: string; san?: string }): Promise<void>
   /** Verify a token and check its tracking status */
   verify(token: string, options?: { audience?: string | string[] }): Promise<VerifyResult>
+}
+
+/**
+ * Helper to convert a JWT payload into a Cedar Entity.
+ * Maps the identity to a principal of the primary role type.
+ * 
+ * @example
+ * // If role is ADMIN and entity.name is 'alice'
+ * // Resulting principal: CATALYST::ADMIN::"alice"
+ */
+export function jwtToEntity(payload: Record<string, unknown>): CedarEntity {
+    const entity = payload.entity as { id: string; name: string; type: string; role: Role }
+    const roles = (payload.roles as Role[]) || []
+    const primaryRole = entity?.role || roles[0] || Role.USER
+
+    // We use the entity name as the ID in the Cedar principal for better policy readability
+    const principalId = entity?.name || entity?.id || payload.sub as string
+
+    const builder = new EntityBuilder()
+    builder.entity(primaryRole, principalId)
+
+    if (entity) {
+        builder.setAttributes({
+            id: entity.id,
+            name: entity.name,
+            type: entity.type,
+            role: entity.role,
+            ...((payload.claims as Record<string, unknown>) || {})
+        })
+    }
+
+    // Add other roles as parents if needed, or stick to primary role principal
+    // For now, we follow the requested CATALYST::ROLE::"name" model
+
+    const collection = builder.build()
+    return collection.getAll()[0]!
 }

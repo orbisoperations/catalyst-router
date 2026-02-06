@@ -121,15 +121,82 @@ flowchart LR
     Engine --> Decision[Allow / Deny]
 ```
 
+## Catalyst Standard Domain
+
+The library provides a set of standardized Roles and Actions specifically designed for the Catalyst ecosystem.
+
+### Roles (Principal Types)
+
+| Role | Description | Principal Example |
+|------|-------------|-------------------|
+| `ADMIN` | Full system access | `CATALYST::ADMIN::"adminuser"` |
+| `NODE` | Network infrastructure nodes | `CATALYST::NODE::"node-01"` |
+| `NODE_CUSTODIAN` | Peer management authority | `CATALYST::NODE_CUSTODIAN::"manager"` |
+| `DATA_CUSTODIAN` | Route management authority | `CATALYST::DATA_CUSTODIAN::"traffic-eng"` |
+| `USER` | Standard end users | `CATALYST::USER::"alice"` |
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| `LOGIN` | User authentication |
+| `IBGP_CONNECT` | Establish iBGP peering |
+| `IBGP_DISCONNECT` | Terminate iBGP peering |
+| `IBGP_UPDATE` | Advertise routes via iBGP |
+| `PEER_CREATE` / `PEER_DELETE` | Manage infrastructure peers |
+| `ROUTE_CREATE` / `ROUTE_DELETE` | Manage local data routes |
+| `TOKEN_CREATE` / `TOKEN_REVOKE` | Manage JWT lifecycles |
+
+### Policy Examples
+
+Using the CATALYST semantic model, policies become highly readable:
+
+#### 1. Global Admin Access
+```cedar
+permit (
+    principal is CATALYST::ADMIN,
+    action,
+    resource
+);
+```
+
+#### 2. Restricting Node Capabilities
+Nodes should only be able to perform iBGP related actions.
+```cedar
+permit (
+    principal is CATALYST::NODE,
+    action in [
+        CATALYST::Action::"IBGP_CONNECT",
+        CATALYST::Action::"IBGP_DISCONNECT",
+        CATALYST::Action::"IBGP_UPDATE"
+    ],
+    resource
+);
+```
+
+#### 3. Data Custodian Route Management
+```cedar
+permit (
+    principal is CATALYST::DATA_CUSTODIAN,
+    action in [
+        CATALYST::Action::"ROUTE_CREATE",
+        CATALYST::Action::"ROUTE_DELETE"
+    ],
+    resource
+);
+```
+
+#### 4. Conditional Access (Self-Revocation)
+```cedar
+permit (
+    principal,
+    action == CATALYST::Action::"TOKEN_REVOKE",
+    resource is CATALYST::Token
+)
+when { resource.ownerId == principal.id };
+```
+
+---
+
 ## Documentation
-
-For more in-depth details, check the `docs/` folder:
-
-- [Architecture Overview](docs/ARCHITECTURE.md): High-level design and class relationships.
-- [Cedar Context](docs/CEDAR_CONTEXT.md): How to work with authorization context.
-- [Custom Entity Providers](docs/CUSTOM_ENTITY_PROVIDERS.md): Creating custom providers and mappers.
-
-## Examples
-
-- [Todo App](examples/todo-app/index.ts): Simple ABAC example with public/private lists.
-- [Marketplace](examples/marketplace/index.ts): Demonstrates transforming DB models into Cedar entities using mappers.
+...

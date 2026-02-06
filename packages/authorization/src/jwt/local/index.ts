@@ -12,12 +12,12 @@ export class LocalTokenManager implements TokenManager {
     return this.store
   }
 
-  async mint(options: MintOptions): Promise<string> {
-    const claims: Record<string, unknown> = {
-      ...options.claims,
-      entity: options.entity,
-      roles: options.roles,
-    }
+    async mint(options: MintOptions): Promise<string> {
+        const claims: Record<string, unknown> = {
+            ...options.claims,
+            entity: options.entity,
+            roles: options.roles,
+        }
 
     // Support certificate binding (ADR 0007)
     if (options.certificateFingerprint) {
