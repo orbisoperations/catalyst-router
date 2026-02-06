@@ -1,11 +1,14 @@
 import type { Action } from './schema.js'
 import type { RouteTable } from './routing/state.js'
 import { z } from 'zod'
-import { PeerInfoSchema } from './routing/state.js'
 import { Permission, type Role } from '@catalyst/auth'
 
+import { NodeConfigSchema } from '@catalyst/config'
+
 export const OrchestratorConfigSchema = z.object({
-  node: PeerInfoSchema,
+  node: NodeConfigSchema.extend({
+    endpoint: z.string(), // Orchestrator requires an endpoint for its own node
+  }),
   ibgp: z
     .object({
       secret: z.string().optional(),

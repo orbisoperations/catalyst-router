@@ -1,11 +1,9 @@
 import type { DataChannelDefinition } from './datachannel.js'
 import { z } from 'zod'
 
-export const PeerInfoSchema = z.object({
-  name: z.string(),
-  endpoint: z.string(),
-  domains: z.array(z.string()),
-})
+import { NodeConfigSchema } from '@catalyst/config'
+
+export const PeerInfoSchema = NodeConfigSchema
 
 export type PeerInfo = z.infer<typeof PeerInfoSchema>
 
