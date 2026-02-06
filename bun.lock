@@ -71,8 +71,9 @@
       "name": "@catalyst/authorization",
       "version": "0.0.0",
       "dependencies": {
+        "@cedar-policy/cedar-wasm": "^4.8.2",
         "jose": "^6.0.0",
-        "zod": "^4.0.0",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:dev",
@@ -349,6 +350,8 @@
     "@catalyst/orchestrator": ["@catalyst/orchestrator@workspace:packages/orchestrator"],
 
     "@catalyst/sdk": ["@catalyst/sdk@workspace:packages/sdk"],
+
+    "@cedar-policy/cedar-wasm": ["@cedar-policy/cedar-wasm@4.8.2", "", {}, "sha512-S37Kd4wP/IMZN3pdKEcsV8av7jMj4AKRovxzJEYZNTEYq0Wj4fno3dsw8xHHDXqT0dkQGTNUBuQNF8CTvOgE/Q=="],
 
     "@commitlint/cli": ["@commitlint/cli@20.3.1", "", { "dependencies": { "@commitlint/format": "^20.3.1", "@commitlint/lint": "^20.3.1", "@commitlint/load": "^20.3.1", "@commitlint/read": "^20.3.1", "@commitlint/types": "^20.3.1", "tinyexec": "^1.0.0", "yargs": "^17.0.0" }, "bin": { "commitlint": "./cli.js" } }, "sha512-NtInjSlyev/+SLPvx/ulz8hRE25Wf5S9dLNDcIwazq0JyB4/w1ROF/5nV0ObPTX8YpRaKYeKtXDYWqumBNHWsw=="],
 
