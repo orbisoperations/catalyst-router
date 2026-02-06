@@ -8,6 +8,19 @@ import { websocket } from 'hono/bun'
 import { ApiKeyService } from './api-key-service.js'
 import { BootstrapService } from './bootstrap.js'
 import { createKeyManagerFromEnv } from './key-manager/factory.js'
+import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
+import {
+    InMemoryUserStore,
+    InMemoryServiceAccountStore,
+    InMemoryBootstrapStore,
+} from './stores/memory.js'
+import {
+    LocalTokenManager,
+    BunSqliteTokenStore,
+    BunSqliteKeyStore,
+    PersistentLocalKeyManager,
+} from '@catalyst/authorization'
+import { BootstrapService } from './bootstrap.js'
 import { LoginService } from './login.js'
 import { hashPassword } from './password.js'
 import { Permission } from './permissions.js'
@@ -31,9 +44,10 @@ export let systemToken: string | undefined
  * Initializes and starts the Auth service.
  */
 export async function startServer() {
-  // Initialize KeyManager using factory pattern
-  const keyManager = createKeyManagerFromEnv()
-  await keyManager.initialize()
+    // Initialize Key persistence
+    const keyStore = new BunSqliteKeyStore(process.env.CATALYST_AUTH_KEYS_DB || 'keys.db')
+    const keyManager = new PersistentLocalKeyManager(keyStore)
+    await keyManager.initialize()
 
   const currentKid = await keyManager.getCurrentKeyId()
   console.log(JSON.stringify({ level: 'info', msg: 'KeyManager initialized', kid: currentKid }))
@@ -53,35 +67,21 @@ export async function startServer() {
   // CatalystDataModel and converts them into entities for the CatalystPolicyDomain
   policyService.entityBuilderFactory.registerMapper('User', userModelToEntityMapper)
 
-  // Initialize token tracking
-  const tokenStore = new BunSqliteTokenStore(process.env.CATALYST_AUTH_DB || 'auth.db')
-  const tokenManager = new LocalTokenManager(keyManager, tokenStore)
+    // Initialize token tracking
+    const tokenStore = new BunSqliteTokenStore(process.env.CATALYST_AUTH_TOKENS_DB || 'tokens.db')
+    const tokenManager = new LocalTokenManager(keyManager, tokenStore)
 
-  // Mint system admin token
-  systemToken = await tokenManager.mint({
-    subject: 'system-admin',
-    entity: {
-      id: 'system',
-      name: 'System Admin',
-      type: 'service',
-    },
-    claims: {
-      role: 'admin',
-      permissions: [
-        Permission.TokenCreate,
-        Permission.TokenRevoke,
-        Permission.TokenList,
-        Permission.PeerCreate,
-        Permission.PeerUpdate,
-        Permission.PeerDelete,
-        Permission.RouteCreate,
-        Permission.RouteDelete,
-        Permission.IbgpConnect,
-        Permission.IbgpDisconnect,
-        Permission.IbgpUpdate,
-      ],
-    },
-  })
+    // Mint system admin token
+    systemToken = await tokenManager.mint({
+        subject: 'bootstrap',
+        entity: {
+            id: 'system',
+            name: 'System Admin',
+            type: 'service',
+        },
+        roles: ['ADMIN'],
+        expiresIn: '365d',
+    })
 
   console.log(
     JSON.stringify({ level: 'info', msg: 'System Admin Token minted', token: systemToken })

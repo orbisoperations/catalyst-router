@@ -58,13 +58,13 @@ export class LoginService {
     const token = await this.tokenManager.mint({
       subject: user.id,
       expiresIn: DEFAULT_TOKEN_EXPIRY,
+      roles: user.roles as any,
       entity: {
         id: user.id,
         name: user.email,
         type: 'user',
       },
       claims: {
-        roles: user.roles,
         orgId: user.orgId,
       },
     })

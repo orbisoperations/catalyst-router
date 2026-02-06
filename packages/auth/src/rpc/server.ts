@@ -15,6 +15,10 @@ import {
   CreateFirstAdminRequestSchema,
   LoginRequestSchema,
   type AdminHandlers,
+  type RotateResponse,
+  type TokenHandlers,
+  type CertHandlers,
+  type ValidationHandlers,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
   type LoginResponse,
@@ -35,7 +39,6 @@ export class AuthRpcServer extends RpcTarget {
   constructor(
     private keyManager: IKeyManager,
     private tokenManager: TokenManager,
-    private revocationStore?: RevocationStore,
     private bootstrapService?: BootstrapService,
     private loginService?: LoginService,
     private apiKeyService?: ApiKeyService,
@@ -84,13 +87,13 @@ export class AuthRpcServer extends RpcTarget {
     const token = await this.tokenManager.mint({
       subject: result.userId!,
       expiresIn: '1h',
+      roles: ['ADMIN'],
       entity: {
         id: result.userId!,
         name: 'First Admin',
         type: 'user',
       },
       claims: {
-        roles: ['admin'],
         orgId: 'default',
       },
     })
@@ -112,7 +115,11 @@ export class AuthRpcServer extends RpcTarget {
 
   // --- Progressive API Entry Points ---
 
-  async admin(token: string): Promise<AdminHandlers | { error: string }> {
+  /**
+   * Token management sub-api.
+   * Requires 'ADMIN' role.
+   */
+  async tokens(token: string): Promise<TokenHandlers | { error: string }> {
     const auth = await this.tokenManager.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
@@ -173,54 +180,86 @@ export class AuthRpcServer extends RpcTarget {
     }
 
     return {
-      createToken: async (req: { role: Role; name: string }) => {
-        // In a real impl, this would probably create a service account or sign a long-lived token
+      create: async (request) => {
         return this.tokenManager.mint({
-          subject: req.name,
-          entity: {
-            id: req.name, // Should be a real entity ID
-            name: req.name,
-            type: 'service',
-          },
-          claims: { roles: [req.role] },
+          subject: request.subject,
+          entity: request.entity,
+          roles: request.roles as any,
+          sans: request.sans,
+          expiresIn: request.expiresIn,
+          claims: {},
         })
       },
-      revokeToken: async (req: { target: string }) => {
-        if (!this.revocationStore) throw new Error('Revocation not enabled')
-        // Target can be a token (decode JTI) or a JTI directly
-        this.revocationStore.revoke(req.target, new Date(Date.now() + 86400000))
+      revoke: async (request) => {
+        await this.tokenManager.revoke({ jti: request.jti, san: request.san })
+      },
+      list: async (request) => {
+        const records = await (this.tokenManager as any).store.listTokens(request)
+        return records
       },
     }
   }
 
+  /**
+   * Certificate/Key management sub-api.
+   * Requires 'ADMIN' role.
+   */
+  async certs(token: string): Promise<CertHandlers | { error: string }> {
+    const auth = await this.tokenManager.verify(token)
+    if (!auth.valid) {
+      return { error: 'Invalid token' }
+    }
+
+    const roles = (auth.payload.roles as string[]) || []
+    if (!roles.includes('ADMIN')) {
+      return { error: 'Permission denied: ADMIN role required' }
+    }
+
+    return {
+      list: async () => {
+        const jwks = await this.keyManager.getJwks()
+        return { success: true, jwks: { keys: jwks.keys as Record<string, unknown>[] } }
+      },
+      rotate: async (request) => {
+        const result = await this.keyManager.rotate(request)
+        return {
+          success: true,
+          previousKeyId: result.previousKeyId,
+          newKeyId: result.newKeyId,
+          gracePeriodEndsAt: result.gracePeriodEndsAt?.toISOString(),
+        }
+      },
+      getTokensByCert: async (request) => {
+        const records = await (this.tokenManager as any).store.listTokens({
+          certificateFingerprint: request.fingerprint,
+        })
+        return records
+      },
+    }
+  }
+
+  /**
+   * Token validation and public metadata sub-api.
+   * Accessible with any valid token or unauthenticated for JWKS.
+   */
   async validation(token: string): Promise<ValidationHandlers | { error: string }> {
     const auth = await this.tokenManager.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
     }
 
-    // Role check could be added here if validation requires specific roles
-
     return {
+      validate: async (req: { token: string; audience?: string }) => {
+        const result = await this.tokenManager.verify(req.token, { audience: req.audience })
+        if (!result.valid) return { valid: false, error: result.error }
+        return { valid: true, payload: result.payload }
+      },
+      getRevocationList: async () => {
+        return (this.tokenManager as any).store.getRevocationList()
+      },
       getJWKS: async () => {
         const jwks = await this.keyManager.getJwks()
         return { success: true, jwks: { keys: jwks.keys as Record<string, unknown>[] } }
-      },
-      getRevocationList: async () => {
-        // Return list of revoked JTIs if supported by store
-        return []
-      },
-      validate: async (req: { token: string }) => {
-        const result = await this.tokenManager.verify(req.token)
-        if (!result.valid) return { valid: false, error: 'Invalid token' }
-
-        if (this.revocationStore && result.payload.jti) {
-          if (this.revocationStore.isRevoked(result.payload.jti as string)) {
-            return { valid: false, error: 'Token revoked' }
-          }
-        }
-
-        return { valid: true, payload: result.payload }
       },
     }
   }
