@@ -50,7 +50,7 @@ export class AuthorizationEngine<
    * @throws {Error} If warnings are present and `failOnWarnings` is `true`.
    * @returns {boolean} `true` if policies are valid.
    */
-  validatePolicies(opts: { failOnWarnings?: boolean } = { failOnWarnings: true }): boolean {
+  validatePolicies(): boolean {
     const validationAnswer = cedar.validate({
       schema: this.schema,
       policies: { staticPolicies: this.policies },
@@ -59,9 +59,10 @@ export class AuthorizationEngine<
     if (validationAnswer.type === 'failure') {
       throw new Error(validationAnswer.errors.map((error) => error.message).join('\n'))
     }
-    const hasWarning = validationAnswer.validationWarnings.length > 0
     const hasError = validationAnswer.validationErrors.length > 0
+    const hasWarning = validationAnswer.validationWarnings.length > 0
     const hasOtherWarnings = validationAnswer.otherWarnings.length > 0
+
     if (hasError) console.error(JSON.stringify(validationAnswer.validationErrors, null, 2))
     if (hasWarning) console.warn(JSON.stringify(validationAnswer.validationWarnings, null, 2))
     if (hasOtherWarnings) console.warn(JSON.stringify(validationAnswer.otherWarnings, null, 2))

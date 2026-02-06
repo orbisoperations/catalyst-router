@@ -4,7 +4,13 @@ import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
 import type { IKeyManager } from '../key-manager/types.js'
-import { type TokenManager, Role, Action, LocalTokenManager } from '@catalyst/authorization'
+import {
+  type TokenManager,
+  Role,
+  Action,
+  LocalTokenManager,
+  jwtToEntity,
+} from '@catalyst/authorization'
 import type { BootstrapService } from '../bootstrap.js'
 import type { ApiKeyService } from '../api-key-service.js'
 import type { LoginService } from '../login.js'
@@ -37,7 +43,9 @@ export class AuthRpcServer extends RpcTarget {
     private bootstrapService?: BootstrapService,
     private loginService?: LoginService,
     private apiKeyService?: ApiKeyService,
-    private policyService?: CatalystPolicyEngine
+    private policyService?: CatalystPolicyEngine,
+    private nodeId: string = 'unknown',
+    private domainId: string = ''
   ) {
     super()
   }
@@ -131,16 +139,20 @@ export class AuthRpcServer extends RpcTarget {
     // Ill give it some thought and see if it makes sense to do so.
     //
     // seems like the pattern of builder, authorized, will be very repetitive
+    const principal = jwtToEntity(auth.payload as Record<string, unknown>)
     const builder = this.policyService?.entityBuilderFactory.createEntityBuilder()
     if (!builder) {
       return { error: 'Policy service not configured' }
     }
-    builder.add(Role.USER, auth.payload)
+    builder.entity(principal.uid.type as any, principal.uid.id).setAttributes(principal.attrs)
+    builder
+      .entity('CATALYST::AdminPanel' as any, 'admin-panel')
+      .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
     const entities = builder.build()
     const autorizedResult = this.policyService?.isAuthorized({
-      principal: entities.entityRef(Role.USER, auth.payload.id as string),
-      action: { type: 'Action', id: Action.LOGIN },
-      resource: { type: 'AdminPanel', id: 'admin-panel' },
+      principal: principal.uid as any,
+      action: { type: 'CATALYST::Action' as any, id: Action.MANAGE as any },
+      resource: { type: 'CATALYST::AdminPanel' as any, id: 'admin-panel' },
       entities: entities.getAll(),
       context: {},
     })
@@ -155,7 +167,8 @@ export class AuthRpcServer extends RpcTarget {
       )
       return { error: 'Error authorizing request' }
     }
-    if (!autorizedResult?.allowed) {
+
+    if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
       // log for telemetry
       console.error(
         JSON.stringify({
@@ -167,12 +180,7 @@ export class AuthRpcServer extends RpcTarget {
           allowed: autorizedResult?.allowed,
         })
       )
-      return { error: 'Permission denied: admin role required' }
-    }
-
-    const roles = (auth.payload.roles as string[]) || []
-    if (!roles.includes('admin')) {
-      return { error: 'Permission denied: admin role required' }
+      return { error: 'Permission denied: ADMIN role required' }
     }
 
     return {
@@ -211,8 +219,29 @@ export class AuthRpcServer extends RpcTarget {
       return { error: 'Invalid token' }
     }
 
-    const roles = (auth.payload.roles as string[]) || []
-    if (!roles.includes('ADMIN')) {
+    const principal = jwtToEntity(auth.payload as Record<string, unknown>)
+    const builder = this.policyService?.entityBuilderFactory.createEntityBuilder()
+    if (!builder) {
+      return { error: 'Policy service not configured' }
+    }
+    builder.entity(principal.uid.type as any, principal.uid.id).setAttributes(principal.attrs)
+    builder
+      .entity('CATALYST::AdminPanel' as any, 'admin-panel')
+      .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
+    const entities = builder.build()
+    const autorizedResult = this.policyService?.isAuthorized({
+      principal: principal.uid as any,
+      action: { type: 'CATALYST::Action' as any, id: Action.MANAGE as any },
+      resource: { type: 'CATALYST::AdminPanel' as any, id: 'admin-panel' },
+      entities: entities.getAll(),
+      context: {},
+    })
+
+    if (autorizedResult?.type === 'failure') {
+      return { error: 'Error authorizing request' }
+    }
+
+    if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
       return { error: 'Permission denied: ADMIN role required' }
     }
 

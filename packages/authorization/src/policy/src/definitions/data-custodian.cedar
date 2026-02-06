@@ -5,4 +5,8 @@ permit (
         CATALYST::Action::"ROUTE_DELETE"
     ],
     resource
-);
+)
+when {
+    principal.trustedDomains.contains(resource.domainId) &&
+    (principal.trustedNodes.isEmpty() || principal.trustedNodes.contains(resource.nodeId))
+};

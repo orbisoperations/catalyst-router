@@ -12,10 +12,13 @@ import {
   PersistentLocalKeyManager,
   type TokenRecord,
 } from '@catalyst/authorization'
+import { AuthorizationEngine, CATALYST_SCHEMA, ALL_POLICIES, Role } from '@catalyst/authorization'
+import { type CatalystPolicyDomain } from '../src/policies/types.js'
 
 describe('Auth Progressive API', () => {
   let keyManager: PersistentLocalKeyManager
   let tokenManager: LocalTokenManager
+  let policyService: AuthorizationEngine<CatalystPolicyDomain>
   let rpcServer: AuthRpcServer
   let adminToken: string
   let userToken: string
@@ -26,22 +29,49 @@ describe('Auth Progressive API', () => {
     await keyManager.initialize()
 
     const tokenStore = new BunSqliteTokenStore(':memory:')
-    tokenManager = new LocalTokenManager(keyManager, tokenStore)
+    tokenManager = new LocalTokenManager(keyManager, tokenStore, 'test-node')
 
     // Sign tokens for testing
+    // Admin token: Trusted for 'test-domain'
     adminToken = await tokenManager.mint({
       subject: 'admin-user',
-      entity: { id: 'admin-user', name: 'Admin', type: 'user' },
-      roles: ['ADMIN'],
+      entity: {
+        id: 'admin-user',
+        name: 'Admin',
+        type: 'user',
+        role: Role.ADMIN,
+        trustedDomains: ['test-domain'],
+      },
+      roles: [Role.ADMIN],
     })
 
+    // User token: Trusted for 'test-domain'
     userToken = await tokenManager.mint({
       subject: 'regular-user',
-      entity: { id: 'regular-user', name: 'User', type: 'user' },
-      roles: ['USER'],
+      entity: {
+        id: 'regular-user',
+        name: 'User',
+        type: 'user',
+        role: Role.USER,
+        trustedDomains: ['test-domain'],
+      },
+      roles: [Role.USER],
     })
 
-    rpcServer = new AuthRpcServer(keyManager, tokenManager)
+    policyService = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
+
+    // RPC Server: Belongs to 'test-node' and 'test-domain'
+    rpcServer = new AuthRpcServer(
+      keyManager,
+      tokenManager,
+      undefined,
+      undefined,
+      undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      policyService as any,
+      'test-node',
+      'test-domain'
+    )
   })
 
   describe('tokens sub-api', () => {
@@ -64,8 +94,8 @@ describe('Auth Progressive API', () => {
       const handlers = (await rpcServer.tokens(adminToken)) as TokenHandlers
       const newToken = await handlers.create({
         subject: 'new-service',
-        entity: { id: 's1', name: 'Service', type: 'service' },
-        roles: ['NODE'],
+        entity: { id: 's1', name: 'Service', type: 'service', role: Role.NODE },
+        roles: [Role.NODE],
       })
       expect(newToken).toBeString()
 
@@ -132,6 +162,84 @@ describe('Auth Progressive API', () => {
       const handlers = (await rpcServer.validation(adminToken)) as ValidationHandlers
       const crl = await handlers.getRevocationList()
       expect(Array.isArray(crl)).toBe(true)
+    })
+  })
+
+  describe('Isolation Boundaries', () => {
+    it('should deny access if domain mismatch', async () => {
+      // Token for 'other-domain'
+      const otherDomainToken = await tokenManager.mint({
+        subject: 'admin-user',
+        entity: {
+          id: 'admin-user',
+          name: 'Admin',
+          type: 'user',
+          role: Role.ADMIN,
+          trustedDomains: ['other-domain'],
+        },
+        roles: [Role.ADMIN],
+      })
+
+      const result = await rpcServer.tokens(otherDomainToken)
+      expect(result).toHaveProperty('error')
+      expect((result as { error: string }).error).toContain('ADMIN role required')
+    })
+
+    it('should deny access if node mismatch (when trustedNodes is set)', async () => {
+      // Token restricted to 'other-node'
+      const otherNodeToken = await tokenManager.mint({
+        subject: 'admin-user',
+        entity: {
+          id: 'admin-user',
+          name: 'Admin',
+          type: 'user',
+          role: Role.ADMIN,
+          trustedDomains: ['test-domain'],
+          trustedNodes: ['other-node'],
+        },
+        roles: [Role.ADMIN],
+      })
+
+      const result = await rpcServer.tokens(otherNodeToken)
+      expect(result).toHaveProperty('error')
+      expect((result as { error: string }).error).toContain('ADMIN role required')
+    })
+
+    it('should grant access if node matches (when trustedNodes is set)', async () => {
+      // Token restricted to 'test-node'
+      const matchedNodeToken = await tokenManager.mint({
+        subject: 'admin-user',
+        entity: {
+          id: 'admin-user',
+          name: 'Admin',
+          type: 'user',
+          role: Role.ADMIN,
+          trustedDomains: ['test-domain'],
+          trustedNodes: ['test-node'],
+        },
+        roles: [Role.ADMIN],
+      })
+
+      const handlers = await rpcServer.tokens(matchedNodeToken)
+      expect(handlers).not.toHaveProperty('error')
+    })
+
+    it('should grant access across multiple trusted domains', async () => {
+      // Token trusted for both A and B
+      const multiDomainToken = await tokenManager.mint({
+        subject: 'admin-user',
+        entity: {
+          id: 'admin-user',
+          name: 'Admin',
+          type: 'user',
+          role: Role.ADMIN,
+          trustedDomains: ['domain-A', 'test-domain'],
+        },
+        roles: [Role.ADMIN],
+      })
+
+      const handlers = await rpcServer.tokens(multiDomainToken)
+      expect(handlers).not.toHaveProperty('error')
     })
   })
 })

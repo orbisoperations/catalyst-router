@@ -9,6 +9,8 @@ describe('System Admin Token', () => {
     // Use in-memory databases for tests
     process.env.CATALYST_AUTH_KEYS_DB = ':memory:'
     process.env.CATALYST_AUTH_TOKENS_DB = ':memory:'
+    process.env.CATALYST_NODE_ID = 'test-node'
+    process.env.CATALYST_PEERING_ENDPOINT = 'http://localhost:3000'
 
     // Import and start server to trigger minting
     const { startServer } = await import('../src/server.js')

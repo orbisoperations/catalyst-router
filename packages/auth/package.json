@@ -17,6 +17,7 @@
   "dependencies": {
     "@hono/capnweb": "^0.1.0",
     "@catalyst/authorization": "workspace:*",
+    "@catalyst/config": "workspace:*",
     "argon2": "^0.44.0",
     "capnweb": "^0.4.0",
     "hono": "^4.11.3",

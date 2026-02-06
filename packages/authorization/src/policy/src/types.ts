@@ -18,6 +18,7 @@ export enum Role {
  */
 export enum Action {
   LOGIN = 'LOGIN',
+  MANAGE = 'MANAGE',
   IBGP_CONNECT = 'IBGP_CONNECT',
   IBGP_DISCONNECT = 'IBGP_DISCONNECT',
   IBGP_UPDATE = 'IBGP_UPDATE',
@@ -139,8 +140,8 @@ export type ActionContext<
   TActionID extends ActionId<TDomain>,
 > =
   TDomain['Actions'] extends Record<string, unknown>
-  ? TDomain['Actions'][TActionID]
-  : Record<string, unknown>
+    ? TDomain['Actions'][TActionID]
+    : Record<string, unknown>
 
 /**
  * Represents an authorization request to be evaluated by the engine.
@@ -167,17 +168,17 @@ export type AuthorizationRequest<
   entities: Entity<TDomain>[] | EntityCollection<TDomain>
 } & (Record<string, never> extends ActionContext<TDomain, TActionID>
   ? {
-    /**
-     * Contextual information for the request (optional if the action requires no context).
-     */
-    context?: ActionContext<TDomain, TActionID>
-  }
+      /**
+       * Contextual information for the request (optional if the action requires no context).
+       */
+      context?: ActionContext<TDomain, TActionID>
+    }
   : {
-    /**
-     * Contextual information for the request (required if the action defines a context shape).
-     */
-    context: ActionContext<TDomain, TActionID>
-  })
+      /**
+       * Contextual information for the request (required if the action defines a context shape).
+       */
+      context: ActionContext<TDomain, TActionID>
+    })
 
 /**
  * Raw response from the authorization evaluation (internal use).
@@ -194,23 +195,23 @@ export interface AuthorizationResponse {
  */
 export type AuthorizationEngineResult =
   | {
-    /** Indicates a failure in the engine execution (e.g., internal error). */
-    type: 'failure'
-    /** List of error messages explaining the failure. */
-    errors: string[]
-  }
+      /** Indicates a failure in the engine execution (e.g., internal error). */
+      type: 'failure'
+      /** List of error messages explaining the failure. */
+      errors: string[]
+    }
   | {
-    /** Indicates the request was successfully evaluated. */
-    type: 'evaluated'
-    /** The authorization decision ('allow' or 'deny'). */
-    decision: 'allow' | 'deny'
-    /** Boolean shorthand for decision === 'allow'. */
-    allowed: boolean
-    /** IDs of the policies that determined the decision. */
-    reasons: string[]
-    /** Detailed diagnostics or warnings from the engine. */
-    diagnostics: DetailedError[]
-  }
+      /** Indicates the request was successfully evaluated. */
+      type: 'evaluated'
+      /** The authorization decision ('allow' or 'deny'). */
+      decision: 'allow' | 'deny'
+      /** Boolean shorthand for decision === 'allow'. */
+      allowed: boolean
+      /** IDs of the policies that determined the decision. */
+      reasons: string[]
+      /** Detailed diagnostics or warnings from the engine. */
+      diagnostics: DetailedError[]
+    }
 
 /**
  * Interface for the Authorization Engine.

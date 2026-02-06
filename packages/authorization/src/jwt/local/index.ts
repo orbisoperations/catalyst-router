@@ -5,19 +5,25 @@ import type { IKeyManager, VerifyResult } from '../../key-manager/index.ts'
 export class LocalTokenManager implements TokenManager {
   constructor(
     private keyManager: IKeyManager,
-    private store: TokenStore
+    private store: TokenStore,
+    private nodeId?: string
   ) {}
 
   getStore(): TokenStore {
     return this.store
   }
 
-    async mint(options: MintOptions): Promise<string> {
-        const claims: Record<string, unknown> = {
-            ...options.claims,
-            entity: options.entity,
-            roles: options.roles,
-        }
+  async mint(options: MintOptions): Promise<string> {
+    // Auto-inject nodeId if configured and not already present
+    if (this.nodeId && !options.entity.nodeId) {
+      options.entity.nodeId = this.nodeId
+    }
+
+    const claims: Record<string, unknown> = {
+      ...options.claims,
+      entity: options.entity,
+      roles: options.roles,
+    }
 
     // Support certificate binding (ADR 0007)
     if (options.certificateFingerprint) {

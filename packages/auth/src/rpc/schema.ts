@@ -330,7 +330,13 @@ export interface TokenHandlers {
   /** Create a new token with optional SANs and entity info */
   create(request: {
     subject: string
-    entity: { id: string; name: string; type: 'user' | 'service' }
+    entity: {
+      id: string
+      name: string
+      type: 'user' | 'service'
+      role: z.infer<typeof RoleSchema>
+      nodeId?: string
+    }
     roles: z.infer<typeof RoleSchema>[]
     sans?: string[]
     expiresIn?: string

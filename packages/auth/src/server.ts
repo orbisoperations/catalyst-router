@@ -8,6 +8,7 @@ import {
   ALL_POLICIES,
   Role,
 } from '@catalyst/authorization'
+import { loadDefaultConfig } from '@catalyst/config'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { ApiKeyService } from './api-key-service.js'
@@ -34,8 +35,10 @@ export let systemToken: string | undefined
  * Initializes and starts the Auth service.
  */
 export async function startServer() {
+  const config = loadDefaultConfig()
+
   // Initialize Key persistence
-  const keyStore = new BunSqliteKeyStore(process.env.CATALYST_AUTH_KEYS_DB || 'keys.db')
+  const keyStore = new BunSqliteKeyStore(config.auth?.keysDb || 'keys.db')
   const keyManager = new PersistentLocalKeyManager(keyStore)
   await keyManager.initialize()
 
@@ -43,10 +46,7 @@ export async function startServer() {
   console.log(JSON.stringify({ level: 'info', msg: 'KeyManager initialized', kid: currentKid }))
 
   // initialize the policy authorization engine using the standard Catalyst domain
-  const policyService = new AuthorizationEngine<CatalystPolicyDomain>(
-    CATALYST_SCHEMA,
-    ALL_POLICIES
-  )
+  const policyService = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
   const validationResult = policyService.validatePolicies()
   if (!validationResult) {
     console.error(JSON.stringify({ level: 'error', msg: 'Invalid policies' }))
@@ -57,8 +57,8 @@ export async function startServer() {
   policyService.entityBuilderFactory.registerMapper(Role.USER, userModelToEntityMapper)
 
   // Initialize token tracking
-  const tokenStore = new BunSqliteTokenStore(process.env.CATALYST_AUTH_TOKENS_DB || 'tokens.db')
-  const tokenManager = new LocalTokenManager(keyManager, tokenStore)
+  const tokenStore = new BunSqliteTokenStore(config.auth?.tokensDb || 'tokens.db')
+  const tokenManager = new LocalTokenManager(keyManager, tokenStore, config.node.name)
 
   // Mint system admin token
   systemToken = await tokenManager.mint({
@@ -78,8 +78,8 @@ export async function startServer() {
   )
 
   // Initialize revocation store if enabled
-  const revocationEnabled = process.env.CATALYST_AUTH_REVOCATION === 'true'
-  const revocationMaxSize = Number(process.env.CATALYST_AUTH_REVOCATION_MAX_SIZE) || undefined
+  const revocationEnabled = config.auth?.revocation?.enabled === true
+  const revocationMaxSize = config.auth?.revocation?.maxSize
   const revocationStore = revocationEnabled
     ? new InMemoryRevocationStore({ maxSize: revocationMaxSize })
     : undefined
@@ -105,8 +105,8 @@ export async function startServer() {
   const apiKeyService = new ApiKeyService(serviceAccountStore)
 
   // Initialize bootstrap with env token or generate new one
-  const envBootstrapToken = process.env.CATALYST_BOOTSTRAP_TOKEN
-  const bootstrapTtl = Number(process.env.CATALYST_BOOTSTRAP_TTL) || 24 * 60 * 60 * 1000 // 24h default
+  const envBootstrapToken = config.auth?.bootstrap?.token
+  const bootstrapTtl = config.auth?.bootstrap?.ttl || 24 * 60 * 60 * 1000 // 24h default
 
   if (envBootstrapToken) {
     const tokenHash = await hashPassword(envBootstrapToken)
@@ -115,7 +115,7 @@ export async function startServer() {
     console.log(
       JSON.stringify({
         level: 'info',
-        msg: 'Bootstrap initialized from env',
+        msg: 'Bootstrap initialized from config',
         expiresAt: expiresAt.toISOString(),
       })
     )
@@ -139,6 +139,8 @@ export async function startServer() {
     loginService,
     apiKeyService,
     policyService,
+    config.node.name,
+    config.node.domains[0] || ''
   )
   rpcServer.setSystemToken(systemToken)
   const rpcApp = createAuthRpcHandler(rpcServer)
@@ -152,7 +154,7 @@ export async function startServer() {
   })
   app.route('/rpc', rpcApp)
 
-  const port = Number(process.env.PORT) || 4001
+  const port = config.port
   console.log(JSON.stringify({ level: 'info', msg: 'Auth service started', port }))
 
   // Graceful shutdown

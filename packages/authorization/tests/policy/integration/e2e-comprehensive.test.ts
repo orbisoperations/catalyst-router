@@ -98,9 +98,7 @@ describe('Full E2E Verification', () => {
     // --- Step 1: Instantiate Engine ---
     const engine = new AuthorizationEngine<ECommerceDomain>(cedarSchema, cedarPolicies)
     const isValid = engine.validatePolicies()
-    expect(isValid).toBe(false) // Returns true if there are errors/warnings, confusingly named?
-    // Wait, let me check validatePolicies implementation again.
-    // It returns "hasWarning || hasError || hasOtherWarnings". So false means Good (0 errors).
+    expect(isValid).toBe(true) // Returns true if valid (no errors)
 
     // --- Step 2: Instantiate Factory and Register Mappers ---
     const factory = new EntityBuilderFactory<ECommerceDomain>()
