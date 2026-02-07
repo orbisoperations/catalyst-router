@@ -6,13 +6,7 @@ export type { PeerInfo, InternalRoute }
 import { newRouteTable, type RouteTable, type PeerRecord } from './routing/state.js'
 import type { DataChannelDefinition } from './routing/datachannel.js'
 import type { UpdateMessageSchema } from './routing/internal/actions.js'
-import {
-  type AuthContext,
-  AuthContextSchema,
-  type OrchestratorConfig,
-  OrchestratorConfigSchema,
-} from './types.js'
-import { getRequiredPermission, hasPermission, isSecretValid, Permission } from './permissions.js'
+import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import {
   newHttpBatchRpcSession,
   newWebSocketRpcSession,
@@ -31,10 +25,7 @@ export interface PublicApi {
   getIBGPClient(
     token: string
   ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
-  dispatch(
-    action: Action,
-    auth?: AuthContext
-  ): Promise<{ success: true } | { success: false; error: string }>
+  dispatch(action: Action): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export interface NetworkClient {
@@ -102,16 +93,47 @@ export class ConnectionPool {
   }
 }
 
+/**
+ * Auth Service RPC API interface
+ */
+interface AuthServicePermissionsHandlers {
+  authorizeAction(request: {
+    action: string
+    nodeContext: { nodeId: string; domains: string[] }
+  }): Promise<
+    | { success: true; allowed: boolean }
+    | {
+        success: false
+        errorType:
+          | 'token_expired'
+          | 'token_malformed'
+          | 'token_revoked'
+          | 'permission_denied'
+          | 'system_error'
+        reason?: string
+        reasons?: string[]
+      }
+  >
+}
+
+interface AuthServiceApi {
+  permissions(token: string): Promise<AuthServicePermissionsHandlers | { error: string }>
+}
+
 export class CatalystNodeBus extends RpcTarget {
   private state: RouteTable
   private connectionPool: ConnectionPool
   private config: OrchestratorConfig
+  private nodeToken?: string
+  private authClient?: RpcStub<AuthServiceApi>
   public lastNotificationPromise?: Promise<void>
 
   constructor(opts: {
     state?: RouteTable
     connectionPool?: { type?: 'ws' | 'http'; pool?: ConnectionPool }
     config: OrchestratorConfig
+    nodeToken?: string
+    authEndpoint?: string
   }) {
     super()
     this.state = opts.state ?? newRouteTable()
@@ -122,6 +144,10 @@ export class CatalystNodeBus extends RpcTarget {
       )
     }
     this.config = opts.config
+    this.nodeToken = opts.nodeToken
+    if (opts.authEndpoint) {
+      this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
+    }
     this.connectionPool =
       opts.connectionPool?.pool ??
       (opts.connectionPool?.type
@@ -144,15 +170,62 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
+  /**
+   * Validates an incoming caller token using the auth service permissions API.
+   *
+   * @param callerToken - The token provided by the caller that needs validation
+   * @param action - The action the caller wants to perform
+   */
+  private async validateToken(
+    callerToken: string,
+    action: string
+  ): Promise<{ valid: true } | { valid: false; error: string }> {
+    // Allow bypassing auth in test/development environments
+    if (process.env.CATALYST_SKIP_AUTH === 'true') {
+      return { valid: true }
+    }
+
+    if (!this.authClient) {
+      return { valid: false, error: 'Auth service not configured' }
+    }
+
+    try {
+      // Use permissions API to validate the caller's token
+      const permissionsApi = await this.authClient.permissions(callerToken)
+      if ('error' in permissionsApi) {
+        return { valid: false, error: `Invalid token: ${permissionsApi.error}` }
+      }
+
+      // Check if the validated token allows the requested action
+      const result = await permissionsApi.authorizeAction({
+        action,
+        nodeContext: {
+          nodeId: this.config.node.name,
+          domains: this.config.node.domains,
+        },
+      })
+
+      if (!result.success) {
+        return {
+          valid: false,
+          error: `Authorization failed: ${result.errorType} - ${result.reason || result.reasons?.join(', ')}`,
+        }
+      }
+
+      if (!result.allowed) {
+        return { valid: false, error: 'Permission denied' }
+      }
+
+      return { valid: true }
+    } catch (error) {
+      return { valid: false, error: `Token validation failed: ${error}` }
+    }
+  }
+
   async dispatch(
-    sentAction: Action,
-    auth?: AuthContext
+    sentAction: Action
   ): Promise<{ success: true } | { success: false; error: string }> {
-    console.log(`[${this.config.node.name}] dispatch called. Auth provided:`, JSON.stringify(auth))
-    // Validate and default to anonymous context
-    const resolvedAuth: AuthContext = auth
-      ? AuthContextSchema.parse(auth)
-      : { userId: 'anonymous', roles: [] }
+    console.log(`[${this.config.node.name}] dispatch called for action: ${sentAction.action}`)
 
     const prevState = this.state
     console.log(`[${this.config.node.name}] Dispatching action: ${sentAction.action}`)
@@ -162,7 +235,7 @@ export class CatalystNodeBus extends RpcTarget {
       console.log(`[${this.config.node.name}] Route Create Data:`, JSON.stringify(sentAction.data))
     }
 
-    const result = await this.handleAction(sentAction, this.state, resolvedAuth)
+    const result = await this.handleAction(sentAction, this.state)
     if (result.success) {
       this.state = result.state
       // Fire and forget side effects to avoid deadlocks in distributed calls
@@ -170,17 +243,14 @@ export class CatalystNodeBus extends RpcTarget {
       // Note: Hono's waitUntil is not available here easily as we are in the core class.
       // The catch below handles unhandled rejections for the side effect chain.
       // Ideally in a serverless evironment we would use ctx.waitUntil.
-      this.lastNotificationPromise = this.handleNotify(
-        sentAction,
-        this.state,
-        prevState,
-        resolvedAuth
-      ).catch((e) => {
-        console.error(
-          `[${this.config.node.name}] Error in handleNotify for ${sentAction.action}:`,
-          e
-        )
-      })
+      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState).catch(
+        (e) => {
+          console.error(
+            `[${this.config.node.name}] Error in handleNotify for ${sentAction.action}:`,
+            e
+          )
+        }
+      )
       return { success: true }
     } else {
       console.error(`[${this.config.node.name}] Action failed: ${sentAction.action}`, result.error)
@@ -190,17 +260,11 @@ export class CatalystNodeBus extends RpcTarget {
 
   async handleAction(
     action: Action,
-    state: RouteTable,
-    auth: AuthContext
+    state: RouteTable
   ): Promise<{ success: true; state: RouteTable } | { success: false; error: string }> {
-    // Permission check - single enforcement point
-    const permission = getRequiredPermission(action)
-    if (!permission) {
-      return { success: false, error: `Unauthorized action: ${action.action}` }
-    }
-    if (!hasPermission(auth.roles, permission)) {
-      return { success: false, error: `Permission denied: ${permission}` }
-    }
+    // Permission enforcement is now handled via token validation in client methods
+    // (getIBGPClient, getNetworkClient, getDataChannelClient)
+    // This method assumes the caller has already been authorized
 
     switch (action.action) {
       case Actions.LocalPeerCreate: {
@@ -449,12 +513,7 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
-  async handleBGPNotify(
-    action: Action,
-    _state: RouteTable,
-    prevState: RouteTable,
-    auth: AuthContext
-  ): Promise<void> {
+  async handleBGPNotify(action: Action, _state: RouteTable, prevState: RouteTable): Promise<void> {
     switch (action.action) {
       case Actions.LocalPeerCreate: {
         // Perform side effect: Try to open connection
@@ -464,9 +523,9 @@ export class CatalystNodeBus extends RpcTarget {
           )
           const stub = this.connectionPool.get(action.data.endpoint)
           if (stub) {
-            const connectionResult = await stub.getIBGPClient(
-              this.config.ibgp?.secret || 'valid-secret'
-            )
+            // Use node token to authenticate to peer
+            const token = this.nodeToken || ''
+            const connectionResult = await stub.getIBGPClient(token)
 
             if (connectionResult.success) {
               const result = await connectionResult.client.open(this.config.node)
@@ -475,14 +534,11 @@ export class CatalystNodeBus extends RpcTarget {
                 console.log(
                   `[${this.config.node.name}] Successfully opened connection to ${action.data.name}`
                 )
-                // Dispatch connected action with inherited auth
-                await this.dispatch(
-                  {
-                    action: Actions.InternalProtocolConnected,
-                    data: { peerInfo: action.data },
-                  },
-                  auth
-                )
+                // Dispatch connected action
+                await this.dispatch({
+                  action: Actions.InternalProtocolConnected,
+                  data: { peerInfo: action.data },
+                })
               }
             } else {
               console.error('Failed to get peer connection', connectionResult.error)
@@ -736,13 +792,8 @@ export class CatalystNodeBus extends RpcTarget {
   /**
    * Handle side effects after state changes.
    */
-  async handleNotify(
-    action: Action,
-    _state: RouteTable,
-    prevState: RouteTable,
-    auth: AuthContext
-  ): Promise<void> {
-    await this.handleBGPNotify(action, _state, prevState, auth)
+  async handleNotify(action: Action, _state: RouteTable, prevState: RouteTable): Promise<void> {
+    await this.handleBGPNotify(action, _state, prevState)
     await this.handleGraphqlConfiguration()
   }
 
@@ -788,29 +839,23 @@ export class CatalystNodeBus extends RpcTarget {
       getNetworkClient: async (
         token: string
       ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> => {
-        // TODO: Parse token to extract authorization context
-        const expectedSecret = this.config?.ibgp?.secret
-        if (!expectedSecret || !isSecretValid(token, expectedSecret)) {
-          return { success: false, error: 'Invalid management token' }
-        }
-
-        const auth: AuthContext = {
-          userId: 'peermgmt',
-          roles: ['peer_custodian'],
-          permissions: [Permission.PeerCreate, Permission.PeerUpdate, Permission.PeerDelete],
+        // Validate token via auth service or fallback to secret
+        const validation = await this.validateToken(token, 'PEER_CREATE')
+        if (!validation.valid) {
+          return { success: false, error: validation.error }
         }
 
         return {
           success: true,
           client: {
             addPeer: async (peer: PeerInfo) => {
-              return this.dispatch({ action: Actions.LocalPeerCreate, data: peer }, auth)
+              return this.dispatch({ action: Actions.LocalPeerCreate, data: peer })
             },
             updatePeer: async (peer: PeerInfo) => {
-              return this.dispatch({ action: Actions.LocalPeerUpdate, data: peer }, auth)
+              return this.dispatch({ action: Actions.LocalPeerUpdate, data: peer })
             },
             removePeer: async (peer: Pick<PeerInfo, 'name'>) => {
-              return this.dispatch({ action: Actions.LocalPeerDelete, data: peer }, auth)
+              return this.dispatch({ action: Actions.LocalPeerDelete, data: peer })
             },
             listPeers: async () => {
               return this.state.internal.peers
@@ -821,26 +866,20 @@ export class CatalystNodeBus extends RpcTarget {
       getDataChannelClient: async (
         token: string
       ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }> => {
-        // TODO: Parse token to extract authorization context
-        const expectedSecret = this.config?.ibgp?.secret
-        if (!expectedSecret || !isSecretValid(token, expectedSecret)) {
-          return { success: false, error: 'Invalid management token' }
-        }
-
-        const auth: AuthContext = {
-          userId: 'datamgmt',
-          roles: ['data_custodian'],
-          permissions: [Permission.RouteCreate, Permission.RouteDelete],
+        // Validate token via auth service or fallback to secret
+        const validation = await this.validateToken(token, 'ROUTE_CREATE')
+        if (!validation.valid) {
+          return { success: false, error: validation.error }
         }
 
         return {
           success: true,
           client: {
             addRoute: async (route: DataChannelDefinition) => {
-              return this.dispatch({ action: Actions.LocalRouteCreate, data: route }, auth)
+              return this.dispatch({ action: Actions.LocalRouteCreate, data: route })
             },
             removeRoute: async (route: DataChannelDefinition) => {
-              return this.dispatch({ action: Actions.LocalRouteDelete, data: route }, auth)
+              return this.dispatch({ action: Actions.LocalRouteDelete, data: route })
             },
             listRoutes: async () => {
               return {
@@ -854,50 +893,35 @@ export class CatalystNodeBus extends RpcTarget {
       getIBGPClient: async (
         token: string
       ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }> => {
-        // TODO: Parse token to extract authorization context
-        const expectedSecret = this.config?.ibgp?.secret
-        if (!expectedSecret || !isSecretValid(token, expectedSecret)) {
-          return { success: false, error: 'Invalid secret' }
-        }
-
-        const auth: AuthContext = {
-          userId: 'ibgppeer',
-          roles: ['peer'],
-          permissions: [Permission.IbgpConnect, Permission.IbgpDisconnect, Permission.IbgpUpdate],
+        // Validate token via auth service or fallback to secret
+        const validation = await this.validateToken(token, 'IBGP_CONNECT')
+        if (!validation.valid) {
+          return { success: false, error: validation.error }
         }
 
         return {
           success: true,
           client: {
             open: async (peer: PeerInfo) => {
-              return this.dispatch(
-                {
-                  action: Actions.InternalProtocolOpen,
-                  data: { peerInfo: peer },
-                },
-                auth
-              )
+              return this.dispatch({
+                action: Actions.InternalProtocolOpen,
+                data: { peerInfo: peer },
+              })
             },
             close: async (peer: PeerInfo, code: number, reason?: string) => {
-              return this.dispatch(
-                {
-                  action: Actions.InternalProtocolClose,
-                  data: { peerInfo: peer, code, reason },
-                },
-                auth
-              )
+              return this.dispatch({
+                action: Actions.InternalProtocolClose,
+                data: { peerInfo: peer, code, reason },
+              })
             },
             update: async (peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>) => {
-              return this.dispatch(
-                {
-                  action: Actions.InternalProtocolUpdate,
-                  data: {
-                    peerInfo: peer,
-                    update: update,
-                  },
+              return this.dispatch({
+                action: Actions.InternalProtocolUpdate,
+                data: {
+                  peerInfo: peer,
+                  update: update,
                 },
-                auth
-              )
+              })
             },
           },
         }

@@ -11,3 +11,10 @@ when {
     principal.trustedDomains.contains(resource.domainId) &&
     (principal.trustedNodes.isEmpty() || principal.trustedNodes.contains(resource.nodeId))
 };
+
+// Allow NODE principals to check permissions via the auth service
+permit (
+    principal is CATALYST::NODE,
+    action == CATALYST::Action::"CHECK_PERMISSIONS",
+    resource is CATALYST::AdminPanel
+);

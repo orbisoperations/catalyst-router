@@ -121,6 +121,11 @@ namespace CATALYST {
         resource: Token
     };
 
+    action CHECK_PERMISSIONS appliesTo {
+        principal: NODE,
+        resource: AdminPanel
+    };
+
     action MANAGE appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
         resource: AdminPanel

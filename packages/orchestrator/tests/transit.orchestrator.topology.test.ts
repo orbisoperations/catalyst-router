@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
+
+// Bypass auth for unit tests
+process.env.CATALYST_SKIP_AUTH = 'true'
 import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
 import type { PeerInfo, RouteTable } from '../src/routing/state.js'
 import { newRouteTable } from '../src/routing/state.js'
