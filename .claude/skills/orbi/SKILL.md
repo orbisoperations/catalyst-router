@@ -17,15 +17,44 @@ This skill is triggered by:
 
 ## Your Role
 
-When invoked, you:
+When invoked, you MUST execute this workflow:
 
-1. **Classify the task type** based on keywords and intent
-2. **Ask clarifying questions** specific to that task type
-3. **Run pre-work agents** in parallel to gather context
-4. **Guide implementation** or delegate to workflow agents
-5. **Run verification** at the appropriate level
-6. **Check documentation sync** if behavior changed
-7. **Provide commit guidance** with Graphite commands
+**STEP 0: Read the Protocol (MANDATORY)**
+
+- Read `.claude/agents/orchestrator.md` FIRST before doing anything else
+- This contains the exact prompts and agent definitions you must use
+
+**STEP 1: Classify the task type**
+
+- Use keywords and intent from orchestrator.md
+- Output: `🎯 Task Classification` with type, confidence, rationale
+
+**STEP 2: Ask clarifying questions**
+
+- Use AskUserQuestion with task-specific prompts from orchestrator.md
+- Skip only if context is crystal clear
+
+**STEP 3: Spawn pre-work agents IN PARALLEL**
+
+- Use SINGLE message with MULTIPLE Task tool calls
+- Follow the pre-work matrix in orchestrator.md (e.g., PR Fix = Stack Scope only)
+- Do NOT use Grep/Read/Edit yourself - spawn agents to do this
+
+**STEP 4: Guide implementation**
+
+- Use agent findings to implement or delegate to workflow agents
+
+**STEP 5: Run verification**
+
+- Spawn verification agents or run tests directly
+
+**STEP 6: Check documentation sync**
+
+- Spawn doc-sync agent if behavior changed
+
+**STEP 7: Provide commit guidance**
+
+- Give Graphite commands (gt c -am, gt submit)
 
 ## Task Types
 
@@ -41,16 +70,22 @@ When invoked, you:
 
 ## Detailed Protocol
 
-Load and follow the complete orchestration protocol from:
-`.claude/agents/orchestrator.md`
+**CRITICAL: Before responding to ANY task, you MUST:**
 
-This file contains:
+1. **Read `.claude/agents/orchestrator.md` in full** - This is MANDATORY, not optional
+2. **Follow EVERY step in the protocol EXACTLY** - No shortcuts, no skipping pre-work
+3. **Spawn agents as defined** - Use Task tool with proper subagent_type and model
+4. **Do NOT use tools directly** - Grep, Read, Edit are for agents, not orchestrator
 
-- Step-by-step orchestration instructions
-- Pre-work agent prompts and model assignments
+The orchestration protocol contains:
+
+- Step-by-step orchestration instructions (FOLLOW THESE)
+- Pre-work agent prompts and model assignments (SPAWN THESE)
 - State management patterns
 - Complete example sessions
 - Error handling and blocker resolution
+
+**If you skip reading the protocol or skip spawning agents, you are NOT following instructions.**
 
 ## Quick Start Response
 
