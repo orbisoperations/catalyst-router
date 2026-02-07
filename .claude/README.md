@@ -4,29 +4,43 @@ This directory contains Claude Code agent definitions, workflows, and configurat
 
 ## Quick Start - Meet Orbi
 
-**Orbi** is your development orchestrator. Invoke it when you want guided workflow execution with subagents:
+**Orbi** is your development orchestrator. Invoke it when you want guided workflow execution with subagents.
+
+### How to Invoke Orbi
+
+**Option 1: Slash Command (Recommended for explicit invocation)**
 
 ```
-Orbi I need to fix a PR comment about error handling
-orbi add a token refresh endpoint
-Orbi how does the peering handshake work?
+/orbi fix PR comment about error handling
+/orbi add a token refresh endpoint
+/orbi how does the peering handshake work?
+/orbi            # Show task type menu
 ```
+
+**Option 2: Natural Language Trigger**
+
+```
+Orbi fix PR comment about error handling
+orbi add a token refresh endpoint
+```
+
+The slash command (`/orbi`) is recommended when you want explicit, intentional orchestrator invocation. The natural language trigger works but may be less clear.
 
 **When to use Orbi vs normal conversation:**
 
-- `Orbi fix the PR comment` → Guided workflow with agents, verification, doc sync
+- `/orbi fix the PR comment` → Guided workflow with agents, verification, doc sync
 - `what does this error mean?` → Quick answer, no workflow
 
 ## Task Types (via Orbi)
 
 ```
-orbi 🔧 PR Fix: reviewer says token validation should be more specific
-orbi ✨ New Feature: add token refresh endpoint
-orbi 🔄 Migration: move from InMemoryStore to SqliteStore
-orbi 🔍 Exploration: how does the peering handshake work?
-orbi 🏗️ Architecture: should we use Cerbos or Cedar?
-orbi 📝 Documentation: the rotation flow is confusing
-orbi 🧹 Cleanup: remove unused InMemoryCache class
+/orbi 🔧 PR Fix: reviewer says token validation should be more specific
+/orbi ✨ New Feature: add token refresh endpoint
+/orbi 🔄 Migration: move from InMemoryStore to SqliteStore
+/orbi 🔍 Exploration: how does the peering handshake work?
+/orbi 🏗️ Architecture: should we use Cerbos or Cedar?
+/orbi 📝 Documentation: the rotation flow is confusing
+/orbi 🧹 Cleanup: remove unused InMemoryCache class
 ```
 
 ## Task Types
@@ -81,7 +95,7 @@ orbi 🧹 Cleanup: remove unused InMemoryCache class
 ### PR Fix
 
 ```
-User: orbi fix a PR comment - reviewer says "error message should be more specific"
+User: /orbi fix a PR comment - reviewer says "error message should be more specific"
 
 Orbi: 🔧 PR Fix Mode
       Which file has this error? Let me check your stack scope...
@@ -95,7 +109,7 @@ Orbi: 🔧 PR Fix Mode
 ### New Feature
 
 ```
-User: Orbi add a token refresh endpoint
+User: /orbi add a token refresh endpoint
 
 Orbi: ✨ New Feature Mode
       Let me ask a few questions and run pre-work...
@@ -107,7 +121,7 @@ Orbi: ✨ New Feature Mode
 ### Exploration
 
 ```
-User: orbi how does the BGP peering handshake work?
+User: /orbi how does the BGP peering handshake work?
 
 Orbi: 🔍 Exploration Mode
       Let me trace through the code...
