@@ -1,30 +1,32 @@
 import { describe, expect, it } from 'bun:test'
 import { EntityBuilderFactory } from '../../src/policy/src/entity-builder.js'
-import type { AuthorizationDomain } from '../../src/policy/src/types.js'
 
 describe('EntityFactory Mappers', () => {
   // Define Test Domain
-  interface TestDomain extends AuthorizationDomain {
-    Actions: 'view' | 'edit'
-    Entities: {
-      User: {
-        username: string
-        role: string
+  type TestDomain = [
+    {
+      Namespace: 'Test'
+      Actions: 'view' | 'edit'
+      Entities: {
+        User: {
+          username: string
+          role: string
+        }
+        Post: {
+          id: string
+          authorId: string
+          content: string
+        }
       }
-      Post: {
-        id: string
-        authorId: string
-        content: string
-      }
-    }
-  }
+    },
+  ]
 
   it('should allow registering mappers via the factory', () => {
     const factory = new EntityBuilderFactory<TestDomain>()
 
     // Test chaining
     const chainedFactory = factory.registerMapper(
-      'User',
+      'Test::User',
       (data: { name: string; role: string }) => ({
         id: data.name,
         attrs: { username: data.name, role: data.role },
@@ -38,7 +40,7 @@ describe('EntityFactory Mappers', () => {
   it('should pass registered mappers to the builder', () => {
     const factory = new EntityBuilderFactory<TestDomain>()
 
-    factory.registerMapper('User', (data: { name: string }) => ({
+    factory.registerMapper('Test::User', (data: { name: string }) => ({
       id: data.name,
       attrs: { username: data.name, role: 'user' },
     }))
@@ -47,16 +49,16 @@ describe('EntityFactory Mappers', () => {
 
     // We can't easily inspect private mappers property, but we can verify behavior
     // by using the builder to add an entity via the mapper
-    builder.add('User', { name: 'alice' })
+    builder.add('Test::User', { name: 'alice' })
     const entities = builder.build()
 
-    const user = entities.get('User', 'alice')
+    const user = entities.get('Test::User', 'alice')
     expect(user).toBeDefined()
     expect(user?.attrs.username).toBe('alice')
     expect(user?.attrs.role).toBe('user')
 
     // non exitent user should be undefined
-    const nonExistingUser = entities.get('User', 'non-existing')
+    const nonExistingUser = entities.get('Test::User', 'non-existing')
     expect(nonExistingUser).toBeUndefined()
   })
 
@@ -64,27 +66,27 @@ describe('EntityFactory Mappers', () => {
     const factory = new EntityBuilderFactory<TestDomain>()
 
     factory
-      .registerMapper('User', (data: { name: string }) => ({
+      .registerMapper('Test::User', (data: { name: string }) => ({
         id: data.name,
         attrs: { username: data.name, role: 'user' },
       }))
-      .registerMapper('Post', (data: { id: string; author: string; text: string }) => ({
+      .registerMapper('Test::Post', (data: { id: string; author: string; text: string }) => ({
         id: data.id,
         attrs: { id: data.id, authorId: data.author, content: data.text },
-        parents: [{ type: 'User', id: data.author }],
+        parents: [{ type: 'Test::User', id: data.author }],
       }))
 
     const builder = factory.createEntityBuilder()
 
-    builder.add('User', { name: 'bob' })
-    builder.add('Post', { id: 'post-1', author: 'bob', text: 'Hello World' })
+    builder.add('Test::User', { name: 'bob' })
+    builder.add('Test::Post', { id: 'post-1', author: 'bob', text: 'Hello World' })
 
     const entities = builder.build()
 
-    const post = entities.get('Post', 'post-1')
+    const post = entities.get('Test::Post', 'post-1')
     expect(post).toBeDefined()
     expect(post?.parents).toHaveLength(1)
-    expect(post?.parents[0]).toEqual({ type: 'User', id: 'bob' })
+    expect(post?.parents[0]).toEqual({ type: 'Test::User', id: 'bob' })
   })
 
   it('should throw an error if no mapper is registered for the type', () => {
@@ -93,7 +95,7 @@ describe('EntityFactory Mappers', () => {
 
     expect(() => {
       // but here we want to test runtime error when no mapper exists for key 'User'
-      builder.add('User', { name: 'alice' })
-    }).toThrow(/No mapper registered for entity type: User/)
+      builder.add('Test::User', { name: 'alice' })
+    }).toThrow(/No mapper registered for entity type: Test::User/)
   })
 })

@@ -1,5 +1,11 @@
 import type { z } from 'zod'
-import type { AuthorizationDomain, DefaultDomain, Entity, EntityProvider } from '../types.js'
+import type {
+  AuthorizationDomain,
+  DefaultPolicyDomain,
+  EntityProvider,
+  PolicyEntity,
+  PolicyEntityType,
+} from '../types.js'
 
 /**
  * A generic adapter that takes a Zod Schema and data, validates it,
@@ -13,9 +19,9 @@ import type { AuthorizationDomain, DefaultDomain, Entity, EntityProvider } from 
  */
 export class GenericZodModel<
   T extends z.ZodTypeAny,
-  TDomain extends AuthorizationDomain = DefaultDomain,
+  TDomain extends AuthorizationDomain = DefaultPolicyDomain,
 > implements EntityProvider<TDomain> {
-  private typeName: string
+  private typeName: PolicyEntityType<TDomain>
   private schema: T
   private data: z.infer<T>
   private idField: keyof z.infer<T>
@@ -28,14 +34,19 @@ export class GenericZodModel<
    * @param idField - The field to use as the ID
    * @throws ZodError if the data does not match the schema
    */
-  constructor(typeName: string, schema: T, data: z.infer<T>, idField: keyof z.infer<T>) {
+  constructor(
+    typeName: PolicyEntityType<TDomain>,
+    schema: T,
+    data: z.infer<T>,
+    idField: keyof z.infer<T>
+  ) {
     this.typeName = typeName
     this.schema = schema
     this.data = this.schema.parse(data)
     this.idField = idField
   }
 
-  build(): Entity<TDomain>[] {
+  build(): PolicyEntity<TDomain>[] {
     const id = String(this.data[this.idField])
     const attributes: Record<string, unknown> = {}
 

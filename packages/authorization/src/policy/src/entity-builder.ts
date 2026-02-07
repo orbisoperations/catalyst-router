@@ -2,46 +2,35 @@ import type { z } from 'zod'
 import { EntityCollection } from './entity-collection.js'
 import type {
   AuthorizationDomain,
-  DefaultDomain,
-  Entity,
+  DefaultPolicyDomain,
   EntityProvider,
-  EntityUid,
+  Mapper,
+  MapperRegistry,
+  PolicyEntity,
+  PolicyEntityType,
+  ZodAddConfig,
 } from './types.js'
 
-/**
- * A function that maps arbitrary data into an entity structure (id, attributes, and parents).
- */
-export type Mapper<TDomain extends AuthorizationDomain, T = unknown> = (data: T) => {
-  id: string
-  attrs: Record<string, unknown>
-  parents?: EntityUid<TDomain>[]
-}
-
-// Separate Factory class to handle instantiation and type binding
 /**
  * Factory for creating `EntityBuilder` instances.
  * Allows pre-registering mappers for specific entity types to streamline entity creation.
  *
  * @template TDomain - The authorization domain.
  */
-export class EntityBuilderFactory<TDomain extends AuthorizationDomain = DefaultDomain> {
-  private mappers: Partial<Record<keyof TDomain['Entities'] & string, Mapper<TDomain>>> = {}
+export class EntityBuilderFactory<TDomain extends AuthorizationDomain = DefaultPolicyDomain> {
+  private mappers: MapperRegistry<TDomain> = new Map()
 
   /**
    * Registers a mapper function for a specific entity type.
    * This allows you to add entities using just their raw data later.
    *
-   * @template K - The entity type key.
    * @template T - The type of the input data expected by the mapper.
    * @param type - The entity type to register the mapper for.
    * @param mapper - The function that transforms raw data into entity properties.
    * @returns The factory instance for chaining.
    */
-  registerMapper<K extends keyof TDomain['Entities'] & string, T>(
-    type: K,
-    mapper: Mapper<TDomain, T>
-  ) {
-    this.mappers[type] = mapper as Mapper<TDomain>
+  registerMapper<T>(type: PolicyEntityType<TDomain>, mapper: Mapper<TDomain, T>) {
+    this.mappers.set(type, mapper as Mapper<TDomain>)
     return this
   }
 
@@ -62,37 +51,28 @@ export class EntityBuilderFactory<TDomain extends AuthorizationDomain = DefaultD
  * @template TDomain - The authorization domain.
  */
 export class EntityBuilder<
-  TDomain extends AuthorizationDomain = DefaultDomain,
+  TDomain extends AuthorizationDomain = DefaultPolicyDomain,
 > implements EntityProvider<TDomain> {
-  private entities: Entity<TDomain>[] = []
-  private currentEntity: Entity<TDomain> | null = null
-  private mappers: Partial<Record<keyof TDomain['Entities'] & string, Mapper<TDomain>>>
+  private entities: PolicyEntity<TDomain>[] = []
+  private currentEntity: PolicyEntity<TDomain> | null = null
+  private mappers: MapperRegistry<TDomain> = new Map()
 
-  // Allow protected access for subclasses like User, but hide from general public API
-  // to encourage factory usage if desired, though direct instantiation via `new EntityBuilder()`
-  // is fine if the constructor is public.
-  // Given the request to use a Factory Pattern where we "instantiate only one time the factory",
-  // we'll keep this constructor accessible to the Factory.
   /**
    * Creates a new EntityBuilder.
    * Prefer using `EntityBuilderFactory.createEntityBuilder()` if you have registered mappers.
    *
    * @param mappers - Optional map of registered entity mappers.
    */
-  public constructor(
-    mappers: Partial<Record<keyof TDomain['Entities'] & string, Mapper<TDomain>>> = {}
-  ) {
+  public constructor(mappers: MapperRegistry<TDomain> = new Map()) {
     this.mappers = mappers
   }
 
-  // Keeping static create for backward compat/convenience if needed,
-  // but the new request is for a stateful factory instance pattern.
   /**
    * Static convenience method to create an empty EntityBuilder.
    *
    * @returns A new EntityBuilder instance.
    */
-  static create<T extends AuthorizationDomain = DefaultDomain>(): EntityBuilder<T> {
+  static create<T extends AuthorizationDomain = DefaultPolicyDomain>(): EntityBuilder<T> {
     return new EntityBuilder<T>()
   }
 
@@ -109,10 +89,10 @@ export class EntityBuilder<
    * @throws ZodError if validation fails.
    */
   addFromZod<T extends z.ZodTypeAny>(
-    type: keyof TDomain['Entities'] & string,
+    type: PolicyEntityType<TDomain>,
     schema: T,
     data: z.infer<T>,
-    config: { idField: keyof z.infer<T>; parents?: EntityUid<TDomain>[] }
+    config: ZodAddConfig<T, TDomain>
   ): EntityBuilder<TDomain> {
     const validatedData = schema.parse(data)
     const id = String(validatedData[config.idField])
@@ -150,8 +130,8 @@ export class EntityBuilder<
    * @param id - The entity ID.
    * @returns The builder instance for chaining.
    */
-  entity(type: keyof TDomain['Entities'] & string, id: string): EntityBuilder<TDomain> {
-    const newEntity: Entity<TDomain> = {
+  entity(type: PolicyEntityType<TDomain>, id: string): EntityBuilder<TDomain> {
+    const newEntity: PolicyEntity<TDomain> = {
       uid: { type, id },
       attrs: {},
       parents: [],
@@ -188,7 +168,7 @@ export class EntityBuilder<
    * @returns The builder instance for chaining.
    * @throws Error if no entity is currently being built.
    */
-  addParent(type: keyof TDomain['Entities'] & string, id: string): EntityBuilder<TDomain> {
+  addParent(type: PolicyEntityType<TDomain>, id: string): EntityBuilder<TDomain> {
     if (!this.currentEntity) {
       throw new Error('Cannot add parent: No entity is currently being built. Call entity() first.')
     }
@@ -207,16 +187,15 @@ export class EntityBuilder<
    * @param type - The entity type to create.
    * @param data - The raw data to pass to the registered mapper.
    * @returns The builder instance.
-   * @throws Error if no mapper is registered for the given type.
    */
-  add<K extends keyof TDomain['Entities'] & string, T>(type: K, data: T): EntityBuilder<TDomain>
+  add<T>(type: PolicyEntityType<TDomain>, data: T): EntityBuilder<TDomain>
   add(
-    componentOrType: EntityProvider<TDomain> | (keyof TDomain['Entities'] & string),
+    componentOrType: EntityProvider<TDomain> | PolicyEntityType<TDomain>,
     data?: unknown
   ): EntityBuilder<TDomain> {
     if (typeof componentOrType === 'string') {
       const type = componentOrType
-      const mapper = this.mappers[type]
+      const mapper = this.mappers.get(type)
       if (!mapper) {
         throw new Error(`No mapper registered for entity type: ${type}`)
       }

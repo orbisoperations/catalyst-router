@@ -3,32 +3,34 @@ import { z } from 'zod'
 import { AuthorizationEngine } from '../../../src/policy/src/authorization-engine.js'
 import { EntityBuilderFactory } from '../../../src/policy/src/entity-builder.js'
 import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodModel.js'
-import type { AuthorizationDomain } from '../../../src/policy/src/types.js'
 
 describe('Todo App Authorization Scenarios', () => {
   // 1. Define Domain Types
-  interface TodoAppDomain extends AuthorizationDomain {
-    Actions: 'view' | 'create' | 'edit' | 'delete'
-    Entities: {
-      User: {
-        username: string
-        role: string
+  type TodoAppDomain = [
+    {
+      Namespace: 'TodoApp'
+      Actions: 'view' | 'create' | 'edit' | 'delete'
+      Entities: {
+        User: {
+          username: string
+          role: string
+        }
+        TodoList: {
+          id: string
+          ownerId: string
+          title: string
+          isPrivate: boolean
+        }
+        TodoItem: {
+          id: string
+          listId: string
+          content: string
+          priority: number
+          completed: boolean
+        }
       }
-      TodoList: {
-        id: string
-        ownerId: string
-        title: string
-        isPrivate: boolean
-      }
-      TodoItem: {
-        id: string
-        listId: string
-        content: string
-        priority: number
-        completed: boolean
-      }
-    }
-  }
+    },
+  ]
 
   // 2. Define Schemas
   const UserSchema = z.object({
@@ -45,6 +47,7 @@ describe('Todo App Authorization Scenarios', () => {
 
   // 3. Define Cedar Schema and Policies
   const cedarSchema = `
+    namespace TodoApp {
       entity User {
         role: String
       };
@@ -64,7 +67,8 @@ describe('Todo App Authorization Scenarios', () => {
         principal: [User],
         resource: [TodoList, TodoItem]
       };
-    `
+    }
+  `
 
   const cedarPolicies = `
       // 1. Admin access
@@ -79,7 +83,7 @@ describe('Todo App Authorization Scenarios', () => {
       when { resource in principal };
 
       // 3. Public lists access (if not private)
-      permit(principal, action == Action::"view", resource is TodoList)
+      permit(principal, action == TodoApp::Action::"view", resource is TodoApp::TodoList)
       when { resource.isPrivate == false };
     `
 
@@ -96,77 +100,51 @@ describe('Todo App Authorization Scenarios', () => {
     const aliceUser = { username: 'alice', role: 'user' }
     const bobUser = { username: 'bob', role: 'user' }
 
-    builder.add(new GenericZodModel('User', UserSchema, adminUser, 'username'))
-    builder.add(new GenericZodModel('User', UserSchema, aliceUser, 'username'))
-    builder.add(new GenericZodModel('User', UserSchema, bobUser, 'username'))
-
-    // We need to attach lists to users to use the "resource in principal" hierarchy policy
-    // GenericZodModel doesn't automatically add parents based on attributes.
-    // So we'll add them manually or use the builder to construct them with parents.
-    // But GenericZodModel.build() returns entities with empty parents.
-    // We need a way to specify parents. GenericZodModel is simple.
-    // Let's just use GenericZodModel for attributes, and then manually link them
-    // OR just instantiate them properly.
-
-    // Actually, let's use the builder's chaining if possible, or just hack the parents in
-    // since we are inside a test.
-    // But better: define a custom model or just modify the entities after build.
-
-    // Let's add them first, then we'll construct the EntityCollection and fix parents?
-    // No, EntityCollection is read-only-ish.
-
-    // Let's use `entity()` builder method for more control instead of GenericZodModel for the hierarchy parts
-    // OR create a helper to add with parent.
-
-    // Let's just use `entity().setAttributes().addParent()` for the structured ones
-    // to demonstrate the builder's capabilities for hierarchy.
-
-    // Admin (no parent)
-    // Alice (no parent)
-    // Bob (no parent)
-    // (Already added via GenericZodModel)
+    builder.add(new GenericZodModel('TodoApp::User', UserSchema, adminUser, 'username'))
+    builder.add(new GenericZodModel('TodoApp::User', UserSchema, aliceUser, 'username'))
+    builder.add(new GenericZodModel('TodoApp::User', UserSchema, bobUser, 'username'))
 
     // Alice's List -> Parent: Alice
     builder
-      .entity('TodoList', 'aliceList')
+      .entity('TodoApp::TodoList', 'aliceList')
       .setAttributes({
         ownerId: 'alice',
         title: "Alice's List",
         isPrivate: true,
       })
-      .addParent('User', 'alice')
+      .addParent('TodoApp::User', 'alice')
 
     // Bob's List -> Parent: Bob
     builder
-      .entity('TodoList', 'bobList')
+      .entity('TodoApp::TodoList', 'bobList')
       .setAttributes({
         ownerId: 'bob',
         title: "Bob's List",
         isPrivate: true,
       })
-      .addParent('User', 'bob')
+      .addParent('TodoApp::User', 'bob')
 
     // Public List -> Parent: Bob
     builder
-      .entity('TodoList', 'publicList')
+      .entity('TodoApp::TodoList', 'publicList')
       .setAttributes({
         ownerId: 'bob',
         title: 'Public List',
         isPrivate: false,
       })
-      .addParent('User', 'bob')
+      .addParent('TodoApp::User', 'bob')
 
     // Items
     // Alice Item -> Parent: Alice List
     builder
-      .entity('TodoItem', 'aliceItem')
+      .entity('TodoApp::TodoItem', 'aliceItem')
       .setAttributes({
         listId: 'aliceList',
         content: 'Buy milk',
         priority: 1,
         completed: false,
       })
-      .addParent('TodoList', 'aliceList')
+      .addParent('TodoApp::TodoList', 'aliceList')
 
     const entities = builder.build()
 
@@ -174,9 +152,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 1: Alice views her own list (Allowed via hierarchy)
     let result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoList', 'aliceList'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoList', 'aliceList'),
       entities: entities.getAll(),
       context: {},
     })
@@ -190,9 +168,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 2: Alice views her own item (Allowed via hierarchy: Item -> List -> Alice)
     result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoItem', 'aliceItem'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoItem', 'aliceItem'),
       entities: entities.getAll(),
       context: {},
     })
@@ -203,9 +181,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 3: Alice tries to view Bob's private list (Deny)
     result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoList', 'bobList'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoList', 'bobList'),
       entities: entities.getAll(),
       context: {},
     })
@@ -216,9 +194,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 4: Alice views Bob's public list (Allowed via isPrivate == false)
     result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoList', 'publicList'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoList', 'publicList'),
       entities: entities.getAll(),
       context: {},
     })
@@ -229,9 +207,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 5: Admin views Bob's private list (Allowed via role == "admin")
     result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'admin'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoList', 'bobList'),
+      principal: entities.entityRef('TodoApp::User', 'admin'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoList', 'bobList'),
       entities: entities.getAll(),
       context: {},
     })
@@ -246,19 +224,19 @@ describe('Todo App Authorization Scenarios', () => {
     const builderFactory = new EntityBuilderFactory<TodoAppDomain>()
     const builder = builderFactory.createEntityBuilder()
     builder.addFromZod(
-      'User',
+      'TodoApp::User',
       UserSchema,
       { username: 'admin', role: 'admin' },
       { idField: 'username' }
     )
     builder.addFromZod(
-      'User',
+      'TodoApp::User',
       UserSchema,
       { username: 'alice', role: 'user' },
       { idField: 'username' }
     )
     builder.addFromZod(
-      'User',
+      'TodoApp::User',
       UserSchema,
       { username: 'bob', role: 'user' },
       { idField: 'username' }
@@ -269,22 +247,22 @@ describe('Todo App Authorization Scenarios', () => {
     const bobList = { id: 'bobList', ownerId: 'bob', title: "Bob's List", isPrivate: true }
     const publicList = { id: 'publicList', ownerId: 'bob', title: 'Public List', isPrivate: false }
     builder
-      .addFromZod('TodoList', TodoListSchema, aliceList, { idField: 'id' })
-      .addParent('User', 'alice')
+      .addFromZod('TodoApp::TodoList', TodoListSchema, aliceList, { idField: 'id' })
+      .addParent('TodoApp::User', 'alice')
     builder
-      .addFromZod('TodoList', TodoListSchema, bobList, { idField: 'id' })
-      .addParent('User', 'bob')
+      .addFromZod('TodoApp::TodoList', TodoListSchema, bobList, { idField: 'id' })
+      .addParent('TodoApp::User', 'bob')
     builder
-      .addFromZod('TodoList', TodoListSchema, publicList, { idField: 'id' })
-      .addParent('User', 'bob')
+      .addFromZod('TodoApp::TodoList', TodoListSchema, publicList, { idField: 'id' })
+      .addParent('TodoApp::User', 'bob')
 
     const entities = builder.build()
 
     // Scenario 1: Alice views her own list (Allowed via hierarchy)
     const result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoList', 'aliceList'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoList', 'aliceList'),
       entities: entities.getAll(),
       context: {},
     })
@@ -302,22 +280,22 @@ describe('Todo App Authorization Scenarios', () => {
     const builderFactory = new EntityBuilderFactory<TodoAppDomain>()
 
     // Register mappers
-    builderFactory.registerMapper('User', (user: { username: string; role: string }) => ({
+    builderFactory.registerMapper('TodoApp::User', (user: { username: string; role: string }) => ({
       id: user.username,
       attrs: { role: user.role },
     }))
 
     builderFactory.registerMapper(
-      'TodoList',
+      'TodoApp::TodoList',
       (list: { id: string; ownerId: string; title: string; isPrivate: boolean }) => ({
         id: list.id,
         attrs: { ownerId: list.ownerId, title: list.title, isPrivate: list.isPrivate },
-        parents: [{ type: 'User', id: list.ownerId }],
+        parents: [{ type: 'TodoApp::User', id: list.ownerId }],
       })
     )
 
     builderFactory.registerMapper(
-      'TodoItem',
+      'TodoApp::TodoItem',
       (item: {
         id: string
         listId: string
@@ -332,31 +310,31 @@ describe('Todo App Authorization Scenarios', () => {
           priority: item.priority,
           completed: item.completed,
         },
-        parents: [{ type: 'TodoList', id: item.listId }],
+        parents: [{ type: 'TodoApp::TodoList', id: item.listId }],
       })
     )
 
     const builder = builderFactory.createEntityBuilder()
 
     // Users
-    builder.add('User', { username: 'admin', role: 'admin' })
-    builder.add('User', { username: 'alice', role: 'user' })
-    builder.add('User', { username: 'bob', role: 'user' })
+    builder.add('TodoApp::User', { username: 'admin', role: 'admin' })
+    builder.add('TodoApp::User', { username: 'alice', role: 'user' })
+    builder.add('TodoApp::User', { username: 'bob', role: 'user' })
 
     // Lists
-    builder.add('TodoList', {
+    builder.add('TodoApp::TodoList', {
       id: 'aliceList',
       ownerId: 'alice',
       title: "Alice's List",
       isPrivate: true,
     })
-    builder.add('TodoList', {
+    builder.add('TodoApp::TodoList', {
       id: 'bobList',
       ownerId: 'bob',
       title: "Bob's List",
       isPrivate: true,
     })
-    builder.add('TodoList', {
+    builder.add('TodoApp::TodoList', {
       id: 'publicList',
       ownerId: 'bob',
       title: 'Public List',
@@ -364,7 +342,7 @@ describe('Todo App Authorization Scenarios', () => {
     })
 
     // Items
-    builder.add('TodoItem', {
+    builder.add('TodoApp::TodoItem', {
       id: 'aliceItem',
       listId: 'aliceList',
       content: 'Buy milk',
@@ -378,9 +356,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 1: Alice views her own list
     let result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoList', 'aliceList'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoList', 'aliceList'),
       entities: entities.getAll(),
       context: {},
     })
@@ -391,9 +369,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 2: Alice views her own item
     result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoItem', 'aliceItem'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoItem', 'aliceItem'),
       entities: entities.getAll(),
       context: {},
     })
@@ -404,9 +382,9 @@ describe('Todo App Authorization Scenarios', () => {
 
     // Scenario 3: Alice tries to view Bob's private list (Deny)
     result = engine.isAuthorized({
-      principal: entities.entityRef('User', 'alice'),
-      action: { type: 'Action', id: 'view' },
-      resource: entities.entityRef('TodoList', 'bobList'),
+      principal: entities.entityRef('TodoApp::User', 'alice'),
+      action: 'TodoApp::Action::view',
+      resource: entities.entityRef('TodoApp::TodoList', 'bobList'),
       entities: entities.getAll(),
       context: {},
     })
