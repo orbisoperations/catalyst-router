@@ -30,7 +30,7 @@ export class GatewayGraphqlServer {
     this.telemetry = telemetry
     this.logger = telemetry.logger.getChild('graphql')
 
-    this.reloadCounter = telemetry.meter.createCounter('gateway.schema.reload.count', {
+    this.reloadCounter = telemetry.meter.createCounter('gateway.schema.reloads', {
       description: 'Number of schema reload attempts',
       unit: '{reload}',
     })

@@ -95,7 +95,7 @@ describe('GatewayGraphqlServer telemetry DI', () => {
     new GatewayGraphqlServer(telemetry)
 
     expect(spies.createCounter).toHaveBeenCalledWith(
-      'gateway.schema.reload.count',
+      'gateway.schema.reloads',
       expect.objectContaining({ description: expect.any(String) })
     )
     expect(spies.createHistogram).toHaveBeenCalledWith(
