@@ -1,5 +1,5 @@
 {
-  "name": "@catalyst/authorization",
+  "name": "@catalyst/types",
   "version": "0.0.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -9,10 +9,7 @@
   },
   "private": true,
   "dependencies": {
-    "jose": "catalog:",
-    "zod": "catalog:",
-    "@cedar-policy/cedar-wasm": "catalog:",
-    "@catalyst/types": "workspace:*"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",

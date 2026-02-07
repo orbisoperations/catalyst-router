@@ -1,4 +1,5 @@
 import type { JSONWebKeySet } from 'jose'
+import type { ValidationResult } from '@catalyst/types'
 
 /**
  * Options for signing a JWT
@@ -20,10 +21,9 @@ export interface VerifyOptions {
 
 /**
  * Result of token verification
+ * @deprecated Use ValidationResult<Record<string, unknown>> directly from @catalyst/types
  */
-export type VerifyResult =
-  | { valid: true; payload: Record<string, unknown> }
-  | { valid: false; error: string }
+export type VerifyResult = ValidationResult<Record<string, unknown>>
 
 /**
  * Options for key rotation

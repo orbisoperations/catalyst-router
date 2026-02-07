@@ -288,6 +288,25 @@ gt sync                            # Sync with trunk and restack
 - **Never use `git add` before `gt create` or `gt modify`** - changes are staged automatically
 - Use `gt` commands exclusively for commits to maintain stack integrity
 
+### Fixing Empty or Duplicate PRs
+
+If you end up with an empty PR or duplicate branches:
+
+```bash
+# Option 1: Fold - merge current branch into its parent
+gt fold                            # Merges current branch commits into parent branch
+
+# Option 2: Move + Delete - move branch onto another, then delete
+gt branch checkout <target-branch> # Switch to the branch you want to keep
+gt move <source-branch>            # Move source branch's commits onto current branch
+gt branch delete <source-branch>   # Delete the now-empty branch
+```
+
+**When to use each:**
+
+- `gt fold`: When you want to merge the current branch into its parent (simplest for adjacent branches)
+- `gt move + delete`: When you need more control over which branch receives the commits
+
 ### Scoping Changes
 
 When reviewing or working on changes:
