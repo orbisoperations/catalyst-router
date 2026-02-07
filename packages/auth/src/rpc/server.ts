@@ -14,12 +14,16 @@ import type { BootstrapService } from '../bootstrap.js'
 import type { ApiKeyService } from '../api-key-service.js'
 import type { LoginService } from '../login.js'
 import type { CatalystPolicyEngine } from '../policies/types.js'
+import { getAuthLogger } from '../logger.js'
 import {
   CreateFirstAdminRequestSchema,
   LoginRequestSchema,
   type TokenHandlers,
   type CertHandlers,
   type ValidationHandlers,
+  type PermissionsHandlers,
+  type AuthorizeActionRequest,
+  type AuthorizeActionResult,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
   type LoginResponse,
@@ -285,6 +289,82 @@ export class AuthRpcServer extends RpcTarget {
       getJWKS: async () => {
         const jwks = await this.keyManager.getJwks()
         return { success: true, jwks: { keys: jwks.keys as Record<string, unknown>[] } }
+      },
+    }
+  }
+
+  /**
+   * Permissions sub-API for Cedar-based authorization checks.
+   * Accessible with any valid token.
+   */
+  async permissions(token: string): Promise<PermissionsHandlers | { error: string }> {
+    const logger = getAuthLogger('permissions')
+
+    // Verify the token
+    const auth = await this.tokenManager.verify(token)
+    if (!auth.valid) {
+      void logger.warn`Token verification failed: ${auth.error}`
+      return { error: 'Invalid token' }
+    }
+
+    if (!this.policyService) {
+      void logger.error`Policy service not configured`
+      return { error: 'Policy service not configured' }
+    }
+
+    return {
+      authorizeAction: async (request: AuthorizeActionRequest): Promise<AuthorizeActionResult> => {
+        // Extract principal from JWT
+        const principal = jwtToEntity(auth.payload as Record<string, unknown>)
+
+        // Parse action
+        const actionId = request.action.toUpperCase().replace(/[:-]/g, '_')
+
+        // Build resource entity (AdminPanel for now, can be extended)
+        const builder = this.policyService!.entityBuilderFactory.createEntityBuilder()
+        builder.entity(principal.uid.type as any, principal.uid.id).setAttributes(principal.attrs)
+        builder.entity('CATALYST::AdminPanel' as any, 'admin-panel').setAttributes({
+          nodeId: request.nodeContext.nodeId,
+          domains: request.nodeContext.domains,
+        })
+
+        const entities = builder.build()
+
+        // Perform Cedar authorization
+        const result = this.policyService!.isAuthorized({
+          principal: principal.uid as any,
+          action: { type: 'CATALYST::Action' as any, id: actionId as any },
+          resource: { type: 'CATALYST::AdminPanel' as any, id: 'admin-panel' },
+          entities: entities.getAll(),
+          context: {},
+        })
+
+        void logger.info`Authorization check - action: ${request.action}, allowed: ${result.type === 'evaluated' && result.allowed}`
+
+        // Handle authorization result
+        if (result.type === 'failure') {
+          void logger.error`Authorization system error: ${result.errors.join(', ')}`
+          return {
+            success: false,
+            errorType: 'system_error',
+            reason: 'Authorization system error',
+          }
+        }
+
+        if (result.type === 'evaluated' && !result.allowed) {
+          void logger.warn`Permission denied for action: ${request.action}, reasons: ${result.reasons.join(', ')}`
+          return {
+            success: false,
+            errorType: 'permission_denied',
+            reasons: result.reasons,
+          }
+        }
+
+        // Success - allowed
+        return {
+          success: true,
+          allowed: true,
+        }
       },
     }
   }

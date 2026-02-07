@@ -378,3 +378,73 @@ export const CreateTokenRequestSchema = z.object({
 })
 
 export type CreateTokenRequest = z.infer<typeof CreateTokenRequestSchema>
+
+/**
+ * Permissions API schemas
+ */
+export const PermissionsApiRequestSchema = z.string() // token
+
+export const NodeContextSchema = z.object({
+  nodeId: z.string(),
+  domains: z.array(z.string()),
+})
+
+export type NodeContext = z.infer<typeof NodeContextSchema>
+
+export const AuthorizeActionRequestSchema = z.object({
+  action: z.string(),
+  nodeContext: NodeContextSchema,
+})
+
+export type AuthorizeActionRequest = z.infer<typeof AuthorizeActionRequestSchema>
+
+/**
+ * Authorization result with discriminated union for different error types
+ */
+export const AuthorizeActionResultSchema = z.discriminatedUnion('success', [
+  // Success case
+  z.object({
+    success: z.literal(true),
+    allowed: z.boolean(),
+  }),
+  // Token expired
+  z.object({
+    success: z.literal(false),
+    errorType: z.literal('token_expired'),
+    reason: z.string(),
+  }),
+  // Token malformed
+  z.object({
+    success: z.literal(false),
+    errorType: z.literal('token_malformed'),
+    reason: z.string(),
+  }),
+  // Token revoked
+  z.object({
+    success: z.literal(false),
+    errorType: z.literal('token_revoked'),
+    reason: z.string(),
+  }),
+  // Permission denied
+  z.object({
+    success: z.literal(false),
+    errorType: z.literal('permission_denied'),
+    reasons: z.array(z.string()),
+  }),
+  // System error
+  z.object({
+    success: z.literal(false),
+    errorType: z.literal('system_error'),
+    reason: z.string(),
+  }),
+])
+
+export type AuthorizeActionResult = z.infer<typeof AuthorizeActionResultSchema>
+
+/**
+ * Permissions handlers interface
+ */
+export interface PermissionsHandlers {
+  /** Authorize an action based on token and node context */
+  authorizeAction(request: AuthorizeActionRequest): Promise<AuthorizeActionResult>
+}
