@@ -8,7 +8,6 @@ import {
   type TokenManager,
   Role,
   Action,
-  LocalTokenManager,
   jwtToEntity,
 } from '@catalyst/authorization'
 import type { BootstrapService } from '../bootstrap.js'
@@ -201,10 +200,7 @@ export class AuthRpcServer extends RpcTarget {
         await this.tokenManager.revoke({ jti: request.jti, san: request.san })
       },
       list: async (request) => {
-        if (this.tokenManager instanceof LocalTokenManager) {
-          return this.tokenManager.getStore().listTokens(request)
-        }
-        return []
+        return this.tokenManager.listTokens(request)
       },
     }
   }
@@ -260,12 +256,9 @@ export class AuthRpcServer extends RpcTarget {
         }
       },
       getTokensByCert: async (request) => {
-        if (this.tokenManager instanceof LocalTokenManager) {
-          return this.tokenManager.getStore().listTokens({
-            certificateFingerprint: request.fingerprint,
-          })
-        }
-        return []
+        return this.tokenManager.listTokens({
+          certificateFingerprint: request.fingerprint,
+        })
       },
     }
   }
@@ -287,10 +280,7 @@ export class AuthRpcServer extends RpcTarget {
         return { valid: true, payload: result.payload }
       },
       getRevocationList: async () => {
-        if (this.tokenManager instanceof LocalTokenManager) {
-          return this.tokenManager.getStore().getRevocationList()
-        }
-        return []
+        return this.tokenManager.getRevocationList()
       },
       getJWKS: async () => {
         const jwks = await this.keyManager.getJwks()
