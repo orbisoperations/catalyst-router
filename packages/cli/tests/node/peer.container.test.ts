@@ -99,7 +99,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
         CATALYST_ORCHESTRATOR_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
         CATALYST_ORCHESTRATOR_AUTH_SYSTEM_TOKEN: systemToken,
       })
-      .withWaitStrategy(Wait.forLogMessage('Orchestrator (Next) running'))
+      .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
       .start()
 
     console.log('Containers started successfully')

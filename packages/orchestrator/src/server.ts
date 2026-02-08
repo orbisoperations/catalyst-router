@@ -4,12 +4,30 @@ import { newRpcResponse } from '@hono/capnweb'
 import { CatalystNodeBus } from './orchestrator.js'
 import { newWebSocketRpcSession } from 'capnweb'
 import { Role } from '@catalyst/authorization'
+import { TelemetryBuilder, shutdownTelemetry } from '@catalyst/telemetry'
+import type { ServiceTelemetry } from '@catalyst/telemetry'
+import { telemetryMiddleware } from '@catalyst/telemetry/middleware/hono'
 
 import { loadDefaultConfig } from '@catalyst/config'
 
 const app = new Hono()
 
 const config = loadDefaultConfig()
+
+let telemetry: ServiceTelemetry
+try {
+  telemetry = await new TelemetryBuilder('orchestrator')
+    .withLogger({ category: ['catalyst', 'orchestrator'] })
+    .withMetrics()
+    .withTracing()
+    .withRpcInstrumentation()
+    .build()
+} catch (err) {
+  process.stderr.write(`[orchestrator] telemetry init failed, falling back to noop: ${err}\n`)
+  telemetry = TelemetryBuilder.noop('orchestrator')
+}
+const { logger } = telemetry
+const tokenLogger = logger.getChild('token')
 
 /**
  * Auth Service Integration
@@ -52,12 +70,12 @@ const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 
 async function mintNodeToken() {
   if (!config.orchestrator?.auth) {
-    console.log('No auth service configured - skipping node token mint')
+    tokenLogger.info`no auth service configured - skipping node token mint`
     return
   }
 
   const { endpoint, systemToken } = config.orchestrator.auth
-  console.log(`Connecting to auth service at ${endpoint}`)
+  tokenLogger.info`connecting to auth service at ${endpoint}`
 
   try {
     const authClient = newWebSocketRpcSession<AuthRpcApi>(endpoint)
@@ -87,11 +105,11 @@ async function mintNodeToken() {
     tokenIssuedAt = new Date()
     tokenExpiresAt = new Date(Date.now() + TOKEN_TTL_MS)
 
-    console.log(`Node token minted successfully for ${config.node.name}`)
-    console.log(`Token issued at: ${tokenIssuedAt.toISOString()}`)
-    console.log(`Token expires at: ${tokenExpiresAt.toISOString()}`)
+    tokenLogger.info`node token minted for ${config.node.name}`
+    tokenLogger.info`token issued at ${tokenIssuedAt.toISOString()}`
+    tokenLogger.info`token expires at ${tokenExpiresAt.toISOString()}`
   } catch (error) {
-    console.error('Failed to mint node token:', error)
+    tokenLogger.error`failed to mint node token: ${error}`
     throw error
   }
 }
@@ -112,12 +130,12 @@ async function refreshNodeTokenIfNeeded() {
   const refreshTime = issuedTime + totalLifetime * REFRESH_THRESHOLD
 
   if (now >= refreshTime) {
-    console.log('Node token approaching expiration, refreshing...')
+    tokenLogger.info`node token approaching expiration, refreshing`
     try {
       await mintNodeToken()
-      console.log('Node token refreshed successfully')
+      tokenLogger.info`node token refreshed`
     } catch (error) {
-      console.error('Failed to refresh node token:', error)
+      tokenLogger.error`failed to refresh node token: ${error}`
       // Don't throw - keep using existing token until it expires
     }
   }
@@ -130,7 +148,7 @@ await mintNodeToken()
 if (config.orchestrator?.auth) {
   const REFRESH_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
   setInterval(refreshNodeTokenIfNeeded, REFRESH_CHECK_INTERVAL)
-  console.log('Token refresh check enabled (every hour)')
+  tokenLogger.info`token refresh check enabled (every hour)`
 }
 
 const bus = new CatalystNodeBus({
@@ -151,10 +169,14 @@ const bus = new CatalystNodeBus({
   connectionPool: { type: 'ws' },
   nodeToken,
   authEndpoint: config.orchestrator?.auth?.endpoint,
+  telemetry,
 })
 
+app.use(telemetryMiddleware({ ignorePaths: ['/health'] }))
+
+const instrumentedApi = telemetry.instrumentRpc(bus.publicApi())
 app.all('/rpc', (c) => {
-  return newRpcResponse(c, bus.publicApi(), {
+  return newRpcResponse(c, instrumentedApi, {
     upgradeWebSocket,
   })
 })
@@ -164,8 +186,16 @@ app.get('/health', (c) => c.text('OK'))
 const port = config.port
 const nodeName = config.node.name
 
-console.log(`Orchestrator (Next) running on port ${port} as ${nodeName}`)
-console.log('NEXT_ORCHESTRATOR_STARTED')
+logger.info`Orchestrator running on port ${port} as ${nodeName}`
+process.stdout.write('NEXT_ORCHESTRATOR_STARTED\n')
+
+const shutdown = async () => {
+  logger.info`shutting down orchestrator...`
+  await shutdownTelemetry()
+  process.exit(0)
+}
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)
 
 export default {
   port,

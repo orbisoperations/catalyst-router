@@ -14,6 +14,9 @@ import {
   type RpcStub,
   RpcTarget,
 } from 'capnweb'
+import { TelemetryBuilder } from '@catalyst/telemetry'
+import type { ServiceTelemetry } from '@catalyst/telemetry'
+import type { Counter, Histogram } from '@opentelemetry/api'
 
 export interface PublicApi {
   getNetworkClient(
@@ -127,6 +130,11 @@ export class CatalystNodeBus extends RpcTarget {
   private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
   public lastNotificationPromise?: Promise<void>
+  private readonly logger: ReturnType<ServiceTelemetry['logger']['getChild']>
+  private readonly dispatchDuration: Histogram
+  private readonly notifyDuration: Histogram
+  private readonly peerEvents: Counter
+  private readonly gatewaySyncDuration: Histogram
 
   constructor(opts: {
     state?: RouteTable
@@ -134,6 +142,7 @@ export class CatalystNodeBus extends RpcTarget {
     config: OrchestratorConfig
     nodeToken?: string
     authEndpoint?: string
+    telemetry?: ServiceTelemetry
   }) {
     super()
     this.state = opts.state ?? newRouteTable()
@@ -155,6 +164,29 @@ export class CatalystNodeBus extends RpcTarget {
         : new ConnectionPool())
 
     this.validateNodeConfig()
+
+    const telemetry = opts.telemetry ?? TelemetryBuilder.noop('orchestrator')
+    this.logger = telemetry.logger
+
+    this.dispatchDuration = telemetry.meter.createHistogram('orchestrator.dispatch.duration', {
+      description: 'Duration of dispatch operations',
+      unit: 's',
+    })
+    this.notifyDuration = telemetry.meter.createHistogram('orchestrator.notify.duration', {
+      description: 'Duration of handleNotify side effects',
+      unit: 's',
+    })
+    this.peerEvents = telemetry.meter.createCounter('orchestrator.peer.events', {
+      description: 'Peer connection lifecycle events',
+      unit: '{event}',
+    })
+    this.gatewaySyncDuration = telemetry.meter.createHistogram(
+      'orchestrator.gateway.sync.duration',
+      {
+        description: 'Duration of gateway configuration sync',
+        unit: 's',
+      }
+    )
   }
 
   private validateNodeConfig() {
@@ -221,36 +253,39 @@ export class CatalystNodeBus extends RpcTarget {
   async dispatch(
     sentAction: Action
   ): Promise<{ success: true } | { success: false; error: string }> {
-    console.log(`[${this.config.node.name}] dispatch called for action: ${sentAction.action}`)
+    const start = performance.now()
+    this.logger.info`dispatch: ${sentAction.action}`
 
     const prevState = this.state
-    console.log(`[${this.config.node.name}] Dispatching action: ${sentAction.action}`)
-
-    // Log detailed data for route creation to debug
-    if (sentAction.action === Actions.LocalRouteCreate) {
-      console.log(`[${this.config.node.name}] Route Create Data:`, JSON.stringify(sentAction.data))
-    }
-
     const result = await this.handleAction(sentAction, this.state)
     if (result.success) {
       this.state = result.state
-      // Fire and forget side effects to avoid deadlocks in distributed calls
+      const notifyStart = performance.now()
+      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState)
+        .then(() => {
+          this.notifyDuration.record((performance.now() - notifyStart) / 1000, {
+            action: sentAction.action,
+          })
+        })
+        .catch((e) => {
+          this.notifyDuration.record((performance.now() - notifyStart) / 1000, {
+            action: sentAction.action,
+          })
+          this.logger.error`handleNotify error for ${sentAction.action}: ${e}`
+        })
 
-      // Note: Hono's waitUntil is not available here easily as we are in the core class.
-      // The catch below handles unhandled rejections for the side effect chain.
-      // Ideally in a serverless evironment we would use ctx.waitUntil.
-      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState).catch(
-        (e) => {
-          console.error(
-            `[${this.config.node.name}] Error in handleNotify for ${sentAction.action}:`,
-            e
-          )
-        }
-      )
+      this.dispatchDuration.record((performance.now() - start) / 1000, {
+        action: sentAction.action,
+        success: 'true',
+      })
       return { success: true }
-    } else {
-      console.error(`[${this.config.node.name}] Action failed: ${sentAction.action}`, result.error)
     }
+
+    this.logger.error`action failed: ${sentAction.action} - ${result.error}`
+    this.dispatchDuration.record((performance.now() - start) / 1000, {
+      action: sentAction.action,
+      success: 'false',
+    })
     return result
   }
 
@@ -418,9 +453,7 @@ export class CatalystNodeBus extends RpcTarget {
       }
       case Actions.InternalProtocolUpdate: {
         const { peerInfo, update } = action.data
-        console.log(
-          `[${this.config.node.name}] InternalProtocolUpdate: received ${update.updates.length} updates from ${peerInfo.name}`
-        )
+        this.logger.info`received ${update.updates.length} updates from ${peerInfo.name}`
         const sourcePeerName = peerInfo.name
         let currentInternalRoutes = [...state.internal.routes]
 
@@ -430,9 +463,8 @@ export class CatalystNodeBus extends RpcTarget {
 
             // Loop Prevention
             if (nodePath.includes(this.config.node.name)) {
-              console.log(
-                `[${this.config.node.name}] Drop update from ${peerInfo.name}: loop detected in path [${nodePath.join(', ')}]`
-              )
+              this.logger
+                .info`drop update from ${peerInfo.name}: loop detected in path [${nodePath.join(', ')}]`
               continue
             }
 
@@ -463,7 +495,7 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       default: {
-        console.log('Unknown action', action)
+        this.logger.warn`unknown action: ${action.action}`
         break
       }
     }
@@ -480,14 +512,13 @@ export class CatalystNodeBus extends RpcTarget {
     )
 
     if (graphqlRoutes.length === 0) {
-      console.log(`[${this.config.node.name}] No GraphQL routes to sync.`)
+      this.logger.info`no GraphQL routes to sync`
       return
     }
 
-    console.log(
-      `[${this.config.node.name}] Syncing ${graphqlRoutes.length} GraphQL routes to gateway...`
-    )
+    this.logger.info`syncing ${graphqlRoutes.length} GraphQL routes to gateway`
 
+    const start = performance.now()
     try {
       const stub = this.connectionPool.get(gatewayEndpoint)
       if (stub) {
@@ -501,13 +532,20 @@ export class CatalystNodeBus extends RpcTarget {
         // @ts-expect-error - Gateway RPC implementation uses updateConfig
         const result = await stub.updateConfig(config)
         if (!result.success) {
-          console.error(`[${this.config.node.name}] Gateway sync failed:`, result.error)
+          this.logger.error`Gateway sync failed: ${result.error}`
+          this.gatewaySyncDuration.record((performance.now() - start) / 1000, {
+            success: 'false',
+          })
         } else {
-          console.log(`[${this.config.node.name}] Gateway sync successful.`)
+          this.logger.info`Gateway sync successful`
+          this.gatewaySyncDuration.record((performance.now() - start) / 1000, {
+            success: 'true',
+          })
         }
       }
     } catch (e) {
-      console.error(`[${this.config.node.name}] Error syncing to gateway:`, e)
+      this.logger.error`Error syncing to gateway: ${e}`
+      this.gatewaySyncDuration.record((performance.now() - start) / 1000, { success: 'false' })
     }
   }
 
@@ -516,9 +554,7 @@ export class CatalystNodeBus extends RpcTarget {
       case Actions.LocalPeerCreate: {
         // Perform side effect: Try to open connection
         try {
-          console.log(
-            `[${this.config.node.name}] LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`
-          )
+          this.logger.info`attempting connection to ${action.data.name} at ${action.data.endpoint}`
           const stub = this.connectionPool.get(action.data.endpoint)
           if (stub) {
             // Use peer-specific token if available, otherwise fall back to node token
@@ -529,9 +565,8 @@ export class CatalystNodeBus extends RpcTarget {
               const result = await connectionResult.client.open(this.config.node)
 
               if (result.success) {
-                console.log(
-                  `[${this.config.node.name}] Successfully opened connection to ${action.data.name}`
-                )
+                this.logger.info`successfully opened connection to ${action.data.name}`
+                this.peerEvents.add(1, { event: 'connected' })
                 // Dispatch connected action
                 await this.dispatch({
                   action: Actions.InternalProtocolConnected,
@@ -539,26 +574,19 @@ export class CatalystNodeBus extends RpcTarget {
                 })
               }
             } else {
-              console.error('Failed to get peer connection', connectionResult.error)
+              this.logger.error`failed to get peer connection: ${connectionResult.error}`
+              this.peerEvents.add(1, { event: 'failed' })
             }
           }
         } catch (e) {
           // Connection failed, leave as initializing (or could transition to error state)
-          console.error(
-            `[${this.config.node.name}] Failed to open connection to ${action.data.name}`,
-            e
-          )
-          console.error(
-            `[${this.config.node.name}] Failed to open connection to ${action.data.name}`,
-            e
-          )
+          this.logger.error`failed to open connection to ${action.data.name}: ${e}`
+          this.peerEvents.add(1, { event: 'failed' })
         }
         break
       }
       case Actions.InternalProtocolOpen: {
-        console.log(
-          `[${this.config.node.name}] InternalProtocolOpen: sync request from ${action.data.peerInfo.name}`
-        )
+        this.logger.info`sync request from ${action.data.peerInfo.name}`
         // Sync existing routes (local AND internal) back to the new peer
         const allRoutes = [
           ..._state.local.routes.map((r) => ({
@@ -588,14 +616,7 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(
-              `[${this.config.node.name}] Failed to sync routes back to ${action.data.peerInfo.name}`,
-              e
-            )
-            console.error(
-              `[${this.config.node.name}] Failed to sync routes back to ${action.data.peerInfo.name}`,
-              e
-            )
+            this.logger.error`failed to sync routes back to ${action.data.peerInfo.name}: ${e}`
           }
         }
         break
@@ -630,14 +651,7 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(
-              `[${this.config.node.name}] Failed to sync routes to ${action.data.peerInfo.name}`,
-              e
-            )
-            console.error(
-              `[${this.config.node.name}] Failed to sync routes to ${action.data.peerInfo.name}`,
-              e
-            )
+            this.logger.error`failed to sync routes to ${action.data.peerInfo.name}: ${e}`
           }
         }
         break
@@ -656,12 +670,11 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(
-              `[${this.config.node.name}] Failed to close connection to ${peer.name}`,
-              e
-            )
+            this.logger.error`failed to close connection to ${peer.name}: ${e}`
           }
         }
+
+        this.peerEvents.add(1, { event: 'disconnected' })
 
         // 2. Propagate removal of routes learned FROM this peer to OTHER peers
         await this.propagateWithdrawalsForPeer(action.data.name, prevState, _state)
@@ -672,16 +685,12 @@ export class CatalystNodeBus extends RpcTarget {
         const connectedPeers = _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected'
         )
-        console.log(
-          `[${this.config.node.name}] LocalRouteCreate: ${action.data.name}, broadcasting to ${connectedPeers.length} peers.`
-        )
+        this.logger.info`broadcasting ${action.data.name} to ${connectedPeers.length} peers`
         for (const peer of connectedPeers) {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              console.log(
-                `[${this.config.node.name}] Pushing local route ${action.data.name} to ${peer.name}`
-              )
+              this.logger.info`pushing local route ${action.data.name} to ${peer.name}`
               const token = peer.peerToken || this.nodeToken || ''
               const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
@@ -693,7 +702,7 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(`[${this.config.node.name}] Failed to broadcast route to ${peer.name}`, e)
+            this.logger.error`failed to broadcast route to ${peer.name}: ${e}`
           }
         }
         break
@@ -714,10 +723,7 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(
-              `[${this.config.node.name}] Failed to broadcast route removal to ${peer.name}`,
-              e
-            )
+            this.logger.error`failed to broadcast route removal to ${peer.name}: ${e}`
           }
         }
         break
@@ -762,19 +768,13 @@ export class CatalystNodeBus extends RpcTarget {
               }
             }
           } catch (e) {
-            console.error(
-              `[${this.config.node.name}] Failed to propagate update to ${peer.name}`,
-              e
-            )
-            console.error(
-              `[${this.config.node.name}] Failed to propagate update to ${peer.name}`,
-              e
-            )
+            this.logger.error`failed to propagate update to ${peer.name}: ${e}`
           }
         }
         break
       }
       case Actions.InternalProtocolClose: {
+        this.peerEvents.add(1, { event: 'disconnected' })
         await this.propagateWithdrawalsForPeer(action.data.peerInfo.name, prevState, _state)
         break
       }
@@ -797,9 +797,7 @@ export class CatalystNodeBus extends RpcTarget {
     const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === peerName)
     if (removedRoutes.length === 0) return
 
-    console.log(
-      `[${this.config.node.name}] Propagating withdrawal of ${removedRoutes.length} routes from ${peerName}`
-    )
+    this.logger.info`propagating withdrawal of ${removedRoutes.length} routes from ${peerName}`
 
     for (const peer of newState.internal.peers.filter(
       (p) => p.connectionStatus === 'connected' && p.name !== peerName
@@ -817,10 +815,7 @@ export class CatalystNodeBus extends RpcTarget {
           }
         }
       } catch (e) {
-        console.error(
-          `[${this.config.node.name}] Failed to propagate withdrawal to ${peer.name}`,
-          e
-        )
+        this.logger.error`failed to propagate withdrawal to ${peer.name}: ${e}`
       }
     }
   }
