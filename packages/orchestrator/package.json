@@ -13,8 +13,10 @@
     "@catalyst/auth": "catalog:",
     "@catalyst/authorization": "catalog:",
     "@catalyst/config": "catalog:",
+    "@catalyst/telemetry": "workspace:*",
     "@hono/capnweb": "catalog:",
     "capnweb": "catalog:",
+    "@opentelemetry/api": "catalog:",
     "hono": "catalog:",
     "zod": "catalog:"
   },
