@@ -69,6 +69,11 @@ Demonstrates the full token-based authentication bootstrap flow. Requires manual
 - **gateway**: GraphQL federation gateway (:4000)
 - **books-service**: Example GraphQL service (:8081)
 - **movies-service**: Example GraphQL service (:8082)
+- **auth**: Authentication service handling JWTs, key rotation, and Cedar-based authorization (:5000)
+- **orchestrator**: Control plane orchestrator with token-based authentication (:3000)
+- **gateway**: GraphQL federation gateway (:4000)
+- **books-service**: Example GraphQL service (:8081)
+- **movies-service**: Example GraphQL service (:8082)
 
 ### Setup Instructions
 
@@ -125,6 +130,18 @@ Shared collector config used by `docker.compose.yaml` and `two-node.compose.yaml
 To add production backends, add exporters to this file (e.g., `otlp/jaeger`, `prometheus`). See [ADR-0003](../docs/adr/0003-observability-backends.md) for approved backend choices.
 
 ## Token-Based Authentication Flow
+## OpenTelemetry Collector Configuration (`otel-collector-config.yaml`)
+
+Shared collector config used by `docker.compose.yaml` and `two-node.compose.yaml`.
+
+- **Receivers**: OTLP over gRPC (:4317) and HTTP (:4318)
+- **Processors**: `memory_limiter` (256 MiB cap, 5s check interval) and `batch`
+- **Exporters**: `debug` (detailed stdout)
+- **Pipelines**: traces, metrics, and logs all flow through the same receiver/processor/exporter chain
+
+To add production backends, add exporters to this file (e.g., `otlp/jaeger`, `prometheus`). See [ADR-0003](../docs/adr/0003-observability-backends.md) for approved backend choices.
+
+## Token-Based Authentication Flow
 
 1. Caller provides token to `getIBGPClient()`, `getNetworkClient()`, or `getDataChannelClient()`
 2. Orchestrator calls auth service `permissions(callerToken)` to validate token
@@ -132,6 +149,7 @@ To add production backends, add exporters to this file (e.g., `otlp/jaeger`, `pr
 4. If authorized, orchestrator returns the requested client
 5. Client method calls are dispatched without additional auth checks (already validated)
 
+## Bypassing Auth (Testing Only)
 ## Bypassing Auth (Testing Only)
 
 For unit tests, you can bypass auth validation by setting:
