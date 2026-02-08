@@ -69,6 +69,8 @@ export async function startServer() {
       name: 'System Admin',
       type: 'service',
       role: Role.ADMIN,
+      trustedDomains: config.node.domains, // Required for Cedar policy
+      trustedNodes: [], // Empty = trust all nodes
     },
     roles: [Role.ADMIN],
     // 365days in milliseconds unix timestamp
@@ -174,17 +176,18 @@ export async function startServer() {
 
 // Auto-start if this file is the entry point
 if (import.meta.path === Bun.main) {
-  startServer().catch((err) => {
-    console.error('Failed to start server:', err)
-    process.exit(1)
-  })
-}
-
-export default {
-  fetch: async (req: Request) => {
-    // This is for Bun's default export support, though usually we'd call startServer
-    // If not started, we'd need to handle it. For now, we assume startServer is the way.
-    const result = await startServer()
-    return result.app.fetch(req)
-  },
+  startServer()
+    .then((result) => {
+      Bun.serve({
+        fetch: result.app.fetch,
+        websocket: result.websocket,
+        port: result.port,
+        hostname: '0.0.0.0',
+      })
+      console.log(`Started development server: http://localhost:${result.port}`)
+    })
+    .catch((err) => {
+      console.error('Failed to start server:', err)
+      process.exit(1)
+    })
 }

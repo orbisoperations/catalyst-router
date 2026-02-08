@@ -1,0 +1,40 @@
+# Ingestion endpoints for telemetry data from Catalyst services
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+# Middleware between receivers and exporters.
+# Order matters in pipeline definitions: memory_limiter runs first to shed
+# load before data reaches the batcher, preventing OOM under spikes.
+processors:
+  # Buffers telemetry and flushes in batches to reduce exporter overhead
+  batch:
+  # Drops data when collector memory exceeds limit to prevent OOM
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 256
+
+# Output destinations. TODO: Replace or extend with production backends
+exporters:
+  debug:
+    verbosity: detailed
+
+# All three signal types use the same receiver -> processor -> exporter chain
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
