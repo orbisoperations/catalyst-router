@@ -1,16 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { newWebSocketRpcSession } from 'capnweb'
+import type { Readable } from 'node:stream'
+import path from 'path'
 import {
   GenericContainer,
-  Wait,
   Network,
-  type StartedTestContainer,
+  Wait,
   type StartedNetwork,
+  type StartedTestContainer,
 } from 'testcontainers'
-import path from 'path'
-import type { Readable } from 'node:stream'
-import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '../src/orchestrator.js'
-import { startAuthService, mintPeerToken, type AuthServiceContext } from './auth-test-helpers.js'
+import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
 
 const isDockerRunning = () => {
   try {
@@ -121,7 +121,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         return await container.start()
       }
 
-      gateway = await startContainer('gateway', 'gateway', 'GATEWAY_STARTED', {}, [4000])
+      gateway = await startContainer('gateway', 'gateway', 'Gateway started', {}, [4000])
 
       const nodeEnv = (name: string, alias: string, gq: string = '') => ({
         PORT: '3000',
@@ -288,7 +288,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         return await container.start()
       }
 
-      gateway = await startContainer('gateway', 'gateway', 'GATEWAY_STARTED', {}, [4000])
+      gateway = await startContainer('gateway', 'gateway', 'Gateway started', {}, [4000])
 
       const nodeEnv = (
         name: string,

@@ -1,19 +1,22 @@
-import { describe, it, expect, beforeAll } from 'bun:test'
-import { AuthRpcServer } from '../src/rpc/server.js'
+import type { CatalystPolicyDomain } from '@catalyst/authorization'
 import {
-  type TokenHandlers,
-  type CertHandlers,
-  type ValidationHandlers,
-} from '../src/rpc/schema.js'
-import {
-  LocalTokenManager,
-  BunSqliteTokenStore,
+  ALL_POLICIES,
+  AuthorizationEngine,
   BunSqliteKeyStore,
+  BunSqliteTokenStore,
+  CATALYST_SCHEMA,
+  LocalTokenManager,
   PersistentLocalKeyManager,
+  Role,
   type TokenRecord,
 } from '@catalyst/authorization'
-import { AuthorizationEngine, CATALYST_SCHEMA, ALL_POLICIES, Role } from '@catalyst/authorization'
-import { type CatalystPolicyDomain } from '../src/policies/types.js'
+import { beforeAll, describe, expect, it } from 'bun:test'
+import {
+  type CertHandlers,
+  type TokenHandlers,
+  type ValidationHandlers,
+} from '../src/rpc/schema.js'
+import { AuthRpcServer } from '../src/rpc/server.js'
 
 describe('Auth Progressive API', () => {
   let keyManager: PersistentLocalKeyManager

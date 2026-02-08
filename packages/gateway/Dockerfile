@@ -6,7 +6,15 @@ WORKDIR /app
 # Copy root config
 COPY package.json bun.lock ./
 
-# Copy gateway package dependencies
+# Copy Gateway Dependencies package.json files (types and telemetry)
+COPY packages/types/package.json packages/types/package.json
+COPY packages/telemetry/package.json packages/telemetry/package.json
+
+# Copy Gateway Dependencies Code (types and telemetry)
+COPY packages/types packages/types
+COPY packages/telemetry packages/telemetry
+
+# Copy Gateway package dependencies
 COPY packages/gateway/package.json packages/gateway/package.json
 
 # Install production dependencies
