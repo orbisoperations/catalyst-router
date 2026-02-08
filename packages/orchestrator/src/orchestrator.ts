@@ -581,9 +581,7 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(
-                this.config.ibgp?.secret || 'valid-secret'
-              )
+              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: allRoutes,
@@ -624,9 +622,7 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(
-                this.config.ibgp?.secret || 'valid-secret'
-              )
+              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: allRoutes,
@@ -653,9 +649,7 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(
-                this.config.ibgp?.secret || 'valid-secret'
-              )
+              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
               if (connectionResult.success) {
                 await connectionResult.client.close(this.config.node, 1000, 'Peer removed')
               }
@@ -687,9 +681,7 @@ export class CatalystNodeBus extends RpcTarget {
               console.log(
                 `[${this.config.node.name}] Pushing local route ${action.data.name} to ${peer.name}`
               )
-              const connectionResult = await stub.getIBGPClient(
-                this.config.ibgp?.secret || 'valid-secret'
-              )
+              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: [
@@ -711,9 +703,7 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(
-                this.config.ibgp?.secret || 'valid-secret'
-              )
+              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: [{ action: 'remove', route: action.data }],
@@ -750,9 +740,7 @@ export class CatalystNodeBus extends RpcTarget {
 
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const connectionResult = await stub.getIBGPClient(
-                this.config.ibgp?.secret || 'valid-secret'
-              )
+              const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
               if (connectionResult.success) {
                 // Prepend my FQDN to the path of propagated updates
                 const updatesWithPrepend = {
@@ -815,9 +803,7 @@ export class CatalystNodeBus extends RpcTarget {
       try {
         const stub = this.connectionPool.get(peer.endpoint)
         if (stub) {
-          const connectionResult = await stub.getIBGPClient(
-            this.config.ibgp?.secret || 'valid-secret'
-          )
+          const connectionResult = await stub.getIBGPClient(this.nodeToken || '')
 
           if (connectionResult.success) {
             await connectionResult.client.update(this.config.node, {
