@@ -5,13 +5,13 @@ import {
   localPeerDeleteMessageSchema,
   localRouteCreateMessageSchema,
   localRouteDeleteMessageSchema,
-} from './routing/local/actions.js'
+} from './local/actions.js'
 import {
   InternalProtocolOpenMessageSchema,
   InternalProtocolUpdateMessageSchema,
   InternalProtocolCloseMessageSchema,
   InternalProtocolConnectedMessageSchema,
-} from './routing/internal/actions.js'
+} from './internal/actions.js'
 
 /**
  * Unified Action Schema

@@ -1,8 +1,6 @@
 import type { RpcStub } from 'capnweb'
 import { newWebSocketRpcSession } from 'capnweb'
-import type { PeerInfo } from '@catalyst/orchestrator'
-import type { DataChannelDefinition } from '@catalyst/orchestrator'
-import type { InternalRoute } from '@catalyst/orchestrator'
+import type { PeerInfo, DataChannelDefinition, InternalRoute } from '@catalyst/routing'
 
 // Polyfill Symbol.asyncDispose if necessary
 // @ts-expect-error - polyfilling Symbol.asyncDispose
