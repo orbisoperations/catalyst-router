@@ -1,5 +1,6 @@
 export * from './jwt/index.js'
 export * from './jwt/local/exports.js'
+export * from './jwt/jwt-token-factory.js'
 export * from './key-manager/index.js'
 export * from './key-manager/persistent.js'
 export * from './key-manager/sqlite-key-store.js'
