@@ -1,33 +1,33 @@
-import { describe, expect, it } from 'bun:test'
-import { createAuthClient } from '../../src/clients/auth-client.js'
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
+import { resolveAuthUrl } from '../../src/clients/auth-client.js'
 
-describe('Auth Client', () => {
-  it('should create client with default URL', async () => {
-    const client = await createAuthClient()
-    expect(client).toBeDefined()
-    expect(typeof client.tokens).toBe('function')
-    expect(typeof client.validation).toBe('function')
+describe('resolveAuthUrl', () => {
+  let originalEnv: string | undefined
+
+  beforeEach(() => {
+    originalEnv = process.env.CATALYST_AUTH_URL
+    delete process.env.CATALYST_AUTH_URL
   })
 
-  it('should create client with custom URL', async () => {
-    const client = await createAuthClient('ws://custom:4000/rpc')
-    expect(client).toBeDefined()
-    expect(typeof client.tokens).toBe('function')
-    expect(typeof client.validation).toBe('function')
-  })
-
-  it('should use CATALYST_AUTH_URL env var if set', async () => {
-    const originalEnv = process.env.CATALYST_AUTH_URL
-    process.env.CATALYST_AUTH_URL = 'ws://env-test:4000/rpc'
-
-    const client = await createAuthClient()
-    expect(client).toBeDefined()
-
-    // Restore env
-    if (originalEnv) {
+  afterEach(() => {
+    if (originalEnv !== undefined) {
       process.env.CATALYST_AUTH_URL = originalEnv
     } else {
       delete process.env.CATALYST_AUTH_URL
     }
+  })
+
+  it('should return explicit URL when provided', () => {
+    process.env.CATALYST_AUTH_URL = 'ws://from-env:4000/rpc'
+    expect(resolveAuthUrl('ws://explicit:4000/rpc')).toBe('ws://explicit:4000/rpc')
+  })
+
+  it('should fall back to CATALYST_AUTH_URL env var', () => {
+    process.env.CATALYST_AUTH_URL = 'ws://from-env:4000/rpc'
+    expect(resolveAuthUrl()).toBe('ws://from-env:4000/rpc')
+  })
+
+  it('should fall back to default when no URL or env var', () => {
+    expect(resolveAuthUrl()).toBe('ws://localhost:4000/rpc')
   })
 })

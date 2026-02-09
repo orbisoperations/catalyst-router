@@ -1,31 +1,33 @@
-import { describe, expect, it } from 'bun:test'
-import { createOrchestratorClient } from '../../src/clients/orchestrator-client.js'
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
+import { resolveOrchestratorUrl } from '../../src/clients/orchestrator-client.js'
 
-describe('Orchestrator Client', () => {
-  it('should create client with default URL', async () => {
-    const client = await createOrchestratorClient()
-    expect(client).toBeDefined()
-    expect(typeof client.connectionFromManagementSDK).toBe('function')
+describe('resolveOrchestratorUrl', () => {
+  let originalEnv: string | undefined
+
+  beforeEach(() => {
+    originalEnv = process.env.CATALYST_ORCHESTRATOR_URL
+    delete process.env.CATALYST_ORCHESTRATOR_URL
   })
 
-  it('should create client with custom URL', async () => {
-    const client = await createOrchestratorClient('ws://custom:3000/rpc')
-    expect(client).toBeDefined()
-    expect(typeof client.connectionFromManagementSDK).toBe('function')
-  })
-
-  it('should use CATALYST_ORCHESTRATOR_URL env var if set', async () => {
-    const originalEnv = process.env.CATALYST_ORCHESTRATOR_URL
-    process.env.CATALYST_ORCHESTRATOR_URL = 'ws://env-test:3000/rpc'
-
-    const client = await createOrchestratorClient()
-    expect(client).toBeDefined()
-
-    // Restore env
-    if (originalEnv) {
+  afterEach(() => {
+    if (originalEnv !== undefined) {
       process.env.CATALYST_ORCHESTRATOR_URL = originalEnv
     } else {
       delete process.env.CATALYST_ORCHESTRATOR_URL
     }
+  })
+
+  it('should return explicit URL when provided', () => {
+    process.env.CATALYST_ORCHESTRATOR_URL = 'ws://from-env:3000/rpc'
+    expect(resolveOrchestratorUrl('ws://explicit:3000/rpc')).toBe('ws://explicit:3000/rpc')
+  })
+
+  it('should fall back to CATALYST_ORCHESTRATOR_URL env var', () => {
+    process.env.CATALYST_ORCHESTRATOR_URL = 'ws://from-env:3000/rpc'
+    expect(resolveOrchestratorUrl()).toBe('ws://from-env:3000/rpc')
+  })
+
+  it('should fall back to default when no URL or env var', () => {
+    expect(resolveOrchestratorUrl()).toBe('ws://localhost:3000/rpc')
   })
 })
