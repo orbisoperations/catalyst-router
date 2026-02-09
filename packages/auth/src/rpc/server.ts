@@ -4,7 +4,6 @@ import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
 import {
-  Action,
   jwtToEntity,
   Role,
   type CatalystPolicyEngine,
@@ -231,7 +230,7 @@ export class AuthRpcServer extends RpcTarget {
     const entities = builder.build()
     const autorizedResult = this.policyService?.isAuthorized({
       principal: principal.uid,
-      action: { type: 'CATALYST::Action', id: Action.MANAGE },
+      action: 'CATALYST::Action::MANAGE',
       resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
       entities: entities.getAll(),
       context: {},
