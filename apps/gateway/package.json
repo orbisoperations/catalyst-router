@@ -20,6 +20,8 @@
     "graphql-yoga": "catalog:",
     "hono": "catalog:",
     "zod": "catalog:",
+    "@catalyst/config": "catalog:",
+    "@catalyst/service": "catalog:",
     "@catalyst/telemetry": "workspace:*",
     "@opentelemetry/api": "catalog:"
   },

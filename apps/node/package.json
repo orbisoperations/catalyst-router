@@ -23,6 +23,8 @@
     "vitest": "catalog:testing"
   },
   "dependencies": {
+    "@catalyst/config": "catalog:",
+    "@catalyst/service": "catalog:",
     "@hono/node-server": "catalog:",
     "capnweb": "catalog:",
     "commander": "catalog:",
