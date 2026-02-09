@@ -1,0 +1,21 @@
+{
+  "name": "@catalyst-examples/books-api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@graphql-tools/schema": "catalog:",
+    "@graphql-tools/stitching-directives": "catalog:",
+    "graphql": "catalog:",
+    "graphql-yoga": "catalog:",
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:dev",
+    "testcontainers": "catalog:testing"
+  }
+}
