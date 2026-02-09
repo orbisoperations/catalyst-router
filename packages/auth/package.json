@@ -18,6 +18,8 @@
     "@hono/capnweb": "^0.1.0",
     "@catalyst/authorization": "catalog:",
     "@catalyst/config": "catalog:",
+    "@catalyst/telemetry": "workspace:*",
+    "@opentelemetry/api": "catalog:",
     "argon2": "catalog:",
     "capnweb": "^0.4.0",
     "hono": "^4.11.3",

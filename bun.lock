@@ -56,7 +56,9 @@
       "dependencies": {
         "@catalyst/authorization": "catalog:",
         "@catalyst/config": "catalog:",
+        "@catalyst/telemetry": "workspace:*",
         "@hono/capnweb": "^0.1.0",
+        "@opentelemetry/api": "catalog:",
         "argon2": "catalog:",
         "capnweb": "^0.4.0",
         "hono": "^4.11.3",
@@ -93,6 +95,7 @@
         "catalyst": "./src/index.ts",
       },
       "dependencies": {
+        "@catalyst/authorization": "catalog:",
         "@catalyst/orchestrator": "catalog:",
         "capnweb": "catalog:",
         "chalk": "catalog:",
@@ -188,6 +191,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@catalyst/auth": "catalog:",
+        "@catalyst/authorization": "catalog:",
         "@catalyst/config": "catalog:",
         "@hono/capnweb": "catalog:",
         "capnweb": "catalog:",
