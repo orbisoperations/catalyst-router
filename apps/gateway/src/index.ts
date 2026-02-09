@@ -58,6 +58,7 @@ async function main() {
 
   logger.info`Gateway starting on port ${port}`
   logger.info`Gateway started`
+  console.log('GATEWAY_STARTED')
 
   return { fetch: app.fetch, port, hostname: '0.0.0.0', websocket }
 }

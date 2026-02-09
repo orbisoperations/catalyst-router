@@ -1,11 +1,16 @@
 import type { z } from 'zod'
-import { type Action } from './schema.js'
-import { Actions } from './action-types.js'
-import type { PeerInfo, InternalRoute } from './routing/state.js'
+import {
+  Actions,
+  newRouteTable,
+  type Action,
+  type DataChannelDefinition,
+  type InternalRoute,
+  type PeerInfo,
+  type PeerRecord,
+  type RouteTable,
+  type UpdateMessageSchema,
+} from '@catalyst/routing'
 export type { PeerInfo, InternalRoute }
-import { newRouteTable, type RouteTable, type PeerRecord } from './routing/state.js'
-import type { DataChannelDefinition } from './routing/datachannel.js'
-import type { UpdateMessageSchema } from './routing/internal/actions.js'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import {
   newHttpBatchRpcSession,

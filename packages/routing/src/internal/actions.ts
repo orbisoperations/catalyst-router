@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { PeerInfoSchema } from '../state.js'
 import { DataChannelDefinitionSchema } from '../datachannel.js'
-import { Actions } from '../../action-types.js'
+import { Actions } from '../action-types.js'
 
 // Re-export for backward compatibility with existing imports
 export const internalProtocolOpenAction = z.literal(Actions.InternalProtocolOpen)

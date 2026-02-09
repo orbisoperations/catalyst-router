@@ -1,5 +1,4 @@
-import type { Action } from './schema.js'
-import type { RouteTable } from './routing/state.js'
+import type { Action, RouteTable } from '@catalyst/routing'
 import { z } from 'zod'
 import { Role } from '@catalyst/authorization'
 

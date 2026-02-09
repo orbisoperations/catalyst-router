@@ -1,4 +1,4 @@
-import { ServiceDefinitionSchema } from '@catalyst/orchestrator'
+import { DataChannelDefinitionSchema } from '@catalyst/routing'
 import { z } from 'zod'
 
 export type CliResult<T> = { success: true; data?: T } | { success: false; error: string }
@@ -12,7 +12,7 @@ export const BaseCliConfigSchema = z.object({
 })
 export type BaseCliConfig = z.infer<typeof BaseCliConfigSchema>
 
-export const AddServiceInputSchema = ServiceDefinitionSchema.pick({
+export const AddServiceInputSchema = DataChannelDefinitionSchema.pick({
   name: true,
   endpoint: true,
   protocol: true,

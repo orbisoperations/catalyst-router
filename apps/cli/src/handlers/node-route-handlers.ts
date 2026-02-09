@@ -1,6 +1,6 @@
 import { createOrchestratorClient } from '../clients/orchestrator-client.js'
 import type { CreateRouteInput, DeleteRouteInput, ListRoutesInput } from '../types.js'
-import type { DataChannelDefinition, InternalRoute } from '@catalyst/orchestrator'
+import type { DataChannelDefinition, InternalRoute } from '@catalyst/routing'
 
 export type CreateRouteResult =
   | { success: true; data: { name: string } }

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
 import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
-import type { PeerInfo, RouteTable } from '../src/routing/state.js'
-import { newRouteTable } from '../src/routing/state.js'
+import { newRouteTable, type PeerInfo, type RouteTable } from '@catalyst/routing'
 
 import { MockConnectionPool } from './mock-connection-pool.js'
 

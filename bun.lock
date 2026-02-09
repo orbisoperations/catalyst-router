@@ -50,6 +50,7 @@
       "dependencies": {
         "@catalyst/authorization": "catalog:",
         "@catalyst/orchestrator-service": "catalog:",
+        "@catalyst/routing": "catalog:",
         "capnweb": "catalog:",
         "chalk": "catalog:",
         "commander": "catalog:",
@@ -119,6 +120,7 @@
         "@catalyst/auth-service": "catalog:",
         "@catalyst/authorization": "catalog:",
         "@catalyst/config": "catalog:",
+        "@catalyst/routing": "catalog:",
         "@hono/capnweb": "catalog:",
         "capnweb": "catalog:",
         "hono": "catalog:",
@@ -217,6 +219,18 @@
         "typescript": "catalog:dev",
       },
     },
+    "packages/routing": {
+      "name": "@catalyst/routing",
+      "version": "0.0.0",
+      "dependencies": {
+        "@catalyst/config": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:dev",
+        "typescript": "catalog:dev",
+      },
+    },
     "packages/sdk": {
       "name": "@catalyst/sdk",
       "version": "0.0.1",
@@ -286,6 +300,7 @@
     "@catalyst/gateway-service": "workspace:*",
     "@catalyst/node-service": "workspace:*",
     "@catalyst/orchestrator-service": "workspace:*",
+    "@catalyst/routing": "workspace:*",
     "@catalyst/sdk": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
     "@catalyst/types": "workspace:*",
@@ -447,6 +462,8 @@
     "@catalyst/node-service": ["@catalyst/node-service@workspace:apps/node"],
 
     "@catalyst/orchestrator-service": ["@catalyst/orchestrator-service@workspace:apps/orchestrator"],
+
+    "@catalyst/routing": ["@catalyst/routing@workspace:packages/routing"],
 
     "@catalyst/sdk": ["@catalyst/sdk@workspace:packages/sdk"],
 

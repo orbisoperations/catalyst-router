@@ -11,7 +11,7 @@ import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { PublicApi, PeerInfo } from '../src/orchestrator'
-import { Actions } from '../src/action-types'
+import { Actions } from '@catalyst/routing'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
 import type { AuthContext } from '../src/types'
 
