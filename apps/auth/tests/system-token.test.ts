@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll } from 'bun:test'
-import type * as jose from 'jose'
-import { decodeToken } from '../src/jwt.js'
+import * as jose from 'jose'
 
 describe('System Admin Token', () => {
   let systemToken: string
@@ -25,9 +24,7 @@ describe('System Admin Token', () => {
   })
 
   it('should contain expected administrative claims', () => {
-    const result = decodeToken(systemToken)
-    expect(result).toBeDefined()
-    const payload = result?.payload as jose.JWTPayload & {
+    const payload = jose.decodeJwt(systemToken) as jose.JWTPayload & {
       roles: string[]
       entity: { id: string; type: string }
     }
