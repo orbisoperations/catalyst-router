@@ -28,10 +28,10 @@ Use **Cerbos** as the Policy Decision Point (PDP) with **JWT authentication** fo
 
 - **JWT Authentication**: RS256 tokens with identity claims (subject, roles, attributes)
 - **Cerbos PDP**: Standalone gRPC service evaluating YAML policies
-- **Policy Storage**: Version-controlled YAML files in `packages/auth/cerbos/policies/`
+- **Policy Storage**: Version-controlled YAML files in `apps/auth/cerbos/policies/`
 - **Runtime Context**: JWT claims passed to Cerbos for attribute-based decisions
 
-Use **Cerbos** (gRPC Policy Decision Point) with **JWT authentication**. JWTs contain identity claims; Cerbos evaluates YAML policies stored in `packages/auth/cerbos/policies/`.
+Use **Cerbos** (gRPC Policy Decision Point) with **JWT authentication**. JWTs contain identity claims; Cerbos evaluates YAML policies stored in `apps/auth/cerbos/policies/`.
 
 ## Cerbos Model
 
@@ -39,11 +39,11 @@ Authorization uses **Principal** (who), **Resource** (what), **Action** (operati
 
 See: [Cerbos Concepts](https://docs.cerbos.dev/cerbos/latest/tutorial), [Testing](https://docs.cerbos.dev/cerbos/latest/tutorial/04_testing-policies)
 
-**Type Definitions** (`packages/auth/src/permissions.ts`):
+**Type Definitions** (`apps/auth/src/permissions.ts`):
 
 ### Cerbos Policies
 
-YAML resource policies (see `packages/auth/cerbos/policies/`):
+YAML resource policies (see `apps/auth/cerbos/policies/`):
 
 ### Permission Service
 
@@ -101,7 +101,7 @@ sequenceDiagram
 
 The Auth RPC Server exposes the `isAuthorized` method through the `validation()` progressive API:
 
-**RPC Server** (`packages/auth/src/rpc/server.ts`):
+**RPC Server** (`apps/auth/src/rpc/server.ts`):
 
 ```typescript
 async validation(token: string) {
@@ -164,8 +164,8 @@ if (!allowed) throw new Error('Forbidden')
 
 - [Cerbos Concepts](https://docs.cerbos.dev/cerbos-hub/concepts.html)
 - [Cerbos Policy Schema](https://api.cerbos.dev/v0.50.0/cerbos/policy/v1/Policy.schema.json)
-- [JWT Implementation](../../packages/auth/src/jwt.ts)
-- [Key Manager Folder](../../packages/auth/src/key-manager/)
-- [Permission Service](../../packages/auth/src/permissions.ts)
-- [Cerbos Policies](../../packages/auth/cerbos/policies/)
+- [JWT Implementation](../../apps/auth/src/jwt.ts)
+- [Key Manager Folder](../../apps/auth/src/key-manager/)
+- [Permission Service](../../apps/auth/src/permissions.ts)
+- [Cerbos Policies](../../apps/auth/cerbos/policies/)
 - [RFC 7519 - JSON Web Token (JWT)](https://datatracker.ietf.org/doc/html/rfc7519)

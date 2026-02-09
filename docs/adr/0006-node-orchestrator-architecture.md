@@ -87,7 +87,7 @@ The core logic of the Orchestrator is split into two phases to ensure state cons
 
 ## Implementation
 
-The implementation is centered in `packages/orchestrator/src/orchestrator.ts`:
+The implementation is centered in `apps/orchestrator/src/orchestrator.ts`:
 
 - `dispatch()`: Entry point that coordinates `handleAction` followed by `handleNotify`.
 - `handleAction()`: Contains the switch/case for all state transitions.

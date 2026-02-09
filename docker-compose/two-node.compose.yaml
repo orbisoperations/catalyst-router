@@ -4,21 +4,21 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.144.0
     container_name: catalyst-otel-collector-2n
-    command: ["--config", "/etc/otel-collector-config.yaml"]
+    command: ['--config', '/etc/otel-collector-config.yaml']
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
 
   # --- Shared auth ---
 
   auth:
     build:
       context: ..
-      dockerfile: packages/auth/Dockerfile
+      dockerfile: apps/auth/Dockerfile
     ports:
-      - "4020:4020"
+      - '4020:4020'
     environment:
       - PORT=4020
       - OTEL_SERVICE_NAME=auth
@@ -31,9 +31,9 @@ services:
   gateway-a:
     build:
       context: ..
-      dockerfile: packages/gateway/Dockerfile
+      dockerfile: apps/gateway/Dockerfile
     ports:
-      - "4000:4000"
+      - '4000:4000'
     environment:
       - PORT=4000
       - OTEL_SERVICE_NAME=gateway-a
@@ -45,18 +45,18 @@ services:
   books-service:
     build:
       context: ..
-      dockerfile: packages/examples/Dockerfile.books
+      dockerfile: examples/books-api/Dockerfile
     ports:
-      - "8081:8080"
+      - '8081:8080'
     environment:
       - PORT=8080
 
   node-a:
     build:
       context: ..
-      dockerfile: packages/orchestrator/Dockerfile
+      dockerfile: apps/orchestrator/Dockerfile
     ports:
-      - "3001:3000"
+      - '3001:3000'
     environment:
       - PORT=3000
       - CATALYST_NODE_ID=node-a.somebiz.local.io
@@ -80,9 +80,9 @@ services:
   gateway-b:
     build:
       context: ..
-      dockerfile: packages/gateway/Dockerfile
+      dockerfile: apps/gateway/Dockerfile
     ports:
-      - "4001:4000"
+      - '4001:4000'
     environment:
       - PORT=4000
       - OTEL_SERVICE_NAME=gateway-b
@@ -94,18 +94,18 @@ services:
   movies-service:
     build:
       context: ..
-      dockerfile: packages/examples/Dockerfile.movies
+      dockerfile: examples/movies-api/Dockerfile
     ports:
-      - "8082:8080"
+      - '8082:8080'
     environment:
       - PORT=8080
 
   node-b:
     build:
       context: ..
-      dockerfile: packages/orchestrator/Dockerfile
+      dockerfile: apps/orchestrator/Dockerfile
     ports:
-      - "3002:3000"
+      - '3002:3000'
     environment:
       - PORT=3000
       - CATALYST_NODE_ID=node-b.somebiz.local.io

@@ -2,7 +2,7 @@ services:
   auth:
     build:
       context: ..
-      dockerfile: packages/auth/Dockerfile
+      dockerfile: apps/auth/Dockerfile
     ports:
       - '5000:5000'
     environment:
@@ -21,7 +21,7 @@ services:
   orchestrator:
     build:
       context: ..
-      dockerfile: packages/orchestrator/Dockerfile
+      dockerfile: apps/orchestrator/Dockerfile
     ports:
       - '3000:3000'
     environment:
@@ -38,7 +38,7 @@ services:
   gateway:
     build:
       context: ..
-      dockerfile: packages/gateway/Dockerfile
+      dockerfile: apps/gateway/Dockerfile
     ports:
       - '4000:4000'
     environment:
@@ -50,7 +50,7 @@ services:
   books-service:
     build:
       context: ..
-      dockerfile: packages/examples/Dockerfile.books
+      dockerfile: examples/books-api/Dockerfile
     ports:
       - '8081:8080'
     environment:
@@ -59,7 +59,7 @@ services:
   movies-service:
     build:
       context: ..
-      dockerfile: packages/examples/Dockerfile.movies
+      dockerfile: examples/movies-api/Dockerfile
     ports:
       - '8082:8080'
     environment:

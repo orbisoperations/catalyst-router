@@ -67,7 +67,7 @@ Low-level tests for individual modules and logic. These are fast and have no ext
 
 ```bash
 # Run all unit tests in the repository
-bun test packages/**/*.test.ts --ignore "*.container.*"
+bun test {apps,packages}/**/*.test.ts --ignore "*.container.*"
 ```
 
 #### 2. Local Topology Tests
@@ -76,7 +76,7 @@ Simulate multi-node orchestration using mocks. These validate routing and synchr
 
 ```bash
 # Example: Run topology tests for the orchestrator
-bun test packages/orchestrator/src/next/*.topology.test.ts
+bun test apps/orchestrator/src/next/*.topology.test.ts
 ```
 
 #### 3. Container Integration Tests
@@ -85,7 +85,7 @@ End-to-end tests that spin up actual node containers using Docker and `testconta
 
 ```bash
 # Run container-based integration tests
-bun test packages/**/*.container.test.ts
+bun test {apps,packages}/**/*.container.test.ts
 ```
 
 ### Docker Environment Setup
@@ -101,9 +101,9 @@ export CATALYST_CONTAINER_TESTS_ENABLED=true
 
 ### Running Tests by Package
 
-Each package in `packages/` contains its own test suite. You can run them individually:
+Apps live in `apps/` and libraries in `packages/`. You can run tests individually:
 
 ```bash
-cd packages/auth && bun test
-cd packages/orchestrator && bun test
+cd apps/auth && bun test
+cd apps/orchestrator && bun test
 ```

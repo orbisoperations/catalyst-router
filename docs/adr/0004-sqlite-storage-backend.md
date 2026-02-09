@@ -167,7 +167,7 @@ db.exec('PRAGMA busy_timeout = 5000')
 
 ### Store Implementation Pattern
 
-Each store will implement the existing interface (defined in `packages/auth/src/stores/types.ts`) but persist to SQLite. The `@catalyst/storage` package provides the database wrapper and schema.
+Each store will implement the existing interface (defined in `apps/auth/src/stores/types.ts`) but persist to SQLite. The `@catalyst/storage` package provides the database wrapper and schema.
 
 See:
 
