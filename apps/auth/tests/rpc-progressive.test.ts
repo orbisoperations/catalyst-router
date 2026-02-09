@@ -2,11 +2,8 @@ import type { CatalystPolicyDomain } from '@catalyst/authorization'
 import {
   ALL_POLICIES,
   AuthorizationEngine,
-  BunSqliteKeyStore,
-  BunSqliteTokenStore,
   CATALYST_SCHEMA,
-  LocalTokenManager,
-  PersistentLocalKeyManager,
+  JWTTokenFactory,
   Role,
   type TokenRecord,
 } from '@catalyst/authorization'
@@ -19,24 +16,19 @@ import {
 import { AuthRpcServer } from '../src/rpc/server.js'
 
 describe('Auth Progressive API', () => {
-  let keyManager: PersistentLocalKeyManager
-  let tokenManager: LocalTokenManager
+  let tokenFactory: JWTTokenFactory
   let policyService: AuthorizationEngine<CatalystPolicyDomain>
   let rpcServer: AuthRpcServer
   let adminToken: string
   let userToken: string
 
   beforeAll(async () => {
-    const keyStore = new BunSqliteKeyStore(':memory:')
-    keyManager = new PersistentLocalKeyManager(keyStore)
-    await keyManager.initialize()
-
-    const tokenStore = new BunSqliteTokenStore(':memory:')
-    tokenManager = new LocalTokenManager(keyManager, tokenStore, 'test-node')
+    tokenFactory = JWTTokenFactory.ephemeral({ nodeId: 'test-node' })
+    await tokenFactory.initialize()
 
     // Sign tokens for testing
     // Admin token: Trusted for 'test-domain'
-    adminToken = await tokenManager.mint({
+    adminToken = await tokenFactory.mint({
       subject: 'admin-user',
       entity: {
         id: 'admin-user',
@@ -49,7 +41,7 @@ describe('Auth Progressive API', () => {
     })
 
     // User token: Trusted for 'test-domain'
-    userToken = await tokenManager.mint({
+    userToken = await tokenFactory.mint({
       subject: 'regular-user',
       entity: {
         id: 'regular-user',
@@ -65,8 +57,7 @@ describe('Auth Progressive API', () => {
 
     // RPC Server: Belongs to 'test-node' and 'test-domain'
     rpcServer = new AuthRpcServer(
-      keyManager,
-      tokenManager,
+      tokenFactory,
       undefined,
       undefined,
       undefined,
@@ -171,7 +162,7 @@ describe('Auth Progressive API', () => {
   describe('Isolation Boundaries', () => {
     it('should deny access if domain mismatch', async () => {
       // Token for 'other-domain'
-      const otherDomainToken = await tokenManager.mint({
+      const otherDomainToken = await tokenFactory.mint({
         subject: 'admin-user',
         entity: {
           id: 'admin-user',
@@ -190,7 +181,7 @@ describe('Auth Progressive API', () => {
 
     it('should deny access if node mismatch (when trustedNodes is set)', async () => {
       // Token restricted to 'other-node'
-      const otherNodeToken = await tokenManager.mint({
+      const otherNodeToken = await tokenFactory.mint({
         subject: 'admin-user',
         entity: {
           id: 'admin-user',
@@ -210,7 +201,7 @@ describe('Auth Progressive API', () => {
 
     it('should grant access if node matches (when trustedNodes is set)', async () => {
       // Token restricted to 'test-node'
-      const matchedNodeToken = await tokenManager.mint({
+      const matchedNodeToken = await tokenFactory.mint({
         subject: 'admin-user',
         entity: {
           id: 'admin-user',
@@ -229,7 +220,7 @@ describe('Auth Progressive API', () => {
 
     it('should grant access across multiple trusted domains', async () => {
       // Token trusted for both A and B
-      const multiDomainToken = await tokenManager.mint({
+      const multiDomainToken = await tokenFactory.mint({
         subject: 'admin-user',
         entity: {
           id: 'admin-user',

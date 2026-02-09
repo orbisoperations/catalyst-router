@@ -1,12 +1,9 @@
 import {
   ALL_POLICIES,
   AuthorizationEngine,
-  BunSqliteKeyStore,
-  BunSqliteTokenStore,
   CATALYST_SCHEMA,
   type CatalystPolicyDomain,
-  LocalTokenManager,
-  PersistentLocalKeyManager,
+  JWTTokenFactory,
   Role,
 } from '@catalyst/authorization'
 import { loadDefaultConfig } from '@catalyst/config'
@@ -16,7 +13,6 @@ import { ApiKeyService } from './api-key-service.js'
 import { BootstrapService } from './bootstrap.js'
 import { LoginService } from './login.js'
 import { hashPassword } from './password.js'
-import { InMemoryRevocationStore } from './revocation.js'
 import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
 import {
   InMemoryBootstrapStore,
@@ -41,13 +37,17 @@ export async function startServer() {
 
   const config = loadDefaultConfig()
 
-  // Initialize Key persistence
-  const keyStore = new BunSqliteKeyStore(config.auth?.keysDb || 'keys.db')
-  const keyManager = new PersistentLocalKeyManager(keyStore)
-  await keyManager.initialize()
+  // Initialize JWT token factory (wires key + token persistence)
+  const tokenFactory = new JWTTokenFactory({
+    local: {
+      keyDbFile: config.auth?.keysDb,
+      tokenDbFile: config.auth?.tokensDb,
+      nodeId: config.node.name,
+    },
+  })
+  await tokenFactory.initialize()
 
-  const currentKid = await keyManager.getCurrentKeyId()
-  void logger.info`KeyManager initialized with kid: ${currentKid}`
+  void logger.info`JWTTokenFactory initialized`
 
   // initialize the policy authorization engine using the standard Catalyst domain
   const policyService = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
@@ -57,12 +57,8 @@ export async function startServer() {
     process.exit(1)
   }
 
-  // Initialize token tracking
-  const tokenStore = new BunSqliteTokenStore(config.auth?.tokensDb || 'tokens.db')
-  const tokenManager = new LocalTokenManager(keyManager, tokenStore, config.node.name)
-
   // Mint system admin token
-  systemToken = await tokenManager.mint({
+  systemToken = await tokenFactory.mint({
     subject: 'bootstrap',
     entity: {
       id: 'system',
@@ -79,23 +75,6 @@ export async function startServer() {
 
   void logger.info`System Admin Token minted: ${systemToken}`
 
-  // Initialize revocation store if enabled
-  const revocationEnabled = config.auth?.revocation?.enabled === true
-  const revocationMaxSize = config.auth?.revocation?.maxSize
-  const revocationStore = revocationEnabled
-    ? new InMemoryRevocationStore({ maxSize: revocationMaxSize })
-    : undefined
-
-  if (revocationStore) {
-    console.log(
-      JSON.stringify({
-        level: 'info',
-        msg: 'Token revocation enabled',
-        maxSize: revocationStore.maxSize,
-      })
-    )
-  }
-
   // Initialize stores
   const userStore = new InMemoryUserStore()
   const serviceAccountStore = new InMemoryServiceAccountStore()
@@ -103,7 +82,7 @@ export async function startServer() {
 
   // Initialize services
   const bootstrapService = new BootstrapService(userStore, bootstrapStore)
-  const loginService = new LoginService(userStore, tokenManager)
+  const loginService = new LoginService(userStore, tokenFactory.getTokenManager())
   const apiKeyService = new ApiKeyService(serviceAccountStore)
 
   // Initialize bootstrap with env token or generate new one
@@ -135,8 +114,7 @@ export async function startServer() {
 
   const app = new Hono()
   const rpcServer = new AuthRpcServer(
-    keyManager,
-    tokenManager,
+    tokenFactory,
     bootstrapService,
     loginService,
     apiKeyService,
@@ -150,7 +128,7 @@ export async function startServer() {
   app.get('/', (c) => c.text('Catalyst Auth Service'))
   app.get('/health', (c) => c.json({ status: 'ok' }))
   app.get('/.well-known/jwks.json', async (c) => {
-    const jwks = await keyManager.getJwks()
+    const jwks = await tokenFactory.getJwks()
     c.header('Cache-Control', 'public, max-age=300')
     return c.json(jwks)
   })
@@ -162,7 +140,7 @@ export async function startServer() {
   // Graceful shutdown
   process.on('SIGTERM', async () => {
     console.log(JSON.stringify({ level: 'info', msg: 'Shutting down...' }))
-    await keyManager.shutdown()
+    await tokenFactory.shutdown()
     process.exit(0)
   })
 

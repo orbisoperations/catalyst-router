@@ -1,7 +1,7 @@
-import type { Action } from './schema.js'
-import type { RouteTable } from './routing/state.js'
+import { Role } from '@catalyst/authorization'
 import { z } from 'zod'
-import type { Role } from '@catalyst/auth'
+import type { RouteTable } from './routing/state.js'
+import type { Action } from './schema.js'
 
 import { NodeConfigSchema } from '@catalyst/config'
 
@@ -25,8 +25,7 @@ export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
 
 export const AuthContextSchema = z.object({
   userId: z.string(),
-  // roles is an array of Role from @catalyst/auth
-  roles: z.array(z.enum<Role[]>(['admin', 'peer', 'peer_custodian', 'data_custodian', 'user'])),
+  roles: z.array(z.enum(Role)),
 })
 export type AuthContext = z.infer<typeof AuthContextSchema>
 
