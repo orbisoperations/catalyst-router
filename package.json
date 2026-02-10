@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
-    "cli": "bun packages/cli/src/index.ts",
+    "cli": "bun apps/cli/src/index.ts",
     "prepare": "husky",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -12,6 +12,7 @@
   },
   "workspaces": {
     "packages": [
+      "apps/*",
       "packages/*",
       "examples/*"
     ],
@@ -39,15 +40,16 @@
       "inquirer": "^9.2.14",
       "ws": "^8.19.0",
       "ip": "^2.0.1",
-      "@catalyst/auth": "workspace:*",
+      "@catalyst/auth-service": "workspace:*",
       "@catalyst/authorization": "workspace:*",
       "@catalyst/cli": "workspace:*",
       "@catalyst/config": "workspace:*",
-      "@catalyst/examples": "workspace:*",
-      "@catalyst/gateway": "workspace:*",
-      "@catalyst/node": "workspace:*",
-      "@catalyst/orchestrator": "workspace:*",
-      "@catalyst/sdk": "workspace:*"
+      "@catalyst/gateway-service": "workspace:*",
+      "@catalyst/node-service": "workspace:*",
+      "@catalyst/orchestrator-service": "workspace:*",
+      "@catalyst/sdk": "workspace:*",
+      "@catalyst/telemetry": "workspace:*",
+      "@catalyst/types": "workspace:*"
     },
     "catalogs": {
       "dev": {

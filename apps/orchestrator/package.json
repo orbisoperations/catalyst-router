@@ -1,0 +1,27 @@
+{
+  "name": "@catalyst/orchestrator-service",
+  "main": "./src/index.ts",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@catalyst/auth-service": "catalog:",
+    "@catalyst/authorization": "catalog:",
+    "@catalyst/config": "catalog:",
+    "@hono/capnweb": "catalog:",
+    "capnweb": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:dev",
+    "testcontainers": "catalog:testing",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
+  }
+}
