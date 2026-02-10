@@ -90,6 +90,14 @@ export class CatalystHonoServer {
     }
     this._server = Bun.serve(serveOptions)
 
+    // Hard fail if the requested port was unavailable
+    if (this._server.port !== port) {
+      const actualPort = this._server.port
+      this._server.stop()
+      this._server = undefined
+      throw new Error(`Port ${port} is already in use (server bound to ${actualPort} instead)`)
+    }
+
     // Wire graceful shutdown
     const shutdownHandler = async () => {
       await this.stop()
