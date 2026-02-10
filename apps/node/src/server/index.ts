@@ -1,6 +1,6 @@
+import { getLogger } from '@catalyst/telemetry'
 import { CatalystRpcServer } from './rpc.js'
 
+const logger = getLogger(['catalyst', 'node'])
 const _rpcServer = new CatalystRpcServer()
-console.log('RPC Server initialized')
-
-// comment to check into github
+logger.info`RPC server initialized`

@@ -102,6 +102,7 @@
       "dependencies": {
         "@catalyst/config": "catalog:",
         "@catalyst/service": "catalog:",
+        "@catalyst/telemetry": "catalog:",
         "@hono/node-server": "catalog:",
         "capnweb": "catalog:",
         "commander": "catalog:",
@@ -204,6 +205,7 @@
       "name": "@catalyst/authorization",
       "version": "0.0.0",
       "dependencies": {
+        "@catalyst/telemetry": "catalog:",
         "@catalyst/types": "workspace:*",
         "@cedar-policy/cedar-wasm": "catalog:",
         "jose": "catalog:",
