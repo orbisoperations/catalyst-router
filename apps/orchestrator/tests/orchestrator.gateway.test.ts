@@ -54,7 +54,6 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
     bus = new CatalystNodeBus({
       config: {
         node: MOCK_NODE,
-        ibgp: { secret: 'secret' },
         gqlGatewayConfig: { endpoint: GATEWAY_ENDPOINT },
       },
       connectionPool: { pool },

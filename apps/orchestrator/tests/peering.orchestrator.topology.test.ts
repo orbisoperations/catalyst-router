@@ -24,7 +24,7 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
 
     const createNode = (info: PeerInfo) => {
       const bus = new CatalystNodeBus({
-        config: { node: info, ibgp: { secret: 'secret' } },
+        config: { node: info },
         connectionPool: { pool },
         state: newRouteTable(),
       })
