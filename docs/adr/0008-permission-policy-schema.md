@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Superseded — The Cerbos-based architecture described in this ADR was never implemented. The system uses [Cedar Policy](https://www.cedarpolicy.com/) (via `@cedar-policy/cedar-wasm`) with principal-based JWT tokens. See `packages/authorization/` for the actual implementation.
 
 ## Date
 

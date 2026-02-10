@@ -84,7 +84,7 @@ export type GetJwksResponse = z.infer<typeof GetJwksResponseSchema>
  * Authorization: caller must provide authToken proving identity.
  * Revocation allowed if:
  * - authToken.sub matches token.sub (revoking own token), OR
- * - authToken has role: 'admin' claim (admin can revoke any token)
+ * - authToken has ADMIN principal (admin can revoke any token)
  */
 export const RevokeTokenRequestSchema = z.object({
   /** Token to revoke */
@@ -105,7 +105,7 @@ export type RevokeTokenResponse = z.infer<typeof RevokeTokenResponseSchema>
 /**
  * Rotate Request/Response schemas
  *
- * Authorization: caller must provide authToken with role: 'admin' claim.
+ * Authorization: caller must provide authToken with ADMIN principal.
  * Only admins can rotate keys.
  */
 export const RotateRequestSchema = z.object({
@@ -193,7 +193,7 @@ export const CertApiRequestSchema = z.string() // token
 export const ValidationApiRequestSchema = z.string() // token
 
 export const CreateTokenRequestSchema = z.object({
-  role: z.string(),
+  principal: PrincipalSchema,
   name: z.string().min(1),
 })
 

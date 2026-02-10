@@ -78,7 +78,7 @@ describe('Auth Progressive API', () => {
     it('should deny access to token handlers with non-admin token', async () => {
       const result = await rpcServer.tokens(userToken)
       expect(result).toHaveProperty('error')
-      expect((result as { error: string }).error).toContain('ADMIN role required')
+      expect((result as { error: string }).error).toContain('ADMIN principal required')
     })
 
     it('should allow creating and revoking a token via token handlers', async () => {
@@ -172,7 +172,7 @@ describe('Auth Progressive API', () => {
 
       const result = await rpcServer.tokens(otherDomainToken)
       expect(result).toHaveProperty('error')
-      expect((result as { error: string }).error).toContain('ADMIN role required')
+      expect((result as { error: string }).error).toContain('ADMIN principal required')
     })
 
     it('should deny access if node mismatch (when trustedNodes is set)', async () => {
@@ -191,7 +191,7 @@ describe('Auth Progressive API', () => {
 
       const result = await rpcServer.tokens(otherNodeToken)
       expect(result).toHaveProperty('error')
-      expect((result as { error: string }).error).toContain('ADMIN role required')
+      expect((result as { error: string }).error).toContain('ADMIN principal required')
     })
 
     it('should grant access if node matches (when trustedNodes is set)', async () => {
