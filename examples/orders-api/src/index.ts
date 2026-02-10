@@ -117,13 +117,7 @@ const yoga = createYoga({
 const app = new Hono()
 
 // Health check endpoint
-app.get('/health', (c) => {
-  return c.json({
-    status: 'healthy',
-    service: SERVICE_NAME,
-    timestamp: new Date().toISOString(),
-  })
-})
+app.get('/health', (c) => c.json({ status: 'ok' }))
 
 // Service info endpoint
 app.get('/', (c) => {
