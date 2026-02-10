@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { getLogger } from '@catalyst/telemetry'
 import { telemetryMiddleware } from '@catalyst/telemetry/middleware/hono'
 
 import type { CatalystService } from './catalyst-service.js'
@@ -112,7 +113,8 @@ export class CatalystHonoServer {
     process.on('SIGINT', shutdownHandler)
 
     const names = serviceNames.length > 0 ? ` [${serviceNames.join(', ')}]` : ''
-    console.log(`Catalyst server${names} listening on ${hostname}:${port}`)
+    const logger = getLogger(['catalyst', 'server'])
+    logger.info`Catalyst server${names} listening on ${hostname}:${port}`
 
     return this
   }
