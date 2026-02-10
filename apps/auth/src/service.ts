@@ -8,9 +8,7 @@ import {
 } from '@catalyst/authorization'
 import { CatalystService, type CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
-import { ApiKeyService } from './api-key-service.js'
 import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
-import { InMemoryServiceAccountStore } from './stores/memory.js'
 
 export class AuthService extends CatalystService {
   readonly info = { name: 'auth', version: '0.0.0' }
@@ -79,15 +77,10 @@ export class AuthService extends CatalystService {
 
     void logger.info`System Admin Token minted: ${this._systemToken}`
 
-    // Initialize services
-    const serviceAccountStore = new InMemoryServiceAccountStore()
-    const apiKeyService = new ApiKeyService(serviceAccountStore)
-
     // Build RPC server
     this._rpcServer = new AuthRpcServer(
       this._tokenFactory,
       this.telemetry,
-      apiKeyService,
       policyService,
       this.config.node.name,
       this.config.node.domains[0] || ''

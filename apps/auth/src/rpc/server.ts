@@ -6,7 +6,6 @@ import { upgradeWebSocket } from 'hono/bun'
 import type { JWTTokenFactory } from '@catalyst/authorization'
 import { jwtToEntity, Role, type CatalystPolicyEngine } from '@catalyst/authorization'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
-import type { ApiKeyService } from '../api-key-service.js'
 import {
   type AuthorizeActionRequest,
   type AuthorizeActionResult,
@@ -49,7 +48,6 @@ export class AuthRpcServer extends RpcTarget {
   constructor(
     private tokenFactory: JWTTokenFactory,
     private telemetry: ServiceTelemetry,
-    private apiKeyService?: ApiKeyService,
     private policyService?: CatalystPolicyEngine,
     private nodeId: string = 'unknown',
     private domainId: string = ''

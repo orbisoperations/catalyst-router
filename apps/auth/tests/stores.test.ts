@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { InMemoryUserStore, InMemoryServiceAccountStore } from '../src/stores/memory.js'
+import { InMemoryUserStore } from '../src/stores/memory.js'
 
 describe('InMemoryUserStore', () => {
   let store: InMemoryUserStore
@@ -94,64 +94,5 @@ describe('InMemoryUserStore', () => {
     const org1Users = await store.list('org1')
     expect(org1Users).toHaveLength(1)
     expect(org1Users[0].email).toBe('user1@example.com')
-  })
-})
-
-describe('InMemoryServiceAccountStore', () => {
-  let store: InMemoryServiceAccountStore
-
-  beforeEach(() => {
-    store = new InMemoryServiceAccountStore()
-  })
-
-  it('should create a service account with generated id', async () => {
-    const sa = await store.create({
-      name: 'ci-bot',
-      apiKeyHash: 'hash123',
-      keyPrefix: 'cat_sk_dflt_',
-      roles: ['operator'],
-      orgId: 'default',
-      expiresAt: new Date(Date.now() + 86400000),
-      createdBy: 'usr_admin',
-    })
-
-    expect(sa.id).toMatch(/^sa_/)
-    expect(sa.name).toBe('ci-bot')
-  })
-
-  it('should find service account by prefix', async () => {
-    await store.create({
-      name: 'ci-bot',
-      apiKeyHash: 'hash',
-      keyPrefix: 'cat_sk_dflt_',
-      roles: ['operator'],
-      orgId: 'default',
-      expiresAt: new Date(Date.now() + 86400000),
-      createdBy: 'usr_admin',
-    })
-
-    const found = await store.findByPrefix('cat_sk_dflt_')
-    expect(found).not.toBeNull()
-    expect(found?.name).toBe('ci-bot')
-  })
-
-  it('should find service account by name', async () => {
-    await store.create({
-      name: 'ci-bot',
-      apiKeyHash: 'hash',
-      keyPrefix: 'cat_sk_dflt_',
-      roles: ['operator'],
-      orgId: 'default',
-      expiresAt: new Date(Date.now() + 86400000),
-      createdBy: 'usr_admin',
-    })
-
-    const found = await store.findByName('ci-bot', 'default')
-    expect(found).not.toBeNull()
-  })
-
-  it('should return null for non-existent prefix', async () => {
-    const found = await store.findByPrefix('cat_sk_fake_')
-    expect(found).toBeNull()
   })
 })
