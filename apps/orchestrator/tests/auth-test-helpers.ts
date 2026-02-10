@@ -155,6 +155,6 @@ export async function mintPeerToken(
     expiresIn: '1h',
   })
 
-  console.log(`✓ Peer token minted for ${peerName}: ${peerToken.substring(0, 20)}...`)
+  console.log(`[ok] Peer token minted for ${peerName}: ${peerToken.substring(0, 20)}...`)
   return peerToken
 }

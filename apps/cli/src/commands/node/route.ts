@@ -60,14 +60,14 @@ export function routeCommands(): Command {
         })
 
         if (result.success) {
-          console.log(chalk.green(`✓ Route '${name}' created successfully.`))
+          console.log(chalk.green(`[ok] Route '${name}' created successfully.`))
           process.exit(0)
         } else {
-          console.error(chalk.red(`✗ Failed to create route: ${result.error}`))
+          console.error(chalk.red(`[error] Failed to create route: ${result.error}`))
           process.exit(1)
         }
       } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -116,7 +116,7 @@ export function routeCommands(): Command {
         }
         process.exit(0)
       } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -155,14 +155,14 @@ export function routeCommands(): Command {
         })
 
         if (result.success) {
-          console.log(chalk.green(`✓ Route '${name}' deleted.`))
+          console.log(chalk.green(`[ok] Route '${name}' deleted.`))
           process.exit(0)
         } else {
-          console.error(chalk.red(`✗ Failed to delete route: ${result.error}`))
+          console.error(chalk.red(`[error] Failed to delete route: ${result.error}`))
           process.exit(1)
         }
       } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })

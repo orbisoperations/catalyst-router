@@ -62,7 +62,7 @@ export function tokenCommands(): Command {
         const tokensApi = await client.tokens(validation.data.token || '')
 
         if ('error' in tokensApi) {
-          console.error(chalk.red(`✗ Auth failed: ${tokensApi.error}`))
+          console.error(chalk.red(`[error] Auth failed: ${tokensApi.error}`))
           process.exit(1)
         }
 
@@ -81,11 +81,11 @@ export function tokenCommands(): Command {
           expiresIn: validation.data.expiresIn,
         })
 
-        console.log(chalk.green('✓ Token minted successfully:'))
+        console.log(chalk.green('[ok] Token minted successfully:'))
         console.log(newToken)
         process.exit(0)
       } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -124,7 +124,7 @@ export function tokenCommands(): Command {
         const validationApi = await client.validation(validation.data.token || '')
 
         if ('error' in validationApi) {
-          console.error(chalk.red(`✗ Auth failed: ${validationApi.error}`))
+          console.error(chalk.red(`[error] Auth failed: ${validationApi.error}`))
           process.exit(1)
         }
 
@@ -134,16 +134,16 @@ export function tokenCommands(): Command {
         })
 
         if (result.valid) {
-          console.log(chalk.green('✓ Token is valid'))
+          console.log(chalk.green('[ok] Token is valid'))
           console.log(chalk.cyan('Payload:'))
           console.log(JSON.stringify(result.payload, null, 2))
           process.exit(0)
         } else {
-          console.log(chalk.red(`✗ Token is invalid: ${result.error}`))
+          console.log(chalk.red(`[error] Token is invalid: ${result.error}`))
           process.exit(1)
         }
       } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -182,7 +182,7 @@ export function tokenCommands(): Command {
         const tokensApi = await client.tokens(validation.data.token || '')
 
         if ('error' in tokensApi) {
-          console.error(chalk.red(`✗ Auth failed: ${tokensApi.error}`))
+          console.error(chalk.red(`[error] Auth failed: ${tokensApi.error}`))
           process.exit(1)
         }
 
@@ -191,10 +191,10 @@ export function tokenCommands(): Command {
           san: validation.data.san,
         })
 
-        console.log(chalk.green('✓ Token revoked successfully.'))
+        console.log(chalk.green('[ok] Token revoked successfully.'))
         process.exit(0)
       } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })
@@ -233,7 +233,7 @@ export function tokenCommands(): Command {
         const tokensApi = await client.tokens(validation.data.token || '')
 
         if ('error' in tokensApi) {
-          console.error(chalk.red(`✗ Auth failed: ${tokensApi.error}`))
+          console.error(chalk.red(`[error] Auth failed: ${tokensApi.error}`))
           process.exit(1)
         }
 
@@ -257,7 +257,7 @@ export function tokenCommands(): Command {
         }
         process.exit(0)
       } catch (error) {
-        console.error(chalk.red(`✗ Error: ${error instanceof Error ? error.message : error}`))
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
       }
     })

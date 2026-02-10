@@ -161,14 +161,14 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
 
         expect(invalidOnA.success).toBe(false)
         expect(invalidOnB.success).toBe(false)
-        console.log('✓ Invalid tokens correctly rejected')
+        console.log('[ok] Invalid tokens correctly rejected')
 
         // Valid shared token works on both nodes
         const validOnA = await clientA.getNetworkClient(auth.systemToken)
         const validOnB = await clientB.getNetworkClient(auth.systemToken)
         expect(validOnA.success).toBe(true)
         expect(validOnB.success).toBe(true)
-        console.log('✓ Shared auth token works on all nodes')
+        console.log('[ok] Shared auth token works on all nodes')
       },
       TIMEOUT
     )
@@ -221,7 +221,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         if (!dataBBefore.success) throw new Error('Failed to get data client B')
         const routesBefore = await dataBBefore.client.listRoutes()
         expect(routesBefore.internal.some((r) => r.name === 'service-a')).toBe(false)
-        console.log('✓ Confirmed route not on B before propagation')
+        console.log('[ok] Confirmed route not on B before propagation')
 
         const routeResult = await dataAResult.client.addRoute({
           name: 'service-a',
@@ -233,7 +233,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
           console.error('Route create failed:', routeResult)
           throw new Error(`Route create failed: ${routeResult.error || 'Unknown error'}`)
         }
-        console.log('✓ Route added on A')
+        console.log('[ok] Route added on A')
 
         // Check B learned it
         let learnedOnB = false
@@ -250,12 +250,12 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
           await new Promise((r) => setTimeout(r, 500))
         }
         expect(learnedOnB).toBe(true)
-        console.log('✓ Route propagated to B')
+        console.log('[ok] Route propagated to B')
 
         // Verify route details match
         expect(matchingRoute.endpoint).toBe('http://a:8080')
         expect(matchingRoute.protocol).toBe('http')
-        console.log('✓ Route details match')
+        console.log('[ok] Route details match')
       },
       TIMEOUT
     )
@@ -362,11 +362,11 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         // Each token works on its own node
         const netAResult = await clientA.getNetworkClient(authA.systemToken)
         expect(netAResult.success).toBe(true)
-        console.log('✓ Node A authenticated with auth-a token')
+        console.log('[ok] Node A authenticated with auth-a token')
 
         const netBResult = await clientB.getNetworkClient(authB.systemToken)
         expect(netBResult.success).toBe(true)
-        console.log('✓ Node B authenticated with auth-b token')
+        console.log('[ok] Node B authenticated with auth-b token')
 
         // SECURITY TEST: Verify cross-auth tokens are rejected (no SKIP_AUTH)
         console.log('Testing cross-auth token rejection...')
@@ -376,7 +376,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         // Without SKIP_AUTH, cross-auth tokens should be rejected
         expect(crossAuthAtoB.success).toBe(false)
         expect(crossAuthBtoA.success).toBe(false)
-        console.log('✓ Cross-auth tokens correctly rejected')
+        console.log('[ok] Cross-auth tokens correctly rejected')
 
         // SECURITY TEST: Verify invalid tokens are rejected
         const invalidToken = 'completely-invalid-token'
@@ -384,7 +384,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         const invalidOnB = await clientB.getNetworkClient(invalidToken)
         expect(invalidOnA.success).toBe(false)
         expect(invalidOnB.success).toBe(false)
-        console.log('✓ Invalid tokens correctly rejected')
+        console.log('[ok] Invalid tokens correctly rejected')
       },
       TIMEOUT
     )
@@ -471,7 +471,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         if (!dataBBefore.success) throw new Error('Failed to get data client B')
         const routesBefore = await dataBBefore.client.listRoutes()
         expect(routesBefore.internal.some((r) => r.name === 'service-separate-auth')).toBe(false)
-        console.log('✓ Confirmed route not on B before propagation')
+        console.log('[ok] Confirmed route not on B before propagation')
 
         const routeResult = await dataAResult.client.addRoute({
           name: 'service-separate-auth',
@@ -482,7 +482,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         if (!routeResult.success) {
           throw new Error(`Route create failed: ${routeResult.error || 'Unknown error'}`)
         }
-        console.log('✓ Route added on A with separate auth')
+        console.log('[ok] Route added on A with separate auth')
 
         // Check B learned it
         let learnedOnB = false
@@ -499,12 +499,12 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
           await new Promise((r) => setTimeout(r, 500))
         }
         expect(learnedOnB).toBe(true)
-        console.log('✓ Route propagated to B with separate auth')
+        console.log('[ok] Route propagated to B with separate auth')
 
         // Verify route details match
         expect(matchingRoute.endpoint).toBe('http://separate:9090')
         expect(matchingRoute.protocol).toBe('http')
-        console.log('✓ Route details match with separate auth')
+        console.log('[ok] Route details match with separate auth')
       },
       TIMEOUT
     )
