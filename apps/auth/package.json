@@ -10,25 +10,19 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/server.ts",
-    "build": "tsc",
     "test": "bun test",
     "start": "bun run src/server.ts"
   },
   "dependencies": {
-    "@hono/capnweb": "^0.1.0",
     "@catalyst/authorization": "catalog:",
     "@catalyst/config": "catalog:",
     "@catalyst/service": "catalog:",
-    "@catalyst/telemetry": "catalog:",
-    "argon2": "catalog:",
-    "capnweb": "^0.4.0",
-    "hono": "^4.11.3",
-    "jose": "^6.0.0",
-    "zod": "^4.0.0"
+    "hono": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
+    "jose": "catalog:",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
     "vitest": "^1.2.1"
