@@ -1,7 +1,8 @@
 import type { TokenRecord } from '../../jwt/index.js'
+import { Role } from '../../policy/src/definitions/models.js'
 import { z } from 'zod'
 
-export const RoleSchema = z.enum(['ADMIN', 'NODE', 'NODE_CUSTODIAN', 'DATA_CUSTODIAN', 'USER'])
+export const RoleSchema = z.enum(Role)
 
 /**
  * SignToken Request/Response schemas

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { Role } from '@catalyst/authorization'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
@@ -46,7 +47,7 @@ class MockConnectionPool extends ConnectionPool {
   }
 }
 
-const ADMIN_AUTH: AuthContext = { userId: 'admin', roles: ['admin'] }
+const ADMIN_AUTH: AuthContext = { userId: 'admin', roles: [Role.ADMIN] }
 
 describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
   let bus: CatalystNodeBus
