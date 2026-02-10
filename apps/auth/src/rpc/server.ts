@@ -7,14 +7,10 @@ import type { JWTTokenFactory } from '@catalyst/authorization'
 import { jwtToEntity, Role, type CatalystPolicyEngine } from '@catalyst/authorization'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import type { ApiKeyService } from '../api-key-service.js'
-import type { BootstrapService } from '../bootstrap.js'
 import {
-  CreateFirstAdminRequestSchema,
   type AuthorizeActionRequest,
   type AuthorizeActionResult,
   type CertHandlers,
-  type CreateFirstAdminResponse,
-  type GetBootstrapStatusResponse,
   type PermissionsHandlers,
   type TokenHandlers,
   type ValidationHandlers,
@@ -53,58 +49,12 @@ export class AuthRpcServer extends RpcTarget {
   constructor(
     private tokenFactory: JWTTokenFactory,
     private telemetry: ServiceTelemetry,
-    private bootstrapService?: BootstrapService,
     private apiKeyService?: ApiKeyService,
     private policyService?: CatalystPolicyEngine,
     private nodeId: string = 'unknown',
     private domainId: string = ''
   ) {
     super()
-  }
-
-  // --- Public API ---
-
-  async createFirstAdmin(request: unknown): Promise<CreateFirstAdminResponse> {
-    if (!this.bootstrapService) {
-      return { success: false, error: 'Bootstrap not configured' }
-    }
-    const parsed = CreateFirstAdminRequestSchema.safeParse(request)
-    if (!parsed.success) {
-      return { success: false, error: 'Invalid request' }
-    }
-    const result = await this.bootstrapService.createFirstAdmin(parsed.data)
-    if (!result.success) {
-      return { success: false, error: result.error ?? 'Bootstrap failed' }
-    }
-
-    const token = await this.tokenFactory.mint({
-      subject: result.userId!,
-      expiresAt: Date.now() + 3600000,
-      roles: [Role.ADMIN],
-      entity: {
-        id: result.userId!,
-        name: 'First Admin',
-        type: 'user',
-        role: Role.ADMIN,
-      },
-      claims: {
-        orgId: 'default',
-      },
-    })
-
-    return {
-      success: true,
-      userId: result.userId!,
-      token,
-      expiresAt: new Date(Date.now() + 3600000).toISOString(),
-    }
-  }
-
-  async getBootstrapStatus(): Promise<GetBootstrapStatusResponse> {
-    if (!this.bootstrapService) {
-      return { initialized: false, used: false }
-    }
-    return this.bootstrapService.getBootstrapStatus()
   }
 
   // --- Progressive API Entry Points ---
