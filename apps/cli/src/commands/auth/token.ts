@@ -1,3 +1,4 @@
+import { Role } from '@catalyst/authorization'
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { createAuthClient } from '../../clients/auth-client.js'
@@ -15,7 +16,7 @@ export function tokenCommands(): Command {
     .command('mint')
     .description('Mint a new token')
     .argument('<subject>', 'Token subject (user/service ID)')
-    .option('--role <role>', 'Role (ADMIN, NODE, NODE_CUSTODIAN, DATA_CUSTODIAN, USER)', 'USER')
+    .option('--role <role>', `Role (${Object.values(Role).join(', ')})`, 'USER')
     .option('--name <name>', 'Entity name')
     .option('--type <type>', 'Entity type (user, service)', 'user')
     .option('--expires-in <duration>', 'Expiration (e.g., 1h, 7d, 30m)')
