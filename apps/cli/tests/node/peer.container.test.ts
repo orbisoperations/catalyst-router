@@ -80,7 +80,6 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
         CATALYST_AUTH_KEYS_DB: ':memory:',
         CATALYST_AUTH_TOKENS_DB: ':memory:',
         CATALYST_BOOTSTRAP_TTL: '3600000',
-        CATALYST_NODE_ID: 'test-node',
       })
       .withWaitStrategy(Wait.forLogMessage('System Admin Token minted:'))
       .withLogConsumer((stream: NodeJS.ReadableStream) => {
