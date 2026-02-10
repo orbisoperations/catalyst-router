@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 import { newRpcResponse } from '@hono/capnweb'
 import { newWebSocketRpcSession } from 'capnweb'
-import { Role } from '@catalyst/authorization'
+import { Principal } from '@catalyst/authorization'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
 import { CatalystNodeBus } from './orchestrator.js'
@@ -19,12 +19,11 @@ interface AuthRpcApi {
             id: string
             name: string
             type: 'user' | 'service'
-            role: string
             nodeId?: string
             trustedNodes?: string[]
             trustedDomains?: string[]
           }
-          roles: string[]
+          principal: string
           sans?: string[]
           expiresIn?: string
         }): Promise<string>
@@ -133,12 +132,11 @@ export class OrchestratorService extends CatalystService {
           id: this.config.node.name,
           name: this.config.node.name,
           type: 'service',
-          role: Role.NODE,
           nodeId: this.config.node.name,
           trustedNodes: [], // Empty for now - could be populated from peer config
           trustedDomains: this.config.node.domains, // Domains this node trusts
         },
-        roles: [Role.NODE],
+        principal: Principal.NODE,
         expiresIn: '7d', // Node token valid for 7 days
       })
 
