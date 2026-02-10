@@ -5,9 +5,9 @@ import { upgradeWebSocket } from 'hono/bun'
 
 import type { JWTTokenFactory } from '@catalyst/authorization'
 import { jwtToEntity, Role, type CatalystPolicyEngine } from '@catalyst/authorization'
+import type { ServiceTelemetry } from '@catalyst/telemetry'
 import type { ApiKeyService } from '../api-key-service.js'
 import type { BootstrapService } from '../bootstrap.js'
-import { getAuthLogger } from '../logger.js'
 import type { LoginService } from '../login.js'
 import {
   CreateFirstAdminRequestSchema,
@@ -55,6 +55,7 @@ export class AuthRpcServer extends RpcTarget {
 
   constructor(
     private tokenFactory: JWTTokenFactory,
+    private telemetry: ServiceTelemetry,
     private bootstrapService?: BootstrapService,
     private loginService?: LoginService,
     private apiKeyService?: ApiKeyService,
@@ -139,7 +140,7 @@ export class AuthRpcServer extends RpcTarget {
    * Requires 'ADMIN' role.
    */
   async tokens(token: string): Promise<TokenHandlers | { error: string }> {
-    const logger = getAuthLogger('tokens')
+    const logger = this.telemetry.logger
     const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
@@ -294,7 +295,7 @@ export class AuthRpcServer extends RpcTarget {
    * Accessible with any valid token.
    */
   async permissions(token: string): Promise<PermissionsHandlers | { error: string }> {
-    const logger = getAuthLogger('permissions')
+    const logger = this.telemetry.logger
 
     // Verify the token
     const auth = await this.tokenFactory.verify(token)

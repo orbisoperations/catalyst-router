@@ -27,6 +27,7 @@
         "@catalyst/authorization": "catalog:",
         "@catalyst/config": "catalog:",
         "@catalyst/service": "catalog:",
+        "@catalyst/telemetry": "catalog:",
         "@hono/capnweb": "^0.1.0",
         "argon2": "catalog:",
         "capnweb": "^0.4.0",
