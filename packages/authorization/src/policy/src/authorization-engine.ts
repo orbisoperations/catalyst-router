@@ -4,6 +4,7 @@ import type {
   EntityUid as CedarEntityUid,
 } from '@cedar-policy/cedar-wasm/nodejs'
 import * as cedar from '@cedar-policy/cedar-wasm/nodejs'
+import { getLogger } from '@catalyst/telemetry'
 import { type EntityBuilder, EntityBuilderFactory } from './entity-builder.js'
 import { EntityCollection } from './entity-collection.js'
 import type {
@@ -50,7 +51,7 @@ export class AuthorizationEngine<
    * @returns {boolean} `true` if policies are valid.
    */
   validatePolicies(opts: { failOnWarnings?: boolean } = {}): boolean {
-    const failOnWarnings = opts.failOnWarnings ?? true
+    const _failOnWarnings = opts.failOnWarnings ?? true
     const validationAnswer = cedar.validate({
       schema: this.schema,
       policies: { staticPolicies: this.policies },
@@ -63,18 +64,15 @@ export class AuthorizationEngine<
     const hasWarning = validationAnswer.validationWarnings.length > 0
     const hasOtherWarnings = validationAnswer.otherWarnings.length > 0
 
+    const logger = getLogger(['catalyst', 'authorization'])
     if (hasError) {
-      console.error(
-        'Validation errors: ' + JSON.stringify(validationAnswer.validationErrors, null, 2)
-      )
+      logger.error`Validation errors: ${JSON.stringify(validationAnswer.validationErrors, null, 2)}`
     }
     if (hasWarning) {
-      console.warn(
-        'Validation warnings: ' + JSON.stringify(validationAnswer.validationWarnings, null, 2)
-      )
+      logger.warn`Validation warnings: ${JSON.stringify(validationAnswer.validationWarnings, null, 2)}`
     }
     if (hasOtherWarnings) {
-      console.warn('Other warnings: ' + JSON.stringify(validationAnswer.otherWarnings, null, 2))
+      logger.warn`Other warnings: ${JSON.stringify(validationAnswer.otherWarnings, null, 2)}`
     }
     if (hasWarning || hasOtherWarnings) {
       throw new Error(

@@ -9,10 +9,11 @@
   },
   "private": true,
   "dependencies": {
-    "jose": "catalog:",
-    "zod": "catalog:",
+    "@catalyst/telemetry": "catalog:",
+    "@catalyst/types": "workspace:*",
     "@cedar-policy/cedar-wasm": "catalog:",
-    "@catalyst/types": "workspace:*"
+    "jose": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",

@@ -25,6 +25,7 @@
   "dependencies": {
     "@catalyst/config": "catalog:",
     "@catalyst/service": "catalog:",
+    "@catalyst/telemetry": "catalog:",
     "@hono/node-server": "catalog:",
     "capnweb": "catalog:",
     "commander": "catalog:",

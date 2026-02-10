@@ -1,5 +1,4 @@
-// Mocking capnweb usage for now as we set up the structure.
-// In a real implementation we would import { RpcServer } from 'capnweb';
+import { getLogger } from '@catalyst/telemetry'
 
 // Defining the Interface locally for now to avoid circular deps until we refactor
 export interface PeerState {
@@ -32,7 +31,8 @@ export class CatalystRpcServer implements CatalystRpc {
   }
 
   async shutdown(): Promise<void> {
-    console.log('Shutdown requested via RPC...')
+    const logger = getLogger(['catalyst', 'node'])
+    logger.info`Shutdown requested via RPC`
     process.exit(0)
   }
 }

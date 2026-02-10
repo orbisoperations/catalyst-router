@@ -139,6 +139,7 @@ export class AuthRpcServer extends RpcTarget {
    * Requires 'ADMIN' role.
    */
   async tokens(token: string): Promise<TokenHandlers | { error: string }> {
+    const logger = getAuthLogger('tokens')
     const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
@@ -172,29 +173,12 @@ export class AuthRpcServer extends RpcTarget {
       context: {},
     })
     if (autorizedResult?.type === 'failure') {
-      // log for telemetry
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          msg: 'Error on policy service',
-          error: autorizedResult.errors,
-        })
-      )
+      void logger.error`Policy service error: ${autorizedResult.errors}`
       return { error: 'Error authorizing request' }
     }
 
     if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
-      // log for telemetry
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          msg: 'Error authorizing request',
-          diagnostics: autorizedResult?.diagnostics,
-          reasons: autorizedResult?.reasons,
-          decision: autorizedResult?.decision,
-          allowed: autorizedResult?.allowed,
-        })
-      )
+      void logger.warn`Permission denied: decision=${autorizedResult.decision}, reasons=${autorizedResult.reasons}`
       return { error: 'Permission denied: ADMIN role required' }
     }
 
