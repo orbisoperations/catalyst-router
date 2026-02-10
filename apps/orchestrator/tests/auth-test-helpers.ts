@@ -1,3 +1,4 @@
+import { Role } from '@catalyst/authorization'
 import type { StartedTestContainer, StartedNetwork } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
 import type { Readable } from 'node:stream'
@@ -148,11 +149,11 @@ export async function mintPeerToken(
       id: peerName,
       name: peerName,
       type: 'service',
-      role: 'NODE',
+      role: Role.NODE,
       trustedDomains: domains,
       trustedNodes: [], // Empty = trust all nodes
     },
-    roles: ['NODE'],
+    roles: [Role.NODE],
     expiresIn: '1h',
   })
 

@@ -6,13 +6,13 @@ The Auth service provides centralized authentication and authorization for the C
 
 Catalyst uses an explicit, role-based permission system. Permissions are categorized by functional area (Tokens, Peers, Routes, Protocol).
 
-| Role               | Description                   | Permissions                                      |
-| :----------------- | :---------------------------- | :----------------------------------------------- |
-| **admin**          | Full system access            | `*` (All permissions)                            |
-| **peer**           | Internal protocol participant | `ibgp:connect`, `ibgp:disconnect`, `ibgp:update` |
-| **peer_custodian** | Manage node peer topology     | `peer:create`, `peer:update`, `peer:delete`      |
-| **data_custodian** | Manage routing and services   | `route:create`, `route:delete`                   |
-| **user**           | Basic access                  | No management permissions                        |
+| Role               | Description                   | Cedar Principal            | Permissions                                      |
+| :----------------- | :---------------------------- | :------------------------- | :----------------------------------------------- |
+| **ADMIN**          | Full system access            | `CATALYST::ADMIN`          | `*` (All permissions)                            |
+| **NODE**           | Internal protocol participant | `CATALYST::NODE`           | `ibgp:connect`, `ibgp:disconnect`, `ibgp:update` |
+| **NODE_CUSTODIAN** | Manage node peer topology     | `CATALYST::NODE_CUSTODIAN` | `peer:create`, `peer:update`, `peer:delete`      |
+| **DATA_CUSTODIAN** | Manage routing and services   | `CATALYST::DATA_CUSTODIAN` | `route:create`, `route:delete`                   |
+| **USER**           | Basic access                  | `CATALYST::USER`           | No management permissions                        |
 
 ### Permission Dictionary
 
@@ -40,9 +40,9 @@ When the Auth service starts, it automatically mints a high-privilege **System A
 
 The token is generated immediately after the `KeyManager` initializes. It contains:
 
-- `sub`: `"system-admin"`
-- `role`: `"admin"`
-- `permissions`: All discrete permissions listed above.
+- `sub`: `"bootstrap"`
+- `roles`: `["ADMIN"]`
+- `entity.role`: `"ADMIN"` (maps to Cedar principal `CATALYST::ADMIN`)
 
 ### Accessing the Token
 

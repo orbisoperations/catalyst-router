@@ -7,9 +7,14 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 
-import { Actions } from '@catalyst/routing'
-import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
+
+import path from 'path'
 import type { Readable } from 'node:stream'
+import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
+import type { PublicApi, PeerInfo } from '../src/orchestrator'
+import { Role } from '@catalyst/authorization'
+import { Actions } from '@catalyst/routing'
+
 import path from 'path'
 import type { PeerInfo, PublicApi } from '../src/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
@@ -297,7 +302,7 @@ class MockConnectionPool extends ConnectionPool {
   }
 }
 
-const ADMIN_AUTH: AuthContext = { userId: 'admin', roles: ['admin'] }
+const ADMIN_AUTH: AuthContext = { userId: 'admin', roles: [Role.ADMIN] }
 
 describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
   let bus: CatalystNodeBus
