@@ -1,4 +1,4 @@
-import { Role } from '@catalyst/authorization'
+import { Principal } from '@catalyst/authorization'
 import type { StartedTestContainer, StartedNetwork } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
 import type { Readable } from 'node:stream'
@@ -19,11 +19,10 @@ interface AuthServiceApi {
             id: string
             name: string
             type: 'user' | 'service'
-            role: string
             trustedDomains?: string[]
             trustedNodes?: string[]
           }
-          roles: string[]
+          principal: string
           sans?: string[]
           expiresIn?: string
         }): Promise<string>
@@ -149,11 +148,10 @@ export async function mintPeerToken(
       id: peerName,
       name: peerName,
       type: 'service',
-      role: Role.NODE,
       trustedDomains: domains,
       trustedNodes: [], // Empty = trust all nodes
     },
-    roles: [Role.NODE],
+    principal: Principal.NODE,
     expiresIn: '1h',
   })
 

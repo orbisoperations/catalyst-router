@@ -22,12 +22,6 @@ export const OrchestratorConfigSchema = z.object({
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
 
-export const AuthContextSchema = z.object({
-  userId: z.string(),
-  roles: z.array(z.enum(Role)),
-})
-export type AuthContext = z.infer<typeof AuthContextSchema>
-
 export type StateResult =
   | { success: true; state: RouteTable; action: Action; data?: unknown; nextActions?: Action[] }
   | { success: false; error: string; state?: RouteTable }
@@ -47,7 +41,7 @@ export interface StatePlugin {
    * Processes an action and returns the new state.
    * returning { success: false } stops the pipeline and reverts.
    */
-  apply(action: Action, state: RouteTable, auth: AuthContext): Promise<StateResult>
+  apply(action: Action, state: RouteTable): Promise<StateResult>
 }
 
 export type Dispatcher = (action: Action) => Promise<ApplyActionResult>
@@ -67,7 +61,6 @@ export interface NotificationPlugin {
     action: Action,
     originalState: RouteTable,
     newState: RouteTable,
-    auth: AuthContext,
     dispatch: Dispatcher
   ): Promise<NotificationResult>
 }
