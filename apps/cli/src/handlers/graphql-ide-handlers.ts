@@ -42,7 +42,7 @@ function generateGraphiQLHtml(graphqlEndpoint: string): string {
     import { GraphiQL } from 'graphiql';
     import { explorerPlugin } from '@graphiql/plugin-explorer';
 
-    const endpoint = '${graphqlEndpoint}';
+    const endpoint = ${JSON.stringify(graphqlEndpoint)};
 
     const fetcher = async (graphQLParams) => {
       const response = await fetch(endpoint, {
