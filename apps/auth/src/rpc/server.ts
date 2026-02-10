@@ -8,16 +8,13 @@ import { jwtToEntity, Role, type CatalystPolicyEngine } from '@catalyst/authoriz
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import type { ApiKeyService } from '../api-key-service.js'
 import type { BootstrapService } from '../bootstrap.js'
-import type { LoginService } from '../login.js'
 import {
   CreateFirstAdminRequestSchema,
-  LoginRequestSchema,
   type AuthorizeActionRequest,
   type AuthorizeActionResult,
   type CertHandlers,
   type CreateFirstAdminResponse,
   type GetBootstrapStatusResponse,
-  type LoginResponse,
   type PermissionsHandlers,
   type TokenHandlers,
   type ValidationHandlers,
@@ -57,7 +54,6 @@ export class AuthRpcServer extends RpcTarget {
     private tokenFactory: JWTTokenFactory,
     private telemetry: ServiceTelemetry,
     private bootstrapService?: BootstrapService,
-    private loginService?: LoginService,
     private apiKeyService?: ApiKeyService,
     private policyService?: CatalystPolicyEngine,
     private nodeId: string = 'unknown',
@@ -67,28 +63,6 @@ export class AuthRpcServer extends RpcTarget {
   }
 
   // --- Public API ---
-
-  async login(request: unknown): Promise<LoginResponse> {
-    if (!this.loginService) {
-      return { success: false, error: 'Login not configured' }
-    }
-    const parsed = LoginRequestSchema.safeParse(request)
-    if (!parsed.success) {
-      return { success: false, error: 'Invalid request' }
-    }
-    const result = await this.loginService.login(parsed.data)
-    if (!result.success) {
-      return { success: false, error: result.error ?? 'Login failed' }
-    }
-    if (!this.policyService) {
-      return { success: false, error: 'Policy service not configured' }
-    }
-    return {
-      success: true,
-      token: result.token!,
-      expiresAt: result.expiresAt!.toISOString(),
-    }
-  }
 
   async createFirstAdmin(request: unknown): Promise<CreateFirstAdminResponse> {
     if (!this.bootstrapService) {

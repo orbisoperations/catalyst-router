@@ -10,7 +10,6 @@ import { CatalystService, type CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
 import { ApiKeyService } from './api-key-service.js'
 import { BootstrapService } from './bootstrap.js'
-import { LoginService } from './login.js'
 import { hashPassword } from './password.js'
 import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
 import {
@@ -93,7 +92,6 @@ export class AuthService extends CatalystService {
 
     // Initialize services
     const bootstrapService = new BootstrapService(userStore, bootstrapStore)
-    const loginService = new LoginService(userStore, this._tokenFactory.getTokenManager())
     const apiKeyService = new ApiKeyService(serviceAccountStore)
 
     // Initialize bootstrap with env token or generate new one
@@ -115,7 +113,6 @@ export class AuthService extends CatalystService {
       this._tokenFactory,
       this.telemetry,
       bootstrapService,
-      loginService,
       apiKeyService,
       policyService,
       this.config.node.name,

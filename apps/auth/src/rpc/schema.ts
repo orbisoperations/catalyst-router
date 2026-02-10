@@ -189,34 +189,6 @@ export const GetBootstrapStatusResponseSchema = z.object({
 export type GetBootstrapStatusResponse = z.infer<typeof GetBootstrapStatusResponseSchema>
 
 /**
- * Login Request/Response schemas
- *
- * Authenticates a user with email/password and returns a JWT.
- */
-export const LoginRequestSchema = z.object({
-  /** User email address */
-  email: z.string().email('Valid email is required'),
-  /** User password */
-  password: z.string().min(1, 'Password is required'),
-})
-
-export type LoginRequest = z.infer<typeof LoginRequestSchema>
-
-export const LoginResponseSchema = z.discriminatedUnion('success', [
-  z.object({
-    success: z.literal(true),
-    token: z.string(),
-    expiresAt: z.string(), // ISO date string
-  }),
-  z.object({
-    success: z.literal(false),
-    error: z.string(),
-  }),
-])
-
-export type LoginResponse = z.infer<typeof LoginResponseSchema>
-
-/**
  * CreateServiceAccount Request/Response schemas
  */
 export const CreateServiceAccountRequestSchema = z.object({
