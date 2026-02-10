@@ -94,7 +94,6 @@ type ConfigLoadOptions = {
  */
 export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConfig {
   const nodeName = process.env.CATALYST_NODE_ID
-  console.log('nodeName', nodeName)
   if (!nodeName) {
     throw new Error('CATALYST_NODE_ID environment variable is required')
   }

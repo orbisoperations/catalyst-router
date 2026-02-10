@@ -124,7 +124,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       gateway = await startContainer(
         'gateway',
         'gateway',
-        'GATEWAY_STARTED',
+        'Catalyst server [gateway] listening',
         {
           CATALYST_NODE_ID: 'gateway',
         },
@@ -299,7 +299,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       gateway = await startContainer(
         'gateway',
         'gateway',
-        'GATEWAY_STARTED',
+        'Catalyst server [gateway] listening',
         {
           CATALYST_NODE_ID: 'gateway',
         },
