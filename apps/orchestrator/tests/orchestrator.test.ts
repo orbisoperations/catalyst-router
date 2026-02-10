@@ -7,14 +7,14 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 
+
 import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { PublicApi, PeerInfo } from '../src/orchestrator'
 import { Role } from '@catalyst/authorization'
 import { Actions } from '@catalyst/routing'
-import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import type { Readable } from 'node:stream'
+
 import path from 'path'
 import type { PeerInfo, PublicApi } from '../src/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
