@@ -88,7 +88,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
             CATALYST_AUTH_ENDPOINT: auth.endpoint,
             CATALYST_SYSTEM_TOKEN: auth.systemToken,
           })
-          .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator]'))
+          .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator] listening'))
           .withLogConsumer(
             (stream: {
               on(event: string, listener: (line: string) => void): void
@@ -295,7 +295,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
             CATALYST_AUTH_ENDPOINT: authEndpoint,
             CATALYST_SYSTEM_TOKEN: systemToken,
           })
-          .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator]'))
+          .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator] listening'))
           .withLogConsumer(
             (stream: {
               on(event: string, listener: (line: string) => void): void

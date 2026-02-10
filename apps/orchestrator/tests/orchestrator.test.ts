@@ -115,7 +115,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
           CATALYST_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
           CATALYST_SYSTEM_TOKEN: systemToken,
         })
-        .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator]'))
+        .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator] listening'))
         .withLogConsumer((stream: Readable) => {
           stream.pipe(process.stdout)
         })
