@@ -1,1 +1,2 @@
-pnpm exec lint-staged
+bunx lint-staged
+bun test --coverage packages/ $(find apps -name '*.unit.test.ts' 2>/dev/null) || true
