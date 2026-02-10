@@ -1,13 +1,18 @@
 import { Principal } from '@catalyst/authorization'
 import { Command } from 'commander'
 import chalk from 'chalk'
-import { createAuthClient } from '../../clients/auth-client.js'
 import {
   MintTokenInputSchema,
   VerifyTokenInputSchema,
   RevokeTokenInputSchema,
   ListTokensInputSchema,
 } from '../../types.js'
+import {
+  mintTokenHandler,
+  verifyTokenHandler,
+  revokeTokenHandler,
+  listTokensHandler,
+} from '../../handlers/auth-token-handlers.js'
 
 export function tokenCommands(): Command {
   const token = new Command('token').description('Token management (mint, verify, revoke, list)')
@@ -51,41 +56,14 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      if (!validation.data.authUrl) {
-        console.error(chalk.red('--auth-url is required for token operations'))
-        console.error(chalk.yellow('Set CATALYST_AUTH_URL env var or pass --auth-url flag'))
-        process.exit(1)
-      }
+      const result = await mintTokenHandler(validation.data)
 
-      try {
-        const client = await createAuthClient(validation.data.authUrl)
-        const tokensApi = await client.tokens(validation.data.token || '')
-
-        if ('error' in tokensApi) {
-          console.error(chalk.red(`[error] Auth failed: ${tokensApi.error}`))
-          process.exit(1)
-        }
-
-        const newToken = await tokensApi.create({
-          subject: validation.data.subject,
-          entity: {
-            id: validation.data.subject,
-            name: validation.data.name,
-            type: validation.data.type,
-            role: validation.data.role,
-            nodeId: validation.data.nodeId,
-            trustedDomains: validation.data.trustedDomains,
-            trustedNodes: validation.data.trustedNodes,
-          },
-          roles: [validation.data.role],
-          expiresIn: validation.data.expiresIn,
-        })
-
+      if (result.success) {
         console.log(chalk.green('[ok] Token minted successfully:'))
-        console.log(newToken)
+        console.log(result.data.token)
         process.exit(0)
-      } catch (error) {
-        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
+      } else {
+        console.error(chalk.red(`[error] ${result.error}`))
         process.exit(1)
       }
     })
@@ -113,37 +91,20 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      if (!validation.data.authUrl) {
-        console.error(chalk.red('--auth-url is required for token operations'))
-        console.error(chalk.yellow('Set CATALYST_AUTH_URL env var or pass --auth-url flag'))
+      const result = await verifyTokenHandler(validation.data)
+
+      if (!result.success) {
+        console.error(chalk.red(`[error] ${result.error}`))
         process.exit(1)
       }
 
-      try {
-        const client = await createAuthClient(validation.data.authUrl)
-        const validationApi = await client.validation(validation.data.token || '')
-
-        if ('error' in validationApi) {
-          console.error(chalk.red(`[error] Auth failed: ${validationApi.error}`))
-          process.exit(1)
-        }
-
-        const result = await validationApi.validate({
-          token: validation.data.tokenToVerify,
-          audience: validation.data.audience,
-        })
-
-        if (result.valid) {
-          console.log(chalk.green('[ok] Token is valid'))
-          console.log(chalk.cyan('Payload:'))
-          console.log(JSON.stringify(result.payload, null, 2))
-          process.exit(0)
-        } else {
-          console.log(chalk.red(`[error] Token is invalid: ${result.error}`))
-          process.exit(1)
-        }
-      } catch (error) {
-        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
+      if (result.data.valid) {
+        console.log(chalk.green('[ok] Token is valid'))
+        console.log(chalk.cyan('Payload:'))
+        console.log(JSON.stringify(result.data.payload, null, 2))
+        process.exit(0)
+      } else {
+        console.log(chalk.red(`[error] Token is invalid: ${result.data.error}`))
         process.exit(1)
       }
     })
@@ -171,30 +132,13 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      if (!validation.data.authUrl) {
-        console.error(chalk.red('--auth-url is required for token operations'))
-        console.error(chalk.yellow('Set CATALYST_AUTH_URL env var or pass --auth-url flag'))
-        process.exit(1)
-      }
+      const result = await revokeTokenHandler(validation.data)
 
-      try {
-        const client = await createAuthClient(validation.data.authUrl)
-        const tokensApi = await client.tokens(validation.data.token || '')
-
-        if ('error' in tokensApi) {
-          console.error(chalk.red(`[error] Auth failed: ${tokensApi.error}`))
-          process.exit(1)
-        }
-
-        await tokensApi.revoke({
-          jti: validation.data.jti,
-          san: validation.data.san,
-        })
-
+      if (result.success) {
         console.log(chalk.green('[ok] Token revoked successfully.'))
         process.exit(0)
-      } catch (error) {
-        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
+      } else {
+        console.error(chalk.red(`[error] ${result.error}`))
         process.exit(1)
       }
     })
@@ -222,44 +166,27 @@ export function tokenCommands(): Command {
         process.exit(1)
       }
 
-      if (!validation.data.authUrl) {
-        console.error(chalk.red('--auth-url is required for token operations'))
-        console.error(chalk.yellow('Set CATALYST_AUTH_URL env var or pass --auth-url flag'))
+      const result = await listTokensHandler(validation.data)
+
+      if (!result.success) {
+        console.error(chalk.red(`[error] ${result.error}`))
         process.exit(1)
       }
 
-      try {
-        const client = await createAuthClient(validation.data.authUrl)
-        const tokensApi = await client.tokens(validation.data.token || '')
-
-        if ('error' in tokensApi) {
-          console.error(chalk.red(`[error] Auth failed: ${tokensApi.error}`))
-          process.exit(1)
-        }
-
-        const tokens = await tokensApi.list({
-          certificateFingerprint: validation.data.certificateFingerprint,
-          san: validation.data.san,
-        })
-
-        if (tokens.length === 0) {
-          console.log(chalk.yellow('No tokens found.'))
-        } else {
-          console.table(
-            tokens.map((t) => ({
-              JTI: t.jti,
-              Subject: t.sub,
-              IssuedAt: new Date(t.iat * 1000).toISOString(),
-              ExpiresAt: new Date(t.exp * 1000).toISOString(),
-              Revoked: t.revoked ? 'Yes' : 'No',
-            }))
-          )
-        }
-        process.exit(0)
-      } catch (error) {
-        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
-        process.exit(1)
+      if (result.data.tokens.length === 0) {
+        console.log(chalk.yellow('No tokens found.'))
+      } else {
+        console.table(
+          result.data.tokens.map((t) => ({
+            JTI: t.jti,
+            Subject: t.sub,
+            IssuedAt: new Date(t.iat * 1000).toISOString(),
+            ExpiresAt: new Date(t.exp * 1000).toISOString(),
+            Revoked: t.revoked ? 'Yes' : 'No',
+          }))
+        )
       }
+      process.exit(0)
     })
 
   return token
