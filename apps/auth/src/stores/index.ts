@@ -1,5 +1,5 @@
 // Store interfaces
-export type { UserStore, ServiceAccountStore } from './types.js'
+export type { UserStore } from './types.js'
 
 // In-memory implementations
-export { InMemoryUserStore, InMemoryServiceAccountStore } from './memory.js'
+export { InMemoryUserStore } from './memory.js'

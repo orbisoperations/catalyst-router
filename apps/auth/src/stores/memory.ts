@@ -1,8 +1,6 @@
 import type { User, CreateUserInput } from '../models/user.js'
 import { generateUserId } from '../models/user.js'
-import type { ServiceAccount, CreateServiceAccountInput } from '../models/service-account.js'
-import { generateServiceAccountId } from '../models/service-account.js'
-import type { UserStore, ServiceAccountStore } from './types.js'
+import type { UserStore } from './types.js'
 
 /**
  * In-memory UserStore implementation
@@ -55,54 +53,5 @@ export class InMemoryUserStore implements UserStore {
   async list(orgId?: string): Promise<User[]> {
     const users = Array.from(this.users.values())
     return orgId ? users.filter((u) => u.orgId === orgId) : users
-  }
-}
-
-/**
- * In-memory ServiceAccountStore implementation
- */
-export class InMemoryServiceAccountStore implements ServiceAccountStore {
-  private accounts = new Map<string, ServiceAccount>()
-
-  async create(input: CreateServiceAccountInput): Promise<ServiceAccount> {
-    const id = generateServiceAccountId()
-    const sa: ServiceAccount = {
-      ...input,
-      id,
-      createdAt: new Date(),
-    }
-    this.accounts.set(id, sa)
-    return sa
-  }
-
-  async findById(id: string): Promise<ServiceAccount | null> {
-    return this.accounts.get(id) ?? null
-  }
-
-  async findByPrefix(prefix: string): Promise<ServiceAccount | null> {
-    for (const sa of this.accounts.values()) {
-      if (sa.keyPrefix === prefix) {
-        return sa
-      }
-    }
-    return null
-  }
-
-  async findByName(name: string, orgId = 'default'): Promise<ServiceAccount | null> {
-    for (const sa of this.accounts.values()) {
-      if (sa.name === name && sa.orgId === orgId) {
-        return sa
-      }
-    }
-    return null
-  }
-
-  async delete(id: string): Promise<void> {
-    this.accounts.delete(id)
-  }
-
-  async list(orgId?: string): Promise<ServiceAccount[]> {
-    const accounts = Array.from(this.accounts.values())
-    return orgId ? accounts.filter((sa) => sa.orgId === orgId) : accounts
   }
 }
