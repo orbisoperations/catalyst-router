@@ -12,13 +12,11 @@ import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { PublicApi, PeerInfo } from '../src/orchestrator'
-import { Role } from '@catalyst/authorization'
 import { Actions } from '@catalyst/routing'
 
 import path from 'path'
 import type { PeerInfo, PublicApi } from '../src/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
-import type { AuthContext } from '../src/types'
 
 const isDockerRunning = () => {
   try {
@@ -302,8 +300,6 @@ class MockConnectionPool extends ConnectionPool {
   }
 }
 
-const ADMIN_AUTH: AuthContext = { userId: 'admin', roles: [Role.ADMIN] }
-
 describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
   let bus: CatalystNodeBus
   let pool: MockConnectionPool
@@ -327,13 +323,10 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
       endpoint: 'http://books:8080',
     }
 
-    await bus.dispatch(
-      {
-        action: Actions.LocalRouteCreate,
-        data: route,
-      },
-      ADMIN_AUTH
-    )
+    await bus.dispatch({
+      action: Actions.LocalRouteCreate,
+      data: route,
+    })
 
     // Give some time for async handleNotify/syncGateway
     await new Promise((r) => setTimeout(r, 10))
@@ -366,13 +359,10 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
 
   it('should sync mesh-wide GraphQL routes (local + internal)', async () => {
     // 1. Add local route
-    await bus.dispatch(
-      {
-        action: Actions.LocalRouteCreate,
-        data: { name: 'local-books', protocol: 'http:graphql', endpoint: 'http://lb:8080' },
-      },
-      ADMIN_AUTH
-    )
+    await bus.dispatch({
+      action: Actions.LocalRouteCreate,
+      data: { name: 'local-books', protocol: 'http:graphql', endpoint: 'http://lb:8080' },
+    })
 
     // 2. Add internal route (from peer)
     const peerInfo: PeerInfo = {
@@ -380,24 +370,21 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
       endpoint: 'http://pb',
       domains: [],
     }
-    await bus.dispatch(
-      {
-        action: Actions.InternalProtocolUpdate,
-        data: {
-          peerInfo,
-          update: {
-            updates: [
-              {
-                action: 'add',
-                route: { name: 'remote-movies', protocol: 'http:gql', endpoint: 'http://rm:8080' },
-                nodePath: ['peer-b.somebiz.local.io'],
-              },
-            ],
-          },
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: { name: 'remote-movies', protocol: 'http:gql', endpoint: 'http://rm:8080' },
+              nodePath: ['peer-b.somebiz.local.io'],
+            },
+          ],
         },
       },
-      ADMIN_AUTH
-    )
+    })
 
     await new Promise((r) => setTimeout(r, 10))
 
