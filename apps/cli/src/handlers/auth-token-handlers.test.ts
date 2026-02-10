@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { Principal } from '@catalyst/authorization'
 import type {
   MintTokenInput,
   VerifyTokenInput,
@@ -11,13 +12,13 @@ describe('Auth Token Handlers', () => {
     it('should have MintTokenInput type with required fields', () => {
       const input: MintTokenInput = {
         subject: 'user-123',
-        role: 'USER',
+        principal: Principal.USER,
         name: 'Test User',
         type: 'user',
         authUrl: 'ws://localhost:4000/rpc',
       }
       expect(input.subject).toBe('user-123')
-      expect(input.role).toBe('USER')
+      expect(input.principal).toBe(Principal.USER)
       expect(input.name).toBe('Test User')
       expect(input.type).toBe('user')
     })
@@ -25,7 +26,7 @@ describe('Auth Token Handlers', () => {
     it('should have MintTokenInput type with optional fields', () => {
       const input: MintTokenInput = {
         subject: 'node-456',
-        role: 'NODE',
+        principal: Principal.NODE,
         name: 'Test Node',
         type: 'service',
         expiresIn: '7d',

@@ -102,9 +102,8 @@ describe.skipIf(skipTests)('Token Commands Container Tests', () => {
           id: 'test-user',
           name: 'Test User',
           type: 'user',
-          role: 'USER',
         },
-        roles: ['USER'],
+        principal: 'CATALYST::USER',
         expiresIn: '1h',
       })
       expect(typeof newToken).toBe('string')

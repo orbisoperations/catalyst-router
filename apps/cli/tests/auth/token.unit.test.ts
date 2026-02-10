@@ -46,11 +46,11 @@ describe('Token Commands', () => {
       expect(mint?.registeredArguments[0].name()).toBe('subject')
     })
 
-    it('should have role, name, type, expires-in, node-id, trusted-domains, trusted-nodes, and token options', () => {
+    it('should have principal, name, type, expires-in, node-id, trusted-domains, trusted-nodes, and token options', () => {
       const token = tokenCommands()
       const mint = token.commands.find((cmd) => cmd.name() === 'mint')
       const optionNames = mint?.options.map((opt) => opt.long)
-      expect(optionNames).toContain('--role')
+      expect(optionNames).toContain('--principal')
       expect(optionNames).toContain('--name')
       expect(optionNames).toContain('--type')
       expect(optionNames).toContain('--expires-in')
@@ -60,11 +60,11 @@ describe('Token Commands', () => {
       expect(optionNames).toContain('--token')
     })
 
-    it('should have default role of USER', () => {
+    it('should have default principal of CATALYST::USER', () => {
       const token = tokenCommands()
       const mint = token.commands.find((cmd) => cmd.name() === 'mint')
-      const roleOption = mint?.options.find((opt) => opt.long === '--role')
-      expect(roleOption?.defaultValue).toBe('USER')
+      const principalOption = mint?.options.find((opt) => opt.long === '--principal')
+      expect(principalOption?.defaultValue).toBe('CATALYST::USER')
     })
 
     it('should have default type of user', () => {

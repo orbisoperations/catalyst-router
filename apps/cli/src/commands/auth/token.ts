@@ -24,7 +24,7 @@ export function tokenCommands(): Command {
     .option('--name <name>', 'Entity name')
     .option('--type <type>', 'Entity type (user, service)', 'user')
     .option('--expires-in <duration>', 'Expiration (e.g., 1h, 7d, 30m)')
-    .option('--node-id <nodeId>', 'Node ID (for NODE role)')
+    .option('--node-id <nodeId>', 'Node ID (for NODE principal)')
     .option('--trusted-domains <domains>', 'Comma-separated trusted domains')
     .option('--trusted-nodes <nodes>', 'Comma-separated trusted nodes')
     .option('--token <token>', 'Admin auth token')

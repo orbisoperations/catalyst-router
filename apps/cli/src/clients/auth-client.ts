@@ -6,12 +6,11 @@ export interface CreateTokenRequest {
     id: string
     name: string
     type: 'user' | 'service'
-    role: string
     nodeId?: string
     trustedNodes?: string[]
     trustedDomains?: string[]
   }
-  roles: string[]
+  principal: string
   sans?: string[]
   expiresIn?: string
 }
