@@ -157,17 +157,19 @@ flowchart LR
 
 ## Catalyst Standard Domain
 
-The library provides a set of standardized Roles and Actions specifically designed for the Catalyst ecosystem.
+The library provides a set of standardized Principals and Actions specifically designed for the Catalyst ecosystem.
 
-### Roles (Principal Types)
+### Principals
 
-| Role             | Description                  | Principal Example                         |
-| ---------------- | ---------------------------- | ----------------------------------------- |
-| `ADMIN`          | Full system access           | `CATALYST::ADMIN::"adminuser"`            |
-| `NODE`           | Network infrastructure nodes | `CATALYST::NODE::"node-01"`               |
-| `NODE_CUSTODIAN` | Peer management authority    | `CATALYST::NODE_CUSTODIAN::"manager"`     |
-| `DATA_CUSTODIAN` | Route management authority   | `CATALYST::DATA_CUSTODIAN::"traffic-eng"` |
-| `USER`           | Standard end users           | `CATALYST::USER::"alice"`                 |
+Principals are Cedar entity types that represent the identity of a token holder. The `Principal` enum value (e.g. `Principal.ADMIN`) is stored directly in the JWT and used as the Cedar entity type during authorization — no role-to-principal mapping needed.
+
+| Principal        | Enum Value                 | Description                  | Cedar Entity Example                      |
+| ---------------- | -------------------------- | ---------------------------- | ----------------------------------------- |
+| `ADMIN`          | `CATALYST::ADMIN`          | Full system access           | `CATALYST::ADMIN::"adminuser"`            |
+| `NODE`           | `CATALYST::NODE`           | Network infrastructure nodes | `CATALYST::NODE::"node-01"`               |
+| `NODE_CUSTODIAN` | `CATALYST::NODE_CUSTODIAN` | Peer management authority    | `CATALYST::NODE_CUSTODIAN::"manager"`     |
+| `DATA_CUSTODIAN` | `CATALYST::DATA_CUSTODIAN` | Route management authority   | `CATALYST::DATA_CUSTODIAN::"traffic-eng"` |
+| `USER`           | `CATALYST::USER`           | Standard end users           | `CATALYST::USER::"alice"`                 |
 
 ### Actions
 

@@ -1,12 +1,12 @@
 # Catalyst Auth Service
 
-The Auth service provides centralized authentication and authorization for the Catalyst node. It manages cryptographic keys, JWT issuance/verification, and role-based access control (RBAC).
+The Auth service provides centralized authentication and authorization for the Catalyst node. It manages cryptographic keys, JWT issuance/verification, and principal-based access control via [Cedar Policy](https://www.cedarpolicy.com/).
 
-## Roles & Permissions
+## Principals & Permissions
 
-Catalyst uses an explicit, role-based permission system. Permissions are categorized by functional area (Tokens, Peers, Routes, Protocol).
+Catalyst uses an explicit, principal-based permission system. Each principal is a Cedar entity type stored directly in the JWT. Permissions are categorized by functional area (Tokens, Peers, Routes, Protocol).
 
-| Role               | Description                   | Cedar Principal            | Permissions                                      |
+| Principal          | Description                   | Cedar Entity Type          | Permissions                                      |
 | :----------------- | :---------------------------- | :------------------------- | :----------------------------------------------- |
 | **ADMIN**          | Full system access            | `CATALYST::ADMIN`          | `*` (All permissions)                            |
 | **NODE**           | Internal protocol participant | `CATALYST::NODE`           | `ibgp:connect`, `ibgp:disconnect`, `ibgp:update` |
@@ -41,8 +41,7 @@ When the Auth service starts, it automatically mints a high-privilege **System A
 The token is generated immediately after the `KeyManager` initializes. It contains:
 
 - `sub`: `"bootstrap"`
-- `roles`: `["ADMIN"]`
-- `entity.role`: `"ADMIN"` (maps to Cedar principal `CATALYST::ADMIN`)
+- `principal`: `"CATALYST::ADMIN"` (the Cedar principal type, stored directly in the JWT)
 
 ### Accessing the Token
 
