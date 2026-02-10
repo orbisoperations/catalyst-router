@@ -51,7 +51,7 @@ const yoga = createYoga({
 
 app.all('/graphql', (c) => yoga.fetch(c.req.raw as unknown as Request, c.env))
 
-app.get('/health', (c) => c.text('OK'))
+app.get('/health', (c) => c.json({ status: 'ok' }))
 
 const port = Number(process.env.PORT) || 8080
 console.log(`Movies service starting on port ${port}...`)
