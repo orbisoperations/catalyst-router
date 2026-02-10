@@ -10,6 +10,11 @@ services:
     ports:
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:13133']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --- Shared auth ---
 
@@ -23,8 +28,14 @@ services:
       - PORT=4020
       - OTEL_SERVICE_NAME=auth
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4020/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - otel-collector
+      otel-collector:
+        condition: service_healthy
 
   # --- Node A: gateway-a + books ---
 
@@ -38,9 +49,16 @@ services:
       - PORT=4000
       - OTEL_SERVICE_NAME=gateway-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - otel-collector
-      - books-service
+      otel-collector:
+        condition: service_healthy
+      books-service:
+        condition: service_healthy
 
   books-service:
     build:
@@ -50,6 +68,11 @@ services:
       - '8081:8080'
     environment:
       - PORT=8080
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   node-a:
     build:
@@ -66,14 +89,20 @@ services:
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-a:4000/api
       - OTEL_SERVICE_NAME=orchestrator-node-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       default:
         aliases:
           - node-a
     depends_on:
-      - otel-collector
-      - auth
-      - gateway-a
+      auth:
+        condition: service_healthy
+      gateway-a:
+        condition: service_healthy
 
   # --- Node B: gateway-b + movies ---
 
@@ -87,9 +116,16 @@ services:
       - PORT=4000
       - OTEL_SERVICE_NAME=gateway-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - otel-collector
-      - movies-service
+      otel-collector:
+        condition: service_healthy
+      movies-service:
+        condition: service_healthy
 
   movies-service:
     build:
@@ -99,6 +135,11 @@ services:
       - '8082:8080'
     environment:
       - PORT=8080
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   node-b:
     build:
@@ -115,11 +156,17 @@ services:
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-b:4000/api
       - OTEL_SERVICE_NAME=orchestrator-node-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       default:
         aliases:
           - node-b
     depends_on:
-      - otel-collector
-      - auth
-      - gateway-b
+      auth:
+        condition: service_healthy
+      gateway-b:
+        condition: service_healthy
