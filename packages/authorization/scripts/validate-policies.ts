@@ -1,4 +1,4 @@
-import { AuthorizationEngine, CATALYST_SCHEMA, ALL_POLICIES } from '@catalyst/authorization'
+import { AuthorizationEngine, CATALYST_SCHEMA, ALL_POLICIES } from '../src/index.js'
 
 const engine = new AuthorizationEngine(CATALYST_SCHEMA, ALL_POLICIES)
 

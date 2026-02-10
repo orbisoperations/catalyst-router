@@ -3,8 +3,9 @@ import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
-import type { JWTTokenFactory } from '@catalyst/authorization'
-import { jwtToEntity, Role, type CatalystPolicyEngine } from '@catalyst/authorization'
+import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
+import { jwtToEntity } from '../../jwt/index.js'
+import { Role, type CatalystPolicyEngine } from '../../policy/src/index.js'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import {
   type AuthorizeActionRequest,

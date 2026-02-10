@@ -1,7 +1,7 @@
+import { AuthService } from '@catalyst/authorization'
 import { loadDefaultConfig } from '@catalyst/config'
 import { catalystHonoServer } from '@catalyst/service'
 import { websocket } from 'hono/bun'
-import { AuthService } from './service.js'
 
 /**
  * The system-wide administrative token minted at startup.

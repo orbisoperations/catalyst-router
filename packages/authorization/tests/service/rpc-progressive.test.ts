@@ -1,19 +1,19 @@
+import { describe, it, expect, beforeAll } from 'bun:test'
+import { AuthRpcServer } from '../../src/service/rpc/server.js'
+import {
+  type TokenHandlers,
+  type CertHandlers,
+  type ValidationHandlers,
+} from '../../src/service/rpc/schema.js'
 import {
   ALL_POLICIES,
   AuthorizationEngine,
   CATALYST_SCHEMA,
-  CatalystPolicyDomain,
-  JWTTokenFactory,
-  Role,
-  type TokenRecord,
-} from '@catalyst/authorization'
-import { beforeAll, describe, expect, it } from 'bun:test'
-import {
-  type CertHandlers,
-  type TokenHandlers,
-  type ValidationHandlers,
-} from '../src/rpc/schema.js'
-import { AuthRpcServer } from '../src/rpc/server.js'
+  type CatalystPolicyDomain,
+} from '../../src/policy/src/index.js'
+import { JWTTokenFactory } from '../../src/jwt/jwt-token-factory.js'
+import { Role } from '../../src/policy/src/definitions/models.js'
+import type { TokenRecord } from '../../src/jwt/index.js'
 import { TelemetryBuilder } from '@catalyst/telemetry'
 
 describe('Auth Progressive API', () => {
@@ -60,9 +60,6 @@ describe('Auth Progressive API', () => {
     rpcServer = new AuthRpcServer(
       tokenFactory,
       TelemetryBuilder.noop('auth-test'),
-      undefined,
-      undefined,
-      undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       policyService as any,
       'test-node',
