@@ -121,7 +121,15 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         return await container.start()
       }
 
-      gateway = await startContainer('gateway', 'gateway', 'Gateway started', {}, [4000])
+      gateway = await startContainer(
+        'gateway',
+        'gateway',
+        'GATEWAY_STARTED',
+        {
+          CATALYST_NODE_ID: 'gateway',
+        },
+        [4000]
+      )
 
       const nodeEnv = (name: string, alias: string, gq: string = '') => ({
         PORT: '3000',
@@ -136,14 +144,14 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       peerA = await startContainer(
         'peer-a.somebiz.local.io',
         'peer-a',
-        'NEXT_ORCHESTRATOR_STARTED',
+        'Catalyst server [orchestrator]',
         nodeEnv('peer-a.somebiz.local.io', 'peer-a'),
         [3000]
       )
       peerB = await startContainer(
         'peer-b.somebiz.local.io',
         'peer-b',
-        'NEXT_ORCHESTRATOR_STARTED',
+        'Catalyst server [orchestrator]',
         nodeEnv('peer-b.somebiz.local.io', 'peer-b', 'ws://gateway:4000/api'),
         [3000]
       )
@@ -288,7 +296,15 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         return await container.start()
       }
 
-      gateway = await startContainer('gateway', 'gateway', 'Gateway started', {}, [4000])
+      gateway = await startContainer(
+        'gateway',
+        'gateway',
+        'GATEWAY_STARTED',
+        {
+          CATALYST_NODE_ID: 'gateway',
+        },
+        [4000]
+      )
 
       const nodeEnv = (
         name: string,
@@ -309,14 +325,14 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       peerA = await startContainer(
         'peer-a.somebiz.local.io',
         'peer-a',
-        'NEXT_ORCHESTRATOR_STARTED',
+        'Catalyst server [orchestrator]',
         nodeEnv('peer-a.somebiz.local.io', 'peer-a', authA.endpoint, authA.systemToken),
         [3000]
       )
       peerB = await startContainer(
         'peer-b.somebiz.local.io',
         'peer-b',
-        'NEXT_ORCHESTRATOR_STARTED',
+        'Catalyst server [orchestrator]',
         nodeEnv(
           'peer-b.somebiz.local.io',
           'peer-b',

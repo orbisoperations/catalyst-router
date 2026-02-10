@@ -1,6 +1,6 @@
+import { Role } from '@catalyst/authorization'
 import type { Action, RouteTable } from '@catalyst/routing'
 import { z } from 'zod'
-import { Role } from '@catalyst/authorization'
 
 import { NodeConfigSchema } from '@catalyst/config'
 

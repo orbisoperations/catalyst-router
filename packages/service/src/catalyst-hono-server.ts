@@ -1,6 +1,6 @@
-import { Hono } from 'hono'
 import { getLogger } from '@catalyst/telemetry'
 import { telemetryMiddleware } from '@catalyst/telemetry/middleware/hono'
+import { Hono } from 'hono'
 
 import type { CatalystService } from './catalyst-service.js'
 
@@ -51,6 +51,7 @@ export class CatalystHonoServer {
   private readonly _options: CatalystHonoServerOptions
   private _server: ReturnType<typeof Bun.serve> | undefined
   private _shutdownHandlers: (() => Promise<void>)[] = []
+  private readonly _logger = getLogger(['catalyst', 'hono-server'])
 
   constructor(handler: Hono, options?: CatalystHonoServerOptions) {
     this._handler = handler
@@ -92,6 +93,8 @@ export class CatalystHonoServer {
     if (this._options.websocket) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(serveOptions as any).websocket = this._options.websocket
+    } else {
+      this._logger.warn`'No websocket handler provided, RPC-over-WebSocket will not be available'`
     }
     this._server = Bun.serve(serveOptions)
 

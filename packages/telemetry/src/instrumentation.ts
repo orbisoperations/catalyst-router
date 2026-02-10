@@ -9,18 +9,18 @@
  */
 
 import {
-  trace,
-  TraceFlags,
   diag,
   DiagConsoleLogger,
   DiagLogLevel,
-  type Tracer,
+  trace,
+  TraceFlags,
   type Context,
+  type Tracer,
 } from '@opentelemetry/api'
-import { NodeTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-node'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { buildResource } from './resource.js'
+import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { EXPORT_TIMEOUT_MS } from './constants.js'
+import { buildResource } from './resource.js'
 
 let tracerProvider: NodeTracerProvider | null = null
 
@@ -93,7 +93,9 @@ export function initTracer(config: TracerConfig): void {
   const otlpEndpoint = config.otlpEndpoint ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT
 
   if (!otlpEndpoint) {
-    console.warn('[telemetry] tracing disabled: OTEL_EXPORTER_OTLP_ENDPOINT not set')
+    console.warn(
+      `[${config.serviceName}] [telemetry] tracing disabled: OTEL_EXPORTER_OTLP_ENDPOINT not set`
+    )
     return
   }
 
