@@ -36,6 +36,7 @@ import type {
   MetricsBuilderOpts,
   TracingBuilderOpts,
   RpcBuilderOpts,
+  AuthBuilderOpts,
 } from './types.js'
 
 export class TelemetryBuilder {
@@ -44,6 +45,7 @@ export class TelemetryBuilder {
   private _metricsOpts: MetricsBuilderOpts | undefined
   private _tracingOpts: TracingBuilderOpts | undefined
   private _rpcOpts: RpcBuilderOpts | undefined
+  private _authOpts: AuthBuilderOpts | undefined
 
   constructor(serviceName: string) {
     if (!serviceName || !serviceName.trim()) {
@@ -70,6 +72,12 @@ export class TelemetryBuilder {
     return this
   }
 
+  /** Configure authenticated OTLP export with per-call gRPC credentials. Returns `this` for chaining. */
+  withAuth(opts: AuthBuilderOpts): this {
+    this._authOpts = opts
+    return this
+  }
+
   /** Configure RPC instrumentation options. Returns `this` for chaining. */
   withRpcInstrumentation(opts?: RpcBuilderOpts): this {
     this._rpcOpts = opts ?? {}
@@ -87,6 +95,7 @@ export class TelemetryBuilder {
     await initTelemetry({
       serviceName: this._serviceName,
       samplingRatio: this._tracingOpts?.samplingRatio,
+      tokenFn: this._authOpts?.tokenFn,
     })
 
     const category = this._loggerOpts?.category ?? [this._serviceName]

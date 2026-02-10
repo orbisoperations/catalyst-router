@@ -1,2 +1,1 @@
-export { systemToken } from './server.js'
-
+export { systemToken, otelToken } from './server.js'
