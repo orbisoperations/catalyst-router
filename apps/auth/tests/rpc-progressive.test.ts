@@ -1,8 +1,8 @@
-import type { CatalystPolicyDomain } from '@catalyst/authorization'
 import {
   ALL_POLICIES,
   AuthorizationEngine,
   CATALYST_SCHEMA,
+  CatalystPolicyDomain,
   JWTTokenFactory,
   Role,
   type TokenRecord,
@@ -14,6 +14,7 @@ import {
   type ValidationHandlers,
 } from '../src/rpc/schema.js'
 import { AuthRpcServer } from '../src/rpc/server.js'
+import { TelemetryBuilder } from '@catalyst/telemetry'
 
 describe('Auth Progressive API', () => {
   let tokenFactory: JWTTokenFactory
@@ -58,6 +59,7 @@ describe('Auth Progressive API', () => {
     // RPC Server: Belongs to 'test-node' and 'test-domain'
     rpcServer = new AuthRpcServer(
       tokenFactory,
+      TelemetryBuilder.noop('auth-test'),
       undefined,
       undefined,
       undefined,

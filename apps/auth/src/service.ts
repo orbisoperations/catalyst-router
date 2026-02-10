@@ -113,6 +113,7 @@ export class AuthService extends CatalystService {
     // Build RPC server
     this._rpcServer = new AuthRpcServer(
       this._tokenFactory,
+      this.telemetry,
       bootstrapService,
       loginService,
       apiKeyService,
