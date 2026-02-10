@@ -8,7 +8,10 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "bun test apps/ packages/ examples/",
+    "test:unit": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -vE 'integration|container')",
+    "test:integration": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -E 'integration|container')"
   },
   "workspaces": {
     "packages": [
