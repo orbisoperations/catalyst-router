@@ -109,3 +109,11 @@ export const ListTokensInputSchema = z.object({
   token: z.string().optional(),
 })
 export type ListTokensInput = z.infer<typeof ListTokensInputSchema>
+
+// GraphQL IDE Schemas
+export const GraphqlIdeInputSchema = z.object({
+  port: z.number().int().min(1).max(65535).default(5173),
+  endpoint: z.string().url().default('http://localhost:4000/graphql'),
+  open: z.boolean().default(true),
+})
+export type GraphqlIdeInput = z.infer<typeof GraphqlIdeInputSchema>

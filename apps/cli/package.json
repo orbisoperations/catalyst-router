@@ -14,6 +14,7 @@
     "capnweb": "catalog:",
     "chalk": "catalog:",
     "commander": "catalog:",
+    "hono": "catalog:",
     "inquirer": "catalog:",
     "ws": "catalog:",
     "zod": "catalog:",
