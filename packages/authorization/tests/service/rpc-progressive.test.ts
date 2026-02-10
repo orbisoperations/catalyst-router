@@ -12,7 +12,7 @@ import {
   type CatalystPolicyDomain,
 } from '../../src/policy/src/index.js'
 import { JWTTokenFactory } from '../../src/jwt/jwt-token-factory.js'
-import { Role } from '../../src/policy/src/definitions/models.js'
+import { Principal } from '../../src/policy/src/definitions/models.js'
 import type { TokenRecord } from '../../src/jwt/index.js'
 import { TelemetryBuilder } from '@catalyst/telemetry'
 
@@ -35,10 +35,9 @@ describe('Auth Progressive API', () => {
         id: 'admin-user',
         name: 'Admin',
         type: 'user',
-        role: Role.ADMIN,
         trustedDomains: ['test-domain'],
       },
-      roles: [Role.ADMIN],
+      principal: Principal.ADMIN,
     })
 
     // User token: Trusted for 'test-domain'
@@ -48,10 +47,9 @@ describe('Auth Progressive API', () => {
         id: 'regular-user',
         name: 'User',
         type: 'user',
-        role: Role.USER,
         trustedDomains: ['test-domain'],
       },
-      roles: [Role.USER],
+      principal: Principal.USER,
     })
 
     policyService = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
@@ -87,8 +85,8 @@ describe('Auth Progressive API', () => {
       const handlers = (await rpcServer.tokens(adminToken)) as TokenHandlers
       const newToken = await handlers.create({
         subject: 'new-service',
-        entity: { id: 's1', name: 'Service', type: 'service', role: Role.NODE },
-        roles: [Role.NODE],
+        entity: { id: 's1', name: 'Service', type: 'service' },
+        principal: Principal.NODE,
       })
       expect(newToken).toBeString()
 
@@ -167,10 +165,9 @@ describe('Auth Progressive API', () => {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          role: Role.ADMIN,
           trustedDomains: ['other-domain'],
         },
-        roles: [Role.ADMIN],
+        principal: Principal.ADMIN,
       })
 
       const result = await rpcServer.tokens(otherDomainToken)
@@ -186,11 +183,10 @@ describe('Auth Progressive API', () => {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          role: Role.ADMIN,
           trustedDomains: ['test-domain'],
           trustedNodes: ['other-node'],
         },
-        roles: [Role.ADMIN],
+        principal: Principal.ADMIN,
       })
 
       const result = await rpcServer.tokens(otherNodeToken)
@@ -206,11 +202,10 @@ describe('Auth Progressive API', () => {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          role: Role.ADMIN,
           trustedDomains: ['test-domain'],
           trustedNodes: ['test-node'],
         },
-        roles: [Role.ADMIN],
+        principal: Principal.ADMIN,
       })
 
       const handlers = await rpcServer.tokens(matchedNodeToken)
@@ -225,10 +220,9 @@ describe('Auth Progressive API', () => {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          role: Role.ADMIN,
           trustedDomains: ['domain-A', 'test-domain'],
         },
-        roles: [Role.ADMIN],
+        principal: Principal.ADMIN,
       })
 
       const handlers = await rpcServer.tokens(multiDomainToken)

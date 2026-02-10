@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { VerifyResult } from '../key-manager/index.js'
-import { Role } from '../policy/src/definitions/models.js'
+import { Principal } from '../policy/src/definitions/models.js'
 import { EntityBuilder } from '../policy/src/entity-builder.js'
 import type { CatalystPolicyDomain } from '../policy/src/index.js'
 import type { PolicyEntity as CedarEntity } from '../policy/src/types.js'
@@ -10,12 +10,6 @@ import type { PolicyEntity as CedarEntity } from '../policy/src/types.js'
  */
 export const EntityTypeEnum = z.enum(['user', 'service'])
 export type EntityType = z.infer<typeof EntityTypeEnum>
-
-/**
- * Standardized roles for the system (Zod schema for validation)
- */
-export const RoleEnum = z.enum(Role)
-export type RoleType = z.infer<typeof RoleEnum>
 
 /**
  * Record of a minted token for tracking
@@ -40,8 +34,8 @@ export interface MintOptions {
   /** Expiration time in milliseconds (unix timestamp * 1000) */
   expiresAt?: number
   claims?: Record<string, unknown>
-  /** Roles assigned to the token (mandatory) */
-  roles: Role[]
+  /** Cedar principal type baked into the token (e.g. Principal.ADMIN = 'CATALYST::ADMIN') */
+  principal: Principal
   /** Certificate fingerprint for binding (ADR 0007) */
   certificateFingerprint?: string
   /** Subject Alternative Names for the token */
@@ -51,8 +45,6 @@ export interface MintOptions {
     id: string
     name: string
     type: EntityType
-    /** Primary role for principal type mapping (ADR 0007/Cedar) */
-    role: Role
     /** The node ID that issued/minted this token */
     nodeId?: string
     /** Set of nodes that are trusted to use this token */
@@ -96,10 +88,10 @@ export interface TokenManager {
 
 /**
  * Helper to convert a JWT payload into a Cedar Entity.
- * Maps the identity to a principal of the primary role type.
+ * Reads the principal type directly from the token — no role-to-principal mapping needed.
  *
  * @example
- * // If role is ADMIN and entity.name is 'alice'
+ * // If principal is 'CATALYST::ADMIN' and entity.name is 'alice'
  * // Resulting principal: CATALYST::ADMIN::"alice"
  */
 export function jwtToEntity(payload: Record<string, unknown>): CedarEntity<CatalystPolicyDomain> {
@@ -107,27 +99,26 @@ export function jwtToEntity(payload: Record<string, unknown>): CedarEntity<Catal
     id: string
     name: string
     type: string
-    role: Role
     nodeId?: string
     trustedNodes?: string[]
     trustedDomains?: string[]
   }
-  const roles = (payload.roles as Role[]) || []
-  const primaryRole = entity?.role || roles[0] || Role.USER
+
+  // Read principal directly from token — falls back to USER if missing
+  const principal = (payload.principal as string) || Principal.USER
 
   // We use the entity name as the ID in the Cedar principal for better policy readability
   const principalId = entity?.name || entity?.id || (payload.sub as string)
 
   const builder = new EntityBuilder()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  builder.entity(`CATALYST::${primaryRole}` as any, principalId)
+  builder.entity(principal as any, principalId)
 
   if (entity) {
     const attributes: Record<string, unknown> = {
       id: entity.id,
       name: entity.name,
       type: entity.type,
-      role: entity.role,
       ...((payload.claims as Record<string, unknown>) || {}),
     }
 
@@ -137,9 +128,6 @@ export function jwtToEntity(payload: Record<string, unknown>): CedarEntity<Catal
 
     builder.setAttributes(attributes)
   }
-
-  // Add other roles as parents if needed, or stick to primary role principal
-  // For now, we follow the requested CATALYST::ROLE::"name" model
 
   const collection = builder.build()
   return collection.getAll()[0]!

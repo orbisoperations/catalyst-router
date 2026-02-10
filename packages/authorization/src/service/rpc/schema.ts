@@ -1,8 +1,8 @@
 import type { TokenRecord } from '../../jwt/index.js'
-import { Role } from '../../policy/src/definitions/models.js'
+import { Principal } from '../../policy/src/definitions/models.js'
 import { z } from 'zod'
 
-export const RoleSchema = z.enum(Role)
+export const PrincipalSchema = z.enum(Principal)
 
 /**
  * SignToken Request/Response schemas
@@ -155,10 +155,9 @@ export interface TokenHandlers {
       id: string
       name: string
       type: 'user' | 'service'
-      role: z.infer<typeof RoleSchema>
       nodeId?: string
     }
-    roles: z.infer<typeof RoleSchema>[]
+    principal: z.infer<typeof PrincipalSchema>
     sans?: string[]
     expiresIn?: string
   }): Promise<string>

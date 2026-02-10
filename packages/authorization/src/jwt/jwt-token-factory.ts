@@ -54,7 +54,7 @@ export interface JWTTokenFactoryConfig {
  * })
  * await factory.initialize()
  *
- * const token = await factory.mint({ subject: 'alice', roles: [Role.USER], entity: { ... } })
+ * const token = await factory.mint({ subject: 'alice', principal: Principal.USER, entity: { ... } })
  * const result = await factory.verify(token)  // auto-checks revocation
  * await factory.revoke({ jti: '...' })
  *
