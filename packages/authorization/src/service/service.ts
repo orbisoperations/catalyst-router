@@ -4,7 +4,7 @@ import {
   AuthorizationEngine,
   CATALYST_SCHEMA,
   type CatalystPolicyDomain,
-  Role,
+  Principal,
 } from '../policy/src/index.js'
 import { CatalystService, type CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
@@ -67,11 +67,10 @@ export class AuthService extends CatalystService {
         id: 'system',
         name: 'System Admin',
         type: 'service',
-        role: Role.ADMIN,
         trustedDomains: this.config.node.domains,
         trustedNodes: [],
       },
-      roles: [Role.ADMIN],
+      principal: Principal.ADMIN,
       expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
     })
 

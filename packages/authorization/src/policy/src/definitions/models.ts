@@ -43,6 +43,30 @@ export enum Role {
 }
 
 /**
+ * Cedar principal types for the Catalyst system.
+ * These are the actual entity type strings used in Cedar policies.
+ * Tokens store the principal directly — no role-to-principal mapping needed at verification time.
+ */
+export enum Principal {
+  ADMIN = 'CATALYST::ADMIN',
+  NODE = 'CATALYST::NODE',
+  NODE_CUSTODIAN = 'CATALYST::NODE_CUSTODIAN',
+  DATA_CUSTODIAN = 'CATALYST::DATA_CUSTODIAN',
+  USER = 'CATALYST::USER',
+}
+
+/**
+ * Maps Role enum values to their corresponding Cedar Principal types.
+ */
+export const ROLE_TO_PRINCIPAL: Record<Role, Principal> = {
+  [Role.ADMIN]: Principal.ADMIN,
+  [Role.NODE]: Principal.NODE,
+  [Role.NODE_CUSTODIAN]: Principal.NODE_CUSTODIAN,
+  [Role.DATA_CUSTODIAN]: Principal.DATA_CUSTODIAN,
+  [Role.USER]: Principal.USER,
+}
+
+/**
  * Standardized actions for the Catalyst system.
  */
 export enum Action {

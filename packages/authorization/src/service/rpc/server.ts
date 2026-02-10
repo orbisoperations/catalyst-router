@@ -5,7 +5,7 @@ import { upgradeWebSocket } from 'hono/bun'
 
 import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
 import { jwtToEntity } from '../../jwt/index.js'
-import { Role, type CatalystPolicyEngine } from '../../policy/src/index.js'
+import { Principal, type CatalystPolicyEngine } from '../../policy/src/index.js'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import {
   type AuthorizeActionRequest,
@@ -110,11 +110,8 @@ export class AuthRpcServer extends RpcTarget {
       create: async (request) => {
         return this.tokenFactory.mint({
           subject: request.subject,
-          entity: {
-            ...request.entity,
-            role: (request.roles as Role[])[0] || Role.USER, // Use primary role
-          },
-          roles: request.roles as Role[],
+          entity: request.entity,
+          principal: (request.principal as Principal) || Principal.USER,
           sans: request.sans,
           expiresAt: request.expiresIn ? Date.now() + parseDuration(request.expiresIn) : undefined,
           claims: {},
