@@ -1,6 +1,5 @@
 import { type TokenRecord } from '@catalyst/authorization'
 import { z } from 'zod'
-import { type TokenRecord } from '@catalyst/authorization'
 
 export const RoleSchema = z.enum(['ADMIN', 'NODE', 'NODE_CUSTODIAN', 'DATA_CUSTODIAN', 'USER'])
 

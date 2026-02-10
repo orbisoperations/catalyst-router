@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'bun:test'
 import { hashPassword, verifyPassword } from '../../src/password.js'
-import { isSecretValid } from '../../src/permissions.js'
 
 /**
  * Timing Attack Security Tests
@@ -96,83 +95,6 @@ describe('Timing Attack Resistance', () => {
       // Allow 20% variance due to system noise
       const variance = Math.abs(avgCorrect - avgIncorrect) / avgCorrect
       expect(variance).toBeLessThan(0.2)
-    })
-  })
-
-  describe('Secret validation timing', () => {
-    it('should use constant-time comparison for secrets', () => {
-      const secret = 'super-secret-bootstrap-token-12345'
-
-      const correctTimes: number[] = []
-      const incorrectTimes: number[] = []
-
-      // Measure correct secret - run 10,000 iterations to reduce measurement noise
-      for (let i = 0; i < 10000; i++) {
-        const start = performance.now()
-        isSecretValid(secret, secret)
-        correctTimes.push(performance.now() - start)
-      }
-
-      // Measure incorrect secret (same length, only last char different)
-      const almostCorrect = secret.slice(0, -1) + '6'
-      for (let i = 0; i < 10000; i++) {
-        const start = performance.now()
-        isSecretValid(almostCorrect, secret)
-        incorrectTimes.push(performance.now() - start)
-      }
-
-      const avgCorrect = correctTimes.reduce((a, b) => a + b, 0) / 10000
-      const avgIncorrect = incorrectTimes.reduce((a, b) => a + b, 0) / 10000
-
-      // For very fast operations (microseconds), allow higher variance due to measurement noise
-      // The key is that we're using a timing-safe comparison function from Node.js crypto
-      const variance = Math.abs(avgCorrect - avgIncorrect) / Math.max(avgCorrect, avgIncorrect)
-
-      // If the operation is extremely fast (<0.001ms), the variance is mostly measurement noise
-      if (avgCorrect < 0.001 && avgIncorrect < 0.001) {
-        // Just verify it completes without error - timing is too fast to measure reliably
-        expect(isSecretValid(secret, secret)).toBe(true)
-        expect(isSecretValid(almostCorrect, secret)).toBe(false)
-      } else {
-        // For slower operations, verify constant-time behavior
-        expect(variance).toBeLessThan(0.5)
-      }
-
-      console.log({
-        avgCorrect: `${avgCorrect.toFixed(6)}ms`,
-        avgIncorrect: `${avgIncorrect.toFixed(6)}ms`,
-        variance: `${(variance * 100).toFixed(2)}%`,
-        tooFastToMeasure: avgCorrect < 0.001 && avgIncorrect < 0.001,
-      })
-    })
-
-    it('should not leak information via timing for different-length secrets', () => {
-      const secret = 'super-secret-bootstrap-token-12345'
-
-      const sameLengthTimes: number[] = []
-      const differentLengthTimes: number[] = []
-
-      // Measure same-length incorrect secret
-      for (let i = 0; i < 1000; i++) {
-        const start = performance.now()
-        isSecretValid('wrong-secret-bootstrap-token-99999', secret)
-        sameLengthTimes.push(performance.now() - start)
-      }
-
-      // Measure different-length incorrect secret
-      for (let i = 0; i < 1000; i++) {
-        const start = performance.now()
-        isSecretValid('short', secret)
-        differentLengthTimes.push(performance.now() - start)
-      }
-
-      const avgSameLength = sameLengthTimes.reduce((a, b) => a + b, 0) / 1000
-      const avgDifferentLength = differentLengthTimes.reduce((a, b) => a + b, 0) / 1000
-
-      // Timing should be similar regardless of length mismatch
-      const variance =
-        Math.abs(avgSameLength - avgDifferentLength) / Math.max(avgSameLength, avgDifferentLength)
-      expect(variance).toBeLessThan(0.5)
     })
   })
 

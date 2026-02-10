@@ -2,30 +2,19 @@ import { describe, it, expect, beforeEach } from 'bun:test'
 import { LoginService } from '../src/login.js'
 import { InMemoryUserStore } from '../src/stores/memory.js'
 import { hashPassword } from '../src/password.js'
-import {
-  LocalTokenManager,
-  BunSqliteTokenStore,
-  BunSqliteKeyStore,
-  PersistentLocalKeyManager,
-} from '@catalyst/authorization'
-import type { IKeyManager } from '../src/key-manager/types.js'
+import { JWTTokenFactory } from '@catalyst/authorization'
 
 describe('LoginService', () => {
   let userStore: InMemoryUserStore
-  let keyManager: IKeyManager
-  let tokenManager: LocalTokenManager
+  let tokenFactory: JWTTokenFactory
   let service: LoginService
 
   beforeEach(async () => {
     userStore = new InMemoryUserStore()
-    const keyStore = new BunSqliteKeyStore(':memory:')
-    const pm = new PersistentLocalKeyManager(keyStore)
-    await pm.initialize()
-    keyManager = pm
+    tokenFactory = JWTTokenFactory.ephemeral()
+    await tokenFactory.initialize()
 
-    const tokenStore = new BunSqliteTokenStore(':memory:')
-    tokenManager = new LocalTokenManager(keyManager, tokenStore)
-    service = new LoginService(userStore, tokenManager)
+    service = new LoginService(userStore, tokenFactory.getTokenManager())
   })
 
   describe('login', () => {
@@ -116,7 +105,7 @@ describe('LoginService', () => {
       expect(result.success).toBe(true)
 
       // Verify token by decoding
-      const verifyResult = await tokenManager.verify(result.token!)
+      const verifyResult = await tokenFactory.verify(result.token!)
       if (!verifyResult.valid) {
         throw new Error(`Token verification failed: ${verifyResult.error}`)
       }

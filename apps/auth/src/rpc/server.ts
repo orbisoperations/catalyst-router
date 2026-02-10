@@ -3,13 +3,8 @@ import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
-import {
-  jwtToEntity,
-  Role,
-  type CatalystPolicyEngine,
-  type IKeyManager,
-  type TokenManager,
-} from '@catalyst/authorization'
+import type { JWTTokenFactory } from '@catalyst/authorization'
+import { jwtToEntity, Role, type CatalystPolicyEngine } from '@catalyst/authorization'
 import type { ApiKeyService } from '../api-key-service.js'
 import type { BootstrapService } from '../bootstrap.js'
 import { getAuthLogger } from '../logger.js'
@@ -28,6 +23,25 @@ import {
   type ValidationHandlers,
 } from './schema.js'
 
+/**
+ * Parse a human-readable duration string into milliseconds.
+ * Supports: '30s', '5m', '1h', '7d', '52w'
+ */
+function parseDuration(duration: string): number {
+  const match = duration.match(/^(\d+)\s*(s|m|h|d|w)$/i)
+  if (!match) throw new Error(`Invalid duration format: ${duration}`)
+  const value = parseInt(match[1], 10)
+  const unit = match[2].toLowerCase()
+  const multipliers: Record<string, number> = {
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+    w: 7 * 24 * 60 * 60 * 1000,
+  }
+  return value * multipliers[unit]
+}
+
 export class AuthRpcServer extends RpcTarget {
   private systemToken?: string
 
@@ -40,8 +54,7 @@ export class AuthRpcServer extends RpcTarget {
   }
 
   constructor(
-    private keyManager: IKeyManager,
-    private tokenManager: TokenManager,
+    private tokenFactory: JWTTokenFactory,
     private bootstrapService?: BootstrapService,
     private loginService?: LoginService,
     private apiKeyService?: ApiKeyService,
@@ -89,7 +102,7 @@ export class AuthRpcServer extends RpcTarget {
       return { success: false, error: result.error ?? 'Bootstrap failed' }
     }
 
-    const token = await this.tokenManager.mint({
+    const token = await this.tokenFactory.mint({
       subject: result.userId!,
       expiresAt: Date.now() + 3600000,
       roles: [Role.ADMIN],
@@ -126,7 +139,7 @@ export class AuthRpcServer extends RpcTarget {
    * Requires 'ADMIN' role.
    */
   async tokens(token: string): Promise<TokenHandlers | { error: string }> {
-    const auth = await this.tokenManager.verify(token)
+    const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
     }
@@ -187,7 +200,7 @@ export class AuthRpcServer extends RpcTarget {
 
     return {
       create: async (request) => {
-        return this.tokenManager.mint({
+        return this.tokenFactory.mint({
           subject: request.subject,
           entity: {
             ...request.entity,
@@ -195,15 +208,15 @@ export class AuthRpcServer extends RpcTarget {
           },
           roles: request.roles as Role[],
           sans: request.sans,
-          expiresIn: request.expiresIn,
+          expiresAt: request.expiresIn ? Date.now() + parseDuration(request.expiresIn) : undefined,
           claims: {},
         })
       },
       revoke: async (request) => {
-        await this.tokenManager.revoke({ jti: request.jti, san: request.san })
+        await this.tokenFactory.revoke({ jti: request.jti, san: request.san })
       },
       list: async (request) => {
-        return this.tokenManager.listTokens(request)
+        return this.tokenFactory.listTokens(request)
       },
     }
   }
@@ -213,7 +226,7 @@ export class AuthRpcServer extends RpcTarget {
    * Requires 'ADMIN' role.
    */
   async certs(token: string): Promise<CertHandlers | { error: string }> {
-    const auth = await this.tokenManager.verify(token)
+    const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
     }
@@ -246,11 +259,11 @@ export class AuthRpcServer extends RpcTarget {
 
     return {
       list: async () => {
-        const jwks = await this.keyManager.getJwks()
+        const jwks = await this.tokenFactory.getJwks()
         return { success: true, jwks: { keys: jwks.keys as Record<string, unknown>[] } }
       },
       rotate: async (request) => {
-        const result = await this.keyManager.rotate(request)
+        const result = await this.tokenFactory.rotate(request)
         return {
           success: true,
           previousKeyId: result.previousKeyId,
@@ -259,7 +272,7 @@ export class AuthRpcServer extends RpcTarget {
         }
       },
       getTokensByCert: async (request) => {
-        return this.tokenManager.listTokens({
+        return this.tokenFactory.listTokens({
           certificateFingerprint: request.fingerprint,
         })
       },
@@ -271,22 +284,22 @@ export class AuthRpcServer extends RpcTarget {
    * Accessible with any valid token or unauthenticated for JWKS.
    */
   async validation(token: string): Promise<ValidationHandlers | { error: string }> {
-    const auth = await this.tokenManager.verify(token)
+    const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
     }
 
     return {
       validate: async (req: { token: string; audience?: string }) => {
-        const result = await this.tokenManager.verify(req.token, { audience: req.audience })
+        const result = await this.tokenFactory.verify(req.token, { audience: req.audience })
         if (!result.valid) return { valid: false, error: result.error }
         return { valid: true, payload: result.payload }
       },
       getRevocationList: async () => {
-        return this.tokenManager.getRevocationList()
+        return this.tokenFactory.getRevocationList()
       },
       getJWKS: async () => {
-        const jwks = await this.keyManager.getJwks()
+        const jwks = await this.tokenFactory.getJwks()
         return { success: true, jwks: { keys: jwks.keys as Record<string, unknown>[] } }
       },
     }
@@ -300,7 +313,7 @@ export class AuthRpcServer extends RpcTarget {
     const logger = getAuthLogger('permissions')
 
     // Verify the token
-    const auth = await this.tokenManager.verify(token)
+    const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
       void logger.warn`Token verification failed: ${auth.error}`
       return { error: 'Invalid token' }
