@@ -115,7 +115,7 @@ export class JWTTokenFactory {
     return this.keyManager.isInitialized()
   }
 
-  /** Mint a new JWT with entity/role bindings. The token is tracked for revocation. */
+  /** Mint a new JWT with entity/principal bindings. The token is tracked for revocation. */
   async mint(options: MintOptions): Promise<string> {
     return this.tokenManager.mint(options)
   }

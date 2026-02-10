@@ -60,7 +60,7 @@ export class AuthRpcServer extends RpcTarget {
 
   /**
    * Token management sub-api.
-   * Requires 'ADMIN' role.
+   * Requires ADMIN principal.
    */
   async tokens(token: string): Promise<TokenHandlers | { error: string }> {
     const logger = this.telemetry.logger
@@ -103,7 +103,7 @@ export class AuthRpcServer extends RpcTarget {
 
     if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
       void logger.warn`Permission denied: decision=${autorizedResult.decision}, reasons=${autorizedResult.reasons}`
-      return { error: 'Permission denied: ADMIN role required' }
+      return { error: 'Permission denied: ADMIN principal required' }
     }
 
     return {
@@ -128,7 +128,7 @@ export class AuthRpcServer extends RpcTarget {
 
   /**
    * Certificate/Key management sub-api.
-   * Requires 'ADMIN' role.
+   * Requires ADMIN principal.
    */
   async certs(token: string): Promise<CertHandlers | { error: string }> {
     const auth = await this.tokenFactory.verify(token)
@@ -159,7 +159,7 @@ export class AuthRpcServer extends RpcTarget {
     }
 
     if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
-      return { error: 'Permission denied: ADMIN role required' }
+      return { error: 'Permission denied: ADMIN principal required' }
     }
 
     return {

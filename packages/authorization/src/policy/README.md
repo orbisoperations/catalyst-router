@@ -173,15 +173,21 @@ Principals are Cedar entity types that represent the identity of a token holder.
 
 ### Actions
 
-| Action                          | Description                 |
-| ------------------------------- | --------------------------- |
-| `LOGIN`                         | User authentication         |
-| `IBGP_CONNECT`                  | Establish iBGP peering      |
-| `IBGP_DISCONNECT`               | Terminate iBGP peering      |
-| `IBGP_UPDATE`                   | Advertise routes via iBGP   |
-| `PEER_CREATE` / `PEER_DELETE`   | Manage infrastructure peers |
-| `ROUTE_CREATE` / `ROUTE_DELETE` | Manage local data routes    |
-| `TOKEN_CREATE` / `TOKEN_REVOKE` | Manage JWT lifecycles       |
+| Action            | Description                       |
+| ----------------- | --------------------------------- |
+| `LOGIN`           | User authentication               |
+| `MANAGE`          | Full administrative access        |
+| `IBGP_CONNECT`    | Establish iBGP peering            |
+| `IBGP_DISCONNECT` | Terminate iBGP peering            |
+| `IBGP_UPDATE`     | Advertise routes via iBGP         |
+| `PEER_CREATE`     | Add infrastructure peers          |
+| `PEER_UPDATE`     | Update infrastructure peer config |
+| `PEER_DELETE`     | Remove infrastructure peers       |
+| `ROUTE_CREATE`    | Advertise local data routes       |
+| `ROUTE_DELETE`    | Withdraw local data routes        |
+| `TOKEN_CREATE`    | Mint new JWTs                     |
+| `TOKEN_REVOKE`    | Revoke existing JWTs              |
+| `TOKEN_LIST`      | List active tokens                |
 
 ### Policy Examples
 

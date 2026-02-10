@@ -29,7 +29,7 @@ export const ALL_POLICIES = [
 
 /**
  * Catalyst Policy Domain definition.
- * Aligns Cedar roles and actions with TypeScript types.
+ * Aligns Cedar principals and actions with TypeScript types.
  */
 export type CatalystPolicyDomain = [
   {
