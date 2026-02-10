@@ -1,4 +1,4 @@
-import { Role } from '@catalyst/authorization'
+import { Principal } from '@catalyst/authorization'
 import { DataChannelDefinitionSchema } from '@catalyst/routing'
 import { z } from 'zod'
 
@@ -70,7 +70,7 @@ export type ListRoutesInput = z.infer<typeof ListRoutesInputSchema>
 // Auth Token Schemas
 export const MintTokenInputSchema = z.object({
   subject: z.string().min(1),
-  role: z.enum(Role),
+  principal: z.enum(Principal),
   name: z.string().min(1),
   type: z.enum(['user', 'service']).default('user'),
   expiresIn: z.string().optional(),

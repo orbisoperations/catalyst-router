@@ -44,12 +44,11 @@ export async function mintTokenHandler(input: MintTokenInput): Promise<MintToken
         id: input.subject,
         name: input.name,
         type: input.type,
-        role: input.role,
         nodeId: input.nodeId,
         trustedDomains: input.trustedDomains,
         trustedNodes: input.trustedNodes,
       },
-      roles: [input.role],
+      principal: input.principal,
       expiresIn: input.expiresIn,
     })
 
