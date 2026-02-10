@@ -2,6 +2,7 @@
   "name": "@catalyst/gateway-service",
   "version": "0.0.0",
   "type": "module",
+  "main": "./src/service.ts",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",

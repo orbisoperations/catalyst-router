@@ -2,10 +2,11 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: ['src/index.ts'],
-  format: ['cjs', 'esm'],
-  dts: true,
+  format: ['esm'],
   splitting: false,
   sourcemap: true,
   clean: true,
-  noExternal: [/(.*)/], // Bundle all dependencies
+  target: 'esnext',
+  external: ['bun:sqlite', 'bun:test'],
+  noExternal: [/(.*)/],
 })
