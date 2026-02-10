@@ -18,6 +18,7 @@ COPY packages/routing/package.json packages/routing/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/telemetry/package.json packages/telemetry/package.json
 COPY packages/types/package.json packages/types/package.json
+COPY packages/service/package.json packages/service/package.json
 COPY examples/books-api/package.json examples/books-api/package.json
 COPY examples/movies-api/package.json examples/movies-api/package.json
 COPY examples/orders-api/package.json examples/orders-api/package.json
@@ -49,6 +50,7 @@ COPY packages/routing/package.json packages/routing/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/telemetry/package.json packages/telemetry/package.json
 COPY packages/types/package.json packages/types/package.json
+COPY packages/service/package.json packages/service/package.json
 COPY examples/books-api/package.json examples/books-api/package.json
 COPY examples/movies-api/package.json examples/movies-api/package.json
 COPY examples/orders-api/package.json examples/orders-api/package.json
