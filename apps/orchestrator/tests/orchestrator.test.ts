@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach, mock, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test'
 import {
   GenericContainer,
-  Wait,
   Network,
-  type StartedTestContainer,
+  Wait,
   type StartedNetwork,
+  type StartedTestContainer,
 } from 'testcontainers'
 
-import path from 'path'
-import type { Readable } from 'node:stream'
-import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import type { PublicApi, PeerInfo } from '../src/orchestrator'
 import { Actions } from '@catalyst/routing'
+import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
+import type { Readable } from 'node:stream'
+import path from 'path'
+import type { PeerInfo, PublicApi } from '../src/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
 import type { AuthContext } from '../src/types'
 
@@ -112,7 +112,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
           CATALYST_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
           CATALYST_SYSTEM_TOKEN: systemToken,
         })
-        .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
+        .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator]'))
         .withLogConsumer((stream: Readable) => {
           stream.pipe(process.stdout)
         })

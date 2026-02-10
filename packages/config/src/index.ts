@@ -49,10 +49,15 @@ export const AuthConfigSchema = z.object({
       maxSize: z.number().optional(),
     })
     .default({ enabled: false }),
+  // NOTE: remove the bootstrap token and ttl, the boostrap token should live only for 1hours (short lived token)
+  // fix the ramiufications of this
   bootstrap: z
     .object({
       token: z.string().optional(),
-      ttl: z.number().default(24 * 60 * 60 * 1000), // 24h
+      ttl: z
+        .number()
+        .default(24 * 60 * 60 * 1000)
+        .optional(), // 24 hours
     })
     .default({}),
 })
@@ -71,20 +76,41 @@ export const CatalystConfigSchema = z.object({
 
 export type CatalystConfig = z.infer<typeof CatalystConfigSchema>
 
+type ServiceType = 'gateway' | 'orchestrator' | 'auth'
+
+/**
+ * Configuration load options
+ *
+ * Able to handle a
+ */
+type ConfigLoadOptions = {
+  serviceType?: ServiceType | null
+}
+
 /**
  * Loads the default configuration from environment variables.
+ *
+ * @param options - The options for the configuration load.
  */
-export function loadDefaultConfig(): CatalystConfig {
+export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConfig {
   const nodeName = process.env.CATALYST_NODE_ID
+  console.log('nodeName', nodeName)
   if (!nodeName) {
     throw new Error('CATALYST_NODE_ID environment variable is required')
   }
 
+  // MUST EXIST for the ORCHESTRATOR
   const peeringEndpoint = process.env.CATALYST_PEERING_ENDPOINT
-  if (!peeringEndpoint) {
-    throw new Error('CATALYST_PEERING_ENDPOINT environment variable is required')
+  if (
+    !peeringEndpoint &&
+    (!options || options.serviceType === null || options.serviceType === 'orchestrator')
+  ) {
+    throw new Error(
+      'CATALYST_PEERING_ENDPOINT environment variable is required for the orchestrator'
+    )
   }
 
+  //Oonly required for the ORCH and AUTH
   const domains = process.env.CATALYST_DOMAINS
     ? process.env.CATALYST_DOMAINS.split(',').map((d) => d.trim())
     : []

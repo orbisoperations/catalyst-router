@@ -1,13 +1,13 @@
 import type { CatalystConfig } from '@catalyst/config'
-import { TelemetryBuilder, shutdownTelemetry } from '@catalyst/telemetry'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
+import { TelemetryBuilder, shutdownTelemetry } from '@catalyst/telemetry'
+import type { Hono } from 'hono'
 import type {
   CatalystServiceOptions,
   ICatalystService,
   ServiceInfo,
   ServiceState,
 } from './types.js'
-import type { Hono } from 'hono'
 
 /**
  * Abstract base class for all Catalyst services.

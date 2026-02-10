@@ -1,16 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
+import { spawnSync } from 'node:child_process'
+import path from 'path'
 import {
   GenericContainer,
-  Wait,
   Network,
-  type StartedTestContainer,
+  Wait,
   type StartedNetwork,
+  type StartedTestContainer,
 } from 'testcontainers'
-import path from 'path'
-import { spawnSync } from 'node:child_process'
-import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import type { PublicApi, NetworkClient } from '../src/orchestrator.js'
-import { startAuthService, mintPeerToken, type AuthServiceContext } from './auth-test-helpers.js'
+import type { NetworkClient, PublicApi } from '../src/orchestrator.js'
+import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
 
 const isDockerRunning = () => {
   try {
@@ -88,7 +88,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
             CATALYST_AUTH_ENDPOINT: auth.endpoint,
             CATALYST_SYSTEM_TOKEN: auth.systemToken,
           })
-          .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
+          .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator]'))
           .withLogConsumer(
             (stream: {
               on(event: string, listener: (line: string) => void): void
@@ -295,7 +295,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
             CATALYST_AUTH_ENDPOINT: authEndpoint,
             CATALYST_SYSTEM_TOKEN: systemToken,
           })
-          .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
+          .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator]'))
           .withLogConsumer(
             (stream: {
               on(event: string, listener: (line: string) => void): void

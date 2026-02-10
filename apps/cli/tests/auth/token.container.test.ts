@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import path from 'path'
 import {
   GenericContainer,
-  Wait,
   Network,
-  type StartedTestContainer,
+  Wait,
   type StartedNetwork,
+  type StartedTestContainer,
 } from 'testcontainers'
-import path from 'path'
 import { createAuthClient } from '../../src/clients/auth-client.js'
 
 const isDockerRunning = () => {
@@ -58,6 +58,7 @@ describe.skipIf(skipTests)('Token Commands Container Tests', () => {
         CATALYST_AUTH_KEYS_DB: ':memory:',
         CATALYST_AUTH_TOKENS_DB: ':memory:',
         CATALYST_BOOTSTRAP_TTL: '3600000',
+        CATALYST_NODE_ID: 'auth-node',
       })
       .withWaitStrategy(Wait.forLogMessage('Auth service started'))
       .start()
