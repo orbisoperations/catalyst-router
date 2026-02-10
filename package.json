@@ -47,6 +47,7 @@
       "@catalyst/gateway-service": "workspace:*",
       "@catalyst/node-service": "workspace:*",
       "@catalyst/orchestrator-service": "workspace:*",
+      "@catalyst/routing": "workspace:*",
       "@catalyst/sdk": "workspace:*",
       "@catalyst/telemetry": "workspace:*",
       "@catalyst/types": "workspace:*"

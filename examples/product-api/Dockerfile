@@ -1,4 +1,4 @@
-# Build from repo root: docker build -f examples/books-api/Dockerfile -t catalyst-example-books-api .
+# Build from repo root: docker build -f examples/product-api/Dockerfile -t catalyst-example-product-api .
 FROM oven/bun:1.3.6-alpine AS deps
 
 WORKDIR /app
@@ -55,12 +55,12 @@ COPY examples/orders-api/package.json examples/orders-api/package.json
 COPY examples/product-api/package.json examples/product-api/package.json
 
 # Copy app source
-COPY examples/books-api examples/books-api
+COPY examples/product-api examples/product-api
 
 # Recreate workspace symlinks (fast — external deps already cached)
 RUN bun install --omit=dev --ignore-scripts
 
-WORKDIR /app/examples/books-api
+WORKDIR /app/examples/product-api
 
 ENV PORT=8080
 EXPOSE 8080

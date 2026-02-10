@@ -18,6 +18,7 @@
     "ws": "catalog:",
     "zod": "catalog:",
     "@catalyst/orchestrator-service": "catalog:",
+    "@catalyst/routing": "catalog:",
     "@catalyst/authorization": "catalog:"
   },
   "devDependencies": {
