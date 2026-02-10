@@ -37,13 +37,13 @@ async function main() {
     console.log('Result:', result)
 
     if (result.success) {
-      console.log('✅ Configuration update successful!')
+      console.log('[ok] Configuration update successful!')
     } else {
-      console.error('❌ Configuration update failed:', result.error)
+      console.error('[error] Configuration update failed:', result.error)
       process.exit(1)
     }
   } catch (error) {
-    console.error('❌ RPC Call failed:', error)
+    console.error('[error] RPC Call failed:', error)
     process.exit(1)
   } finally {
     ws.close()

@@ -1,4 +1,3 @@
-import { Role } from '@catalyst/authorization'
 import { newRpcResponse } from '@hono/capnweb'
 import { newWebSocketRpcSession } from 'capnweb'
 import { Principal } from '@catalyst/authorization'
@@ -113,7 +112,7 @@ export class OrchestratorService extends CatalystService {
 
   private async mintNodeToken(): Promise<void> {
     if (!this.config.orchestrator?.auth) {
-      this.telemetry.logger.info`No auth service configured — skipping node token mint`
+      this.telemetry.logger.info`No auth service configured -- skipping node token mint`
       return
     }
 

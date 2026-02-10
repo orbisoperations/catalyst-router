@@ -40,10 +40,10 @@ export function peerCommands(): Command {
       const result = await createPeerHandler(validation.data)
 
       if (result.success) {
-        console.log(chalk.green(`✓ Peer '${result.data.name}' created successfully.`))
+        console.log(chalk.green(`[ok] Peer '${result.data.name}' created successfully.`))
         process.exit(0)
       } else {
-        console.error(chalk.red(`✗ Failed to create peer: ${result.error}`))
+        console.error(chalk.red(`[error] Failed to create peer: ${result.error}`))
         process.exit(1)
       }
     })
@@ -84,7 +84,7 @@ export function peerCommands(): Command {
         }
         process.exit(0)
       } else {
-        console.error(chalk.red(`✗ Error: ${result.error}`))
+        console.error(chalk.red(`[error] Error: ${result.error}`))
         process.exit(1)
       }
     })
@@ -113,10 +113,10 @@ export function peerCommands(): Command {
       const result = await deletePeerHandler(validation.data)
 
       if (result.success) {
-        console.log(chalk.green(`✓ Peer '${result.data.name}' deleted.`))
+        console.log(chalk.green(`[ok] Peer '${result.data.name}' deleted.`))
         process.exit(0)
       } else {
-        console.error(chalk.red(`✗ Failed to delete peer: ${result.error}`))
+        console.error(chalk.red(`[error] Failed to delete peer: ${result.error}`))
         process.exit(1)
       }
     })
