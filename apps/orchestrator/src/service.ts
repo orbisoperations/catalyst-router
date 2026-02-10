@@ -68,7 +68,7 @@ export class OrchestratorService extends CatalystService {
         () => this.refreshNodeTokenIfNeeded(),
         REFRESH_CHECK_INTERVAL
       )
-      console.log('Token refresh check enabled (every hour)')
+      this.telemetry.logger.info`Token refresh check enabled (every hour)`
     }
 
     // Build the CatalystNodeBus
@@ -99,9 +99,7 @@ export class OrchestratorService extends CatalystService {
       })
     })
 
-    const nodeName = this.config.node.name
-    console.log(`Orchestrator (Next) running as ${nodeName}`)
-    console.log('NEXT_ORCHESTRATOR_STARTED')
+    this.telemetry.logger.info`Orchestrator running as ${this.config.node.name}`
   }
 
   protected async onShutdown(): Promise<void> {
@@ -113,12 +111,12 @@ export class OrchestratorService extends CatalystService {
 
   private async mintNodeToken(): Promise<void> {
     if (!this.config.orchestrator?.auth) {
-      console.log('No auth service configured - skipping node token mint')
+      this.telemetry.logger.info`No auth service configured — skipping node token mint`
       return
     }
 
     const { endpoint, systemToken } = this.config.orchestrator.auth
-    console.log(`Connecting to auth service at ${endpoint}`)
+    this.telemetry.logger.info`Connecting to auth service at ${endpoint}`
 
     try {
       const authClient = newWebSocketRpcSession<AuthRpcApi>(endpoint)
@@ -148,11 +146,10 @@ export class OrchestratorService extends CatalystService {
       this._tokenIssuedAt = new Date()
       this._tokenExpiresAt = new Date(Date.now() + TOKEN_TTL_MS)
 
-      console.log(`Node token minted successfully for ${this.config.node.name}`)
-      console.log(`Token issued at: ${this._tokenIssuedAt.toISOString()}`)
-      console.log(`Token expires at: ${this._tokenExpiresAt.toISOString()}`)
+      this.telemetry.logger
+        .info`Node token minted for ${this.config.node.name} (expires ${this._tokenExpiresAt.toISOString()})`
     } catch (error) {
-      console.error('Failed to mint node token:', error)
+      this.telemetry.logger.error`Failed to mint node token: ${error}`
       throw error
     }
   }
@@ -169,12 +166,12 @@ export class OrchestratorService extends CatalystService {
     const refreshTime = issuedTime + totalLifetime * REFRESH_THRESHOLD
 
     if (now >= refreshTime) {
-      console.log('Node token approaching expiration, refreshing...')
+      this.telemetry.logger.info`Node token approaching expiration, refreshing...`
       try {
         await this.mintNodeToken()
-        console.log('Node token refreshed successfully')
+        this.telemetry.logger.info`Node token refreshed successfully`
       } catch (error) {
-        console.error('Failed to refresh node token:', error)
+        this.telemetry.logger.error`Failed to refresh node token: ${error}`
         // Don't throw - keep using existing token until it expires
       }
     }
