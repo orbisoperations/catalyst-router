@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { UserSchema } from '../src/models/user.js'
 import { ServiceAccountSchema } from '../src/models/service-account.js'
-import { BootstrapStateSchema } from '../src/models/bootstrap.js'
 
 describe('UserSchema', () => {
   it('should validate a complete user', () => {
@@ -147,53 +146,5 @@ describe('ServiceAccountSchema', () => {
     }
 
     expect(() => ServiceAccountSchema.parse(sa)).toThrow()
-  })
-})
-
-describe('BootstrapStateSchema', () => {
-  it('should validate bootstrap state', () => {
-    const state = {
-      tokenHash: '$argon2id$...',
-      expiresAt: new Date(Date.now() + 86400000),
-      used: false,
-    }
-
-    const result = BootstrapStateSchema.parse(state)
-    expect(result.used).toBe(false)
-    expect(result.createdAdminId).toBeUndefined()
-  })
-
-  it('should validate used bootstrap state with admin id', () => {
-    const state = {
-      tokenHash: '$argon2id$...',
-      expiresAt: new Date(),
-      used: true,
-      createdAdminId: 'usr_firstadmin',
-    }
-
-    const result = BootstrapStateSchema.parse(state)
-    expect(result.used).toBe(true)
-    expect(result.createdAdminId).toBe('usr_firstadmin')
-  })
-
-  it('should default used to false', () => {
-    const state = {
-      tokenHash: '$argon2id$...',
-      expiresAt: new Date(),
-    }
-
-    const result = BootstrapStateSchema.parse(state)
-    expect(result.used).toBe(false)
-  })
-
-  it('should reject createdAdminId without usr_ prefix', () => {
-    const state = {
-      tokenHash: '$argon2id$...',
-      expiresAt: new Date(),
-      used: true,
-      createdAdminId: 'invalid_id',
-    }
-
-    expect(() => BootstrapStateSchema.parse(state)).toThrow()
   })
 })

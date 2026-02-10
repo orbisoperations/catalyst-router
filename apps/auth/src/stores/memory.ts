@@ -2,8 +2,7 @@ import type { User, CreateUserInput } from '../models/user.js'
 import { generateUserId } from '../models/user.js'
 import type { ServiceAccount, CreateServiceAccountInput } from '../models/service-account.js'
 import { generateServiceAccountId } from '../models/service-account.js'
-import type { BootstrapState } from '../models/bootstrap.js'
-import type { UserStore, ServiceAccountStore, BootstrapStore } from './types.js'
+import type { UserStore, ServiceAccountStore } from './types.js'
 
 /**
  * In-memory UserStore implementation
@@ -105,27 +104,5 @@ export class InMemoryServiceAccountStore implements ServiceAccountStore {
   async list(orgId?: string): Promise<ServiceAccount[]> {
     const accounts = Array.from(this.accounts.values())
     return orgId ? accounts.filter((sa) => sa.orgId === orgId) : accounts
-  }
-}
-
-/**
- * In-memory BootstrapStore implementation
- */
-export class InMemoryBootstrapStore implements BootstrapStore {
-  private state: BootstrapState | null = null
-
-  async get(): Promise<BootstrapState | null> {
-    return this.state
-  }
-
-  async set(state: BootstrapState): Promise<void> {
-    this.state = state
-  }
-
-  async markUsed(adminId: string): Promise<void> {
-    if (this.state) {
-      this.state.used = true
-      this.state.createdAdminId = adminId
-    }
   }
 }

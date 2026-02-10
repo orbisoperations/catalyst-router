@@ -1,6 +1,5 @@
 import type { User, CreateUserInput } from '../models/user.js'
 import type { ServiceAccount, CreateServiceAccountInput } from '../models/service-account.js'
-import type { BootstrapState } from '../models/bootstrap.js'
 
 /**
  * UserStore interface - persistence for User entities
@@ -24,13 +23,4 @@ export interface ServiceAccountStore {
   findByName(name: string, orgId?: string): Promise<ServiceAccount | null>
   delete(id: string): Promise<void>
   list(orgId?: string): Promise<ServiceAccount[]>
-}
-
-/**
- * BootstrapStore interface - persistence for BootstrapState singleton
- */
-export interface BootstrapStore {
-  get(): Promise<BootstrapState | null>
-  set(state: BootstrapState): Promise<void>
-  markUsed(adminId: string): Promise<void>
 }

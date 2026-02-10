@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import {
-  InMemoryUserStore,
-  InMemoryServiceAccountStore,
-  InMemoryBootstrapStore,
-} from '../src/stores/memory.js'
+import { InMemoryUserStore, InMemoryServiceAccountStore } from '../src/stores/memory.js'
 
 describe('InMemoryUserStore', () => {
   let store: InMemoryUserStore
@@ -157,45 +153,5 @@ describe('InMemoryServiceAccountStore', () => {
   it('should return null for non-existent prefix', async () => {
     const found = await store.findByPrefix('cat_sk_fake_')
     expect(found).toBeNull()
-  })
-})
-
-describe('InMemoryBootstrapStore', () => {
-  let store: InMemoryBootstrapStore
-
-  beforeEach(() => {
-    store = new InMemoryBootstrapStore()
-  })
-
-  it('should return null when no state set', async () => {
-    const state = await store.get()
-    expect(state).toBeNull()
-  })
-
-  it('should set and get bootstrap state', async () => {
-    await store.set({
-      tokenHash: 'hash123',
-      expiresAt: new Date(Date.now() + 86400000),
-      used: false,
-    })
-
-    const state = await store.get()
-    expect(state).not.toBeNull()
-    expect(state?.tokenHash).toBe('hash123')
-    expect(state?.used).toBe(false)
-  })
-
-  it('should mark as used with admin id', async () => {
-    await store.set({
-      tokenHash: 'hash123',
-      expiresAt: new Date(Date.now() + 86400000),
-      used: false,
-    })
-
-    await store.markUsed('usr_firstadmin')
-
-    const state = await store.get()
-    expect(state?.used).toBe(true)
-    expect(state?.createdAdminId).toBe('usr_firstadmin')
   })
 })

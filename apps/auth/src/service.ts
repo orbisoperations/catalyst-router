@@ -9,14 +9,8 @@ import {
 import { CatalystService, type CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
 import { ApiKeyService } from './api-key-service.js'
-import { BootstrapService } from './bootstrap.js'
-import { hashPassword } from './password.js'
 import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
-import {
-  InMemoryBootstrapStore,
-  InMemoryServiceAccountStore,
-  InMemoryUserStore,
-} from './stores/memory.js'
+import { InMemoryServiceAccountStore } from './stores/memory.js'
 
 export class AuthService extends CatalystService {
   readonly info = { name: 'auth', version: '0.0.0' }
@@ -85,34 +79,14 @@ export class AuthService extends CatalystService {
 
     void logger.info`System Admin Token minted: ${this._systemToken}`
 
-    // Initialize stores
-    const userStore = new InMemoryUserStore()
-    const serviceAccountStore = new InMemoryServiceAccountStore()
-    const bootstrapStore = new InMemoryBootstrapStore()
-
     // Initialize services
-    const bootstrapService = new BootstrapService(userStore, bootstrapStore)
+    const serviceAccountStore = new InMemoryServiceAccountStore()
     const apiKeyService = new ApiKeyService(serviceAccountStore)
-
-    // Initialize bootstrap with env token or generate new one
-    const envBootstrapToken = this.config.auth?.bootstrap?.token
-    const bootstrapTtl = this.config.auth?.bootstrap?.ttl || 24 * 60 * 60 * 1000
-
-    if (envBootstrapToken) {
-      const tokenHash = await hashPassword(envBootstrapToken)
-      const expiresAt = new Date(Date.now() + bootstrapTtl)
-      await bootstrapStore.set({ tokenHash, expiresAt, used: false })
-      void logger.info`Bootstrap initialized from config, expires at ${expiresAt.toISOString()}`
-    } else {
-      const result = await bootstrapService.initializeBootstrap({ expiresInMs: bootstrapTtl })
-      void logger.info`Bootstrap token generated: ${result.token}, expires at ${result.expiresAt.toISOString()}`
-    }
 
     // Build RPC server
     this._rpcServer = new AuthRpcServer(
       this._tokenFactory,
       this.telemetry,
-      bootstrapService,
       apiKeyService,
       policyService,
       this.config.node.name,
