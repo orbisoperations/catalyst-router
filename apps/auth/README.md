@@ -56,17 +56,21 @@ The token is logged to `stdout` in JSON format on startup:
 
 #### 2. Programmatically (Tests/Library)
 
-If you are running the Auth service as a library (e.g., in unit/integration tests), you can access the token after starting the server:
+If you are running the Auth service as a library (e.g., in unit/integration tests), you can access the token after creating the service:
 
 ```typescript
-import { startServer } from '@catalyst/auth'
+import { loadDefaultConfig } from '@catalyst/config'
+import { AuthService } from '@catalyst/auth-service'
 
-const { systemToken } = await startServer()
-console.log('Admin Token:', systemToken)
+const config = loadDefaultConfig()
+const auth = await AuthService.create({ config })
+console.log('Admin Token:', auth.systemToken)
 ```
 
-Alternatively, it is exported as a singleton for easy reference within the same process:
+The `startServer()` convenience function also returns the token:
 
 ```typescript
-import { systemToken } from '@catalyst/auth'
+import { startServer } from '@catalyst/auth-service'
+
+const { systemToken } = await startServer()
 ```

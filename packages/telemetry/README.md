@@ -56,6 +56,8 @@ Unified observability SDK for Catalyst services. Provides traces, logs, and metr
 
 ## Service integration
 
+> **Note:** Services built on `@catalyst/service` get telemetry automatically via `CatalystService`. The manual setup below is only needed when using `@catalyst/telemetry` directly without the service base class.
+
 Every service follows this initialization order:
 
 ```typescript

@@ -14,6 +14,7 @@
     "@catalyst/authorization": "catalog:",
     "@catalyst/config": "catalog:",
     "@catalyst/routing": "catalog:",
+    "@catalyst/service": "catalog:",
     "@hono/capnweb": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",
