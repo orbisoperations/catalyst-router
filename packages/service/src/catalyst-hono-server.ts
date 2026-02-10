@@ -58,6 +58,10 @@ export class CatalystHonoServer {
 
   /** Start listening. Wires SIGTERM/SIGINT for graceful shutdown. */
   start(): this {
+    if (this._server) {
+      throw new Error('Server is already running. Call stop() before starting again.')
+    }
+
     const port = this._options.port ?? 3000
     const hostname = this._options.hostname ?? '0.0.0.0'
     const ignorePaths = this._options.telemetryIgnorePaths ?? ['/', '/health']
