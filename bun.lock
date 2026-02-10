@@ -206,9 +206,13 @@
       "name": "@catalyst/authorization",
       "version": "0.0.0",
       "dependencies": {
+        "@catalyst/service": "catalog:",
         "@catalyst/telemetry": "catalog:",
         "@catalyst/types": "workspace:*",
         "@cedar-policy/cedar-wasm": "catalog:",
+        "@hono/capnweb": "catalog:",
+        "capnweb": "catalog:",
+        "hono": "catalog:",
         "jose": "catalog:",
         "zod": "catalog:",
       },

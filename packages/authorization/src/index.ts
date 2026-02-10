@@ -1,3 +1,4 @@
+export * from './service/index.js'
 export * from './jwt/index.js'
 export * from './jwt/local/exports.js'
 export * from './jwt/jwt-token-factory.js'

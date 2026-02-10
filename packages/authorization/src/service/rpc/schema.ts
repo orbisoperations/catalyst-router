@@ -1,4 +1,4 @@
-import { type TokenRecord } from '@catalyst/authorization'
+import type { TokenRecord } from '../../jwt/index.js'
 import { z } from 'zod'
 
 export const RoleSchema = z.enum(['ADMIN', 'NODE', 'NODE_CUSTODIAN', 'DATA_CUSTODIAN', 'USER'])

@@ -1,11 +1,11 @@
+import { JWTTokenFactory } from '../jwt/jwt-token-factory.js'
 import {
   ALL_POLICIES,
   AuthorizationEngine,
   CATALYST_SCHEMA,
   type CatalystPolicyDomain,
-  JWTTokenFactory,
   Role,
-} from '@catalyst/authorization'
+} from '../policy/src/index.js'
 import { CatalystService, type CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
 import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
