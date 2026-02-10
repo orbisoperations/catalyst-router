@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import path from 'path'
 import type { StartedTestContainer } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
-import path from 'path'
 
 const isDockerRunning = () => {
   try {
@@ -37,6 +37,7 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
       // "TypeError: The 'sourceEnd' argument must be of type number. Received undefined"
       // This is likely due to differences in Buffer/Stream implementation in Bun vs Node.
       // We manually build the image using the docker CLI instead.
+      console.log('Building books-api image...')
       const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
         cwd: repoRoot,
         stdout: 'ignore',
@@ -95,6 +96,7 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
       const imageName = 'movies-service:test'
       const dockerfile = 'examples/movies-api/Dockerfile'
 
+      console.log('[TEST] FIXTURE BUILD] Building movies-api image...')
       const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
         cwd: repoRoot,
         stdout: 'ignore',

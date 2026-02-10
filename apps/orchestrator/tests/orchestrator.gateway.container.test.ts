@@ -144,14 +144,14 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       peerA = await startContainer(
         'peer-a.somebiz.local.io',
         'peer-a',
-        'Catalyst server [orchestrator]',
+        'Catalyst server [orchestrator] listening',
         nodeEnv('peer-a.somebiz.local.io', 'peer-a'),
         [3000]
       )
       peerB = await startContainer(
         'peer-b.somebiz.local.io',
         'peer-b',
-        'Catalyst server [orchestrator]',
+        'Catalyst server [orchestrator] listening',
         nodeEnv('peer-b.somebiz.local.io', 'peer-b', 'ws://gateway:4000/api'),
         [3000]
       )
@@ -325,14 +325,14 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       peerA = await startContainer(
         'peer-a.somebiz.local.io',
         'peer-a',
-        'Catalyst server [orchestrator]',
+        'Catalyst server [orchestrator] listening',
         nodeEnv('peer-a.somebiz.local.io', 'peer-a', authA.endpoint, authA.systemToken),
         [3000]
       )
       peerB = await startContainer(
         'peer-b.somebiz.local.io',
         'peer-b',
-        'Catalyst server [orchestrator]',
+        'Catalyst server [orchestrator] listening',
         nodeEnv(
           'peer-b.somebiz.local.io',
           'peer-b',

@@ -1,11 +1,14 @@
-import { Hono } from 'hono'
-import { upgradeWebSocket } from 'hono/bun'
+import { Role } from '@catalyst/authorization'
 import { newRpcResponse } from '@hono/capnweb'
 import { newWebSocketRpcSession } from 'capnweb'
 import { Principal } from '@catalyst/authorization'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
+import { Hono } from 'hono'
+import { upgradeWebSocket, websocket } from 'hono/bun'
 import { CatalystNodeBus } from './orchestrator.js'
+
+export { websocket }
 
 /**
  * Auth Service RPC API for token minting.

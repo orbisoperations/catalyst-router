@@ -58,6 +58,7 @@ COPY examples/product-api/package.json examples/product-api/package.json
 
 # Copy app source
 COPY examples/books-api examples/books-api
+COPY packages/service packages/service
 
 # Recreate workspace symlinks (fast — external deps already cached)
 RUN bun install --omit=dev --ignore-scripts
