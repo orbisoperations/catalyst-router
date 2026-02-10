@@ -96,7 +96,7 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
       const imageName = 'movies-service:test'
       const dockerfile = 'examples/movies-api/Dockerfile'
 
-      console.log('[TEST] FIXTURE BUILD] Building movies-api image...')
+      console.log('[TEST] [FIXTURE BUILD] Building movies-api image...')
       const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
         cwd: repoRoot,
         stdout: 'ignore',
