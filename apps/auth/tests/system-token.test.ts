@@ -25,13 +25,13 @@ describe('System Admin Token', () => {
 
   it('should contain expected administrative claims', () => {
     const payload = jose.decodeJwt(systemToken) as jose.JWTPayload & {
-      roles: string[]
+      principal: string
       entity: { id: string; type: string }
     }
     expect(payload).toBeDefined()
 
     expect(payload.sub).toBe('bootstrap')
-    expect(payload.roles).toEqual(['ADMIN'])
+    expect(payload.principal).toBe('CATALYST::ADMIN')
     expect(payload.entity?.id).toBe('system')
     expect(payload.entity?.type).toBe('service')
   })

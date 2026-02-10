@@ -4,7 +4,7 @@ The JWT module provides high-level token management, abstraction over raw crypto
 
 ## Features
 
-- **Structured Minting**: Enforces strict typing for entities, roles, and claims during token creation.
+- **Structured Minting**: Enforces strict typing for entities, principals, and claims during token creation.
 - **Certificate Binding**: Supports RFC 8705 Certificate-Bound Access Tokens via the `cnf` claim (ADR 0007).
 - **Revocation**: Built-in support for revoking tokens by ID (JTI) or Subject Alternative Name (SAN).
 - **Policy Integration**: Helper utilities to map JWT payloads directly to Cedar entities.
@@ -31,21 +31,22 @@ const tokenManager = new LocalTokenManager(keyManager, tokenStore, 'node-01')
 ### Minting a Token
 
 ```typescript
-import { EntityTypeEnum, RoleEnum } from '@catalyst-node/authorization/jwt'
+import { Principal } from '@catalyst/authorization'
 
 const token = await tokenManager.mint({
   subject: 'alice',
-  roles: [RoleEnum.enum.USER],
+  principal: Principal.USER,
   entity: {
     id: 'alice',
     name: 'alice',
-    type: EntityTypeEnum.enum.user,
-    role: RoleEnum.enum.USER,
+    type: 'user',
   },
   // Optional: Bind to a certificate fingerprint (mTLS)
   certificateFingerprint: 'sha256:...',
 })
 ```
+
+The `principal` field accepts a `Principal` enum value (e.g. `Principal.ADMIN`, `Principal.NODE`, `Principal.USER`) which maps directly to the Cedar entity type stored in the JWT (e.g. `CATALYST::ADMIN`, `CATALYST::NODE`, `CATALYST::USER`).
 
 ### Verifying a Token
 
