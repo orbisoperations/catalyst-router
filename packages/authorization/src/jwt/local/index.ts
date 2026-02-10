@@ -22,7 +22,7 @@ export class LocalTokenManager implements TokenManager {
     const claims: Record<string, unknown> = {
       ...options.claims,
       entity: options.entity,
-      roles: options.roles,
+      principal: options.principal,
     }
 
     // Support certificate binding (ADR 0007)

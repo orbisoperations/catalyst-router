@@ -3,7 +3,6 @@ namespace CATALYST {
         id: String,
         name: String,
         type: String,
-        role: String,
         trustedNodes: Set<String>,
         trustedDomains: Set<String>
     };
@@ -11,7 +10,6 @@ namespace CATALYST {
         id: String,
         name: String,
         type: String,
-        role: String,
         trustedNodes: Set<String>,
         trustedDomains: Set<String>
     };
@@ -19,7 +17,6 @@ namespace CATALYST {
         id: String,
         name: String,
         type: String,
-        role: String,
         trustedNodes: Set<String>,
         trustedDomains: Set<String>
     };
@@ -27,7 +24,6 @@ namespace CATALYST {
         id: String,
         name: String,
         type: String,
-        role: String,
         trustedNodes: Set<String>,
         trustedDomains: Set<String>
     };
@@ -35,7 +31,6 @@ namespace CATALYST {
         id: String,
         name: String,
         type: String,
-        role: String,
         trustedNodes: Set<String>,
         trustedDomains: Set<String>
     };

@@ -3,7 +3,7 @@ import * as jose from 'jose'
 import { type TokenStore } from '../../src/jwt/index.js'
 import { LocalTokenManager } from '../../src/jwt/local/index.js'
 import { type IKeyManager } from '../../src/key-manager/index.js'
-import { Role } from '../../src/policy/src/definitions/models.js'
+import { Principal } from '../../src/policy/src/definitions/models.js'
 
 describe('LocalTokenManager', () => {
   const mockKeyManager: IKeyManager = {
@@ -47,12 +47,11 @@ describe('LocalTokenManager', () => {
 
     const token = await manager.mint({
       subject: 'user-1',
-      roles: [Role.USER],
+      principal: Principal.USER,
       entity: {
         id: 'user-1',
         name: 'alice',
         type: 'user',
-        role: Role.USER,
       },
     })
 
@@ -66,12 +65,11 @@ describe('LocalTokenManager', () => {
 
     const token = await manager.mint({
       subject: 'user-1',
-      roles: [Role.USER],
+      principal: Principal.USER,
       entity: {
         id: 'user-1',
         name: 'alice',
         type: 'user',
-        role: Role.USER,
         nodeId: 'node-b', // Explicitly provided
       },
     })

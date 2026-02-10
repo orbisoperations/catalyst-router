@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import * as jose from 'jose'
 import { JWTTokenFactory } from '../../src/jwt/jwt-token-factory.js'
-import { Role } from '../../src/policy/src/definitions/models.js'
+import { Principal } from '../../src/policy/src/definitions/models.js'
 
 describe('JWTTokenFactory', () => {
   let factory: JWTTokenFactory
@@ -18,12 +18,11 @@ describe('JWTTokenFactory', () => {
   const mintTestToken = (overrides?: Partial<Parameters<typeof factory.mint>[0]>) =>
     factory.mint({
       subject: 'user-1',
-      roles: [Role.USER],
+      principal: Principal.USER,
       entity: {
         id: 'user-1',
         name: 'alice',
         type: 'user',
-        role: Role.USER,
       },
       ...overrides,
     })
@@ -74,8 +73,8 @@ describe('JWTTokenFactory', () => {
 
       const token = await customFactory.mint({
         subject: 'user-1',
-        roles: [Role.USER],
-        entity: { id: 'u1', name: 'alice', type: 'user', role: Role.USER },
+        principal: Principal.USER,
+        entity: { id: 'u1', name: 'alice', type: 'user' },
       })
 
       const result = await customFactory.rotate({ gracePeriodMs: 1000 })
@@ -109,7 +108,6 @@ describe('JWTTokenFactory', () => {
           id: 'user-1',
           name: 'alice',
           type: 'user',
-          role: Role.USER,
           nodeId: 'explicit-node',
         },
       })
@@ -139,7 +137,7 @@ describe('JWTTokenFactory', () => {
       expect(result.valid).toBe(true)
       if (result.valid) {
         expect(result.payload.entity).toBeDefined()
-        expect(result.payload.roles).toEqual([Role.USER])
+        expect(result.payload.principal).toBe(Principal.USER)
       }
     })
 
@@ -189,7 +187,7 @@ describe('JWTTokenFactory', () => {
       await mintTestToken({
         subject: 'user-2',
         sans: ['api.internal'],
-        entity: { id: 'u2', name: 'bob', type: 'user', role: Role.USER },
+        entity: { id: 'u2', name: 'bob', type: 'user' },
       })
 
       await factory.revoke({ san: 'api.internal' })
@@ -288,7 +286,7 @@ describe('JWTTokenFactory', () => {
       await mintTestToken()
       await mintTestToken({
         subject: 'user-2',
-        entity: { id: 'u2', name: 'bob', type: 'user', role: Role.USER },
+        entity: { id: 'u2', name: 'bob', type: 'user' },
       })
 
       const tokens = await factory.listTokens()
@@ -299,7 +297,7 @@ describe('JWTTokenFactory', () => {
       await mintTestToken({ certificateFingerprint: 'sha256-abc' })
       await mintTestToken({
         subject: 'user-2',
-        entity: { id: 'u2', name: 'bob', type: 'user', role: Role.USER },
+        entity: { id: 'u2', name: 'bob', type: 'user' },
       })
 
       const filtered = await factory.listTokens({ certificateFingerprint: 'sha256-abc' })
@@ -312,7 +310,7 @@ describe('JWTTokenFactory', () => {
       await mintTestToken({
         subject: 'user-2',
         sans: ['web.example.com'],
-        entity: { id: 'u2', name: 'bob', type: 'user', role: Role.USER },
+        entity: { id: 'u2', name: 'bob', type: 'user' },
       })
 
       const filtered = await factory.listTokens({ san: 'api.example.com' })
@@ -354,8 +352,8 @@ describe('JWTTokenFactory', () => {
 
       const token = await f.mint({
         subject: 'test',
-        roles: [Role.USER],
-        entity: { id: 't1', name: 'test', type: 'user', role: Role.USER },
+        principal: Principal.USER,
+        entity: { id: 't1', name: 'test', type: 'user' },
       })
 
       const result = await f.verify(token)
