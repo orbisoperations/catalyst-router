@@ -21,7 +21,7 @@ function defaultOpts(overrides: Partial<CompositeServerOptions> = {}): Composite
     peeringSecret: 'test-secret',
     keysDb: ':memory:',
     tokensDb: ':memory:',
-    revocation: false,
+    revocation: true,
     logLevel: 'info',
     ...overrides,
   }
@@ -80,6 +80,16 @@ describe('buildConfig', () => {
 
     expect(config.auth?.bootstrap?.token).toBe('my-bootstrap-token')
     expect(config.auth?.bootstrap?.ttl).toBe(3600000)
+  })
+
+  it('auto-derives peeringEndpoint from port when not provided', () => {
+    const config = buildConfig(defaultOpts({ peeringEndpoint: undefined, port: '5000' }))
+    expect(config.node.endpoint).toBe('ws://localhost:5000/orchestrator/rpc')
+  })
+
+  it('uses explicit peeringEndpoint when provided', () => {
+    const config = buildConfig(defaultOpts({ peeringEndpoint: 'ws://peer:9000/rpc' }))
+    expect(config.node.endpoint).toBe('ws://peer:9000/rpc')
   })
 
   it('omits orchestrator auth config (composite mode)', () => {

@@ -36,6 +36,7 @@
     "@catalyst/telemetry": "catalog:",
     "capnweb": "catalog:",
     "commander": "catalog:",
-    "hono": "catalog:"
+    "hono": "catalog:",
+    "zod": "catalog:"
   }
 }

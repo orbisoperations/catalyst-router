@@ -151,6 +151,7 @@
         "capnweb": "catalog:",
         "commander": "catalog:",
         "hono": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@types/node": "catalog:dev",

@@ -13,7 +13,7 @@ export interface CompositeServerOptions {
   nodeId: string
   port: string
   hostname: string
-  peeringEndpoint: string
+  peeringEndpoint?: string
   domains?: string
   peeringSecret: string
   keysDb: string
@@ -36,15 +36,16 @@ export function buildConfig(opts: CompositeServerOptions): CatalystConfig {
   const domains = opts.domains ? opts.domains.split(',').map((d) => d.trim()) : []
   const port = parseInt(opts.port, 10)
 
-  // In composite mode, auto-wire the gateway RPC endpoint to the local server
-  // unless explicitly overridden. The gateway is mounted at /gateway/api.
+  // In composite mode, auto-wire endpoints to the local server unless
+  // explicitly overridden. Gateway is at /gateway/api, orchestrator at /orchestrator/rpc.
   const gatewayEndpoint = opts.gatewayEndpoint || `ws://localhost:${port}/gateway/api`
+  const peeringEndpoint = opts.peeringEndpoint || `ws://localhost:${port}/orchestrator/rpc`
 
   return CatalystConfigSchema.parse({
     port,
     node: {
       name: opts.nodeId,
-      endpoint: opts.peeringEndpoint,
+      endpoint: peeringEndpoint,
       domains,
     },
     orchestrator: {
