@@ -6,7 +6,12 @@ import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodMod
 describe('Model-Agnostic Usage Integration', () => {
   // --- Scenario 1: Orchestrator Route Integration (Mocked Schema) ---
   // This mimics importing DataChannelDefinitionSchema from 'orchestrator'
-  const MockDataChannelProtocolEnum = z.enum(['http', 'http:graphql', 'http:gql', 'http:grpc'])
+  const MockDataChannelProtocolEnum = z.enum([
+    'http',
+    'http:graphql',
+    'http:gql',
+    'http:grpc',
+  ] as const)
   const MockDataChannelDefinitionSchema = z.object({
     name: z.string(),
     endpoint: z.string().url().optional(),

@@ -13,7 +13,7 @@ export const internalProtocolConnectedAction = z.literal(Actions.InternalProtoco
 export const UpdateMessageSchema = z.object({
   updates: z.array(
     z.object({
-      action: z.enum(['add', 'remove']),
+      action: z.enum(['add', 'remove'] as const),
       route: DataChannelDefinitionSchema,
       nodePath: z.array(z.string()).optional(),
     })
