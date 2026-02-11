@@ -9,6 +9,13 @@
   },
   "dependencies": {
     "@catalyst/config": "catalog:",
+    "@catalyst/routing": "catalog:",
+    "@catalyst/service": "catalog:",
+    "@catalyst/telemetry": "workspace:*",
+    "@hono/capnweb": "catalog:",
+    "@opentelemetry/api": "catalog:",
+    "capnweb": "catalog:",
+    "hono": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

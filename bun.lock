@@ -84,6 +84,25 @@
         "typescript": "catalog:dev",
       },
     },
+    "apps/envoy": {
+      "name": "@catalyst/envoy-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@catalyst/config": "catalog:",
+        "@catalyst/routing": "catalog:",
+        "@catalyst/service": "catalog:",
+        "@catalyst/telemetry": "workspace:*",
+        "@hono/capnweb": "catalog:",
+        "@opentelemetry/api": "catalog:",
+        "capnweb": "catalog:",
+        "hono": "catalog:",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:dev",
+        "typescript": "catalog:dev",
+      },
+    },
     "apps/gateway": {
       "name": "@catalyst/gateway-service",
       "version": "0.0.0",
@@ -499,6 +518,8 @@
     "@catalyst/cli": ["@catalyst/cli@workspace:apps/cli"],
 
     "@catalyst/config": ["@catalyst/config@workspace:packages/config"],
+
+    "@catalyst/envoy-service": ["@catalyst/envoy-service@workspace:apps/envoy"],
 
     "@catalyst/gateway-service": ["@catalyst/gateway-service@workspace:apps/gateway"],
 
