@@ -1,0 +1,136 @@
+# METABEGIN
+# X-Env-Layer-Name: catalyst-node
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: Catalyst Node composite server (auth + gateway + orchestrator)
+#  as a pre-compiled Bun binary. Includes first-boot provisioning and systemd service.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: catalyst-otel,rpi-user-credentials,ca-certificates
+#
+# X-Env-VarPrefix: catalyst
+#
+# X-Env-Var-node_id:
+# X-Env-Var-node_id-Desc: Unique node identifier (e.g. edge-node-001)
+# X-Env-Var-node_id-Required: n
+# X-Env-Var-node_id-Valid: string-or-empty
+# X-Env-Var-node_id-Set: y
+#
+# X-Env-Var-peering_secret:
+# X-Env-Var-peering_secret-Desc: iBGP peering shared secret
+# X-Env-Var-peering_secret-Required: n
+# X-Env-Var-peering_secret-Valid: string-or-empty
+# X-Env-Var-peering_secret-Set: y
+#
+# X-Env-Var-domains:
+# X-Env-Var-domains-Desc: Comma-separated list of trusted domains
+# X-Env-Var-domains-Required: n
+# X-Env-Var-domains-Valid: string-or-empty
+# X-Env-Var-domains-Set: y
+#
+# X-Env-Var-port: 3000
+# X-Env-Var-port-Desc: Listen port for the composite server
+# X-Env-Var-port-Required: n
+# X-Env-Var-port-Valid: int:1024-65535
+# X-Env-Var-port-Set: y
+#
+# X-Env-Var-bootstrap_token:
+# X-Env-Var-bootstrap_token-Desc: Initial auth bootstrap token
+# X-Env-Var-bootstrap_token-Required: n
+# X-Env-Var-bootstrap_token-Valid: string-or-empty
+# X-Env-Var-bootstrap_token-Set: y
+#
+# X-Env-Var-log_level: info
+# X-Env-Var-log_level-Desc: Log level (debug, info, warn, error)
+# X-Env-Var-log_level-Required: n
+# X-Env-Var-log_level-Valid: keywords:debug,info,warn,error
+# X-Env-Var-log_level-Set: y
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    # Install the pre-built catalyst-node binary from source directory
+    - install -m 755 "$SRCROOT/bin/catalyst-node" "$1/usr/local/bin/catalyst-node"
+    # Create data and config directories
+    - |-
+      mkdir -p "$1/var/lib/catalyst-node"
+      mkdir -p "$1/etc/catalyst-node"
+    # Install environment file with build-time values
+    - |-
+      cat > "$1/etc/catalyst-node/catalyst-node.env" <<ENVEOF
+      # Catalyst Node Configuration
+      # Values set at image build time. Edit after first boot as needed.
+      CATALYST_NODE_ID=$IGconf_catalyst_node_id
+      CATALYST_PEERING_SECRET=$IGconf_catalyst_peering_secret
+      CATALYST_DOMAINS=$IGconf_catalyst_domains
+      PORT=$IGconf_catalyst_port
+      CATALYST_BOOTSTRAP_TOKEN=$IGconf_catalyst_bootstrap_token
+      CATALYST_AUTH_KEYS_DB=/var/lib/catalyst-node/keys.db
+      CATALYST_AUTH_TOKENS_DB=/var/lib/catalyst-node/tokens.db
+      OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+      OTEL_SERVICE_NAME=catalyst-node
+      ENVEOF
+      chmod 600 "$1/etc/catalyst-node/catalyst-node.env"
+    # Install first-boot provisioning script
+    - |-
+      cat > "$1/usr/local/bin/catalyst-firstboot" <<'FBEOF'
+      #!/bin/bash
+      set -euo pipefail
+
+      ENV_FILE="/etc/catalyst-node/catalyst-node.env"
+
+      # Source existing env for variable access
+      set -a; source "$ENV_FILE"; set +a
+
+      # Generate unique node ID if not set at build time
+      if [ -z "${CATALYST_NODE_ID:-}" ]; then
+        NODE_ID="edge-$(hostname)-$(cat /proc/sys/kernel/random/boot_id | cut -c1-8)"
+        sed -i "s/^CATALYST_NODE_ID=.*/CATALYST_NODE_ID=${NODE_ID}/" "$ENV_FILE"
+        echo "Generated node ID: ${NODE_ID}"
+      fi
+
+      # Ensure data directory exists with correct permissions
+      mkdir -p /var/lib/catalyst-node
+      chmod 750 /var/lib/catalyst-node
+
+      echo "First boot setup complete"
+      FBEOF
+      chmod 755 "$1/usr/local/bin/catalyst-firstboot"
+    # Install first-boot systemd service (runs once)
+    - |-
+      cat > "$1/etc/systemd/system/catalyst-node-firstboot.service" <<'SVCEOF'
+      [Unit]
+      Description=Catalyst Node First Boot Setup
+      After=network-online.target
+      Before=catalyst-node.service
+      ConditionPathExists=!/var/lib/catalyst-node/.firstboot-done
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/catalyst-firstboot
+      ExecStartPost=/usr/bin/touch /var/lib/catalyst-node/.firstboot-done
+      RemainAfterExit=no
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" catalyst-node-firstboot
+    # Install main catalyst-node systemd service
+    - |-
+      cat > "$1/etc/systemd/system/catalyst-node.service" <<'SVCEOF'
+      [Unit]
+      Description=Catalyst Node
+      After=otelcol.service network-online.target catalyst-node-firstboot.service
+      Wants=otelcol.service network-online.target
+      Requires=catalyst-node-firstboot.service
+
+      [Service]
+      Type=simple
+      EnvironmentFile=/etc/catalyst-node/catalyst-node.env
+      ExecStart=/usr/local/bin/catalyst-node
+      WorkingDirectory=/var/lib/catalyst-node
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" catalyst-node

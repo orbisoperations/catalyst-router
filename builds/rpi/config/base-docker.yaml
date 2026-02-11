@@ -1,0 +1,25 @@
+include:
+  file: bookworm-minbase.yaml
+
+device:
+  layer: rpi5
+  hostname: catalyst-node
+  user1: catalyst
+  user1pass: changeme
+
+image:
+  layer: image-rpios
+  boot_part_size: 200%
+  root_part_size: 500%
+  name: catalyst-node-image
+
+docker:
+  trust_user1: y
+
+layer:
+  container: docker-debian-bookworm
+  app: catalyst-docker-stack
+
+ssh:
+  pubkey_only: y
+  pubkey_user1: ${CATALYST_SSH_PUBKEY}

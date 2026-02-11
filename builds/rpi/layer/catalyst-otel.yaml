@@ -1,0 +1,98 @@
+# METABEGIN
+# X-Env-Layer-Name: catalyst-otel
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: OpenTelemetry Collector (contrib) native binary for ARM64.
+#  Downloads the release tarball at build time and installs as a systemd service.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: ca-certificates
+#
+# X-Env-VarPrefix: otel
+#
+# X-Env-Var-version: 0.145.0
+# X-Env-Var-version-Desc: OTEL Collector version to install
+# X-Env-Var-version-Required: n
+# X-Env-Var-version-Valid: string
+# X-Env-Var-version-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - curl
+  customize-hooks:
+    # Download and install otelcol-contrib binary
+    - |-
+      OTEL_VERSION="$IGconf_otel_version"
+      OTEL_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTEL_VERSION}/otelcol-contrib_${OTEL_VERSION}_linux_arm64.tar.gz"
+      echo "Downloading otelcol-contrib v${OTEL_VERSION}..."
+      curl -fsSL "$OTEL_URL" -o /tmp/otelcol.tar.gz
+      tar -xzf /tmp/otelcol.tar.gz -C /tmp otelcol-contrib
+      install -m 755 /tmp/otelcol-contrib "$1/usr/local/bin/otelcol-contrib"
+      rm -f /tmp/otelcol.tar.gz /tmp/otelcol-contrib
+    # Create config directory
+    - mkdir -p "$1/etc/catalyst-node"
+    # Install OTEL config
+    - |-
+      cat > "$1/etc/catalyst-node/otel-config.yaml" <<'OTELEOF'
+      extensions:
+        health_check:
+          endpoint: 0.0.0.0:13133
+
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+
+      processors:
+        batch:
+          send_batch_size: 512
+          timeout: 5s
+        memory_limiter:
+          check_interval: 5s
+          limit_mib: 256
+
+      exporters:
+        debug:
+          verbosity: detailed
+
+      service:
+        extensions: [health_check]
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [debug]
+          metrics:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [debug]
+          logs:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [debug]
+      OTELEOF
+    # Create dedicated otelcol user
+    - chroot "$1" useradd --system --no-create-home --shell /usr/sbin/nologin otelcol
+    # Install systemd service
+    - |-
+      cat > "$1/etc/systemd/system/otelcol.service" <<'SVCEOF'
+      [Unit]
+      Description=OpenTelemetry Collector
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=otelcol
+      ExecStart=/usr/local/bin/otelcol-contrib --config /etc/catalyst-node/otel-config.yaml
+      Restart=on-failure
+      RestartSec=5
+      MemoryMax=300M
+      LimitNOFILE=65536
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" otelcol
