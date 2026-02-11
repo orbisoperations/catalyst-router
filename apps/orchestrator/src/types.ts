@@ -8,11 +8,6 @@ export const OrchestratorConfigSchema = z.object({
   node: NodeConfigSchema.extend({
     endpoint: z.string(), // Orchestrator requires an endpoint for its own node
   }),
-  ibgp: z
-    .object({
-      secret: z.string().optional(),
-    })
-    .optional(),
   gqlGatewayConfig: z
     .object({
       endpoint: z.string(),

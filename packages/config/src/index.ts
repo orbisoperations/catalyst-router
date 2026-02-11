@@ -17,11 +17,6 @@ export type NodeConfig = z.infer<typeof NodeConfigSchema>
  * Orchestrator Specific Configuration
  */
 export const OrchestratorConfigSchema = z.object({
-  ibgp: z
-    .object({
-      secret: z.string().optional(),
-    })
-    .optional(),
   gqlGatewayConfig: z
     .object({
       endpoint: z.string(),
@@ -122,9 +117,6 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       domains: domains,
     },
     orchestrator: {
-      ibgp: {
-        secret: process.env.CATALYST_PEERING_SECRET || 'valid-secret',
-      },
       gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
         ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
         : undefined,
