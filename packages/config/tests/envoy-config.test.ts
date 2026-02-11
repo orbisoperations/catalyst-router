@@ -294,13 +294,11 @@ describe('OrchestratorConfigSchema with envoyConfig', () => {
 
   it('existing fields still parse correctly', () => {
     const result = OrchestratorConfigSchema.safeParse({
-      ibgp: { secret: 'test-secret' },
       gqlGatewayConfig: { endpoint: 'http://localhost:4000' },
       envoyConfig: { endpoint: 'http://localhost:18000', portRange: [8000] },
     })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.ibgp?.secret).toBe('test-secret')
       expect(result.data.gqlGatewayConfig?.endpoint).toBe('http://localhost:4000')
       expect(result.data.envoyConfig?.endpoint).toBe('http://localhost:18000')
     }

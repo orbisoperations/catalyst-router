@@ -54,12 +54,6 @@ const HCM_TYPE_URL =
   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager'
 
 // ---------------------------------------------------------------------------
-// Version counter
-// ---------------------------------------------------------------------------
-
-let versionCounter = 0
-
-// ---------------------------------------------------------------------------
 // IP detection — determines STATIC vs STRICT_DNS cluster type
 // ---------------------------------------------------------------------------
 
@@ -176,9 +170,10 @@ export function buildLocalCluster(opts: {
   port: number
 }): XdsCluster {
   const name = `local_${opts.channelName}`
+  const clusterType = isIpAddress(opts.address) ? 'STATIC' : 'STRICT_DNS'
   return {
     name,
-    type: 'STATIC',
+    type: clusterType,
     connect_timeout: '5s',
     lb_policy: 'ROUND_ROBIN',
     load_assignment: {
@@ -258,6 +253,7 @@ export interface BuildXdsSnapshotInput {
   internal: InternalRoute[]
   portAllocations: Record<string, number>
   bindAddress: string
+  version: string
 }
 
 /**
@@ -268,8 +264,7 @@ export interface BuildXdsSnapshotInput {
  * - Egress listener + remote cluster for each internal route (with envoyPort + peer address)
  */
 export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
-  versionCounter++
-  const version = String(versionCounter)
+  const version = input.version
 
   const listeners: XdsListener[] = []
   const clusters: XdsCluster[] = []

@@ -31,15 +31,6 @@ const adsServiceDefinition: grpc.ServiceDefinition = {
 }
 
 // ---------------------------------------------------------------------------
-// Nonce generation
-// ---------------------------------------------------------------------------
-
-let nonceCounter = 0
-function nextNonce(): string {
-  return String(++nonceCounter)
-}
-
-// ---------------------------------------------------------------------------
 // XdsControlPlane — gRPC ADS server backed by the snapshot cache
 // ---------------------------------------------------------------------------
 
@@ -61,6 +52,7 @@ export class XdsControlPlane {
   private readonly cache: SnapshotCache
   private readonly logger: ServiceTelemetry['logger']
   private started = false
+  private nonceCounter = 0
 
   constructor(options: XdsControlPlaneOptions) {
     this.port = options.port
@@ -113,29 +105,36 @@ export class XdsControlPlane {
   /**
    * Handle a single ADS bidirectional stream from an Envoy proxy.
    *
-   * Protocol:
-   * 1. On connect, send the current snapshot (CDS first, then LDS)
-   * 2. Watch for snapshot changes and push updates
-   * 3. Process incoming ACKs/NACKs from Envoy
+   * Protocol (SotW ADS):
+   * 1. Client subscribes to CDS, server sends CDS response
+   * 2. Client ACKs CDS, subscribes to LDS, server sends LDS response
+   * 3. On snapshot changes, send updates for all subscribed types
+   *
+   * Responses are only sent for types the client has subscribed to.
+   * This ensures Envoy doesn't discard unsolicited responses.
    */
   private handleStream(call: grpc.ServerDuplexStream<Buffer, Buffer>): void {
     this.logger.info`New ADS stream connected`
 
-    // Track acknowledged versions per type URL
+    // Track subscribed types, sent versions, and acknowledged versions
+    const subscribedTypes = new Set<string>()
+    const sentVersions = new Map<string, string>()
     const ackedVersions = new Map<string, string>()
+    let latestSnapshot: XdsSnapshot | undefined = this.cache.getSnapshot()
 
-    // Send current snapshot immediately
-    const current = this.cache.getSnapshot()
-    if (current) {
-      this.sendSnapshot(call, current)
+    /** Send snapshot resources for subscribed types that haven't been sent at this version. */
+    const sendSubscribed = (): void => {
+      if (!latestSnapshot) return
+      this.sendSnapshotForTypes(call, latestSnapshot, subscribedTypes, sentVersions)
     }
 
-    // Watch for changes
+    // Watch for snapshot changes — send updates for subscribed types
     const unwatch = this.cache.watch((snapshot) => {
-      this.sendSnapshot(call, snapshot)
+      latestSnapshot = snapshot
+      sendSubscribed()
     })
 
-    // Process incoming messages (ACKs and NACKs)
+    // Process incoming messages (subscribes, ACKs, NACKs)
     call.on('data', (buffer: Buffer) => {
       try {
         const request = decodeDiscoveryRequest(buffer)
@@ -148,8 +147,10 @@ export class XdsControlPlane {
           // NACK — client rejected the last response (version_info empty but nonce set)
           this.logger.warn`NACK received for ${request.type_url} nonce=${request.response_nonce}`
         } else {
-          // Initial request — client subscribing to a resource type
+          // Initial subscribe — send pending resources for this type
           this.logger.info`Subscribe request for ${request.type_url}`
+          subscribedTypes.add(request.type_url)
+          sendSubscribed()
         }
       } catch (err) {
         this.logger.error`Failed to decode DiscoveryRequest: ${err}`
@@ -172,33 +173,48 @@ export class XdsControlPlane {
   }
 
   /**
-   * Send a complete snapshot to the connected Envoy.
-   * CDS is sent first to ensure clusters exist before listeners reference them.
+   * Send snapshot resources for subscribed types that haven't been sent at this version.
+   * CDS is sent before LDS to ensure clusters exist before listeners reference them.
    */
-  private sendSnapshot(call: grpc.ServerDuplexStream<Buffer, Buffer>, snapshot: XdsSnapshot): void {
-    // CDS first
-    if (snapshot.clusters.length > 0) {
+  private sendSnapshotForTypes(
+    call: grpc.ServerDuplexStream<Buffer, Buffer>,
+    snapshot: XdsSnapshot,
+    subscribedTypes: Set<string>,
+    sentVersions: Map<string, string>
+  ): void {
+    // CDS first (only if subscribed and not already sent at this version)
+    if (
+      subscribedTypes.has(CLUSTER_TYPE_URL) &&
+      snapshot.clusters.length > 0 &&
+      sentVersions.get(CLUSTER_TYPE_URL) !== snapshot.version
+    ) {
       const cdsResources = snapshot.clusters.map((c) => encodeCluster(c))
       const cdsResponse = encodeDiscoveryResponse({
         version_info: snapshot.version,
         resources: cdsResources,
         type_url: CLUSTER_TYPE_URL,
-        nonce: nextNonce(),
+        nonce: String(++this.nonceCounter),
       })
       call.write(cdsResponse)
+      sentVersions.set(CLUSTER_TYPE_URL, snapshot.version)
       this.logger.info`Sent CDS v${snapshot.version} (${snapshot.clusters.length} clusters)`
     }
 
-    // Then LDS
-    if (snapshot.listeners.length > 0) {
+    // Then LDS (only if subscribed and not already sent at this version)
+    if (
+      subscribedTypes.has(LISTENER_TYPE_URL) &&
+      snapshot.listeners.length > 0 &&
+      sentVersions.get(LISTENER_TYPE_URL) !== snapshot.version
+    ) {
       const ldsResources = snapshot.listeners.map((l) => encodeListener(l))
       const ldsResponse = encodeDiscoveryResponse({
         version_info: snapshot.version,
         resources: ldsResources,
         type_url: LISTENER_TYPE_URL,
-        nonce: nextNonce(),
+        nonce: String(++this.nonceCounter),
       })
       call.write(ldsResponse)
+      sentVersions.set(LISTENER_TYPE_URL, snapshot.version)
       this.logger.info`Sent LDS v${snapshot.version} (${snapshot.listeners.length} listeners)`
     }
   }
