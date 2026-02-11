@@ -9,6 +9,7 @@ COPY package.json bun.lock ./
 # Copy ALL workspace package.json files for complete resolution
 COPY apps/auth/package.json apps/auth/package.json
 COPY apps/cli/package.json apps/cli/package.json
+COPY apps/envoy/package.json apps/envoy/package.json
 COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/node/package.json apps/node/package.json
 COPY apps/orchestrator/package.json apps/orchestrator/package.json
@@ -41,6 +42,7 @@ COPY package.json bun.lock ./
 # Copy ALL workspace package.json files for workspace resolution
 COPY apps/auth/package.json apps/auth/package.json
 COPY apps/cli/package.json apps/cli/package.json
+COPY apps/envoy/package.json apps/envoy/package.json
 COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/node/package.json apps/node/package.json
 COPY apps/orchestrator/package.json apps/orchestrator/package.json

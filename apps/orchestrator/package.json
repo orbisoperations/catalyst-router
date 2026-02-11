@@ -15,6 +15,7 @@
     "@catalyst/auth-service": "catalog:",
     "@catalyst/authorization": "catalog:",
     "@catalyst/config": "catalog:",
+    "@catalyst/envoy-service": "catalog:",
     "@catalyst/routing": "catalog:",
     "@catalyst/service": "catalog:",
     "@catalyst/telemetry": "catalog:",

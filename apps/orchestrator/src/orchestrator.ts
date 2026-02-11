@@ -14,6 +14,10 @@ export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import {
+  createPortAllocator,
+  type PortAllocator,
+} from '@catalyst/envoy-service/src/port-allocator.js'
+import {
   newHttpBatchRpcSession,
   newWebSocketRpcSession,
   type RpcCompatible,
@@ -133,6 +137,7 @@ export class CatalystNodeBus extends RpcTarget {
   private config: OrchestratorConfig
   private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
+  private portAllocator?: PortAllocator
   public lastNotificationPromise?: Promise<void>
 
   constructor(opts: {
@@ -160,6 +165,10 @@ export class CatalystNodeBus extends RpcTarget {
       (opts.connectionPool?.type
         ? new ConnectionPool(opts.connectionPool.type)
         : new ConnectionPool())
+
+    if (this.config.envoyConfig?.portRange) {
+      this.portAllocator = createPortAllocator(this.config.envoyConfig.portRange)
+    }
 
     this.validateNodeConfig()
   }
@@ -738,10 +747,92 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
+  private async handleEnvoyConfiguration(
+    action: Action,
+    _state: RouteTable,
+    prevState: RouteTable
+  ): Promise<void> {
+    const envoyEndpoint = this.config.envoyConfig?.endpoint
+    if (!envoyEndpoint || !this.portAllocator) return
+
+    // Only react to route-affecting actions
+    const routeActions = [
+      Actions.LocalRouteCreate,
+      Actions.LocalRouteDelete,
+      Actions.InternalProtocolUpdate,
+      Actions.InternalProtocolClose,
+      Actions.InternalProtocolOpen,
+      Actions.InternalProtocolConnected,
+    ]
+    if (!routeActions.includes(action.action)) return
+
+    // Allocate ports for local routes that need them
+    for (const route of this.state.local.routes) {
+      if (!route.envoyPort) {
+        const result = this.portAllocator.allocate(route.name)
+        if (result.success) {
+          route.envoyPort = result.port
+        } else {
+          this.logger.error`Port allocation failed for ${route.name}: ${result.error}`
+        }
+      }
+    }
+
+    // Release ports for deleted local routes
+    if (action.action === Actions.LocalRouteDelete) {
+      const deletedRoute = prevState.local.routes.find(
+        (r) => !this.state.local.routes.some((lr) => lr.name === r.name)
+      )
+      if (deletedRoute) {
+        this.portAllocator.release(deletedRoute.name)
+      }
+    }
+
+    // Allocate egress ports for internal routes
+    for (const route of this.state.internal.routes) {
+      if (!route.envoyPort) {
+        const egressKey = `egress_${route.name}_via_${route.peerName}`
+        const result = this.portAllocator.allocate(egressKey)
+        if (result.success) {
+          route.envoyPort = result.port
+        } else {
+          this.logger.error`Egress port allocation failed for ${egressKey}: ${result.error}`
+        }
+      }
+    }
+
+    // Release egress ports for closed peer connections
+    if (action.action === Actions.InternalProtocolClose) {
+      const closedPeer = action.data.peerInfo.name
+      const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === closedPeer)
+      for (const route of removedRoutes) {
+        this.portAllocator.release(`egress_${route.name}_via_${route.peerName}`)
+      }
+    }
+
+    // Push complete config to envoy service (fire-and-forget)
+    try {
+      const stub = this.connectionPool.get(envoyEndpoint)
+      if (stub) {
+        // @ts-expect-error - Envoy RPC stub typed separately
+        const result = await stub.updateRoutes({
+          local: this.state.local.routes,
+          internal: this.state.internal.routes,
+        })
+        if (!result.success) {
+          this.logger.error`Envoy config sync failed: ${result.error}`
+        }
+      }
+    } catch (e) {
+      this.logger.error`Error syncing to Envoy service: ${e}`
+    }
+  }
+
   /**
    * Handle side effects after state changes.
    */
   async handleNotify(action: Action, _state: RouteTable, prevState: RouteTable): Promise<void> {
+    await this.handleEnvoyConfiguration(action, _state, prevState)
     await this.handleBGPNotify(action, _state, prevState)
     await this.handleGraphqlConfiguration()
   }
