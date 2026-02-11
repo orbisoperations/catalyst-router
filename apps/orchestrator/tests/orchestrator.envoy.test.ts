@@ -14,6 +14,7 @@ const ENVOY_ENDPOINT = 'http://envoy:18000'
 interface EnvoyUpdateRoutesPayload {
   local: Array<{ name: string; envoyPort?: number; [key: string]: unknown }>
   internal: Array<{ name: string; envoyPort?: number; peerName?: string; [key: string]: unknown }>
+  portAllocations?: Record<string, number>
 }
 
 class MockConnectionPool extends ConnectionPool {
@@ -307,6 +308,213 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     expect(booksRoute?.envoyPort).toBe(firstPort)
   })
 
+  it('rewrites envoyPort in BGP re-advertisement for multi-hop', async () => {
+    // Set up two peers: node-b (upstream) and node-c (downstream)
+    const peerB: PeerInfo = {
+      name: 'node-b.somebiz.local.io',
+      endpoint: 'http://node-b:3000',
+      domains: ['somebiz.local.io'],
+      envoyAddress: 'envoy-proxy-b',
+    }
+    const peerC: PeerInfo = {
+      name: 'node-c.somebiz.local.io',
+      endpoint: 'http://node-c:3000',
+      domains: ['somebiz.local.io'],
+    }
+
+    // Connect both peers
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerC } })
+    await bus.lastNotificationPromise
+
+    pool.envoyCalls.length = 0
+    pool.bgpCalls.length = 0
+
+    // Receive a route from peer B with B's envoyPort (5000)
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: {
+                name: 'books-api',
+                protocol: 'http:graphql' as const,
+                endpoint: 'http://books:5001/graphql',
+                envoyPort: 5000,
+              },
+              nodePath: ['node-b.somebiz.local.io'],
+            },
+          ],
+        },
+      },
+    })
+    await bus.lastNotificationPromise
+
+    // Find the BGP call to peer C (re-advertisement)
+    const bgpToC = pool.bgpCalls.find((c) => c.endpoint === peerC.endpoint)
+    expect(bgpToC).toBeDefined()
+
+    const updateMsg = bgpToC!.args[1] as {
+      updates: Array<{ action: string; route: { envoyPort?: number }; nodePath: string[] }>
+    }
+    const addUpdate = updateMsg.updates.find((u) => u.action === 'add')
+    expect(addUpdate).toBeDefined()
+
+    // envoyPort should be this node's allocated egress port, NOT the original 5000
+    expect(addUpdate!.route.envoyPort).toBeNumber()
+    expect(addUpdate!.route.envoyPort).toBeGreaterThanOrEqual(10000)
+    expect(addUpdate!.route.envoyPort).toBeLessThanOrEqual(10100)
+    expect(addUpdate!.route.envoyPort).not.toBe(5000)
+
+    // nodePath should have local node prepended
+    expect(addUpdate!.nodePath).toEqual(['node-a.somebiz.local.io', 'node-b.somebiz.local.io'])
+  })
+
+  it('does not rewrite envoyPort when no envoy configured', async () => {
+    const plainPool = new MockConnectionPool('http')
+    const plainBus = new CatalystNodeBus({
+      config: {
+        node: MOCK_NODE,
+        ibgp: { secret: 'secret' },
+        // no envoyConfig
+      },
+      connectionPool: { pool: plainPool },
+    })
+
+    const peerB: PeerInfo = {
+      name: 'node-b.somebiz.local.io',
+      endpoint: 'http://node-b:3000',
+      domains: ['somebiz.local.io'],
+    }
+    const peerC: PeerInfo = {
+      name: 'node-c.somebiz.local.io',
+      endpoint: 'http://node-c:3000',
+      domains: ['somebiz.local.io'],
+    }
+
+    await plainBus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    await plainBus.lastNotificationPromise
+    await plainBus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+    await plainBus.lastNotificationPromise
+    await plainBus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
+    await plainBus.lastNotificationPromise
+    await plainBus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerC } })
+    await plainBus.lastNotificationPromise
+
+    plainPool.bgpCalls.length = 0
+
+    // Receive a route from peer B with envoyPort 5000
+    await plainBus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: {
+                name: 'books-api',
+                protocol: 'http:graphql' as const,
+                endpoint: 'http://books:5001/graphql',
+                envoyPort: 5000,
+              },
+              nodePath: ['node-b.somebiz.local.io'],
+            },
+          ],
+        },
+      },
+    })
+    await plainBus.lastNotificationPromise
+
+    // BGP call to C should have original envoyPort (no rewrite)
+    const bgpToC = plainPool.bgpCalls.find((c) => c.endpoint === peerC.endpoint)
+    expect(bgpToC).toBeDefined()
+
+    const updateMsg = bgpToC!.args[1] as {
+      updates: Array<{ action: string; route: { envoyPort?: number } }>
+    }
+    const addUpdate = updateMsg.updates.find((u) => u.action === 'add')
+    expect(addUpdate!.route.envoyPort).toBe(5000)
+  })
+
+  it('full sync on peer connect uses state-mutated egress port', async () => {
+    // Set up peer B and receive a route from it
+    const peerB: PeerInfo = {
+      name: 'node-b.somebiz.local.io',
+      endpoint: 'http://node-b:3000',
+      domains: ['somebiz.local.io'],
+      envoyAddress: 'envoy-proxy-b',
+    }
+
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+    await bus.lastNotificationPromise
+
+    // Receive route from peer B (original envoyPort 5000)
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: {
+                name: 'books-api',
+                protocol: 'http:graphql' as const,
+                endpoint: 'http://books:5001/graphql',
+                envoyPort: 5000,
+              },
+              nodePath: ['node-b.somebiz.local.io'],
+            },
+          ],
+        },
+      },
+    })
+    await bus.lastNotificationPromise
+
+    pool.bgpCalls.length = 0
+
+    // Now connect a new peer C — triggers full table sync (InternalProtocolOpen)
+    const peerC: PeerInfo = {
+      name: 'node-c.somebiz.local.io',
+      endpoint: 'http://node-c:3000',
+      domains: ['somebiz.local.io'],
+    }
+
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerC } })
+    await bus.lastNotificationPromise
+
+    // Find the BGP update call to C for the full sync (not the open call)
+    const bgpToC = pool.bgpCalls.find((c) => c.endpoint === peerC.endpoint && c.method === 'update')
+    expect(bgpToC).toBeDefined()
+
+    const updateMsg = bgpToC!.args[1] as {
+      updates: Array<{ action: string; route: { name: string; envoyPort?: number } }>
+    }
+    const booksUpdate = updateMsg.updates.find(
+      (u) => u.action === 'add' && u.route.name === 'books-api'
+    )
+    expect(booksUpdate).toBeDefined()
+
+    // Should have the mutated egress port from handleEnvoyConfiguration, not 5000
+    expect(booksUpdate!.route.envoyPort).toBeNumber()
+    expect(booksUpdate!.route.envoyPort).toBeGreaterThanOrEqual(10000)
+    expect(booksUpdate!.route.envoyPort).toBeLessThanOrEqual(10100)
+    expect(booksUpdate!.route.envoyPort).not.toBe(5000)
+  })
+
   it('envoyPort is populated before BGP broadcast (ordering)', async () => {
     // Set up a connected peer so BGP broadcast happens
     const peerInfo: PeerInfo = {
@@ -344,5 +552,162 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     // The routes in the state should have envoyPort set by the time BGP sees them.
     // Verify the envoy push had the port assigned.
     expect(envoyPush.local[0].envoyPort).toBeGreaterThanOrEqual(10000)
+  })
+
+  it('passes this node envoyAddress to downstream peers via PeerInfo', async () => {
+    // Create a bus where the node has envoyAddress configured
+    const envoyPool = new MockConnectionPool('http')
+    const envoyBus = new CatalystNodeBus({
+      config: {
+        node: {
+          ...MOCK_NODE,
+          envoyAddress: 'envoy-proxy-a',
+        },
+        ibgp: { secret: 'secret' },
+        envoyConfig: {
+          endpoint: ENVOY_ENDPOINT,
+          portRange: [[10000, 10100]],
+        },
+      },
+      connectionPool: { pool: envoyPool },
+    })
+
+    const peerB: PeerInfo = {
+      name: 'node-b.somebiz.local.io',
+      endpoint: 'http://node-b:3000',
+      domains: ['somebiz.local.io'],
+      envoyAddress: 'envoy-proxy-b',
+    }
+    const peerC: PeerInfo = {
+      name: 'node-c.somebiz.local.io',
+      endpoint: 'http://node-c:3000',
+      domains: ['somebiz.local.io'],
+    }
+
+    await envoyBus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    await envoyBus.lastNotificationPromise
+    await envoyBus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+    await envoyBus.lastNotificationPromise
+    await envoyBus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
+    await envoyBus.lastNotificationPromise
+    await envoyBus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerC } })
+    await envoyBus.lastNotificationPromise
+
+    envoyPool.bgpCalls.length = 0
+
+    // Receive a route from peer B
+    await envoyBus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: {
+                name: 'books-api',
+                protocol: 'http:graphql' as const,
+                endpoint: 'http://books:5001/graphql',
+                envoyPort: 5000,
+              },
+              nodePath: ['node-b.somebiz.local.io'],
+            },
+          ],
+        },
+      },
+    })
+    await envoyBus.lastNotificationPromise
+
+    // The BGP call to peer C should include this node's PeerInfo (first arg)
+    // which carries envoyAddress so C knows where to reach A's Envoy
+    const bgpToC = envoyPool.bgpCalls.find((c) => c.endpoint === peerC.endpoint)
+    expect(bgpToC).toBeDefined()
+
+    const peerInfoArg = bgpToC!.args[0] as { name: string; envoyAddress?: string }
+    expect(peerInfoArg.name).toBe('node-a.somebiz.local.io')
+    expect(peerInfoArg.envoyAddress).toBe('envoy-proxy-a')
+  })
+
+  it('does not rewrite envoyPort on remove actions', async () => {
+    const peerB: PeerInfo = {
+      name: 'node-b.somebiz.local.io',
+      endpoint: 'http://node-b:3000',
+      domains: ['somebiz.local.io'],
+      envoyAddress: 'envoy-proxy-b',
+    }
+    const peerC: PeerInfo = {
+      name: 'node-c.somebiz.local.io',
+      endpoint: 'http://node-c:3000',
+      domains: ['somebiz.local.io'],
+    }
+
+    // Connect both peers
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
+    await bus.lastNotificationPromise
+    await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerC } })
+    await bus.lastNotificationPromise
+
+    // First add a route so there's something to remove
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: {
+                name: 'books-api',
+                protocol: 'http:graphql' as const,
+                endpoint: 'http://books:5001/graphql',
+                envoyPort: 5000,
+              },
+              nodePath: ['node-b.somebiz.local.io'],
+            },
+          ],
+        },
+      },
+    })
+    await bus.lastNotificationPromise
+
+    pool.bgpCalls.length = 0
+
+    // Now send a remove update
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            {
+              action: 'remove',
+              route: {
+                name: 'books-api',
+                protocol: 'http:graphql' as const,
+                endpoint: 'http://books:5001/graphql',
+              },
+            },
+          ],
+        },
+      },
+    })
+    await bus.lastNotificationPromise
+
+    // The BGP call to peer C should propagate the remove unchanged
+    const bgpToC = pool.bgpCalls.find((c) => c.endpoint === peerC.endpoint)
+    expect(bgpToC).toBeDefined()
+
+    const updateMsg = bgpToC!.args[1] as {
+      updates: Array<{ action: string; route: { name: string; envoyPort?: number } }>
+    }
+    const removeUpdate = updateMsg.updates.find((u) => u.action === 'remove')
+    expect(removeUpdate).toBeDefined()
+    expect(removeUpdate!.route.name).toBe('books-api')
+    // Remove actions should not have envoyPort rewritten or added
+    expect(removeUpdate!.route.envoyPort).toBeUndefined()
   })
 })
