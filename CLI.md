@@ -1,6 +1,6 @@
-# Catalyst Node CLI
+# Catalyst Router CLI
 
-The `catalyst-node` project uses `commander.js` to provide a robust command-line interface. The primary entry point is the `catalystd` command, which starts the server.
+The `catalyst-router` project uses `commander.js` to provide a robust command-line interface. The primary entry point is the `catalystd` command, which starts the server.
 
 ## Installation
 

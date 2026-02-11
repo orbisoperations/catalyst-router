@@ -2,7 +2,7 @@
 
 ## System Overview: The Core Pod
 
-Catalyst Node runs as a cohesive set of containers ("The Core Pod") orchestrated by the main **Catalyst Node** process.
+Catalyst Router runs as a cohesive set of containers ("The Core Pod") orchestrated by the main **Catalyst Router** process.
 
 ```mermaid
 graph TD
@@ -11,7 +11,7 @@ graph TD
     end
 
     subgraph ControlPlane [Control Plane Pod]
-        Orchestrator["Catalyst Node <br/> (Orchestrator)"]
+        Orchestrator["Catalyst Router <br/> (Orchestrator)"]
         GQL["GraphQL Gateway <br/> (Sidecar)"]
         Auth["Auth Service <br/> (Sidecar)"]
         OTEL["OTEL Collector <br/> (Sidecar)"]
@@ -37,7 +37,7 @@ graph TD
 
 ### Components
 
-#### 1. Catalyst Node (The Orchestrator)
+#### 1. Catalyst Router (The Orchestrator)
 
 - **Role**: Central Brain.
 - **Responsibilities**:
@@ -155,20 +155,20 @@ The Orchestrator implements a lightweight xDS Control Plane that pushes JSON upd
 
 ## Identity & API Management
 
-Catalyst Node supports three strategies for API Key management and service authentication.
+Catalyst Router supports three strategies for API Key management and service authentication.
 
 ### Option 1: Completely External Service
 
 - **Description**: Identity is handled entirely outside the Catalyst mesh.
 - **Flow**:
   1.  Client gets token from External Auth Provider (Auth0, Okta, etc.).
-  2.  Client sends token to Catalyst Node.
+  2.  Client sends token to Catalyst Router.
   3.  Envoy/Auth Service validates the token signature against absolute external JWKS.
 - **Use Case**: Enterprise integration where Identity is already solved.
 
 ### Option 2: Centralized API Service (Single Node)
 
-- **Description**: One specific Catalyst Node acts as the "Identity Authority" for the cluster.
+- **Description**: One specific Catalyst Router acts as the "Identity Authority" for the cluster.
 - **Flow**:
   1.  Admin generates API Keys/Tokens on the Leader Node.
   2.  Other Nodes are configured to delegate auth decisions or sync JWKS from the Leader.

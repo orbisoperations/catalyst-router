@@ -1,6 +1,6 @@
 # @catalyst/config
 
-Centralized configuration management for the Catalyst Node system.
+Centralized configuration management for the Catalyst Router system.
 
 ## Environment Variables
 

@@ -1,6 +1,6 @@
 # Example Services
 
-Example GraphQL services for testing Catalyst Node routing.
+Example GraphQL services for testing Catalyst Router routing.
 
 ## Services
 

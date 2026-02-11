@@ -1,6 +1,6 @@
 # @catalyst/types
 
-Shared type definitions and schemas for Catalyst Node.
+Shared type definitions and schemas for Catalyst Router.
 
 ## Overview
 

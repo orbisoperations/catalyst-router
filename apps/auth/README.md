@@ -1,6 +1,6 @@
 # Catalyst Auth Service
 
-The Auth service provides centralized authentication and authorization for the Catalyst node. It manages cryptographic keys, JWT issuance/verification, and principal-based access control via [Cedar Policy](https://www.cedarpolicy.com/).
+The Auth service provides centralized authentication and authorization for the Catalyst router. It manages cryptographic keys, JWT issuance/verification, and principal-based access control via [Cedar Policy](https://www.cedarpolicy.com/).
 
 ## Principals & Permissions
 

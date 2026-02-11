@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Catalyst SDK** (`@catalyst/sdk`) is a TypeScript-based framework designed to accelerate the development of microservices that run alongside the **Catalyst Node**. It enforces patterns for observability, API design, and service discovery.
+The **Catalyst SDK** (`@catalyst/sdk`) is a TypeScript-based framework designed to accelerate the development of microservices that run alongside the **Catalyst Router**. It enforces patterns for observability, API design, and service discovery.
 
 ## Features
 

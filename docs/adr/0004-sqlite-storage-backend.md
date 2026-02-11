@@ -7,7 +7,7 @@
 
 ## Context
 
-The catalyst-node codebase currently uses in-memory `Map<K,V>` objects for storing application state. While simple to implement, this approach has significant limitations for production deployments.
+The catalyst-router codebase currently uses in-memory `Map<K,V>` objects for storing application state. While simple to implement, this approach has significant limitations for production deployments.
 
 ### Current State
 
@@ -60,7 +60,7 @@ This ADR does **NOT** apply to:
 
 **Chosen Option: SQLite via `bun:sqlite`**
 
-SQLite provides the best balance of reliability, performance, and operational simplicity for catalyst-node's requirements.
+SQLite provides the best balance of reliability, performance, and operational simplicity for catalyst-router's requirements.
 
 ### Rationale
 

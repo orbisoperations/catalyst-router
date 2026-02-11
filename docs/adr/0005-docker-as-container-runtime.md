@@ -6,7 +6,7 @@
 
 ## Context
 
-The catalyst-node project requires a container runtime for local development, integration testing (testcontainers), and CI/CD pipelines (GitHub Actions). The team initially attempted to avoid Docker Desktop due to its commercial licensing requirements, exploring free alternatives instead.
+The catalyst-router project requires a container runtime for local development, integration testing (testcontainers), and CI/CD pipelines (GitHub Actions). The team initially attempted to avoid Docker Desktop due to its commercial licensing requirements, exploring free alternatives instead.
 
 ### Current State
 

@@ -10,7 +10,7 @@ The recommended approach is to use the `addFromZod` method directly on the `Enti
 
 ```typescript
 import { z } from 'zod'
-import { EntityBuilderFactory } from '@catalyst-node/authorization-engine'
+import { EntityBuilderFactory } from '@catalyst-router/authorization-engine'
 
 // Define your Zod schema
 const UserSchema = z.object({
@@ -72,7 +72,7 @@ The legacy approach involved instantiating a `GenericZodModel` class.
 
 ```typescript
 // Legacy Code
-import { GenericZodModel } from '@catalyst-node/authorization-engine'
+import { GenericZodModel } from '@catalyst-router/authorization-engine'
 
 const userModel = new GenericZodModel('User', UserSchema, data, 'username')
 builder.add(userModel)
@@ -93,7 +93,7 @@ builder.add(userModel)
 You can implement your own `EntityProvider`:
 
 ```typescript
-import type { EntityProvider, Entity, EntityCollection, DefaultDomain } from '@catalyst-node/authorization-engine'
+import type { EntityProvider, Entity, EntityCollection, DefaultDomain } from '@catalyst-router/authorization-engine'
 
 class DatabaseUserProvider implements EntityProvider<DefaultDomain> {
   constructor(private userId: string) {}

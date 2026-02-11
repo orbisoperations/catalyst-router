@@ -1,6 +1,6 @@
 # PRODUCT REQUIREMENTS DOCUMENT
 
-**Product:** Catalyst Node
+**Product:** Catalyst Router
 **Project:** POC — GraphQL Parity
 **Version:** 1.0.0
 **Date:** 2026-02-05
@@ -10,11 +10,11 @@
 
 ## 1. Executive Summary
 
-Catalyst Node is a distributed GraphQL federation and cross-organization data sharing system that uses BGP-inspired peering for decentralized service routing. This PRD defines the scope for a Proof of Concept (POC) that demonstrates Catalyst running as a portable virtual appliance — a self-contained, containerized system deployable via Docker Compose on x86_64 infrastructure and Raspberry Pi 5 (8GB). Catalyst v2 is an effort to inject new requirements on hosting and connectivity while consolidating functionality of the sprawling core.
+Catalyst Router is a distributed GraphQL federation and cross-organization data sharing system that uses BGP-inspired peering for decentralized service routing. This PRD defines the scope for a Proof of Concept (POC) that demonstrates Catalyst running as a portable virtual appliance — a self-contained, containerized system deployable via Docker Compose on x86_64 infrastructure and Raspberry Pi 5 (8GB). Catalyst v2 is an effort to inject new requirements on hosting and connectivity while consolidating functionality of the sprawling core.
 
 **Why now:** Catalyst currently exists as a SaaS-only offering. Many organizations in regulated or other data environments cannot use SaaS. The virtual appliance model enables these organizations to participate in federated data sharing by hosting Catalyst on their own infrastructure.
 
-**POC goal:** Demonstrate that two Catalyst nodes can be deployed via Docker Compose, establish a peering relationship, and share GraphQL services across organizational boundaries, running as a self-contained appliance with no external dependencies on both x86_64 servers and Raspberry Pi 5 (8GB ARM64) hardware.
+**POC goal:** Demonstrate that two Catalyst routers can be deployed via Docker Compose, establish a peering relationship, and share GraphQL services across organizational boundaries, running as a self-contained appliance with no external dependencies on both x86_64 servers and Raspberry Pi 5 (8GB ARM64) hardware.
 
 ---
 
@@ -126,7 +126,7 @@ The system must compose multiple GraphQL schemas into a unified endpoint via sch
 
 ### FR-2: Cross-Organization Data Sharing
 
-Two Catalyst nodes must be able to peer and share service routes.
+Two Catalyst routers must be able to peer and share service routes.
 
 **Requirements:**
 

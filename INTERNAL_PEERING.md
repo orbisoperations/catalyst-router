@@ -1,6 +1,6 @@
 # Internal Peering Architecture
 
-This document describes the implementation of Internal Peering (iBGP) for the Catalyst Node orchestrator, focusing on the use of Cap'n Proto RPC for bidirectional communication and route propagation between nodes within the same Autonomous System (AS).
+This document describes the implementation of Internal Peering (iBGP) for the Catalyst Router orchestrator, focusing on the use of Cap'n Proto RPC for bidirectional communication and route propagation between nodes within the same Autonomous System (AS).
 
 ## Overview: BGP in Catalyst
 

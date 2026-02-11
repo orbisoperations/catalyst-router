@@ -1,6 +1,6 @@
-# Catalyst Node License -- Human-Readable Summary
+# Catalyst Router License -- Human-Readable Summary
 
-**This is a plain-language summary of the Catalyst Node license for quick reference.
+**This is a plain-language summary of the Catalyst Router license for quick reference.
 It is NOT the license itself and has no legal force. See the [LICENSE](./LICENSE)
 file for the complete, binding legal terms. If anything in this summary conflicts
 with the LICENSE file, the LICENSE file governs.**
@@ -9,7 +9,7 @@ with the LICENSE file, the LICENSE file governs.**
 
 ## What kind of license is this?
 
-Catalyst Node is **source-available** software. The source code is publicly
+Catalyst Router is **source-available** software. The source code is publicly
 viewable, but commercial use is restricted.
 
 The project is licensed under two layers:

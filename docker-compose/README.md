@@ -1,6 +1,6 @@
 # Docker Compose Examples
 
-This directory contains Docker Compose configurations for running Catalyst Node in different topologies.
+This directory contains Docker Compose configurations for running Catalyst Router in different topologies.
 TODO: Need to actually add the telemetry to the services for docker.compose.yaml and two-node.compose.yaml.
 
 | File                        | Topology           | Observability  | Auth Model          |
@@ -11,7 +11,7 @@ TODO: Need to actually add the telemetry to the services for docker.compose.yaml
 
 ## Single Node (`docker.compose.yaml`)
 
-A single Catalyst node with OpenTelemetry observability. Good for local development and testing.
+A single Catalyst router with OpenTelemetry observability. Good for local development and testing.
 
 ### Services
 
@@ -32,7 +32,7 @@ All services emit traces, metrics, and logs to the OTEL Collector via `OTEL_EXPO
 
 ## Two-Node Peering (`two-node.compose.yaml`)
 
-Two Catalyst nodes peered on the same domain, each with their own gateway and subgraph service. Demonstrates BGP-inspired service route exchange between nodes.
+Two Catalyst routers peered on the same domain, each with their own gateway and subgraph service. Demonstrates BGP-inspired service route exchange between nodes.
 
 ### Services
 

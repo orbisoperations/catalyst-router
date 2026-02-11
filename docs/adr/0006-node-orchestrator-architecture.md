@@ -6,7 +6,7 @@
 
 ## Context
 
-The Catalyst Node Orchestrator is the central control plane component responsible for BGP peering, route management, and sidecar configuration (Envoy, GraphQL Gateway, Auth Service). As the system scales, we need a clear architectural definition of how management operations are handled and how state evolves in response to events.
+The Catalyst Router Orchestrator is the central control plane component responsible for BGP peering, route management, and sidecar configuration (Envoy, GraphQL Gateway, Auth Service). As the system scales, we need a clear architectural definition of how management operations are handled and how state evolves in response to events.
 
 ### Current State
 

@@ -1,12 +1,12 @@
-# Catalyst Node
+# Catalyst Router
 
-**Catalyst Node** is a distributed control and data plane designed to bridge organizations, clouds, and disparate fabrics. It enables different organizations to "peer" and offer services to each other in a cloud-native, edge-compatible way.
+**Catalyst Router** is a distributed control and data plane designed to bridge organizations, clouds, and disparate fabrics. It enables different organizations to "peer" and offer services to each other in a cloud-native, edge-compatible way.
 
-Modeled after BGP, Catalyst Node brings decentralized routing to Layers 4-7, allowing for service discovery and traffic propagation across trust boundaries without relying on centralized coordination like a single Kubernetes cluster or mesh.
+Modeled after BGP, Catalyst Router brings decentralized routing to Layers 4-7, allowing for service discovery and traffic propagation across trust boundaries without relying on centralized coordination like a single Kubernetes cluster or mesh.
 
 ## Mission
 
-Traditional service meshes (like Istio/Linkerd) excel at managing traffic _within_ a cluster or organization. Catalyst Node is built for the spaces _between_ them. We aim to:
+Traditional service meshes (like Istio/Linkerd) excel at managing traffic _within_ a cluster or organization. Catalyst Router is built for the spaces _between_ them. We aim to:
 
 - **Bridge Disparate Networks**: Connect on-prem datacenters, public clouds, and edge devices (even Raspberry Pis) into a unified service fabric.
 - **Enable Organizational Peering**: Allow Organization A to securely expose specific services to Organization B via standard peering agreements, similar to how ISPs peer on the internet.
@@ -14,7 +14,7 @@ Traditional service meshes (like Istio/Linkerd) excel at managing traffic _withi
 
 ## Core Architecture
 
-Catalyst Node runs as a **Core Pod** containing 5 specialized containers:
+Catalyst Router runs as a **Core Pod** containing 5 specialized containers:
 
 ### 1. Control Plane (The Orchestrator)
 
@@ -57,7 +57,7 @@ We support a variety of protocols for service definitions. Currently, **GraphQL*
 
 ## Testing
 
-Catalyst Node employs a multi-tiered testing strategy to ensure reliability across its distributed components. We primarily use `bun:test` as our test runner for its speed and native TypeScript support.
+Catalyst Router employs a multi-tiered testing strategy to ensure reliability across its distributed components. We primarily use `bun:test` as our test runner for its speed and native TypeScript support.
 
 ### Test Categories
 

@@ -1,6 +1,6 @@
 # Catalyst Project Crosswalk
 
-This document maps the concepts from the legacy `catalyst` project (GitHub) to the new `catalyst-node` objectives, annotated with the specific **Implementation Phase** that delivers the capability.
+This document maps the concepts from the legacy `catalyst` project (GitHub) to the new `catalyst-router` objectives, annotated with the specific **Implementation Phase** that delivers the capability.
 
 ## Conceptual Mapping
 

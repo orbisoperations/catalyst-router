@@ -6,7 +6,7 @@ Proposed
 
 ## Context
 
-Catalyst Node peering currently relies on Pre-Shared Keys (PSKs) for session establishment. While simple, PSKs present several challenges:
+Catalyst Router peering currently relies on Pre-Shared Keys (PSKs) for session establishment. While simple, PSKs present several challenges:
 
 1. **Rotation Complexity**: Updating a PSK requires synchronized changes across all nodes in a cluster.
 2. **Weak Identity Assurance**: A PSK only proves knowledge of a secret, not the identity of the holder.

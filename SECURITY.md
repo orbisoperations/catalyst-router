@@ -1,4 +1,4 @@
-# Catalyst Node Peer Security Protocol
+# Catalyst Router Peer Security Protocol
 
 ## Overview
 
@@ -82,7 +82,7 @@ We support three models for Identity and JWT signing. **Strategy 2 (Root Authori
 **Mechanism**:
 
 - An external Identity Provider (IdP) or dedicated signing service handles all key operations.
-- The Catalyst Node is configured with a `jwks_uri` pointing to this external service.
+- The Catalyst Router is configured with a `jwks_uri` pointing to this external service.
 - **Use Case**: Integrating with existing corporate SSO (Okta, Auth0) or Cloud KMS.
 
 #### Strategy 3: Distributed PKI (Mesh Identity)

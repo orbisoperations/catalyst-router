@@ -1,6 +1,6 @@
 # PRD Progress Tracking
 
-**PRD:** Catalyst Node POC — GraphQL Parity (v1.0.0)
+**PRD:** Catalyst Router POC — GraphQL Parity (v1.0.0)
 **Last Updated:** 2026-02-10
 **Overall POC Readiness:** ~95%
 
@@ -29,13 +29,13 @@
 
 ### Implementation Status
 
-| Requirement               | Implementation               | Files                                   |
-| ------------------------- | ---------------------------- | --------------------------------------- |
-| Register services via CLI | `catalyst node route create` | `apps/cli/src/commands/node/route.ts`   |
-| Register services via API | `DataChannel.addRoute()`     | `apps/orchestrator/src/orchestrator.ts` |
-| Schema stitching          | `@graphql-tools/stitch`      | `apps/gateway/src/graphql/server.ts`    |
-| Query delegation          | AsyncExecutor per-service    | `apps/gateway/src/graphql/server.ts`    |
-| Zero-downtime reload      | RPC `updateConfig()`         | `apps/gateway/src/rpc/server.ts`        |
+| Requirement               | Implementation                 | Files                                   |
+| ------------------------- | ------------------------------ | --------------------------------------- |
+| Register services via CLI | `catalyst router route create` | `apps/cli/src/commands/node/route.ts`   |
+| Register services via API | `DataChannel.addRoute()`       | `apps/orchestrator/src/orchestrator.ts` |
+| Schema stitching          | `@graphql-tools/stitch`        | `apps/gateway/src/graphql/server.ts`    |
+| Query delegation          | AsyncExecutor per-service      | `apps/gateway/src/graphql/server.ts`    |
+| Zero-downtime reload      | RPC `updateConfig()`           | `apps/gateway/src/rpc/server.ts`        |
 
 ---
 
@@ -52,7 +52,7 @@
 
 | Requirement        | Implementation                            | Files                                   |
 | ------------------ | ----------------------------------------- | --------------------------------------- |
-| Add peer via CLI   | `catalyst node peer create`               | `apps/cli/src/commands/node/peer.ts`    |
+| Add peer via CLI   | `catalyst router peer create`             | `apps/cli/src/commands/node/peer.ts`    |
 | Route propagation  | BGP-style with `nodePath` loop prevention | `apps/orchestrator/src/orchestrator.ts` |
 | Route withdrawal   | `propagateWithdrawalsForPeer()`           | `apps/orchestrator/src/orchestrator.ts` |
 | Gateway federation | Internal routes synced to gateway         | `apps/orchestrator/src/orchestrator.ts` |
