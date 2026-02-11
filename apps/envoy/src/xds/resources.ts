@@ -34,6 +34,7 @@ export interface XdsCluster {
   type: 'STATIC' | 'STRICT_DNS'
   connect_timeout: string
   lb_policy: string
+  dns_lookup_family?: number
   load_assignment: {
     cluster_name: string
     endpoints: Array<{
@@ -52,6 +53,15 @@ export interface XdsCluster {
 
 const HCM_TYPE_URL =
   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager'
+
+/** Envoy Cluster dns_lookup_family values */
+const DnsLookupFamily = {
+  AUTO: 0,
+  V4_ONLY: 1,
+  V6_ONLY: 2,
+  V4_PREFERRED: 3,
+  ALL: 4,
+} as const
 
 // ---------------------------------------------------------------------------
 // IP detection — determines STATIC vs STRICT_DNS cluster type
@@ -176,6 +186,7 @@ export function buildLocalCluster(opts: {
     type: clusterType,
     connect_timeout: '5s',
     lb_policy: 'ROUND_ROBIN',
+    ...(clusterType === 'STRICT_DNS' && { dns_lookup_family: DnsLookupFamily.V4_ONLY }),
     load_assignment: {
       cluster_name: name,
       endpoints: [
@@ -212,6 +223,7 @@ export function buildRemoteCluster(opts: {
     type: clusterType,
     connect_timeout: '5s',
     lb_policy: 'ROUND_ROBIN',
+    ...(clusterType === 'STRICT_DNS' && { dns_lookup_family: DnsLookupFamily.V4_ONLY }),
     load_assignment: {
       cluster_name: name,
       endpoints: [

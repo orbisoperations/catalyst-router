@@ -176,6 +176,26 @@ describe('buildLocalCluster', () => {
     })
     expect(cluster.load_assignment.cluster_name).toBe('local_books-api')
   })
+
+  it('sets dns_lookup_family V4_ONLY for hostname addresses (STRICT_DNS)', () => {
+    const cluster = buildLocalCluster({
+      channelName: 'books-api',
+      address: 'books.internal',
+      port: 5001,
+    })
+    expect(cluster.type).toBe('STRICT_DNS')
+    expect(cluster.dns_lookup_family).toBe(1)
+  })
+
+  it('does not set dns_lookup_family for IP addresses (STATIC)', () => {
+    const cluster = buildLocalCluster({
+      channelName: 'books-api',
+      address: '127.0.0.1',
+      port: 5001,
+    })
+    expect(cluster.type).toBe('STATIC')
+    expect(cluster.dns_lookup_family).toBeUndefined()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -283,6 +303,28 @@ describe('buildRemoteCluster', () => {
       peerPort: 8001,
     })
     expect(cluster.connect_timeout).toBe('5s')
+  })
+
+  it('sets dns_lookup_family V4_ONLY for hostname addresses (STRICT_DNS)', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-a',
+      peerAddress: 'node-a.example.local.io',
+      peerPort: 8001,
+    })
+    expect(cluster.type).toBe('STRICT_DNS')
+    expect(cluster.dns_lookup_family).toBe(1)
+  })
+
+  it('does not set dns_lookup_family for IP addresses (STATIC)', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-a',
+      peerAddress: '10.0.0.5',
+      peerPort: 8001,
+    })
+    expect(cluster.type).toBe('STATIC')
+    expect(cluster.dns_lookup_family).toBeUndefined()
   })
 })
 
