@@ -6,10 +6,9 @@ export type CliResult<T> = { success: true; data?: T } | { success: false; error
 
 export const BaseCliConfigSchema = z.object({
   orchestratorUrl: z
-    .string()
     .url()
     .default(process.env.CATALYST_ORCHESTRATOR_URL || 'ws://localhost:3000/rpc'),
-  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error'] as const).default('info'),
 })
 export type BaseCliConfig = z.infer<typeof BaseCliConfigSchema>
 
@@ -17,7 +16,7 @@ export const AddServiceInputSchema = DataChannelDefinitionSchema.pick({
   name: true,
   endpoint: true,
   protocol: true,
-}).merge(BaseCliConfigSchema)
+}).extend(BaseCliConfigSchema.shape)
 
 export type AddServiceInput = z.infer<typeof AddServiceInputSchema>
 
@@ -49,7 +48,9 @@ export type ListPeersInput = z.infer<typeof ListPeersInputSchema>
 export const CreateRouteInputSchema = BaseCliConfigSchema.extend({
   name: z.string().min(1),
   endpoint: z.string().url(),
-  protocol: z.enum(['http', 'http:graphql', 'http:gql', 'http:grpc']).default('http:graphql'),
+  protocol: z
+    .enum(['http', 'http:graphql', 'http:gql', 'http:grpc'] as const)
+    .default('http:graphql'),
   region: z.string().optional(),
   tags: z.array(z.string()).optional(),
   token: z.string().optional(),
@@ -72,7 +73,7 @@ export const MintTokenInputSchema = z.object({
   subject: z.string().min(1),
   principal: z.enum(Principal),
   name: z.string().min(1),
-  type: z.enum(['user', 'service']).default('user'),
+  type: z.enum(['user', 'service'] as const).default('user'),
   expiresIn: z.string().optional(),
   nodeId: z.string().optional(),
   trustedDomains: z.array(z.string()).optional(),

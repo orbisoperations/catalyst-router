@@ -8,7 +8,7 @@ import type { PolicyEntity as CedarEntity } from '../policy/src/types.js'
 /**
  * Entity types that can own a token
  */
-export const EntityTypeEnum = z.enum(['user', 'service'])
+export const EntityTypeEnum = z.enum(['user', 'service'] as const)
 export type EntityType = z.infer<typeof EntityTypeEnum>
 
 /**
