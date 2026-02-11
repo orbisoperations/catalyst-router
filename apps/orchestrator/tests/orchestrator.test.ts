@@ -7,7 +7,6 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 
-
 import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
@@ -299,6 +298,42 @@ class MockConnectionPool extends ConnectionPool {
     return this.mockStubs.get(endpoint) as unknown as RpcStub<PublicApi>
   }
 }
+
+describe('CatalystNodeBus > validateToken rejects when authClient is not configured', () => {
+  let bus: CatalystNodeBus
+
+  beforeEach(() => {
+    bus = new CatalystNodeBus({
+      config: { node: MOCK_NODE },
+      connectionPool: { pool: new MockConnectionPool('http') },
+      authEndpoint: '',
+    })
+  })
+
+  it('getNetworkClient rejects with no auth client', async () => {
+    const result = await bus.publicApi().getNetworkClient('any-token')
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toContain('Token validation failed')
+    }
+  })
+
+  it('getDataChannelClient rejects with no auth client', async () => {
+    const result = await bus.publicApi().getDataChannelClient('any-token')
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toContain('Token validation failed')
+    }
+  })
+
+  it('getIBGPClient rejects with no auth client', async () => {
+    const result = await bus.publicApi().getIBGPClient('any-token')
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toContain('Token validation failed')
+    }
+  })
+})
 
 describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
   let bus: CatalystNodeBus

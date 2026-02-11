@@ -72,6 +72,7 @@ RUN bun install --omit=dev --ignore-scripts
 WORKDIR /app/apps/orchestrator
 
 ENV PORT=3000
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
 EXPOSE 3000
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

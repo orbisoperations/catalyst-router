@@ -67,6 +67,12 @@ namespace CATALYST {
         nodeId: String,
         domainId: String
     };
+    entity Stream {
+        streamId: String,
+        sourceNode: String,
+        domainId: String,
+        nodeId: String
+    };
 
     action LOGIN appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
@@ -141,5 +147,15 @@ namespace CATALYST {
     action TELEMETRY_EXPORT appliesTo {
         principal: [ADMIN, TELEMETRY_EXPORTER],
         resource: [Collector]
+    };
+
+    action STREAM_PUBLISH appliesTo {
+        principal: [ADMIN, DATA_CUSTODIAN],
+        resource: [Stream, AdminPanel]
+    };
+
+    action STREAM_SUBSCRIBE appliesTo {
+        principal: [ADMIN, DATA_CUSTODIAN, USER],
+        resource: [Stream, AdminPanel]
     };
 }
