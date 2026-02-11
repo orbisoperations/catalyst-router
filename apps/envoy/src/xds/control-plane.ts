@@ -6,10 +6,12 @@ import {
   LISTENER_TYPE_URL,
   CLUSTER_TYPE_URL,
   encodeListener,
+  encodeTcpProxyListener,
   encodeCluster,
   encodeDiscoveryResponse,
   decodeDiscoveryRequest,
 } from './proto-encoding.js'
+import { isTcpProxyListener } from './resources.js'
 
 // ---------------------------------------------------------------------------
 // ADS service definition for @grpc/grpc-js
@@ -204,7 +206,9 @@ export class XdsControlPlane {
       subscribedTypes.has(LISTENER_TYPE_URL) &&
       sentVersions.get(LISTENER_TYPE_URL) !== snapshot.version
     ) {
-      const ldsResources = snapshot.listeners.map((l) => encodeListener(l))
+      const ldsResources = snapshot.listeners.map((l) =>
+        isTcpProxyListener(l) ? encodeTcpProxyListener(l) : encodeListener(l)
+      )
       const ldsResponse = encodeDiscoveryResponse({
         version_info: snapshot.version,
         resources: ldsResources,

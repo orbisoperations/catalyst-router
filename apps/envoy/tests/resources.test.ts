@@ -5,6 +5,9 @@ import {
   buildLocalCluster,
   buildRemoteCluster,
   buildXdsSnapshot,
+  buildTcpProxyIngressListener,
+  buildTcpProxyEgressListener,
+  isTcpProxyListener,
 } from '../src/xds/resources.js'
 
 // ---------------------------------------------------------------------------
@@ -810,5 +813,417 @@ describe('buildXdsSnapshot protocol-aware', () => {
 
     // Cluster: no HTTP/2 (GraphQL is HTTP/1.1)
     expect(snapshot.clusters[0].upstream_http2).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildTcpProxyIngressListener
+// ---------------------------------------------------------------------------
+
+describe('buildTcpProxyIngressListener', () => {
+  it('creates listener named "ingress_<channelName>"', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    expect(listener.name).toBe('ingress_redis-cache')
+  })
+
+  it('binds to given address and port', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '127.0.0.1',
+    })
+    const addr = listener.address.socket_address
+    expect(addr.address).toBe('127.0.0.1')
+    expect(addr.port_value).toBe(6379)
+  })
+
+  it('uses tcp_proxy filter', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    const filter = listener.filter_chains[0].filters[0]
+    expect(filter.name).toBe('envoy.filters.network.tcp_proxy')
+  })
+
+  it('routes to "local_<channelName>" cluster via typed_config.cluster', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    const typedConfig = listener.filter_chains[0].filters[0].typed_config
+    expect(typedConfig.cluster).toBe('local_redis-cache')
+  })
+
+  it('sets stat_prefix to "ingress_<channelName>"', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    const typedConfig = listener.filter_chains[0].filters[0].typed_config
+    expect(typedConfig.stat_prefix).toBe('ingress_redis-cache')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildTcpProxyEgressListener
+// ---------------------------------------------------------------------------
+
+describe('buildTcpProxyEgressListener', () => {
+  it('creates listener named "egress_<channelName>_via_<peerName>"', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'redis-cache',
+      peerName: 'node-b',
+      port: 16379,
+    })
+    expect(listener.name).toBe('egress_redis-cache_via_node-b')
+  })
+
+  it('defaults bind address to 0.0.0.0', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'redis-cache',
+      peerName: 'node-b',
+      port: 16379,
+    })
+    const addr = listener.address.socket_address
+    expect(addr.address).toBe('0.0.0.0')
+    expect(addr.port_value).toBe(16379)
+  })
+
+  it('routes to "remote_<channelName>_via_<peerName>" cluster via typed_config.cluster', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'redis-cache',
+      peerName: 'node-b',
+      port: 16379,
+    })
+    const typedConfig = listener.filter_chains[0].filters[0].typed_config
+    expect(typedConfig.cluster).toBe('remote_redis-cache_via_node-b')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// isTcpProxyListener
+// ---------------------------------------------------------------------------
+
+describe('isTcpProxyListener', () => {
+  it('returns true for TCP proxy listeners', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    expect(isTcpProxyListener(listener)).toBe(true)
+  })
+
+  it('returns false for HCM listeners', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+    })
+    expect(isTcpProxyListener(listener)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildXdsSnapshot with TCP protocol
+// ---------------------------------------------------------------------------
+
+describe('buildXdsSnapshot with TCP protocol', () => {
+  it('creates TCP proxy ingress listener + local cluster for tcp protocol local routes', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [
+        {
+          name: 'redis-cache',
+          protocol: 'tcp',
+          endpoint: 'http://localhost:6379',
+          envoyPort: 6379,
+        },
+      ],
+      internal: [],
+      portAllocations: { 'redis-cache': 6379 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(1)
+    expect(snapshot.listeners[0].name).toBe('ingress_redis-cache')
+
+    // Verify it is a TCP proxy listener, not HCM
+    expect(isTcpProxyListener(snapshot.listeners[0])).toBe(true)
+    const filter = snapshot.listeners[0].filter_chains[0].filters[0]
+    expect(filter.name).toBe('envoy.filters.network.tcp_proxy')
+
+    expect(snapshot.clusters).toHaveLength(1)
+    expect(snapshot.clusters[0].name).toBe('local_redis-cache')
+  })
+
+  it('creates TCP proxy egress listener + remote cluster for tcp protocol internal routes', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [],
+      internal: [
+        {
+          name: 'redis-cache',
+          protocol: 'tcp',
+          endpoint: 'http://peer-node:6379',
+          envoyPort: 6379,
+          peer: { name: 'node-b', envoyAddress: '10.0.0.10' },
+          peerName: 'node-b',
+          nodePath: ['local-node', 'node-b'],
+        },
+      ],
+      portAllocations: { 'egress_redis-cache_via_node-b': 16379 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(1)
+    expect(snapshot.listeners[0].name).toBe('egress_redis-cache_via_node-b')
+
+    // Verify it is a TCP proxy listener
+    expect(isTcpProxyListener(snapshot.listeners[0])).toBe(true)
+
+    expect(snapshot.clusters).toHaveLength(1)
+    expect(snapshot.clusters[0].name).toBe('remote_redis-cache_via_node-b')
+  })
+
+  it('mixed protocols: tcp and http routes produce correct listener types', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [
+        {
+          name: 'redis-cache',
+          protocol: 'tcp',
+          endpoint: 'http://localhost:6379',
+          envoyPort: 6379,
+        },
+        {
+          name: 'books-api',
+          protocol: 'http',
+          endpoint: 'http://localhost:5001',
+          envoyPort: 8001,
+        },
+      ],
+      internal: [],
+      portAllocations: { 'redis-cache': 6379, 'books-api': 8001 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(2)
+    expect(snapshot.clusters).toHaveLength(2)
+
+    // Find each listener by name
+    const tcpListener = snapshot.listeners.find((l) => l.name === 'ingress_redis-cache')!
+    const httpListener = snapshot.listeners.find((l) => l.name === 'ingress_books-api')!
+
+    expect(isTcpProxyListener(tcpListener)).toBe(true)
+    expect(isTcpProxyListener(httpListener)).toBe(false)
+
+    // TCP listener uses tcp_proxy filter
+    expect(tcpListener.filter_chains[0].filters[0].name).toBe('envoy.filters.network.tcp_proxy')
+
+    // HTTP listener uses http_connection_manager filter
+    expect(httpListener.filter_chains[0].filters[0].name).toBe(
+      'envoy.filters.network.http_connection_manager'
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TCP proxy listeners
+// ---------------------------------------------------------------------------
+
+describe('buildTcpProxyIngressListener', () => {
+  it('creates a listener named "ingress_<channelName>"', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'zenoh-bridge',
+      port: 7447,
+      bindAddress: '0.0.0.0',
+    })
+    expect(listener.name).toBe('ingress_zenoh-bridge')
+  })
+
+  it('uses tcp_proxy filter instead of http_connection_manager', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'zenoh-bridge',
+      port: 7447,
+      bindAddress: '0.0.0.0',
+    })
+    expect(listener.filter_chains[0].filters[0].name).toBe('envoy.filters.network.tcp_proxy')
+  })
+
+  it('sets cluster reference to "local_<channelName>"', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'zenoh-bridge',
+      port: 7447,
+      bindAddress: '0.0.0.0',
+    })
+    expect(listener.filter_chains[0].filters[0].typed_config.cluster).toBe('local_zenoh-bridge')
+  })
+
+  it('sets stat_prefix to the listener name', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'zenoh-bridge',
+      port: 7447,
+      bindAddress: '0.0.0.0',
+    })
+    expect(listener.filter_chains[0].filters[0].typed_config.stat_prefix).toBe(
+      'ingress_zenoh-bridge'
+    )
+  })
+
+  it('binds to the given address and port', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'zenoh-bridge',
+      port: 7447,
+      bindAddress: '0.0.0.0',
+    })
+    const addr = listener.address.socket_address
+    expect(addr.address).toBe('0.0.0.0')
+    expect(addr.port_value).toBe(7447)
+  })
+})
+
+describe('buildTcpProxyEgressListener', () => {
+  it('creates a listener named "egress_<channelName>_via_<peerName>"', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'zenoh-bridge',
+      peerName: 'node-a',
+      port: 10001,
+    })
+    expect(listener.name).toBe('egress_zenoh-bridge_via_node-a')
+  })
+
+  it('uses tcp_proxy filter', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'zenoh-bridge',
+      peerName: 'node-a',
+      port: 10001,
+    })
+    expect(listener.filter_chains[0].filters[0].name).toBe('envoy.filters.network.tcp_proxy')
+  })
+
+  it('sets cluster reference to "remote_<channelName>_via_<peerName>"', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'zenoh-bridge',
+      peerName: 'node-a',
+      port: 10001,
+    })
+    expect(listener.filter_chains[0].filters[0].typed_config.cluster).toBe(
+      'remote_zenoh-bridge_via_node-a'
+    )
+  })
+
+  it('defaults bind address to 0.0.0.0', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'zenoh-bridge',
+      peerName: 'node-a',
+      port: 10001,
+    })
+    expect(listener.address.socket_address.address).toBe('0.0.0.0')
+  })
+})
+
+describe('isTcpProxyListener', () => {
+  it('returns true for TCP proxy listeners', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'zenoh-bridge',
+      port: 7447,
+      bindAddress: '0.0.0.0',
+    })
+    expect(isTcpProxyListener(listener)).toBe(true)
+  })
+
+  it('returns false for HCM listeners', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      protocol: 'http',
+    })
+    expect(isTcpProxyListener(listener)).toBe(false)
+  })
+})
+
+describe('buildXdsSnapshot with TCP protocol', () => {
+  it('uses TCP proxy listener for local tcp routes', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [
+        {
+          name: 'zenoh-bridge',
+          protocol: 'tcp',
+          endpoint: 'http://localhost:7447',
+          envoyPort: 7447,
+        },
+      ],
+      internal: [],
+      portAllocations: { 'zenoh-bridge': 7447 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(1)
+    expect(isTcpProxyListener(snapshot.listeners[0])).toBe(true)
+    expect(snapshot.listeners[0].name).toBe('ingress_zenoh-bridge')
+  })
+
+  it('uses TCP proxy listener for internal tcp routes', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [],
+      internal: [
+        {
+          name: 'zenoh-bridge',
+          protocol: 'tcp',
+          endpoint: 'http://peer:7447',
+          envoyPort: 7447,
+          peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
+          peerName: 'node-a',
+          nodePath: ['local', 'node-a'],
+        },
+      ],
+      portAllocations: { 'egress_zenoh-bridge_via_node-a': 10001 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(1)
+    expect(isTcpProxyListener(snapshot.listeners[0])).toBe(true)
+    expect(snapshot.listeners[0].name).toBe('egress_zenoh-bridge_via_node-a')
+  })
+
+  it('mixes TCP and HTTP listeners in the same snapshot', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [
+        {
+          name: 'zenoh-bridge',
+          protocol: 'tcp',
+          endpoint: 'http://localhost:7447',
+          envoyPort: 7447,
+        },
+        {
+          name: 'rest-api',
+          protocol: 'http',
+          endpoint: 'http://localhost:5001',
+          envoyPort: 8001,
+        },
+      ],
+      internal: [],
+      portAllocations: { 'zenoh-bridge': 7447, 'rest-api': 8001 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(2)
+    const tcpListener = snapshot.listeners.find((l) => l.name === 'ingress_zenoh-bridge')!
+    const httpListener = snapshot.listeners.find((l) => l.name === 'ingress_rest-api')!
+    expect(isTcpProxyListener(tcpListener)).toBe(true)
+    expect(isTcpProxyListener(httpListener)).toBe(false)
   })
 })

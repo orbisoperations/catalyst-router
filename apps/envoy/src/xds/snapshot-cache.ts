@@ -1,4 +1,4 @@
-import type { XdsListener, XdsCluster } from './resources.js'
+import type { XdsListener, XdsTcpProxyListener, XdsCluster } from './resources.js'
 
 /**
  * xDS snapshot — a complete set of Envoy resources at a given version.
@@ -10,8 +10,8 @@ import type { XdsListener, XdsCluster } from './resources.js'
 export interface XdsSnapshot {
   /** Monotonic version string. */
   version: string
-  /** All LDS resources (ingress + egress listeners). */
-  listeners: XdsListener[]
+  /** All LDS resources (ingress + egress listeners, both HCM and TCP proxy). */
+  listeners: Array<XdsListener | XdsTcpProxyListener>
   /** All CDS resources (local + remote clusters). */
   clusters: XdsCluster[]
 }

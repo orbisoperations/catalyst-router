@@ -35,6 +35,28 @@ export interface XdsListener {
   }>
 }
 
+export interface XdsTcpProxyListener {
+  name: string
+  address: { socket_address: { address: string; port_value: number } }
+  filter_chains: Array<{
+    filters: Array<{
+      name: 'envoy.filters.network.tcp_proxy'
+      typed_config: {
+        '@type': string
+        stat_prefix: string
+        cluster: string
+      }
+    }>
+  }>
+}
+
+/** Type guard: returns true if the listener uses tcp_proxy instead of HCM. */
+export function isTcpProxyListener(
+  listener: XdsListener | XdsTcpProxyListener
+): listener is XdsTcpProxyListener {
+  return listener.filter_chains[0]?.filters[0]?.name === 'envoy.filters.network.tcp_proxy'
+}
+
 export interface XdsCluster {
   name: string
   type: 'STATIC' | 'STRICT_DNS'
@@ -217,6 +239,85 @@ export function buildEgressListener(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// TCP proxy listener builders (raw L4 passthrough)
+// ---------------------------------------------------------------------------
+
+const TCP_PROXY_TYPE_URL =
+  'type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy'
+
+/** Returns true if the protocol should use a raw TCP proxy instead of HCM. */
+function isTcpProtocol(protocol?: DataChannelProtocol): boolean {
+  return protocol === 'tcp'
+}
+
+export function buildTcpProxyIngressListener(opts: {
+  channelName: string
+  port: number
+  bindAddress: string
+}): XdsTcpProxyListener {
+  const name = `ingress_${opts.channelName}`
+  const clusterName = `local_${opts.channelName}`
+
+  return {
+    name,
+    address: {
+      socket_address: {
+        address: opts.bindAddress,
+        port_value: opts.port,
+      },
+    },
+    filter_chains: [
+      {
+        filters: [
+          {
+            name: 'envoy.filters.network.tcp_proxy',
+            typed_config: {
+              '@type': TCP_PROXY_TYPE_URL,
+              stat_prefix: name,
+              cluster: clusterName,
+            },
+          },
+        ],
+      },
+    ],
+  }
+}
+
+export function buildTcpProxyEgressListener(opts: {
+  channelName: string
+  peerName: string
+  port: number
+  bindAddress?: string
+}): XdsTcpProxyListener {
+  const name = `egress_${opts.channelName}_via_${opts.peerName}`
+  const clusterName = `remote_${opts.channelName}_via_${opts.peerName}`
+
+  return {
+    name,
+    address: {
+      socket_address: {
+        address: opts.bindAddress ?? '0.0.0.0',
+        port_value: opts.port,
+      },
+    },
+    filter_chains: [
+      {
+        filters: [
+          {
+            name: 'envoy.filters.network.tcp_proxy',
+            typed_config: {
+              '@type': TCP_PROXY_TYPE_URL,
+              stat_prefix: name,
+              cluster: clusterName,
+            },
+          },
+        ],
+      },
+    ],
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Cluster builders
 // ---------------------------------------------------------------------------
 
@@ -329,11 +430,15 @@ export interface BuildXdsSnapshotInput {
  * Creates:
  * - Ingress listener + local cluster for each local route (with endpoint)
  * - Egress listener + remote cluster for each internal route (with envoyPort + peer address)
+ *
+ * Protocol branching:
+ * - `tcp` → raw TCP proxy listener (L4 passthrough, no HCM)
+ * - all others → HTTP connection manager listener (L7)
  */
 export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
   const version = input.version
 
-  const listeners: XdsListener[] = []
+  const listeners: Array<XdsListener | XdsTcpProxyListener> = []
   const clusters: XdsCluster[] = []
 
   // Local routes -> ingress listeners + local clusters
@@ -344,14 +449,24 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
 
     const { address, port } = parseEndpointUrl(route.endpoint)
 
-    listeners.push(
-      buildIngressListener({
-        channelName: route.name,
-        port: allocatedPort,
-        bindAddress: input.bindAddress,
-        protocol: route.protocol,
-      })
-    )
+    if (isTcpProtocol(route.protocol)) {
+      listeners.push(
+        buildTcpProxyIngressListener({
+          channelName: route.name,
+          port: allocatedPort,
+          bindAddress: input.bindAddress,
+        })
+      )
+    } else {
+      listeners.push(
+        buildIngressListener({
+          channelName: route.name,
+          port: allocatedPort,
+          bindAddress: input.bindAddress,
+          protocol: route.protocol,
+        })
+      )
+    }
 
     clusters.push(
       buildLocalCluster({
@@ -373,15 +488,26 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
     const egressPort = input.portAllocations[egressKey]
     if (!egressPort) continue
 
-    listeners.push(
-      buildEgressListener({
-        channelName: route.name,
-        peerName: route.peerName,
-        port: egressPort,
-        bindAddress: input.bindAddress,
-        protocol: route.protocol,
-      })
-    )
+    if (isTcpProtocol(route.protocol)) {
+      listeners.push(
+        buildTcpProxyEgressListener({
+          channelName: route.name,
+          peerName: route.peerName,
+          port: egressPort,
+          bindAddress: input.bindAddress,
+        })
+      )
+    } else {
+      listeners.push(
+        buildEgressListener({
+          channelName: route.name,
+          peerName: route.peerName,
+          port: egressPort,
+          bindAddress: input.bindAddress,
+          protocol: route.protocol,
+        })
+      )
+    }
 
     clusters.push(
       buildRemoteCluster({
