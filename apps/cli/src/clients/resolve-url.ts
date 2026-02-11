@@ -16,7 +16,7 @@ export interface ServiceUrlConfig {
  *
  * Resolution order: explicit `url` > `process.env[envVar]` > `{protocol}://localhost:{port}{path}`
  *
- * If the resolved URL has no protocol prefix, `defaultProtocol://` is prepended.
+ * If the resolved URL has no protocol prefix, `${defaultProtocol}://` is prepended.
  */
 export function resolveServiceUrl(config: ServiceUrlConfig): string {
   const raw = config.url ?? process.env[config.envVar]
