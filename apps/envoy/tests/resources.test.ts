@@ -208,6 +208,46 @@ describe('buildRemoteCluster', () => {
     expect(cluster.type).toBe('STATIC')
   })
 
+  it('uses STRICT_DNS for invalid IPv4 with out-of-range octets', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-a',
+      peerAddress: '999.999.999.999',
+      peerPort: 8001,
+    })
+    expect(cluster.type).toBe('STRICT_DNS')
+  })
+
+  it('uses STRICT_DNS for partially invalid IPv4 octets', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-a',
+      peerAddress: '256.0.0.1',
+      peerPort: 8001,
+    })
+    expect(cluster.type).toBe('STRICT_DNS')
+  })
+
+  it('uses STATIC for valid boundary IPv4 (255.255.255.255)', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-a',
+      peerAddress: '255.255.255.255',
+      peerPort: 8001,
+    })
+    expect(cluster.type).toBe('STATIC')
+  })
+
+  it('uses STATIC for valid IPv4 (0.0.0.0)', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-a',
+      peerAddress: '0.0.0.0',
+      peerPort: 8001,
+    })
+    expect(cluster.type).toBe('STATIC')
+  })
+
   it('recognizes IPv6 addresses as STATIC', () => {
     const cluster = buildRemoteCluster({
       channelName: 'books-api',

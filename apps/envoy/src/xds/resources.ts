@@ -63,7 +63,7 @@ let versionCounter = 0
 // IP detection — determines STATIC vs STRICT_DNS cluster type
 // ---------------------------------------------------------------------------
 
-const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/
+const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/
 const IPV6_RE = /^[0-9a-fA-F:]+$/
 
 function isIpAddress(address: string): boolean {
