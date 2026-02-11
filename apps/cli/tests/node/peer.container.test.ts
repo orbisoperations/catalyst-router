@@ -7,9 +7,7 @@ import {
   type StartedNetwork,
 } from 'testcontainers'
 import path from 'path'
-import { spawnSync } from 'node:child_process'
-import { newWebSocketRpcSession } from 'capnweb'
-import type { PublicApi } from '@catalyst/orchestrator'
+import { createOrchestratorClient } from '../../src/clients/orchestrator-client.js'
 
 const isDockerRunning = () => {
   try {
@@ -57,10 +55,6 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
     if (authBuild.exitCode !== 0) {
       throw new Error('Failed to build auth image')
     }
-  }
-
-  beforeAll(async () => {
-    buildImages()
 
     // Create network
     network = await new Network().start()
@@ -142,13 +136,12 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
     async () => {
       const orchestratorUrl = `ws://${orchestrator.getHost()}:${orchestrator.getMappedPort(3000)}/rpc`
 
-      // Create client using actual PublicApi
-      const client = await newWebSocketRpcSession<PublicApi>(orchestratorUrl)
-      const netClientResult = await client.getNetworkClient(systemToken)
-      if (!netClientResult.success) {
-        throw new Error(`Failed to get network client: ${netClientResult.error}`)
-      }
-      const netClient = netClientResult.client
+      // Create client and get network scope
+      const client = await createOrchestratorClient(orchestratorUrl)
+      const netResult = await client.getNetworkClient(systemToken)
+      expect(netResult.success).toBe(true)
+      if (!netResult.success) throw new Error(netResult.error)
+      const netClient = netResult.client
 
       // List peers (should be empty initially)
       const initialList = await netClient.listPeers()

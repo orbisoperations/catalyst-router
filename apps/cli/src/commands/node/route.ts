@@ -47,7 +47,8 @@ export function routeCommands(): Command {
         process.exit(1)
       }
 
-      const result = await createRouteHandler(validation.data)
+      try {
+        const result = await createRouteHandler(validation.data)
 
         if (result.success) {
           console.log(chalk.green(`[ok] Route '${name}' created successfully.`))
@@ -81,23 +82,28 @@ export function routeCommands(): Command {
         process.exit(1)
       }
 
-      const result = await listRoutesHandler(validation.data)
+      try {
+        const result = await listRoutesHandler(validation.data)
 
-      if (result.success) {
-        if (result.data.routes.length === 0) {
-          console.log(chalk.yellow('No routes found.'))
+        if (result.success) {
+          if (result.data.routes.length === 0) {
+            console.log(chalk.yellow('No routes found.'))
+          } else {
+            console.table(
+              result.data.routes.map((r) => ({
+                Name: r.name,
+                Endpoint: r.endpoint || 'N/A',
+                Protocol: r.protocol,
+                Source: r.source,
+                Peer: 'peer' in r ? r.peer : '-',
+              }))
+            )
+          }
+          process.exit(0)
         } else {
-          console.table(
-            result.data.routes.map((r) => ({
-              Name: r.name,
-              Endpoint: r.endpoint || 'N/A',
-              Protocol: r.protocol,
-              Source: r.source,
-              Peer: 'peer' in r ? r.peer : '-',
-            }))
-          )
+          console.error(chalk.red(`[error] Failed to list routes: ${result.error}`))
+          process.exit(1)
         }
-        process.exit(0)
       } catch (error) {
         console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
         process.exit(1)
@@ -125,7 +131,8 @@ export function routeCommands(): Command {
         process.exit(1)
       }
 
-      const result = await deleteRouteHandler(validation.data)
+      try {
+        const result = await deleteRouteHandler(validation.data)
 
         if (result.success) {
           console.log(chalk.green(`[ok] Route '${name}' deleted.`))
