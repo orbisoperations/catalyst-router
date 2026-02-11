@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { type OrchestratorPublicApi } from '@catalyst/orchestrator-service'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { newWebSocketRpcSession } from 'capnweb'
+import path from 'path'
 import {
   GenericContainer,
-  Wait,
   Network,
-  type StartedTestContainer,
+  Wait,
   type StartedNetwork,
+  type StartedTestContainer,
 } from 'testcontainers'
-import path from 'path'
-import { spawnSync } from 'node:child_process'
-import { newWebSocketRpcSession } from 'capnweb'
-import type { PublicApi } from '@catalyst/orchestrator'
+import { startAuthService } from '../auth-test-helpers.js'
 
 const isDockerRunning = () => {
   try {
@@ -57,54 +57,22 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
     if (authBuild.exitCode !== 0) {
       throw new Error('Failed to build auth image')
     }
-  }
+  })
 
   beforeAll(async () => {
-    buildImages()
-
     // Create network
     network = await new Network().start()
 
-    // Start auth service
-    console.log('Starting auth service...')
-    const authLogs: string[] = []
-    auth = await new GenericContainer(authImage)
-      .withNetwork(network)
-      .withNetworkAliases('auth')
-      .withExposedPorts(5000)
-      .withEnvironment({
-        CATALYST_NODE_ID: 'test-auth-node.somebiz.local.io',
-        CATALYST_PEERING_ENDPOINT: 'ws://auth:5000/rpc',
-        CATALYST_DOMAINS: 'somebiz.local.io',
-        CATALYST_AUTH_ISSUER: 'catalyst',
-        CATALYST_AUTH_KEYS_DB: ':memory:',
-        CATALYST_AUTH_TOKENS_DB: ':memory:',
-        CATALYST_BOOTSTRAP_TTL: '3600000',
-      })
-      .withWaitStrategy(Wait.forLogMessage('System Admin Token minted:'))
-      .withLogConsumer((stream: NodeJS.ReadableStream) => {
-        stream.on('data', (chunk: Buffer) => {
-          const text = chunk.toString()
-          authLogs.push(text)
-          process.stdout.write(`[auth] ${text}`)
-        })
-      })
-      .start()
-
-    // Extract system token from captured logs
-    console.log('Auth service started, extracting system token...')
-    let tokenMatch: RegExpMatchArray | null = null
-    for (let i = 0; i < 20; i++) {
-      const logsData = authLogs.join('')
-      tokenMatch = logsData.match(/System Admin Token minted: (eyJ[^\s]+)/)
-      if (tokenMatch) break
-      await new Promise((r) => setTimeout(r, 100))
-    }
-    if (!tokenMatch) {
-      throw new Error('Failed to extract system token from auth logs')
-    }
-    systemToken = tokenMatch[1]
-    console.log('Extracted system token:', systemToken.substring(0, 20) + '...')
+    // Start auth service and extract system token
+    const authCtx = await startAuthService(network, 'auth', authImage, {
+      CATALYST_NODE_ID: 'test-auth-node.somebiz.local.io',
+      CATALYST_PEERING_ENDPOINT: 'ws://auth:5000/rpc',
+      CATALYST_DOMAINS: 'somebiz.local.io',
+      CATALYST_AUTH_ISSUER: 'catalyst',
+      CATALYST_BOOTSTRAP_TTL: '3600000',
+    })
+    auth = authCtx.container
+    systemToken = authCtx.systemToken
 
     // Start orchestrator
     console.log('Starting orchestrator...')
@@ -120,7 +88,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
         CATALYST_AUTH_ENDPOINT: `ws://auth:5000/rpc`,
         CATALYST_SYSTEM_TOKEN: systemToken,
       })
-      .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator] listening'))
       .withLogConsumer((stream: NodeJS.ReadableStream) => {
         stream.on('data', (chunk: Buffer) => {
           process.stdout.write(`[orchestrator] ${chunk.toString()}`)
@@ -143,7 +111,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
       const orchestratorUrl = `ws://${orchestrator.getHost()}:${orchestrator.getMappedPort(3000)}/rpc`
 
       // Create client using actual PublicApi
-      const client = await newWebSocketRpcSession<PublicApi>(orchestratorUrl)
+      const client = newWebSocketRpcSession<OrchestratorPublicApi>(orchestratorUrl)
       const netClientResult = await client.getNetworkClient(systemToken)
       if (!netClientResult.success) {
         throw new Error(`Failed to get network client: ${netClientResult.error}`)
@@ -160,7 +128,6 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
         name: 'test-peer.somebiz.local.io',
         endpoint: 'ws://test-peer:3000/rpc',
         domains: ['example.com'],
-        connectionStatus: 'disconnected',
       })
       expect(createResult.success).toBe(true)
 

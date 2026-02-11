@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import path from 'path'
+import type { Readable } from 'stream'
 import {
   GenericContainer,
   Network,
@@ -8,6 +9,7 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 import { createOrchestratorClient } from '../../src/clients/orchestrator-client.js'
+import { startAuthService } from '../auth-test-helpers.js'
 
 const isDockerRunning = () => {
   try {
@@ -18,7 +20,7 @@ const isDockerRunning = () => {
   }
 }
 
-const skipTests = !isDockerRunning() || !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+const skipTests = !isDockerRunning()
 if (skipTests) {
   console.warn(
     'Skipping route container tests: Docker not running or CATALYST_CONTAINER_TESTS_ENABLED not set'
@@ -59,34 +61,13 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
     // Create network
     network = await new Network().start()
 
-    // Start auth service
-    console.log('Starting auth service...')
-    auth = await new GenericContainer(authImage)
-      .withNetwork(network)
-      .withNetworkAliases('auth')
-      .withExposedPorts(5000)
-      .withEnvironment({
-        CATALYST_AUTH_ISSUER: 'catalyst',
-        CATALYST_AUTH_KEYS_DB: ':memory:',
-        CATALYST_AUTH_TOKENS_DB: ':memory:',
-        CATALYST_BOOTSTRAP_TTL: '3600000',
-        CATALYST_NODE_ID: 'test-node',
-      })
-      .withWaitStrategy(Wait.forLogMessage('Auth service started'))
-      .start()
-
-    // Extract system token from logs
-    const authLogs = await auth.logs()
-    let logsData = ''
-    for await (const chunk of authLogs) {
-      logsData += chunk.toString()
-    }
-    const tokenMatch = logsData.match(/System Admin Token minted: (eyJ[^\s]+)/)
-    if (!tokenMatch) {
-      throw new Error('Failed to extract system token from auth logs')
-    }
-    systemToken = tokenMatch[1]
-    console.log('Extracted system token:', systemToken.substring(0, 20) + '...')
+    // Start auth service and extract system token
+    const authCtx = await startAuthService(network, 'auth', authImage, {
+      CATALYST_AUTH_ISSUER: 'catalyst',
+      CATALYST_BOOTSTRAP_TTL: '3600000',
+    })
+    auth = authCtx.container
+    systemToken = authCtx.systemToken
 
     // Start orchestrator
     console.log('Starting orchestrator...')
@@ -95,12 +76,17 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
       .withNetworkAliases('orchestrator')
       .withExposedPorts(3000)
       .withEnvironment({
-        CATALYST_NODE_ID: 'test-node',
-        CATALYST_DOMAINS: 'test.local',
-        CATALYST_ORCHESTRATOR_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
-        CATALYST_ORCHESTRATOR_AUTH_SYSTEM_TOKEN: systemToken,
+        PORT: '3000',
+        CATALYST_NODE_ID: 'test-orquestrator-node.somebiz.local.io',
+        CATALYST_PEERING_ENDPOINT: 'ws://orchestrator:3000/rpc',
+        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
+        CATALYST_SYSTEM_TOKEN: systemToken,
       })
-      .withWaitStrategy(Wait.forLogMessage('Orchestrator (Next) running'))
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator] listening'))
+      .withLogConsumer((stream: Readable) => {
+        stream.pipe(process.stdout)
+      })
       .start()
 
     console.log('Containers started successfully')
@@ -117,50 +103,45 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
     async () => {
       const orchestratorUrl = `ws://${orchestrator.getHost()}:${orchestrator.getMappedPort(3000)}/rpc`
 
-      // Create client
+      // Create client using the actual PublicApi with system token for auth
       const client = await createOrchestratorClient(orchestratorUrl)
-      const mgmtScope = client.connectionFromManagementSDK()
+      const dataChannelResult = await client.getDataChannelClient(systemToken)
+      expect(dataChannelResult.success).toBe(true)
+      if (!dataChannelResult.success) return
+      const dataChannel = dataChannelResult.client
 
       // List routes (check initial state)
-      const initialList = await mgmtScope.listLocalRoutes()
-      expect(initialList.routes).toBeDefined()
-      expect(initialList.routes.local).toBeInstanceOf(Array)
-      const initialCount = initialList.routes.local.length
+      const initialList = await dataChannel.listRoutes()
+      expect(initialList.local).toBeInstanceOf(Array)
+      const initialCount = initialList.local.length
 
       // Create route
-      const createResult = await mgmtScope.applyAction({
-        resource: 'localRoute',
-        resourceAction: 'create',
-        data: {
-          name: 'test-service',
-          endpoint: 'http://test-service:8080',
-          protocol: 'http:graphql',
-        },
+      const createResult = await dataChannel.addRoute({
+        name: 'test-service',
+        endpoint: 'http://test-service:8080',
+        protocol: 'http:graphql',
       })
       expect(createResult.success).toBe(true)
 
       // List routes (should have new route)
-      const afterCreate = await mgmtScope.listLocalRoutes()
-      expect(afterCreate.routes.local.length).toBe(initialCount + 1)
-      const createdRoute = afterCreate.routes.local.find((r) => r.name === 'test-service')
+      const afterCreate = await dataChannel.listRoutes()
+      expect(afterCreate.local.length).toBe(initialCount + 1)
+      const createdRoute = afterCreate.local.find((r) => r.name === 'test-service')
       expect(createdRoute).toBeDefined()
       expect(createdRoute?.endpoint).toBe('http://test-service:8080')
       expect(createdRoute?.protocol).toBe('http:graphql')
 
       // Delete route
-      const deleteResult = await mgmtScope.applyAction({
-        resource: 'localRoute',
-        resourceAction: 'delete',
-        data: {
-          name: 'test-service',
-        },
+      const deleteResult = await dataChannel.removeRoute({
+        name: 'test-service',
+        protocol: 'http:graphql',
       })
       expect(deleteResult.success).toBe(true)
 
       // List routes (should be back to initial count)
-      const afterDelete = await mgmtScope.listLocalRoutes()
-      expect(afterDelete.routes.local.length).toBe(initialCount)
-      const deletedRoute = afterDelete.routes.local.find((r) => r.name === 'test-service')
+      const afterDelete = await dataChannel.listRoutes()
+      expect(afterDelete.local.length).toBe(initialCount)
+      const deletedRoute = afterDelete.local.find((r) => r.name === 'test-service')
       expect(deletedRoute).toBeUndefined()
     },
     TIMEOUT
