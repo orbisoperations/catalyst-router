@@ -46,7 +46,7 @@ C4Container
 
 The Orchestrator is the brain of the pod -- it manages peering sessions, computes routes, and coordinates the Auth and Gateway sidecars. All components emit telemetry to the OTEL Collector.
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design.
+See [Architecture](./docs/architecture/overview.md) for the full design.
 
 ## Quick Start
 
@@ -96,11 +96,11 @@ bun test
 
 ## Documentation
 
-- [Architecture](./ARCHITECTURE.md) -- system design and component interactions
+- [Architecture](./docs/architecture/overview.md) -- system design and component interactions
 - [Constitution](./constitution.md) -- architectural principles and constraints
 - [Security](./SECURITY.md) -- peer security protocol and threat model
 - [ADRs](./docs/adr/) -- architecture decision records
-- [CLI Reference](./CLI.md) -- command-line usage and options
+- [CLI Reference](./docs/api/cli.md) -- command-line usage and options
 
 ## Contributing
 

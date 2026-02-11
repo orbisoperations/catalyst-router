@@ -99,4 +99,4 @@ The implementation is centered in `apps/orchestrator/src/orchestrator.ts`:
 
 ## References
 
-- [ARCHITECTURE.md](../../ARCHITECTURE.md) - High-level system overview.
+- [Architecture](../architecture/overview.md) - High-level system overview.
