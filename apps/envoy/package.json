@@ -16,7 +16,9 @@
     "@opentelemetry/api": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@grpc/grpc-js": "^1.14.3",
+    "protobufjs": "^7.5.4"
   },
   "devDependencies": {
     "@catalyst/authorization": "catalog:",
