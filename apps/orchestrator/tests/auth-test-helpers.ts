@@ -1,8 +1,8 @@
 import { Principal } from '@catalyst/authorization'
-import type { StartedTestContainer, StartedNetwork } from 'testcontainers'
-import { GenericContainer, Wait } from 'testcontainers'
-import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession } from 'capnweb'
+import type { Readable } from 'node:stream'
+import type { StartedNetwork, StartedTestContainer } from 'testcontainers'
+import { GenericContainer, Wait } from 'testcontainers'
 
 export interface AuthServiceContext {
   container: StartedTestContainer
@@ -65,7 +65,7 @@ export async function startAuthService(
       CATALYST_AUTH_KEYS_DB: ':memory:', // Use in-memory DB for container tests
       CATALYST_AUTH_TOKENS_DB: ':memory:', // Use in-memory DB for container tests
     })
-    .withWaitStrategy(Wait.forLogMessage('System Admin Token minted:'))
+    .withWaitStrategy(Wait.forLogMessage('Catalyst server [auth] listening'))
     .withLogConsumer((stream: Readable) => {
       stream.on('data', (chunk) => {
         const text = chunk.toString()
@@ -157,4 +157,71 @@ export async function mintPeerToken(
 
   console.log(`[ok] Peer token minted for ${peerName}: ${peerToken.substring(0, 20)}...`)
   return peerToken
+}
+
+export async function mintNodeCustodianToken(
+  authEndpoint: string,
+  systemToken: string,
+  nodeId: string,
+  domains: string[]
+): Promise<string> {
+  console.log(`Minting node custodian token for ${nodeId} from ${authEndpoint}...`)
+  const authClient = newWebSocketRpcSession<AuthServiceApi>(authEndpoint)
+  const tokensApi = await authClient.tokens(systemToken)
+
+  if ('error' in tokensApi) {
+    throw new Error(`Failed to access tokens API: ${tokensApi.error}`)
+  }
+
+  const nodeCustodianToken = await tokensApi.create({
+    subject: nodeId,
+    entity: {
+      id: nodeId,
+      name: nodeId,
+      type: 'service',
+      trustedDomains: domains,
+      trustedNodes: [], // Empty = trust all nodes
+    },
+    principal: Principal.NODE_CUSTODIAN,
+    expiresIn: '1h',
+  })
+
+  console.log(
+    `[ok] Node custodian token minted for ${nodeId}: ${nodeCustodianToken.substring(0, 20)}...`
+  )
+
+  return nodeCustodianToken
+}
+
+export async function mintDataCustodianToken(
+  authEndpoint: string,
+  systemToken: string,
+  nodeId: string,
+  domains: string[]
+): Promise<string> {
+  console.log(`Minting data custodian token for ${nodeId} from ${authEndpoint}...`)
+  const authClient = newWebSocketRpcSession<AuthServiceApi>(authEndpoint)
+  const tokensApi = await authClient.tokens(systemToken)
+
+  if ('error' in tokensApi) {
+    throw new Error(`Failed to access tokens API: ${tokensApi.error}`)
+  }
+
+  const dataCustodianToken = await tokensApi.create({
+    subject: nodeId,
+    entity: {
+      id: nodeId,
+      name: nodeId,
+      type: 'service',
+      trustedDomains: domains,
+    },
+    principal: Principal.DATA_CUSTODIAN,
+    expiresIn: '1h',
+  })
+
+  console.log(
+    `[ok] Data custodian token minted for ${nodeId}: ${dataCustodianToken.substring(0, 20)}...`
+  )
+
+  return dataCustodianToken
 }

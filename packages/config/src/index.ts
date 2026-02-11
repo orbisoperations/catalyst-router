@@ -57,6 +57,16 @@ export const AuthConfigSchema = z.object({
     .default({}),
 })
 
+export const GatewayConfigSchema = z
+  .object({
+    auth: z
+      .object({
+        endpoint: z.string().optional(),
+      })
+      .optional(),
+  })
+  .optional()
+
 export type AuthConfig = z.infer<typeof AuthConfigSchema>
 
 /**
@@ -65,6 +75,7 @@ export type AuthConfig = z.infer<typeof AuthConfigSchema>
 export const CatalystConfigSchema = z.object({
   node: NodeConfigSchema,
   orchestrator: OrchestratorConfigSchema.optional(),
+  gateway: GatewayConfigSchema.optional(),
   auth: AuthConfigSchema.optional(),
   port: z.number().default(3000),
 })
@@ -104,10 +115,25 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
     )
   }
 
-  //Oonly required for the ORCH and AUTH
+  // Required for ORCHESTRATOR, GATEWAY, and AUTH
   const domains = process.env.CATALYST_DOMAINS
     ? process.env.CATALYST_DOMAINS.split(',').map((d) => d.trim())
     : []
+
+  if (
+    domains.length === 0 &&
+    (!options || options.serviceType === null || options.serviceType === 'gateway')
+  ) {
+    throw new Error('CATALYST_DOMAINS environment variable is required for the gateway')
+  }
+
+  const authEndpoint = process.env.CATALYST_AUTH_ENDPOINT
+  if (
+    !authEndpoint &&
+    (!options || options.serviceType === null || options.serviceType === 'gateway')
+  ) {
+    throw new Error('CATALYST_AUTH_ENDPOINT environment variable is required for the gateway')
+  }
 
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
@@ -127,6 +153,11 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
               systemToken: process.env.CATALYST_SYSTEM_TOKEN,
             }
           : undefined,
+    },
+    gateway: {
+      auth: {
+        endpoint: process.env.CATALYST_AUTH_ENDPOINT,
+      },
     },
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,

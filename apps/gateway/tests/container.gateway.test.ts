@@ -1,28 +1,47 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
-import type { StartedTestContainer, StartedNetwork } from 'testcontainers'
-import { GenericContainer, Wait, Network } from 'testcontainers'
-import path from 'path'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { newWebSocketRpcSession } from 'capnweb'
+import path from 'path'
+import type { StartedNetwork, StartedTestContainer } from 'testcontainers'
+import { GenericContainer, Network, Wait } from 'testcontainers'
+import { startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
 
 const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
 describe.skipIf(skipTests)('Gateway Container Integration', () => {
-  const TIMEOUT = 180000 // 3 minutes for builds
+  const TIMEOUT = 300000 // 5 minutes for builds (includes auth)
   // Containers
   let booksContainer: StartedTestContainer
   let moviesContainer: StartedTestContainer
   let gatewayContainer: StartedTestContainer
+  let auth: AuthServiceContext
   let network: StartedNetwork
 
   // Gateway Access
   let gatewayPort: number
-  let rpcClient: { updateConfig(config: unknown): Promise<{ success: boolean }> } | null = null
+  let rpcClient: {
+    getConfigClient(token: string): Promise<{
+      success: boolean
+      client: { updateConfig(config: unknown): Promise<{ success: boolean }> }
+    }>
+  } | null = null
   let ws: WebSocket
   const repoRoot = path.resolve(__dirname, '../../..')
+  const authImage = 'catalyst-auth:gateway-test'
 
   beforeAll(async () => {
     network = await new Network().start()
+
+    // 0. Build Auth image
+    const buildAuth = async () => {
+      const result = Bun.spawnSync(
+        [CONTAINER_RUNTIME, 'build', '-t', authImage, '-f', 'apps/auth/Dockerfile', '.'],
+        { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+      )
+      if (result.exitCode !== 0) {
+        throw new Error(`docker build auth failed: ${result.exitCode}`)
+      }
+    }
 
     // 1. Build & Start Books (Background)
     const startBooks = async () => {
@@ -64,29 +83,49 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
         .start()
     }
 
-    // 3. Build & Start Gateway (Background)
-    const startGateway = async () => {
-      const imageName = 'gateway-service:test'
-      await Bun.spawn(
-        [CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', 'apps/gateway/Dockerfile', '.'],
-        {
-          cwd: repoRoot,
-          stdout: 'ignore',
-          stderr: 'inherit',
-        }
-      ).exited
+    // 3. Build images in parallel, then start auth first (gateway needs the system token)
+    await Promise.all([
+      buildAuth(),
+      startBooks(),
+      startMovies(),
+      // Build gateway image in parallel with other builds
+      Bun.spawn(
+        [
+          CONTAINER_RUNTIME,
+          'build',
+          '-t',
+          'gateway-service:test',
+          '-f',
+          'apps/gateway/Dockerfile',
+          '.',
+        ],
+        { cwd: repoRoot, stdout: 'ignore', stderr: 'inherit' }
+      ).exited,
+    ])
 
-      gatewayContainer = await new GenericContainer(imageName)
-        .withNetwork(network)
-        .withExposedPorts(4000)
-        .withWaitStrategy(Wait.forHttp('/', 4000))
-        .start()
+    // 4. Start auth service (must complete before gateway so we have the system token)
+    auth = await startAuthService(network, 'auth', authImage)
 
-      gatewayPort = gatewayContainer.getMappedPort(4000)
-    }
+    // 5. Start Gateway with auth env vars
+    gatewayContainer = await new GenericContainer('gateway-service:test')
+      .withNetwork(network)
+      .withExposedPorts(4000)
+      .withEnvironment({
+        PORT: '4000',
+        CATALYST_NODE_ID: 'gateway',
+        CATALYST_AUTH_ENDPOINT: auth.endpoint,
+        CATALYST_SYSTEM_TOKEN: auth.systemToken,
+        CATALYST_DOMAINS: 'somebiz.local.io',
+      })
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [gateway] listening'))
+      .withLogConsumer((stream) => {
+        stream.on('data', (chunk: Buffer) => {
+          process.stdout.write(`[gateway] ${chunk.toString()}`)
+        })
+      })
+      .start()
 
-    // Run builds in parallel to save time
-    await Promise.all([startBooks(), startMovies(), startGateway()])
+    gatewayPort = gatewayContainer.getMappedPort(4000)
   }, TIMEOUT)
 
   afterAll(async () => {
@@ -94,6 +133,7 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
     if (booksContainer) await booksContainer.stop()
     if (moviesContainer) await moviesContainer.stop()
     if (gatewayContainer) await gatewayContainer.stop()
+    if (auth?.container) await auth.container.stop()
     if (network) await network.stop()
   })
 
@@ -105,9 +145,14 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
       ws.addEventListener('open', () => resolve())
       ws.addEventListener('error', (e: Event) => reject(e))
     })
+
     rpcClient = newWebSocketRpcSession(ws as unknown as WebSocket) as unknown as {
-      updateConfig(config: unknown): Promise<{ success: boolean }>
+      getConfigClient(token: string): Promise<{
+        success: boolean
+        client: { updateConfig(config: unknown): Promise<{ success: boolean }> }
+      }>
     }
+
     return rpcClient
   }
 
@@ -140,7 +185,9 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
       ],
     }
 
-    const update = await client.updateConfig(config)
+    const configResult = await client.getConfigClient(auth.systemToken)
+    expect(configResult.success).toBe(true)
+    const update = await configResult.client.updateConfig(config)
     expect(update).toEqual({ success: true })
 
     // Query Books
@@ -162,7 +209,9 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
       ],
     }
 
-    const update = await client.updateConfig(config)
+    const configResult = await client.getConfigClient(auth.systemToken)
+    expect(configResult.success).toBe(true)
+    const update = await configResult.client.updateConfig(config)
     expect(update).toEqual({ success: true })
 
     // Query Both
@@ -186,7 +235,9 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
     // But let's try.
     const config = { services: [] }
 
-    const update = await client.updateConfig(config)
+    const configResult = await client.getConfigClient(auth.systemToken)
+    expect(configResult.success).toBe(true)
+    const update = await configResult.client.updateConfig(config)
 
     // If the implementation allows clearing the schema (no services), it sets default schema or stays as is?
     // Checking `GatewayGraphqlServer.reload`:
