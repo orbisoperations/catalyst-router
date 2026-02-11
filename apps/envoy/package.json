@@ -19,6 +19,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@catalyst/authorization": "catalog:",
+    "@catalyst/orchestrator-service": "catalog:",
     "@types/bun": "catalog:dev",
     "typescript": "catalog:dev"
   }
