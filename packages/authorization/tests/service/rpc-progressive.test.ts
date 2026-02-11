@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeAll } from 'bun:test'
+import * as jose from 'jose'
 import { AuthRpcServer } from '../../src/service/rpc/server.js'
 import {
   type TokenHandlers,
   type CertHandlers,
   type ValidationHandlers,
+  type PermissionsHandlers,
+  // type AuthorizeActionResult,
 } from '../../src/service/rpc/schema.js'
 import {
   ALL_POLICIES,
@@ -227,6 +230,95 @@ describe('Auth Progressive API', () => {
 
       const handlers = await rpcServer.tokens(multiDomainToken)
       expect(handlers).not.toHaveProperty('error')
+    })
+  })
+
+  describe('handle liveness after token revocation', () => {
+    /**
+     * These tests demonstrate that the progressive API checks the token once
+     * at handle-acquisition time. After the handle (set of closures) is
+     * returned, the underlying token's revocation status is never re-checked.
+     *
+     * If a token is revoked after the caller acquires the handle, all
+     * operations on that handle continue to succeed. This is the gap: there
+     * is no push-based invalidation of already-issued handler sets.
+     */
+
+    it('should reject token handler operations after the admin token is revoked', async () => {
+      // Mint a dedicated admin token for this test
+      const ephemeralAdmin = await tokenFactory.mint({
+        subject: 'ephemeral-admin',
+        entity: {
+          id: 'ephemeral-admin',
+          name: 'Ephemeral Admin',
+          type: 'user',
+          trustedDomains: ['test-domain'],
+        },
+        principal: Principal.ADMIN,
+      })
+
+      // Acquire the progressive API handle — token is verified HERE, once.
+      const handle = await rpcServer.tokens(ephemeralAdmin)
+      expect(handle).not.toHaveProperty('error')
+      const tokenHandlers = handle as TokenHandlers
+
+      // Revoke the admin token
+      const decoded = jose.decodeJwt(ephemeralAdmin)
+      await tokenFactory.revoke({ jti: decoded.jti! })
+
+      // Sanity check: the token is genuinely revoked at the verification layer
+      const verification = await tokenFactory.verify(ephemeralAdmin)
+      expect(verification.valid).toBe(false)
+
+      let operationFailed = false
+      try {
+        const minted = await tokenHandlers.create({
+          subject: 'post-revocation-service',
+          entity: { id: 'ghost', name: 'Ghost', type: 'service' },
+          principal: Principal.USER,
+        })
+
+        if (typeof minted === 'string' && minted.length > 0) {
+          operationFailed = false
+        }
+      } catch {
+        operationFailed = true
+      }
+
+      expect(operationFailed).toBe(true)
+    })
+
+    it('should deny permissions.authorizeAction after the backing token is revoked', async () => {
+      // Mint an admin token for the permissions handle
+      const permAdmin = await tokenFactory.mint({
+        subject: 'perm-admin',
+        entity: {
+          id: 'perm-admin',
+          name: 'Perm Admin',
+          type: 'user',
+          trustedDomains: ['test-domain'],
+        },
+        principal: Principal.ADMIN,
+      })
+
+      // Acquire the permissions handle — token verified once here
+      const handle = await rpcServer.permissions(permAdmin)
+      expect(handle).not.toHaveProperty('error')
+      const permHandlers = handle as PermissionsHandlers
+
+      const decoded = jose.decodeJwt(permAdmin)
+      await tokenFactory.revoke({ jti: decoded.jti! })
+
+      // Sanity check
+      const verification = await tokenFactory.verify(permAdmin)
+      expect(verification.valid).toBe(false)
+
+      const authResult = await permHandlers.authorizeAction({
+        action: 'MANAGE',
+        nodeContext: { nodeId: 'test-node', domains: ['test-domain'] },
+      })
+
+      expect(authResult.success).toBe(false)
     })
   })
 })
