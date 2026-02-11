@@ -205,6 +205,13 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
           check()
         })
 
+      // Subscribe to CDS and LDS (server only sends after subscribe)
+      const RequestType = root.lookupType('envoy.service.discovery.v3.DiscoveryRequest')
+      const cdsReq = RequestType.fromObject({ type_url: CLUSTER_TYPE_URL })
+      stream.write(Buffer.from(RequestType.encode(cdsReq).finish()))
+      const ldsReq = RequestType.fromObject({ type_url: LISTENER_TYPE_URL })
+      stream.write(Buffer.from(RequestType.encode(ldsReq).finish()))
+
       await waitForResponses(2)
 
       // First response: CDS

@@ -55,6 +55,7 @@ export class EnvoyRpcServer extends RpcTarget {
   private readonly snapshotCache: SnapshotCache | undefined
   private readonly bindAddress: string
   private config: RouteConfig = { local: [], internal: [] }
+  private versionCounter = 0
 
   constructor(options: EnvoyRpcServerOptions = {}) {
     super()
@@ -114,6 +115,7 @@ export class EnvoyRpcServer extends RpcTarget {
         internal: this.config.internal,
         portAllocations,
         bindAddress: this.bindAddress,
+        version: String(++this.versionCounter),
       })
 
       this.snapshotCache.setSnapshot(snapshot)

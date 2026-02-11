@@ -32,6 +32,7 @@ function openAdsStream(client: grpc.Client): {
     nonce: string
     resourceCount: number
   }>
+  subscribe: (typeUrl: string) => void
   waitForResponses: (count: number, timeoutMs?: number) => Promise<void>
 } {
   const responses: Array<{
@@ -49,6 +50,7 @@ function openAdsStream(client: grpc.Client): {
 
   const root = getProtoRoot()
   const ResponseType = root.lookupType('envoy.service.discovery.v3.DiscoveryResponse')
+  const RequestType = root.lookupType('envoy.service.discovery.v3.DiscoveryRequest')
 
   stream.on('data', (buffer: Buffer) => {
     const msg = ResponseType.decode(buffer)
@@ -65,6 +67,12 @@ function openAdsStream(client: grpc.Client): {
       resourceCount: obj.resources.length,
     })
   })
+
+  /** Send a subscribe DiscoveryRequest for a resource type. */
+  function subscribe(typeUrl: string): void {
+    const msg = RequestType.fromObject({ type_url: typeUrl })
+    stream.write(Buffer.from(RequestType.encode(msg).finish()))
+  }
 
   function waitForResponses(count: number, timeoutMs = 5000): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -84,7 +92,7 @@ function openAdsStream(client: grpc.Client): {
     })
   }
 
-  return { stream, responses, waitForResponses }
+  return { stream, responses, subscribe, waitForResponses }
 }
 
 describe('ADS gRPC Control Plane', () => {
@@ -109,7 +117,7 @@ describe('ADS gRPC Control Plane', () => {
     await controlPlane?.shutdown()
   })
 
-  it('sends CDS and LDS on initial connect when snapshot exists', async () => {
+  it('sends CDS and LDS after client subscribes when snapshot exists', async () => {
     // Push a snapshot before connecting
     cache.setSnapshot({
       version: '1',
@@ -130,23 +138,27 @@ describe('ADS gRPC Control Plane', () => {
     })
 
     const client = createAdsClient(port)
-    const { stream, responses, waitForResponses } = openAdsStream(client)
+    const { stream, responses, subscribe, waitForResponses } = openAdsStream(client)
 
     try {
-      // Should receive 2 responses: CDS first, then LDS
+      // Subscribe to CDS first, then LDS (mimics Envoy ADS behavior)
+      subscribe(CLUSTER_TYPE_URL)
+      await waitForResponses(1)
+
+      subscribe(LISTENER_TYPE_URL)
       await waitForResponses(2)
 
-      expect(responses).toHaveLength(2)
-
       // First response: CDS
-      expect(responses[0].type_url).toBe(CLUSTER_TYPE_URL)
-      expect(responses[0].version_info).toBe('1')
-      expect(responses[0].resourceCount).toBe(1)
+      const cds = responses.find((r) => r.type_url === CLUSTER_TYPE_URL)
+      expect(cds).toBeDefined()
+      expect(cds!.version_info).toBe('1')
+      expect(cds!.resourceCount).toBe(1)
 
       // Second response: LDS
-      expect(responses[1].type_url).toBe(LISTENER_TYPE_URL)
-      expect(responses[1].version_info).toBe('1')
-      expect(responses[1].resourceCount).toBe(1)
+      const lds = responses.find((r) => r.type_url === LISTENER_TYPE_URL)
+      expect(lds).toBeDefined()
+      expect(lds!.version_info).toBe('1')
+      expect(lds!.resourceCount).toBe(1)
     } finally {
       stream.end()
       client.close()
@@ -155,9 +167,13 @@ describe('ADS gRPC Control Plane', () => {
 
   it('pushes new snapshot when cache updates', async () => {
     const client = createAdsClient(port)
-    const { stream, responses, waitForResponses } = openAdsStream(client)
+    const { stream, responses, subscribe, waitForResponses } = openAdsStream(client)
 
     try {
+      // Subscribe to both types
+      subscribe(CLUSTER_TYPE_URL)
+      subscribe(LISTENER_TYPE_URL)
+
       // Wait for the initial snapshot (from previous test)
       await waitForResponses(2)
       const initialCount = responses.length
@@ -214,9 +230,10 @@ describe('ADS gRPC Control Plane', () => {
 
   it('handles stream disconnect gracefully', async () => {
     const client = createAdsClient(port)
-    const { stream } = openAdsStream(client)
+    const { stream, subscribe } = openAdsStream(client)
 
-    // Wait for initial data before closing
+    // Subscribe and wait briefly before closing
+    subscribe(CLUSTER_TYPE_URL)
     await new Promise((r) => setTimeout(r, 200))
 
     // Close the stream — should not crash the server
@@ -228,9 +245,16 @@ describe('ADS gRPC Control Plane', () => {
 
     const client2 = createAdsClient(port)
     try {
-      const { stream: stream2, responses, waitForResponses } = openAdsStream(client2)
+      const {
+        stream: stream2,
+        responses,
+        subscribe: sub2,
+        waitForResponses,
+      } = openAdsStream(client2)
 
       try {
+        sub2(CLUSTER_TYPE_URL)
+        sub2(LISTENER_TYPE_URL)
         await waitForResponses(2)
         expect(responses.length).toBeGreaterThanOrEqual(2)
       } finally {
