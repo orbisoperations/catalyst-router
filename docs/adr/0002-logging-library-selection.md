@@ -7,7 +7,7 @@
 
 ## Context
 
-As part of implementing unified observability for catalyst-node (see ADR-0001), we need to select a logging library that:
+As part of implementing unified observability for catalyst-router (see ADR-0001), we need to select a logging library that:
 
 1. Provides a developer-friendly API for structured logging
 2. Supports automatic trace_id injection for log correlation
@@ -40,7 +40,7 @@ Services currently use inconsistent logging approaches:
 
 **Chosen Option: LogTape**
 
-We will adopt LogTape as the logging library for all catalyst-node services.
+We will adopt LogTape as the logging library for all catalyst-router services.
 
 ### Rationale
 

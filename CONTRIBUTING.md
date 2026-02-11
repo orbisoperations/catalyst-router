@@ -1,10 +1,10 @@
-# Contributing to Catalyst Node
+# Contributing to Catalyst Router
 
-Thank you for your interest in contributing to Catalyst Node. This document
+Thank you for your interest in contributing to Catalyst Router. This document
 explains the process for contributing to the project, from signing the
 Contributor License Agreement to submitting your first pull request.
 
-Catalyst Node is maintained by **Orbis Operations LLC**.
+Catalyst Router is maintained by **Orbis Operations LLC**.
 
 ---
 
@@ -44,7 +44,7 @@ Pull requests from contributors who have not signed the CLA will not be reviewed
 
 ## Development workflow
 
-Catalyst Node uses **Graphite** for stacked pull requests. All branching,
+Catalyst Router uses **Graphite** for stacked pull requests. All branching,
 committing, and submitting should use `gt` commands rather than raw `git`.
 
 ### Creating a branch and PR
@@ -128,7 +128,7 @@ for coding standards. Key conventions include:
 
 ## Testing
 
-Catalyst Node follows test-driven development. Write tests before or alongside
+Catalyst Router follows test-driven development. Write tests before or alongside
 your implementation, not as an afterthought.
 
 - **Unit tests**: `*.test.ts` -- for core logic, no external dependencies
@@ -168,6 +168,6 @@ constructively, and collaborate in good faith.
 
 ## License
 
-By contributing to Catalyst Node, you agree that your contributions will be
+By contributing to Catalyst Router, you agree that your contributions will be
 licensed under the project's [LICENSE](./LICENSE) (Commons Clause + Elastic
 License 2.0) and that you have signed the [CLA](./CLA.md).

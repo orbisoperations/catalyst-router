@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-This directory contains Architecture Decision Records (ADRs) for the catalyst-node project.
+This directory contains Architecture Decision Records (ADRs) for the catalyst-router project.
 
 ## What is an ADR?
 

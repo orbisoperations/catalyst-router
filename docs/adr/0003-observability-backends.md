@@ -51,7 +51,7 @@
 
 ### Licensing Constraints
 
-Since catalyst-node is distributed software, we cannot include or bundle AGPL-licensed components:
+Since catalyst-router is distributed software, we cannot include or bundle AGPL-licensed components:
 
 | License    | Can Use? | Reason                           |
 | ---------- | -------- | -------------------------------- |
@@ -125,7 +125,7 @@ Since catalyst-node is distributed software, we cannot include or bundle AGPL-li
 ### Positive
 
 - **Full license compliance** — All backends are Apache 2.0 or MIT
-- **Distribution-safe** — Can bundle observability stack with catalyst-node
+- **Distribution-safe** — Can bundle observability stack with catalyst-router
 - **Native UIs** — Each backend provides built-in visualization
 - **Industry standards** — Prometheus and Jaeger are CNCF projects
 - **Simple operations** — No complex dependencies (no Kafka, no Cassandra)
@@ -155,7 +155,7 @@ If license constraints change or we use backends as external services (not bundl
 ## Compliance
 
 - All selected backends are Apache 2.0 or MIT licensed
-- Safe to distribute with catalyst-node
+- Safe to distribute with catalyst-router
 - No AGPL or SSPL components included
 
 ## Related Decisions

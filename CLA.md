@@ -1,6 +1,6 @@
-# Catalyst Node Individual Contributor License Agreement ("Agreement") v1.0
+# Catalyst Router Individual Contributor License Agreement ("Agreement") v1.0
 
-Thank you for your interest in contributing to Catalyst Node, a project
+Thank you for your interest in contributing to Catalyst Router, a project
 maintained by Orbis Operations LLC ("the Company"). In order to clarify the
 intellectual property licenses granted with Contributions from any person or
 entity, the Company must have a Contributor License Agreement ("CLA") on file
@@ -44,7 +44,7 @@ of, the Company for the purpose of discussing and improving the Work, but
 excluding communication that is conspicuously marked or otherwise designated in
 writing by You as "Not a Contribution."
 
-"Work" shall mean the Catalyst Node project and any other project owned or
+"Work" shall mean the Catalyst Router project and any other project owned or
 managed by the Company to which Contributions may be made.
 
 ## 1. Grant of Copyright License
@@ -123,10 +123,10 @@ By signing below, You accept and agree to the terms of this Contributor
 License Agreement for all present and future Contributions Submitted to the
 Company.
 
-| Field           | Value                                |
-| --------------- | ------------------------------------ |
-| Full Name       | **************\_\_\_\_************** |
-| Date            | **************\_\_\_\_************** |
-| Email Address   | **************\_\_\_\_************** |
-| Mailing Address | **************\_\_\_\_************** |
-| Signature       | **************\_\_\_\_************** |
+| Field           | Value                                    |
+| --------------- | ---------------------------------------- |
+| Full Name       | ******\*\*******\_\_\_\_******\*\******* |
+| Date            | ******\*\*******\_\_\_\_******\*\******* |
+| Email Address   | ******\*\*******\_\_\_\_******\*\******* |
+| Mailing Address | ******\*\*******\_\_\_\_******\*\******* |
+| Signature       | ******\*\*******\_\_\_\_******\*\******* |

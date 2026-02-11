@@ -1,6 +1,6 @@
 # BGP Service Discovery Protocol
 
-This document outlines the adaptation of the Border Gateway Protocol (BGP) for service discovery within the Catalyst Node ecosystem. Instead of routing IP packets between Autonomous Systems (AS) based on CIDR blocks, we propagate service availability and routing information for logical domains.
+This document outlines the adaptation of the Border Gateway Protocol (BGP) for service discovery within the Catalyst Router ecosystem. Instead of routing IP packets between Autonomous Systems (AS) based on CIDR blocks, we propagate service availability and routing information for logical domains.
 
 ## Overview
 
@@ -9,7 +9,7 @@ In this system, an **Autonomous System (AS)** represents a logical domain of ser
 - **Standard BGP**: Routes `10.0.0.0/24` -> Next Hop IP.
 - **Catalyst BGP**: Routes `*.mydatacenter.mycompany` -> Envoy Node ID / Service Endpoint.
 
-Traffic is routed via Envoy proxies, not at the IP layer. The "Next Hop" is a catalyst node that can forward the request or terminate it at a local service.
+Traffic is routed via Envoy proxies, not at the IP layer. The "Next Hop" is a catalyst router that can forward the request or terminate it at a local service.
 
 ## Architecture
 

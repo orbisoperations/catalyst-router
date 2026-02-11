@@ -1,5 +1,5 @@
 {
-  "name": "catalyst-monorepo",
+  "name": "catalyst-router",
   "private": true,
   "scripts": {
     "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",

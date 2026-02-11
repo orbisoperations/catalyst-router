@@ -1,8 +1,8 @@
-# Catalyst Node Constitution
+# Catalyst Router Constitution
 
 **Version**: 1.1.0 | **Ratified**: 2026-02-05 | **Last Amended**: 2026-02-09
 
-> This constitution defines the immutable architectural principles for the Catalyst Node project.
+> This constitution defines the immutable architectural principles for the Catalyst Router project.
 > All specifications, implementation plans, and code changes MUST comply with these principles.
 > Violations are CRITICAL findings that block merge. No exceptions.
 
@@ -37,7 +37,7 @@
 
 ### I. Decentralized Service Routing
 
-**Statement**: Catalyst Node operates as a decentralized service mesh using a BGP-inspired protocol for Layers 4-7. No centralized coordinator may be introduced that creates a single point of failure for routing decisions.
+**Statement**: Catalyst Router operates as a decentralized service mesh using a BGP-inspired protocol for Layers 4-7. No centralized coordinator may be introduced that creates a single point of failure for routing decisions.
 
 | DO                                                          | DON'T                                                  |
 | ----------------------------------------------------------- | ------------------------------------------------------ |
@@ -420,7 +420,7 @@ gt fold                                    # Merge current branch into parent
 
 ### Scope
 
-All packages in the `catalyst-node` monorepo.
+All packages in the `catalyst-router` monorepo.
 
 ### Precedence
 

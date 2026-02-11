@@ -7,7 +7,7 @@
 
 ## Context
 
-Catalyst-node is a distributed control plane with multiple services:
+Catalyst-router is a distributed control plane with multiple services:
 
 - **Orchestrator** - BGP-style peering, route table management
 - **Gateway** - GraphQL federation via schema stitching
@@ -43,7 +43,7 @@ The existing observability is fragmented:
 
 ### Licensing Constraints
 
-Since catalyst-node is distributed software, we cannot use AGPL-licensed components. This affects backend selection:
+Since catalyst-router is distributed software, we cannot use AGPL-licensed components. This affects backend selection:
 
 | Component        | License    | Status     |
 | ---------------- | ---------- | ---------- |

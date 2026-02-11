@@ -1,12 +1,12 @@
-# Catalyst Node Implementation Milestones
+# Catalyst Router Implementation Milestones
 
-This document outlines the step-by-step implementation strategy for **Catalyst Node**, consolidated from the architectural vision and the roll-out strategy.
+This document outlines the step-by-step implementation strategy for **Catalyst Router**, consolidated from the architectural vision and the roll-out strategy.
 
 > **Note on Configuration**: For all phases below, configuration is considered **a priori** (static at startup). We must verify that the node can be fully configured via both **JSON config file** and **CLI arguments/flags**. Dynamic configuration is out of scope for these initial phases.
 
 ## Feature Crosswalk (Legacy vs New)
 
-This table maps legacy `catalyst` capabilities to the specific Milestone that delivers them in `catalyst-node`.
+This table maps legacy `catalyst` capabilities to the specific Milestone that delivers them in `catalyst-router`.
 
 | Legacy Capability    | New Objective                  | Fulfillment Milestone              |
 | :------------------- | :----------------------------- | :--------------------------------- |

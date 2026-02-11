@@ -1,6 +1,6 @@
 # Catalyst CLI
 
-The Catalyst Node CLI provides command-line utilities for managing the Catalyst network node, including registering services and viewing metrics.
+The Catalyst Router CLI provides command-line utilities for managing the Catalyst network router, including registering services and viewing metrics.
 
 ## Development
 
