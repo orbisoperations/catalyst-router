@@ -78,14 +78,12 @@ describe('PortEntrySchema', () => {
 describe('EnvoyConfigSchema', () => {
   it('parses valid config with all fields', () => {
     const result = EnvoyConfigSchema.safeParse({
-      portRange: [8000, [9000, 9010], 10000],
       adminPort: 9902,
       xdsPort: 18001,
       bindAddress: '127.0.0.1',
     })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.portRange).toEqual([8000, [9000, 9010], 10000])
       expect(result.data.adminPort).toBe(9902)
       expect(result.data.xdsPort).toBe(18001)
       expect(result.data.bindAddress).toBe('127.0.0.1')
@@ -93,9 +91,7 @@ describe('EnvoyConfigSchema', () => {
   })
 
   it('uses default adminPort of 9901', () => {
-    const result = EnvoyConfigSchema.safeParse({
-      portRange: [8000],
-    })
+    const result = EnvoyConfigSchema.safeParse({})
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.adminPort).toBe(9901)
@@ -103,9 +99,7 @@ describe('EnvoyConfigSchema', () => {
   })
 
   it('uses default xdsPort of 18000', () => {
-    const result = EnvoyConfigSchema.safeParse({
-      portRange: [8000],
-    })
+    const result = EnvoyConfigSchema.safeParse({})
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.xdsPort).toBe(18000)
@@ -113,42 +107,16 @@ describe('EnvoyConfigSchema', () => {
   })
 
   it('uses default bindAddress of 0.0.0.0', () => {
-    const result = EnvoyConfigSchema.safeParse({
-      portRange: [8000],
-    })
+    const result = EnvoyConfigSchema.safeParse({})
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.bindAddress).toBe('0.0.0.0')
     }
   })
 
-  it('requires at least one port entry', () => {
-    const result = EnvoyConfigSchema.safeParse({
-      portRange: [],
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('validates mixed arrays of single ports and ranges', () => {
-    const result = EnvoyConfigSchema.safeParse({
-      portRange: [8000, [9000, 9010], 10000, [11000, 11500]],
-    })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.portRange.length).toBe(4)
-    }
-  })
-
-  it('rejects missing portRange', () => {
+  it('parses with empty object (all defaults)', () => {
     const result = EnvoyConfigSchema.safeParse({})
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects invalid port entries in portRange', () => {
-    const result = EnvoyConfigSchema.safeParse({
-      portRange: [-1],
-    })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
   })
 })
 
@@ -174,7 +142,6 @@ describe('CatalystConfigSchema with envoy field', () => {
     const result = CatalystConfigSchema.safeParse({
       ...baseConfig,
       envoy: {
-        portRange: [8000, [9000, 9010]],
         adminPort: 9901,
         xdsPort: 18000,
         bindAddress: '0.0.0.0',
@@ -183,7 +150,7 @@ describe('CatalystConfigSchema with envoy field', () => {
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.envoy).toBeDefined()
-      expect(result.data.envoy!.portRange).toEqual([8000, [9000, 9010]])
+      expect(result.data.envoy!.adminPort).toBe(9901)
     }
   })
 
@@ -192,14 +159,15 @@ describe('CatalystConfigSchema with envoy field', () => {
     expect(result.success).toBe(true)
   })
 
-  it('rejects invalid envoy config', () => {
+  it('envoy field accepts empty object (all defaults)', () => {
     const result = CatalystConfigSchema.safeParse({
       ...baseConfig,
-      envoy: {
-        portRange: [],
-      },
+      envoy: {},
     })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.envoy!.adminPort).toBe(9901)
+    }
   })
 })
 
@@ -240,16 +208,18 @@ describe('OrchestratorConfigSchema with envoyConfig', () => {
     }
   })
 
-  it('parses with envoyConfig.endpoint', () => {
+  it('parses with full envoyConfig', () => {
     const result = OrchestratorConfigSchema.safeParse({
       envoyConfig: {
         endpoint: 'http://localhost:18000',
+        portRange: [8000, [9000, 9010]],
       },
     })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.envoyConfig).toBeDefined()
       expect(result.data.envoyConfig!.endpoint).toBe('http://localhost:18000')
+      expect(result.data.envoyConfig!.portRange).toEqual([8000, [9000, 9010]])
     }
   })
 
@@ -258,6 +228,7 @@ describe('OrchestratorConfigSchema with envoyConfig', () => {
       envoyConfig: {
         endpoint: 'http://localhost:18000',
         envoyAddress: 'https://10.0.0.5:443',
+        portRange: [8000],
       },
     })
     expect(result.success).toBe(true)
@@ -270,6 +241,7 @@ describe('OrchestratorConfigSchema with envoyConfig', () => {
     const result = OrchestratorConfigSchema.safeParse({
       envoyConfig: {
         endpoint: 'http://localhost:18000',
+        portRange: [8000],
       },
     })
     expect(result.success).toBe(true)
@@ -278,11 +250,53 @@ describe('OrchestratorConfigSchema with envoyConfig', () => {
     }
   })
 
+  it('requires portRange with at least one entry in envoyConfig', () => {
+    const result = OrchestratorConfigSchema.safeParse({
+      envoyConfig: {
+        endpoint: 'http://localhost:18000',
+        portRange: [],
+      },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects envoyConfig without portRange', () => {
+    const result = OrchestratorConfigSchema.safeParse({
+      envoyConfig: {
+        endpoint: 'http://localhost:18000',
+      },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('validates mixed port entries in envoyConfig.portRange', () => {
+    const result = OrchestratorConfigSchema.safeParse({
+      envoyConfig: {
+        endpoint: 'http://localhost:18000',
+        portRange: [8000, [9000, 9010], 10000, [11000, 11500]],
+      },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.envoyConfig!.portRange.length).toBe(4)
+    }
+  })
+
+  it('rejects invalid port entries in envoyConfig.portRange', () => {
+    const result = OrchestratorConfigSchema.safeParse({
+      envoyConfig: {
+        endpoint: 'http://localhost:18000',
+        portRange: [-1],
+      },
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('existing fields still parse correctly', () => {
     const result = OrchestratorConfigSchema.safeParse({
       ibgp: { secret: 'test-secret' },
       gqlGatewayConfig: { endpoint: 'http://localhost:4000' },
-      envoyConfig: { endpoint: 'http://localhost:18000' },
+      envoyConfig: { endpoint: 'http://localhost:18000', portRange: [8000] },
     })
     expect(result.success).toBe(true)
     if (result.success) {
@@ -313,22 +327,36 @@ describe('loadDefaultConfig with envoy env vars', () => {
     process.env = { ...originalEnv }
   }
 
-  it('parses CATALYST_ENVOY_PORT_RANGE as JSON array', () => {
+  it('parses CATALYST_ENVOY_PORT_RANGE into orchestrator.envoyConfig', () => {
     setRequiredEnv()
     process.env.CATALYST_ENVOY_PORT_RANGE = '[8000, [9000, 9010], 10000]'
+    process.env.CATALYST_ENVOY_ENDPOINT = 'http://localhost:18000'
 
     try {
       const config = loadDefaultConfig()
-      expect(config.envoy).toBeDefined()
-      expect(config.envoy!.portRange).toEqual([8000, [9000, 9010], 10000])
+      expect(config.orchestrator?.envoyConfig).toBeDefined()
+      expect(config.orchestrator!.envoyConfig!.portRange).toEqual([8000, [9000, 9010], 10000])
     } finally {
       clearEnv()
     }
   })
 
-  it('parses CATALYST_ENVOY_ADMIN_PORT', () => {
+  it('parses CATALYST_ENVOY_ENDPOINT into orchestrator.envoyConfig', () => {
     setRequiredEnv()
     process.env.CATALYST_ENVOY_PORT_RANGE = '[8000]'
+    process.env.CATALYST_ENVOY_ENDPOINT = 'http://localhost:18000'
+
+    try {
+      const config = loadDefaultConfig()
+      expect(config.orchestrator?.envoyConfig).toBeDefined()
+      expect(config.orchestrator!.envoyConfig!.endpoint).toBe('http://localhost:18000')
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('parses CATALYST_ENVOY_ADMIN_PORT into envoy config', () => {
+    setRequiredEnv()
     process.env.CATALYST_ENVOY_ADMIN_PORT = '9902'
 
     try {
@@ -340,9 +368,8 @@ describe('loadDefaultConfig with envoy env vars', () => {
     }
   })
 
-  it('parses CATALYST_ENVOY_XDS_PORT', () => {
+  it('parses CATALYST_ENVOY_XDS_PORT into envoy config', () => {
     setRequiredEnv()
-    process.env.CATALYST_ENVOY_PORT_RANGE = '[8000]'
     process.env.CATALYST_ENVOY_XDS_PORT = '18001'
 
     try {
@@ -354,9 +381,8 @@ describe('loadDefaultConfig with envoy env vars', () => {
     }
   })
 
-  it('parses CATALYST_ENVOY_BIND_ADDRESS', () => {
+  it('parses CATALYST_ENVOY_BIND_ADDRESS into envoy config', () => {
     setRequiredEnv()
-    process.env.CATALYST_ENVOY_PORT_RANGE = '[8000]'
     process.env.CATALYST_ENVOY_BIND_ADDRESS = '127.0.0.1'
 
     try {
@@ -368,27 +394,42 @@ describe('loadDefaultConfig with envoy env vars', () => {
     }
   })
 
-  it('missing envoy env vars results in no envoy config', () => {
+  it('missing envoy env vars results in no envoy or envoyConfig', () => {
     setRequiredEnv()
 
     try {
       const config = loadDefaultConfig()
       expect(config.envoy).toBeUndefined()
+      expect(config.orchestrator?.envoyConfig).toBeUndefined()
     } finally {
       clearEnv()
     }
   })
 
-  it('uses default values for adminPort, xdsPort, and bindAddress when not set', () => {
+  it('requires both PORT_RANGE and ENDPOINT for orchestrator.envoyConfig', () => {
     setRequiredEnv()
     process.env.CATALYST_ENVOY_PORT_RANGE = '[8000]'
+    // No CATALYST_ENVOY_ENDPOINT set
 
     try {
       const config = loadDefaultConfig()
-      expect(config.envoy).toBeDefined()
-      expect(config.envoy!.adminPort).toBe(9901)
-      expect(config.envoy!.xdsPort).toBe(18000)
-      expect(config.envoy!.bindAddress).toBe('0.0.0.0')
+      expect(config.orchestrator?.envoyConfig).toBeUndefined()
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('uses default values for envoy adminPort, xdsPort, and bindAddress when not set', () => {
+    setRequiredEnv()
+    process.env.CATALYST_ENVOY_PORT_RANGE = '[8000]'
+    process.env.CATALYST_ENVOY_ENDPOINT = 'http://localhost:18000'
+
+    try {
+      const config = loadDefaultConfig()
+      // envoy block should not exist when only PORT_RANGE/ENDPOINT are set
+      expect(config.envoy).toBeUndefined()
+      // but orchestrator.envoyConfig should have portRange
+      expect(config.orchestrator?.envoyConfig?.portRange).toEqual([8000])
     } finally {
       clearEnv()
     }

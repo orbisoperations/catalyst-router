@@ -18,7 +18,6 @@ export type PortEntry = z.infer<typeof PortEntrySchema>
  * Envoy proxy configuration.
  */
 export const EnvoyConfigSchema = z.object({
-  portRange: z.array(PortEntrySchema).min(1),
   adminPort: PortNumberSchema.default(9901),
   xdsPort: PortNumberSchema.default(18000),
   bindAddress: z.string().default('0.0.0.0'),
@@ -58,6 +57,7 @@ export const OrchestratorConfigSchema = z.object({
     .object({
       endpoint: z.string(),
       envoyAddress: z.string().optional(),
+      portRange: z.array(PortEntrySchema).min(1),
     })
     .optional(),
 })
@@ -142,10 +142,12 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
     ? process.env.CATALYST_DOMAINS.split(',').map((d) => d.trim())
     : []
 
-  const envoyPortRange = process.env.CATALYST_ENVOY_PORT_RANGE
-  const envoy = envoyPortRange
+  const hasEnvoyEnv =
+    process.env.CATALYST_ENVOY_ADMIN_PORT ||
+    process.env.CATALYST_ENVOY_XDS_PORT ||
+    process.env.CATALYST_ENVOY_BIND_ADDRESS
+  const envoy = hasEnvoyEnv
     ? {
-        portRange: JSON.parse(envoyPortRange) as unknown,
         adminPort: process.env.CATALYST_ENVOY_ADMIN_PORT
           ? Number(process.env.CATALYST_ENVOY_ADMIN_PORT)
           : undefined,
@@ -155,6 +157,17 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
         bindAddress: process.env.CATALYST_ENVOY_BIND_ADDRESS || undefined,
       }
     : undefined
+
+  const envoyPortRange = process.env.CATALYST_ENVOY_PORT_RANGE
+  const envoyEndpoint = process.env.CATALYST_ENVOY_ENDPOINT
+  const envoyConfig =
+    envoyPortRange && envoyEndpoint
+      ? {
+          endpoint: envoyEndpoint,
+          envoyAddress: process.env.CATALYST_ENVOY_ADDRESS || undefined,
+          portRange: JSON.parse(envoyPortRange) as unknown,
+        }
+      : undefined
 
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
@@ -175,6 +188,7 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
               systemToken: process.env.CATALYST_SYSTEM_TOKEN,
             }
           : undefined,
+      envoyConfig,
     },
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,
