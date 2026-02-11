@@ -10,6 +10,8 @@ export const CLUSTER_TYPE_URL = 'type.googleapis.com/envoy.config.cluster.v3.Clu
 const HCM_TYPE_URL =
   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager'
 const ROUTER_TYPE_URL = 'type.googleapis.com/envoy.extensions.filters.http.router.v3.Router'
+const HTTP_PROTOCOL_OPTIONS_TYPE_URL =
+  'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions'
 
 // ---------------------------------------------------------------------------
 // Enum constants
@@ -31,6 +33,11 @@ export function getProtoRoot(): protobuf.Root {
   if (_root) return _root
   _root = buildProtoRoot()
   return _root
+}
+
+/** Reset the cached root (for testing only). */
+export function resetProtoRoot(): void {
+  _root = undefined
 }
 
 function buildProtoRoot(): protobuf.Root {
@@ -123,7 +130,11 @@ function buildProtoRoot(): protobuf.Root {
   // envoy.config.route.v3
   root
     .define('envoy.config.route.v3')
-    .add(new protobuf.Type('RouteAction').add(new protobuf.Field('cluster', 1, 'string')))
+    .add(
+      new protobuf.Type('RouteAction')
+        .add(new protobuf.Field('cluster', 1, 'string'))
+        .add(new protobuf.Field('timeout', 24, 'google.protobuf.Duration'))
+    )
 
   root
     .define('envoy.config.route.v3')
@@ -166,6 +177,11 @@ function buildProtoRoot(): protobuf.Root {
         .add(new protobuf.Field('typed_config', 4, 'google.protobuf.Any'))
     )
 
+  // envoy.extensions.filters.network.http_connection_manager.v3.UpgradeConfig
+  root
+    .define('envoy.extensions.filters.network.http_connection_manager.v3')
+    .add(new protobuf.Type('UpgradeConfig').add(new protobuf.Field('upgrade_type', 1, 'string')))
+
   // envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
   root.define('envoy.extensions.filters.network.http_connection_manager.v3').add(
     new protobuf.Type('HttpConnectionManager')
@@ -177,6 +193,14 @@ function buildProtoRoot(): protobuf.Root {
           'http_filters',
           5,
           'envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter',
+          'repeated'
+        )
+      )
+      .add(
+        new protobuf.Field(
+          'upgrade_configs',
+          6,
+          'envoy.extensions.filters.network.http_connection_manager.v3.UpgradeConfig',
           'repeated'
         )
       )
@@ -210,6 +234,31 @@ function buildProtoRoot(): protobuf.Root {
       )
   )
 
+  // envoy.config.core.v3.Http2ProtocolOptions (empty — defaults are fine)
+  root.define('envoy.config.core.v3').add(new protobuf.Type('Http2ProtocolOptions'))
+
+  // envoy.extensions.upstreams.http.v3.HttpProtocolOptions.ExplicitHttpConfig
+  root
+    .define('envoy.extensions.upstreams.http.v3.HttpProtocolOptions')
+    .add(
+      new protobuf.Type('ExplicitHttpConfig').add(
+        new protobuf.Field('http2_protocol_options', 2, 'envoy.config.core.v3.Http2ProtocolOptions')
+      )
+    )
+
+  // envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+  root
+    .define('envoy.extensions.upstreams.http.v3')
+    .add(
+      new protobuf.Type('HttpProtocolOptions').add(
+        new protobuf.Field(
+          'explicit_http_config',
+          3,
+          'envoy.extensions.upstreams.http.v3.HttpProtocolOptions.ExplicitHttpConfig'
+        )
+      )
+    )
+
   // envoy.config.cluster.v3.Cluster
   root.define('envoy.config.cluster.v3').add(
     new protobuf.Type('Cluster')
@@ -220,6 +269,14 @@ function buildProtoRoot(): protobuf.Root {
       .add(new protobuf.Field('dns_lookup_family', 17, 'int32'))
       .add(
         new protobuf.Field('load_assignment', 33, 'envoy.config.endpoint.v3.ClusterLoadAssignment')
+      )
+      .add(
+        new protobuf.MapField(
+          'typed_extension_protocol_options',
+          36,
+          'string',
+          'google.protobuf.Any'
+        )
       )
   )
 
@@ -290,10 +347,13 @@ export function encodeListener(listener: XdsListener): {
       filters: fc.filters.map((f) => {
         // The typed_config has an '@type' field — encode the inner HCM message
         const { '@type': _typeUrl, ...hcmFields } = f.typed_config
-        const hcmProto = {
+        const hcmProto: Record<string, unknown> = {
           stat_prefix: hcmFields.stat_prefix,
           route_config: hcmFields.route_config,
           http_filters: [{ name: 'envoy.filters.http.router', typed_config: routerAny }],
+        }
+        if (hcmFields.upgrade_configs) {
+          hcmProto.upgrade_configs = hcmFields.upgrade_configs
         }
         const hcmAny = encodeAsAny(
           root,
@@ -334,13 +394,36 @@ export function encodeCluster(cluster: XdsCluster): {
   const match = cluster.connect_timeout.match(/^(\d+)s$/)
   const seconds = match ? parseInt(match[1], 10) : 5
 
-  const protoCluster = {
+  const protoCluster: Record<string, unknown> = {
     name: cluster.name,
     type: typeInt,
     connect_timeout: { seconds, nanos: 0 },
     lb_policy: 0, // ROUND_ROBIN
     dns_lookup_family: cluster.dns_lookup_family ?? 0,
     load_assignment: cluster.load_assignment,
+  }
+
+  // HTTP/2 upstream: encode as typed_extension_protocol_options with HttpProtocolOptions
+  if (cluster.upstream_http2) {
+    const Http2Opts = root.lookupType('envoy.config.core.v3.Http2ProtocolOptions')
+    const ExplicitConfig = root.lookupType(
+      'envoy.extensions.upstreams.http.v3.HttpProtocolOptions.ExplicitHttpConfig'
+    )
+    const HttpProtoOpts = root.lookupType('envoy.extensions.upstreams.http.v3.HttpProtocolOptions')
+
+    const explicitConfig = ExplicitConfig.fromObject({
+      http2_protocol_options: Http2Opts.create(),
+    })
+    const httpProtoOpts = HttpProtoOpts.fromObject({
+      explicit_http_config: explicitConfig,
+    })
+
+    protoCluster.typed_extension_protocol_options = {
+      'envoy.extensions.upstreams.http.v3.HttpProtocolOptions': {
+        type_url: HTTP_PROTOCOL_OPTIONS_TYPE_URL,
+        value: HttpProtoOpts.encode(httpProtoOpts).finish(),
+      },
+    }
   }
 
   const ClusterType = root.lookupType('envoy.config.cluster.v3.Cluster')

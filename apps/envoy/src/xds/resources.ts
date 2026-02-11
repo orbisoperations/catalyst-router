@@ -1,9 +1,14 @@
-import type { DataChannelDefinition } from '@catalyst/routing'
+import type { DataChannelDefinition, DataChannelProtocol } from '@catalyst/routing'
 import type { XdsSnapshot } from './snapshot-cache.js'
 
 // ---------------------------------------------------------------------------
 // xDS JSON structure types (matching Envoy's JSON config format)
 // ---------------------------------------------------------------------------
+
+export interface XdsRouteAction {
+  cluster: string
+  timeout?: { seconds: number; nanos: number }
+}
 
 export interface XdsListener {
   name: string
@@ -14,13 +19,14 @@ export interface XdsListener {
       typed_config: {
         '@type': string
         stat_prefix: string
+        upgrade_configs?: Array<{ upgrade_type: string }>
         route_config: {
           virtual_hosts: Array<{
             name: string
             domains: string[]
             routes: Array<{
               match: { prefix: string }
-              route: { cluster: string }
+              route: XdsRouteAction
             }>
           }>
         }
@@ -35,6 +41,8 @@ export interface XdsCluster {
   connect_timeout: string
   lb_policy: string
   dns_lookup_family?: number
+  /** Enable HTTP/2 upstream (required for gRPC). */
+  upstream_http2?: boolean
   load_assignment: {
     cluster_name: string
     endpoints: Array<{
@@ -88,13 +96,43 @@ function parseEndpointUrl(endpoint: string): { address: string; port: number } {
 // Listener builders
 // ---------------------------------------------------------------------------
 
+/** Protocol-aware listener config options. */
+interface ListenerProtocolOptions {
+  /** Enable WebSocket upgrade support (for GraphQL subscriptions). */
+  enableWebSocket?: boolean
+  /** Disable route timeout for long-lived streams (SSE, gRPC streaming). */
+  disableRouteTimeout?: boolean
+}
+
+/** Derive listener options from a data channel protocol. */
+function getListenerOptions(protocol?: DataChannelProtocol): ListenerProtocolOptions {
+  switch (protocol) {
+    case 'http:graphql':
+    case 'http:gql':
+      return { enableWebSocket: true, disableRouteTimeout: true }
+    case 'http:grpc':
+      return { disableRouteTimeout: true }
+    default:
+      return {}
+  }
+}
+
 function buildHttpConnectionManager(
   statPrefix: string,
-  clusterName: string
+  clusterName: string,
+  options?: ListenerProtocolOptions
 ): XdsListener['filter_chains'][0]['filters'][0]['typed_config'] {
+  const routeAction: XdsRouteAction = { cluster: clusterName }
+  if (options?.disableRouteTimeout) {
+    routeAction.timeout = { seconds: 0, nanos: 0 }
+  }
+
   return {
     '@type': HCM_TYPE_URL,
     stat_prefix: statPrefix,
+    ...(options?.enableWebSocket && {
+      upgrade_configs: [{ upgrade_type: 'websocket' }],
+    }),
     route_config: {
       virtual_hosts: [
         {
@@ -103,7 +141,7 @@ function buildHttpConnectionManager(
           routes: [
             {
               match: { prefix: '/' },
-              route: { cluster: clusterName },
+              route: routeAction,
             },
           ],
         },
@@ -116,9 +154,11 @@ export function buildIngressListener(opts: {
   channelName: string
   port: number
   bindAddress: string
+  protocol?: DataChannelProtocol
 }): XdsListener {
   const name = `ingress_${opts.channelName}`
   const clusterName = `local_${opts.channelName}`
+  const protocolOpts = getListenerOptions(opts.protocol)
 
   return {
     name,
@@ -133,7 +173,7 @@ export function buildIngressListener(opts: {
         filters: [
           {
             name: 'envoy.filters.network.http_connection_manager',
-            typed_config: buildHttpConnectionManager(name, clusterName),
+            typed_config: buildHttpConnectionManager(name, clusterName, protocolOpts),
           },
         ],
       },
@@ -146,6 +186,7 @@ export function buildEgressListener(opts: {
   peerName: string
   port: number
   bindAddress?: string
+  protocol?: DataChannelProtocol
 }): XdsListener {
   const name = `egress_${opts.channelName}_via_${opts.peerName}`
   const clusterName = `remote_${opts.channelName}_via_${opts.peerName}`
@@ -163,7 +204,11 @@ export function buildEgressListener(opts: {
         filters: [
           {
             name: 'envoy.filters.network.http_connection_manager',
-            typed_config: buildHttpConnectionManager(name, clusterName),
+            typed_config: buildHttpConnectionManager(
+              name,
+              clusterName,
+              getListenerOptions(opts.protocol)
+            ),
           },
         ],
       },
@@ -175,10 +220,16 @@ export function buildEgressListener(opts: {
 // Cluster builders
 // ---------------------------------------------------------------------------
 
+/** Returns true if the protocol requires HTTP/2 upstream (e.g. gRPC). */
+function requiresHttp2(protocol?: DataChannelProtocol): boolean {
+  return protocol === 'http:grpc'
+}
+
 export function buildLocalCluster(opts: {
   channelName: string
   address: string
   port: number
+  protocol?: DataChannelProtocol
 }): XdsCluster {
   const name = `local_${opts.channelName}`
   const clusterType = isIpAddress(opts.address) ? 'STATIC' : 'STRICT_DNS'
@@ -188,6 +239,7 @@ export function buildLocalCluster(opts: {
     connect_timeout: '5s',
     lb_policy: 'ROUND_ROBIN',
     ...(clusterType === 'STRICT_DNS' && { dns_lookup_family: DnsLookupFamily.V4_ONLY }),
+    ...(requiresHttp2(opts.protocol) && { upstream_http2: true }),
     load_assignment: {
       cluster_name: name,
       endpoints: [
@@ -215,6 +267,7 @@ export function buildRemoteCluster(opts: {
   peerName: string
   peerAddress: string
   peerPort: number
+  protocol?: DataChannelProtocol
 }): XdsCluster {
   const name = `remote_${opts.channelName}_via_${opts.peerName}`
   const clusterType = isIpAddress(opts.peerAddress) ? 'STATIC' : 'STRICT_DNS'
@@ -225,6 +278,7 @@ export function buildRemoteCluster(opts: {
     connect_timeout: '5s',
     lb_policy: 'ROUND_ROBIN',
     ...(clusterType === 'STRICT_DNS' && { dns_lookup_family: DnsLookupFamily.V4_ONLY }),
+    ...(requiresHttp2(opts.protocol) && { upstream_http2: true }),
     load_assignment: {
       cluster_name: name,
       endpoints: [
@@ -295,6 +349,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
         channelName: route.name,
         port: allocatedPort,
         bindAddress: input.bindAddress,
+        protocol: route.protocol,
       })
     )
 
@@ -303,6 +358,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
         channelName: route.name,
         address,
         port,
+        protocol: route.protocol,
       })
     )
   }
@@ -323,6 +379,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
         peerName: route.peerName,
         port: egressPort,
         bindAddress: input.bindAddress,
+        protocol: route.protocol,
       })
     )
 
@@ -332,6 +389,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
         peerName: route.peerName,
         peerAddress,
         peerPort: route.envoyPort,
+        protocol: route.protocol,
       })
     )
   }
