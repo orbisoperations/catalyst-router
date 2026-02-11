@@ -48,8 +48,10 @@ export interface AuthValidationHandlers {
   getJWKS(): Promise<{ keys: unknown[] }>
 }
 
-export async function createAuthClient(
-  url: string = process.env.CATALYST_AUTH_URL || 'ws://localhost:4000/rpc'
-): Promise<AuthPublicApi> {
-  return newWebSocketRpcSession<AuthPublicApi>(url)
+export function resolveAuthUrl(url?: string): string {
+  return url ?? process.env.CATALYST_AUTH_URL ?? 'ws://localhost:4000/rpc'
+}
+
+export async function createAuthClient(url?: string): Promise<AuthPublicApi> {
+  return newWebSocketRpcSession<AuthPublicApi>(resolveAuthUrl(url))
 }

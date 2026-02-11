@@ -22,8 +22,10 @@ export interface ManagementScope {
   deletePeer(peerId: string): Promise<ActionResult>
 }
 
-export async function createOrchestratorClient(
-  url: string = process.env.CATALYST_ORCHESTRATOR_URL || 'ws://localhost:3000/rpc'
-): Promise<OrchestratorPublicApi> {
-  return newWebSocketRpcSession<OrchestratorPublicApi>(url)
+export function resolveOrchestratorUrl(url?: string): string {
+  return url ?? process.env.CATALYST_ORCHESTRATOR_URL ?? 'ws://localhost:3000/rpc'
+}
+
+export async function createOrchestratorClient(url?: string): Promise<OrchestratorPublicApi> {
+  return newWebSocketRpcSession<OrchestratorPublicApi>(resolveOrchestratorUrl(url))
 }
