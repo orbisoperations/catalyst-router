@@ -298,6 +298,7 @@ function buildProtoRoot(): protobuf.Root {
       .add(new protobuf.Field('resource_names', 3, 'string', 'repeated'))
       .add(new protobuf.Field('type_url', 4, 'string'))
       .add(new protobuf.Field('response_nonce', 5, 'string'))
+      .add(new protobuf.Field('error_detail', 6, 'google.rpc.Status'))
   )
 
   // envoy.service.discovery.v3.DiscoveryResponse
@@ -518,6 +519,7 @@ export function decodeDiscoveryRequest(buffer: Buffer): {
   resource_names: string[]
   type_url: string
   response_nonce: string
+  error_detail?: { code: number; message: string }
 } {
   const root = getProtoRoot()
   const RequestType = root.lookupType('envoy.service.discovery.v3.DiscoveryRequest')
@@ -530,5 +532,6 @@ export function decodeDiscoveryRequest(buffer: Buffer): {
     resource_names: string[]
     type_url: string
     response_nonce: string
+    error_detail?: { code: number; message: string }
   }
 }

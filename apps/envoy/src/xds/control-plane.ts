@@ -118,10 +118,9 @@ export class XdsControlPlane {
   private handleStream(call: grpc.ServerDuplexStream<Buffer, Buffer>): void {
     this.logger.info`New ADS stream connected`
 
-    // Track subscribed types, sent versions, and acknowledged versions
+    // Track subscribed types and sent versions per-stream
     const subscribedTypes = new Set<string>()
     const sentVersions = new Map<string, string>()
-    const ackedVersions = new Map<string, string>()
     let latestSnapshot: XdsSnapshot | undefined = this.cache.getSnapshot()
 
     /** Send snapshot resources for subscribed types that haven't been sent at this version. */
@@ -137,22 +136,34 @@ export class XdsControlPlane {
     })
 
     // Process incoming messages (subscribes, ACKs, NACKs)
+    //
+    // Per the xDS SotW protocol:
+    // - Initial subscribe: empty version_info, empty response_nonce
+    // - ACK: version_info matches last sent version, response_nonce matches, no error_detail
+    // - NACK: version_info is last *accepted* version, response_nonce matches, error_detail present
+    //
+    // Every request with a type_url is an implicit (re-)subscription for that type.
     call.on('data', (buffer: Buffer) => {
       try {
         const request = decodeDiscoveryRequest(buffer)
+        const typeUrl = request.type_url
 
-        if (request.version_info) {
-          // ACK — client confirmed it received this version
-          ackedVersions.set(request.type_url, request.version_info)
-          this.logger.info`ACK received for ${request.type_url} v${request.version_info}`
-        } else if (request.response_nonce) {
-          // NACK — client rejected the last response (version_info empty but nonce set)
-          this.logger.warn`NACK received for ${request.type_url} nonce=${request.response_nonce}`
-        } else {
-          // Initial subscribe — send pending resources for this type
-          this.logger.info`Subscribe request for ${request.type_url}`
-          subscribedTypes.add(request.type_url)
+        // Every DiscoveryRequest with a type_url is a subscription for that type
+        if (typeUrl) {
+          subscribedTypes.add(typeUrl)
+        }
+
+        if (!request.version_info && !request.response_nonce) {
+          // Initial subscribe — no version yet, send current snapshot
+          this.logger.info`Subscribe request for ${typeUrl}`
           sendSubscribed()
+        } else if (request.error_detail && request.error_detail.code !== 0) {
+          // NACK — client rejected the response (error_detail present with non-zero code)
+          this.logger
+            .warn`NACK received for ${typeUrl} nonce=${request.response_nonce} error=${request.error_detail.message}`
+        } else {
+          // ACK — client confirmed it applied this version
+          this.logger.info`ACK received for ${typeUrl} v${request.version_info}`
         }
       } catch (err) {
         this.logger.error`Failed to decode DiscoveryRequest: ${err}`
