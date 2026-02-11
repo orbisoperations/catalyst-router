@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
+import { spawnSync } from 'node:child_process'
+import type { Readable } from 'node:stream'
+import path from 'path'
 import {
   GenericContainer,
   Wait,
@@ -6,34 +10,19 @@ import {
   type StartedTestContainer,
   type StartedNetwork,
 } from 'testcontainers'
-import { Hono } from 'hono'
-import { websocket } from 'hono/bun'
-import path from 'path'
-import { CatalystConfigSchema } from '@catalyst/config'
-import { AuthService } from '@catalyst/authorization'
-import { EnvoyService } from '../src/service.js'
-import { OrchestratorService } from '../../orchestrator/src/service.js'
-import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
+import type { PublicApi, NetworkClient } from '../../orchestrator/src/orchestrator.js'
 import {
-  createRouteHandler,
-  deleteRouteHandler,
-} from '../../cli/src/handlers/node-route-handlers.js'
-import { createPeerHandler } from '../../cli/src/handlers/node-peer-handlers.js'
+  startAuthService,
+  type AuthServiceContext,
+} from '../../orchestrator/tests/auth-test-helpers.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 const repoRoot = path.resolve(__dirname, '../../..')
 
-/**
- * Fixed Envoy listener port — used for both ingress (Node A) and egress (Node B).
- *
- * When Node A allocates ingress port 10000 for books-api, BGP propagates this
- * port to Node B. Node B reuses the same port number for its egress listener
- * (bound to 127.0.0.1:10000) and its remote cluster (pointing to envoy-a:10000).
- */
+/** Fixed Envoy listener port — used for both ingress (Node A) and egress (Node B). */
 const ENVOY_LISTENER_PORT = 10000
 
 /** Timeout for Docker setup (builds, image pulls, container starts). */
@@ -41,6 +30,15 @@ const SETUP_TIMEOUT = 600_000 // 10 minutes
 
 /** Timeout for individual test cases. */
 const TEST_TIMEOUT = 60_000 // 60 seconds
+
+// ---------------------------------------------------------------------------
+// Docker image names
+// ---------------------------------------------------------------------------
+
+const ORCH_IMAGE = 'catalyst-orchestrator:cross-node-e2e'
+const ENVOY_SVC_IMAGE = 'catalyst-envoy:cross-node-e2e'
+const AUTH_IMAGE = 'catalyst-auth:cross-node-e2e'
+const BOOKS_IMAGE = 'books-service:cross-node-e2e'
 
 // ---------------------------------------------------------------------------
 // Docker availability check
@@ -60,17 +58,35 @@ if (skipTests) {
 }
 
 // ---------------------------------------------------------------------------
+// Image builder with caching
+// ---------------------------------------------------------------------------
+
+function buildImageIfNeeded(imageName: string, dockerfile: string): void {
+  const check = spawnSync('docker', ['image', 'inspect', imageName])
+  if (check.status === 0) {
+    console.log(`Using existing image: ${imageName}`)
+    return
+  }
+  console.log(`Building image: ${imageName}...`)
+  const result = spawnSync('docker', ['build', '-f', dockerfile, '-t', imageName, '.'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  })
+  if (result.status !== 0) throw new Error(`Failed to build ${imageName}`)
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap YAML generator
 // ---------------------------------------------------------------------------
 
 /**
- * Generate an Envoy bootstrap config for a Docker container.
+ * Generate an Envoy bootstrap config.
  *
- * Uses `STRICT_DNS` because `host.docker.internal` is a hostname.
- * `dns_lookup_family: V4_ONLY` avoids IPv6 resolution delays.
- * HTTP/2 is required for the gRPC ADS connection.
+ * The xDS cluster uses `STRICT_DNS` with `V4_ONLY` because the xDS server
+ * is referenced by Docker network alias (a hostname, not an IP).
+ * HTTP/2 is required for gRPC ADS.
  */
-function generateBootstrapYaml(xdsPort: number): string {
+function generateBootstrapYaml(xdsHost: string, xdsPort: number): string {
   return `
 admin:
   address:
@@ -114,18 +130,15 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      address: host.docker.internal
+                      address: ${xdsHost}
                       port_value: ${xdsPort}
 `.trim()
 }
 
 // ---------------------------------------------------------------------------
-// Envoy readiness poller
+// Envoy admin readiness pollers
 // ---------------------------------------------------------------------------
 
-/**
- * Poll the Envoy admin API until a specific dynamic listener appears.
- */
 async function waitForListener(
   adminPort: number,
   listenerName: string,
@@ -145,9 +158,6 @@ async function waitForListener(
   throw new Error(`Timed out waiting for listener ${listenerName} after ${timeoutMs}ms`)
 }
 
-/**
- * Poll until a listener is removed from Envoy's admin API.
- */
 async function waitForListenerRemoval(
   adminPort: number,
   listenerName: string,
@@ -168,332 +178,288 @@ async function waitForListenerRemoval(
 }
 
 // ---------------------------------------------------------------------------
+// RPC helpers
+// ---------------------------------------------------------------------------
+
+function getOrchestratorClient(container: StartedTestContainer): RpcStub<PublicApi> {
+  const port = container.getMappedPort(3000)
+  return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+}
+
+async function waitForPeerConnected(
+  client: RpcStub<PublicApi>,
+  token: string,
+  peerName: string,
+  timeoutMs = 20_000
+): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const netResult = await client.getNetworkClient(token)
+    if (!netResult.success) throw new Error('Failed to get network client')
+    const peers = await (netResult as { success: true; client: NetworkClient }).client.listPeers()
+    const peer = peers.find((p) => p.name === peerName)
+    if (peer && peer.connectionStatus === 'connected') return
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  throw new Error(`Peer ${peerName} failed to connect within ${timeoutMs}ms`)
+}
+
+// ---------------------------------------------------------------------------
+// Log consumer helper
+// ---------------------------------------------------------------------------
+
+function withLogConsumer(label: string) {
+  return (stream: Readable) => {
+    stream.on('data', (chunk: Buffer | string) => {
+      process.stdout.write(`[${label}] ${chunk.toString()}`)
+    })
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 
 /**
- * Cross-node routing E2E test with real Envoy proxies.
+ * Cross-node routing E2E test — all containers.
  *
- * Architecture:
+ * Architecture (8 containers + 2 Envoy proxy containers):
  * ```
- * ┌───────────────────────────────────────────────────────────────────┐
- * │ Host (Bun test process)                                           │
- * │  Auth Service       (:random)                                     │
- * │  Envoy Service A    (:random) + ADS gRPC (:xdsA)                 │
- * │  Envoy Service B    (:random) + ADS gRPC (:xdsB)                 │
- * │  Orchestrator A     (:orchA)  — envoy-a, books-api route          │
- * │  Orchestrator B     (:orchB)  — envoy-b, peers with A             │
- * └────────────────────┬──────────────────────────────────────────────┘
- *                      │ host.docker.internal
- *        ┌─────────────┴─────────────────────────────────────────┐
- *        │                Docker Network                          │
- *   ┌────┴───────┐   ┌───────────────────┐  ┌──────────────────┐│
- *   │ books-api  │   │ Envoy Proxy A     │  │ Envoy Proxy B    ││
- *   │ alias:books│   │ alias:envoy-a     │  │ alias:envoy-b    ││
- *   │ :8080      │←──│ :10000 (ingress)  │  │ :10000 (egress)  ││
- *   └────────────┘   │ :9901  (admin)    │  │ :9901  (admin)   ││
- *                    └───────────────────┘  └──────────────────┘│
- *                             ↑                       │          │
- *                             └───────────────────────┘          │
- *                        Envoy B egress → envoy-a:10000 ingress  │
- *        └───────────────────────────────────────────────────────┘
+ * ┌───────────────────────────────────────────────────────────────────────┐
+ * │                        Docker Network                                 │
+ * │                                                                       │
+ * │  ┌──────────┐  ┌──────────────┐  ┌───────────────┐  ┌─────────────┐ │
+ * │  │  auth    │  │  books-api   │  │ envoy-svc-a   │  │ envoy-svc-b │ │
+ * │  │  :5000   │  │  :8080       │  │ :3000 (RPC)   │  │ :3000 (RPC) │ │
+ * │  └──────────┘  └──────────────┘  │ :18000 (xDS)  │  │ :18000(xDS) │ │
+ * │       ↑               ↑          └───────┬───────┘  └──────┬──────┘ │
+ * │       │               │                  │                  │        │
+ * │  ┌────┴───────┐  ┌────┴──────────┐  ┌───┴────────┐  ┌─────┴──────┐ │
+ * │  │  orch-a    │  │ envoy-proxy-a │  │envoy-prx-a │  │envoy-prx-b │ │
+ * │  │  :3000     │  │ :10000 (LDS)  │  │ ADS→svc-a  │  │ ADS→svc-b  │ │
+ * │  │  auth→auth │  │ :9901 (admin) │  └────────────┘  └────────────┘ │
+ * │  │  envoy→    │  └───────────────┘                                  │
+ * │  │   svc-a    │                                                     │
+ * │  └────────────┘  ┌───────────────┐  ┌───────────────────────────┐   │
+ * │                  │  orch-b       │  │ envoy-proxy-b             │   │
+ * │                  │  :3000        │  │ :10000 (egress→envoy-a)   │   │
+ * │                  │  auth→auth    │  │ :9901 (admin)             │   │
+ * │                  │  envoy→svc-b  │  └───────────────────────────┘   │
+ * │                  └───────────────┘                                  │
+ * └───────────────────────────────────────────────────────────────────────┘
+ *
+ * Host (Bun test process):
+ *   - Builds Docker images
+ *   - Connects to orch-a / orch-b via mapped ports (capnweb RPC)
+ *   - Peers orchestrators, creates routes
+ *   - Verifies xDS resources via Envoy admin APIs
+ *   - Runs traffic test via container.exec() inside envoy-proxy-b
  * ```
  *
- * Port 10000 serves dual purpose: ingress on Node A (0.0.0.0:10000) and
- * egress on Node B (127.0.0.1:10000). BGP propagates the port number from
- * Node A's local route to Node B's internal route.
- *
- * Data flow:
- *   curl (inside Envoy B) → 127.0.0.1:10000 (egress) → envoy-a:10000 (ingress) → books-api
+ * Data path:
+ *   curl (inside Envoy B) → 127.0.0.1:10000 (egress) → envoy-proxy-a:10000 (ingress) → books:8080
  */
-describe.skipIf(skipTests)('Cross-Node Routing: Two-Node E2E with Real Envoy Proxies', () => {
+describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envoy Proxies', () => {
   // Docker resources
   let network: StartedNetwork
+  let auth: AuthServiceContext
   let booksContainer: StartedTestContainer
-  let envoyContainerA: StartedTestContainer
-  let envoyContainerB: StartedTestContainer
+  let envoySvcA: StartedTestContainer
+  let envoySvcB: StartedTestContainer
+  let envoyProxyA: StartedTestContainer
+  let envoyProxyB: StartedTestContainer
+  let orchA: StartedTestContainer
+  let orchB: StartedTestContainer
 
-  // In-process Bun servers
-  let authServer: ReturnType<typeof Bun.serve>
-  let envoyServerA: ReturnType<typeof Bun.serve>
-  let envoyServerB: ReturnType<typeof Bun.serve>
-  let orchServerA: ReturnType<typeof Bun.serve>
-  let orchServerB: ReturnType<typeof Bun.serve>
-
-  // Catalyst services (for lifecycle management)
-  let authService: AuthService
-  let envoyServiceA: EnvoyService
-  let envoyServiceB: EnvoyService
-  let orchServiceA: OrchestratorService
-  let orchServiceB: OrchestratorService
-
-  // Tokens
-  let systemToken: string
-  let cliToken: string
-
-  // Port tracking
-  let ports: {
-    auth: number
-    books: number
-    envoyA: number
-    envoyB: number
-    orchA: number
-    orchB: number
-    xdsA: number
-    xdsB: number
-  }
-
-  // Mapped container ports for test assertions
+  // Mapped ports for admin API assertions
   let envoyAAdminPort: number
   let envoyBAdminPort: number
 
+  // RPC auth token
+  let systemToken: string
+
   beforeAll(async () => {
-    // ── 1. Docker network ──────────────────────────────────────────
+    // ── 1. Build images ────────────────────────────────────────────
+    buildImageIfNeeded(AUTH_IMAGE, 'apps/auth/Dockerfile')
+    buildImageIfNeeded(ORCH_IMAGE, 'apps/orchestrator/Dockerfile')
+    buildImageIfNeeded(ENVOY_SVC_IMAGE, 'apps/envoy/Dockerfile')
+    buildImageIfNeeded(BOOKS_IMAGE, 'examples/books-api/Dockerfile')
+
+    // ── 2. Docker network ──────────────────────────────────────────
     network = await new Network().start()
 
-    // ── 2. Build + start books-api container ───────────────────────
-    console.log('[setup] Building books-api image...')
-    const build = Bun.spawn(
-      [
-        CONTAINER_RUNTIME,
-        'build',
-        '-t',
-        'books-service:cross-node-test',
-        '-f',
-        'examples/books-api/Dockerfile',
-        '.',
-      ],
-      { cwd: repoRoot, stdout: 'ignore', stderr: 'inherit' }
-    )
-    const buildExit = await build.exited
-    if (buildExit !== 0) throw new Error('Failed to build books-api image')
+    // ── 3. Auth service ────────────────────────────────────────────
+    auth = await startAuthService(network, 'auth', AUTH_IMAGE)
+    systemToken = auth.systemToken
 
+    // ── 4. Books API ───────────────────────────────────────────────
     console.log('[setup] Starting books-api container...')
-    booksContainer = await new GenericContainer('books-service:cross-node-test')
+    booksContainer = await new GenericContainer(BOOKS_IMAGE)
       .withNetwork(network)
       .withNetworkAliases('books')
       .withExposedPorts(8080)
       .withWaitStrategy(Wait.forHttp('/health', 8080))
+      .withLogConsumer(withLogConsumer('books'))
       .start()
 
-    // ── 3. Start in-process Auth Service ───────────────────────────
-    const authConfig = CatalystConfigSchema.parse({
-      node: { name: 'auth-node', domains: ['somebiz.local.io'] },
-      auth: { keysDb: ':memory:', tokensDb: ':memory:' },
-      port: 0,
-    })
-    authService = await AuthService.create({ config: authConfig })
-    systemToken = authService.systemToken
-
-    const authApp = new Hono()
-    authApp.route('/', authService.handler)
-    authServer = Bun.serve({ fetch: authApp.fetch, port: 0, websocket })
-
-    // ── 4. Start Envoy Service A (xDS for Node A) ──────────────────
-    const tempXdsA = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const xdsPortA = tempXdsA.port
-    tempXdsA.stop()
-
-    const envoyConfigA = CatalystConfigSchema.parse({
-      node: { name: 'envoy-node-a', domains: ['somebiz.local.io'] },
-      envoy: { adminPort: 9901, xdsPort: xdsPortA, bindAddress: '0.0.0.0' },
-      port: 0,
-    })
-    envoyServiceA = await EnvoyService.create({ config: envoyConfigA })
-
-    const envoyAppA = new Hono()
-    envoyAppA.route('/', envoyServiceA.handler)
-    envoyServerA = Bun.serve({ fetch: envoyAppA.fetch, port: 0, websocket })
-
-    // ── 5. Start Envoy Service B (xDS for Node B) ──────────────────
-    const tempXdsB = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const xdsPortB = tempXdsB.port
-    tempXdsB.stop()
-
-    const envoyConfigB = CatalystConfigSchema.parse({
-      node: { name: 'envoy-node-b', domains: ['somebiz.local.io'] },
-      envoy: { adminPort: 9901, xdsPort: xdsPortB, bindAddress: '0.0.0.0' },
-      port: 0,
-    })
-    envoyServiceB = await EnvoyService.create({ config: envoyConfigB })
-
-    const envoyAppB = new Hono()
-    envoyAppB.route('/', envoyServiceB.handler)
-    envoyServerB = Bun.serve({ fetch: envoyAppB.fetch, port: 0, websocket })
-
-    // ── 6. Start Orchestrator A ────────────────────────────────────
-    const tempOrchA = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const orchPortA = tempOrchA.port
-    tempOrchA.stop()
-
-    const orchConfigA = CatalystConfigSchema.parse({
-      node: {
-        name: 'node-a.somebiz.local.io',
-        domains: ['somebiz.local.io'],
-        endpoint: `ws://localhost:${orchPortA}/rpc`,
-      },
-      orchestrator: {
-        ibgp: { secret: 'test-secret' },
-        auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
-          systemToken,
-        },
-        envoyConfig: {
-          endpoint: `ws://localhost:${envoyServerA.port}/api`,
-          portRange: [[ENVOY_LISTENER_PORT, ENVOY_LISTENER_PORT]],
-        },
-      },
-      port: orchPortA,
-    })
-
-    // Add envoyAddress to Node A's config so BGP propagates it to peers.
-    // When Node B receives an internal route from A, the peer.envoyAddress
-    // tells Node B's envoy where to route egress traffic.
-    ;(orchConfigA.node as Record<string, unknown>).envoyAddress = 'envoy-a'
-
-    orchServiceA = await OrchestratorService.create({ config: orchConfigA })
-
-    const orchAppA = new Hono()
-    orchAppA.route('/', orchServiceA.handler)
-    orchServerA = Bun.serve({ fetch: orchAppA.fetch, port: orchPortA, websocket })
-
-    // ── 7. Start Orchestrator B ────────────────────────────────────
-    const tempOrchB = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const orchPortB = tempOrchB.port
-    tempOrchB.stop()
-
-    const orchConfigB = CatalystConfigSchema.parse({
-      node: {
-        name: 'node-b.somebiz.local.io',
-        domains: ['somebiz.local.io'],
-        endpoint: `ws://localhost:${orchPortB}/rpc`,
-      },
-      orchestrator: {
-        ibgp: { secret: 'test-secret' },
-        auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
-          systemToken,
-        },
-        envoyConfig: {
-          endpoint: `ws://localhost:${envoyServerB.port}/api`,
-          // Node B does not allocate local ingress ports — internal routes
-          // arrive with envoyPort already set from BGP. This range exists
-          // only to satisfy the schema (min 1 entry).
-          portRange: [[10100, 10200]],
-        },
-      },
-      port: orchPortB,
-    })
-
-    // Add envoyAddress to Node B's config too (for symmetry, though not
-    // needed by this test since we only route from B → A).
-    ;(orchConfigB.node as Record<string, unknown>).envoyAddress = 'envoy-b'
-
-    orchServiceB = await OrchestratorService.create({ config: orchConfigB })
-
-    const orchAppB = new Hono()
-    orchAppB.route('/', orchServiceB.handler)
-    orchServerB = Bun.serve({ fetch: orchAppB.fetch, port: orchPortB, websocket })
-
-    ports = {
-      auth: authServer.port,
-      books: booksContainer.getMappedPort(8080),
-      envoyA: envoyServerA.port,
-      envoyB: envoyServerB.port,
-      orchA: orchPortA,
-      orchB: orchPortB,
-      xdsA: xdsPortA,
-      xdsB: xdsPortB,
-    }
-
-    // ── 8. Mint CLI token ──────────────────────────────────────────
-    console.log('[setup] Minting CLI token...')
-    const mintResult = await mintTokenHandler({
-      subject: 'test-cli',
-      principal: 'CATALYST::ADMIN',
-      name: 'Test CLI',
-      type: 'service',
-      authUrl: `ws://localhost:${ports.auth}/rpc`,
-      token: systemToken,
-    })
-    if (!mintResult.success) throw new Error(`Failed to mint CLI token: ${mintResult.error}`)
-    cliToken = mintResult.data.token
-
-    // ── 9. Start Envoy Proxy A (connects to Envoy Service A via ADS) ─
-    console.log(`[setup] Starting Envoy Proxy A (ADS at host.docker.internal:${xdsPortA})...`)
-    const bootstrapA = generateBootstrapYaml(xdsPortA)
-
-    envoyContainerA = await new GenericContainer('envoyproxy/envoy:v1.32-latest')
+    // ── 5. Envoy Service A ─────────────────────────────────────────
+    console.log('[setup] Starting envoy-svc-a...')
+    envoySvcA = await new GenericContainer(ENVOY_SVC_IMAGE)
       .withNetwork(network)
-      .withNetworkAliases('envoy-a')
+      .withNetworkAliases('envoy-svc-a')
+      .withExposedPorts(3000, 18000)
+      .withEnvironment({
+        PORT: '3000',
+        CATALYST_NODE_ID: 'envoy-svc-a',
+        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_ENVOY_XDS_PORT: '18000',
+        CATALYST_ENVOY_BIND_ADDRESS: '0.0.0.0',
+      })
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [envoy] listening'))
+      .withLogConsumer(withLogConsumer('envoy-svc-a'))
+      .start()
+
+    // ── 6. Envoy Service B ─────────────────────────────────────────
+    console.log('[setup] Starting envoy-svc-b...')
+    envoySvcB = await new GenericContainer(ENVOY_SVC_IMAGE)
+      .withNetwork(network)
+      .withNetworkAliases('envoy-svc-b')
+      .withExposedPorts(3000, 18000)
+      .withEnvironment({
+        PORT: '3000',
+        CATALYST_NODE_ID: 'envoy-svc-b',
+        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_ENVOY_XDS_PORT: '18000',
+        CATALYST_ENVOY_BIND_ADDRESS: '0.0.0.0',
+      })
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [envoy] listening'))
+      .withLogConsumer(withLogConsumer('envoy-svc-b'))
+      .start()
+
+    // ── 7. Envoy Proxy A (ADS → envoy-svc-a:18000) ────────────────
+    console.log('[setup] Starting envoy-proxy-a...')
+    const bootstrapA = generateBootstrapYaml('envoy-svc-a', 18000)
+    envoyProxyA = await new GenericContainer('envoyproxy/envoy:v1.32-latest')
+      .withNetwork(network)
+      .withNetworkAliases('envoy-proxy-a')
       .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
-      .withExtraHosts([{ host: 'host.docker.internal', ipAddress: 'host-gateway' }])
       .withCopyContentToContainer([{ content: bootstrapA, target: '/etc/envoy/envoy.yaml' }])
       .withCommand(['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info'])
       .withWaitStrategy(Wait.forHttp('/server_info', 9901))
       .withStartupTimeout(120_000)
+      .withLogConsumer(withLogConsumer('envoy-proxy-a'))
       .start()
+    envoyAAdminPort = envoyProxyA.getMappedPort(9901)
 
-    envoyAAdminPort = envoyContainerA.getMappedPort(9901)
-
-    // ── 10. Start Envoy Proxy B (connects to Envoy Service B via ADS) ─
-    console.log(`[setup] Starting Envoy Proxy B (ADS at host.docker.internal:${xdsPortB})...`)
-    const bootstrapB = generateBootstrapYaml(xdsPortB)
-
-    envoyContainerB = await new GenericContainer('envoyproxy/envoy:v1.32-latest')
+    // ── 8. Envoy Proxy B (ADS → envoy-svc-b:18000) ────────────────
+    console.log('[setup] Starting envoy-proxy-b...')
+    const bootstrapB = generateBootstrapYaml('envoy-svc-b', 18000)
+    envoyProxyB = await new GenericContainer('envoyproxy/envoy:v1.32-latest')
       .withNetwork(network)
-      .withNetworkAliases('envoy-b')
+      .withNetworkAliases('envoy-proxy-b')
       .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
-      .withExtraHosts([{ host: 'host.docker.internal', ipAddress: 'host-gateway' }])
       .withCopyContentToContainer([{ content: bootstrapB, target: '/etc/envoy/envoy.yaml' }])
       .withCommand(['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info'])
       .withWaitStrategy(Wait.forHttp('/server_info', 9901))
       .withStartupTimeout(120_000)
+      .withLogConsumer(withLogConsumer('envoy-proxy-b'))
       .start()
+    envoyBAdminPort = envoyProxyB.getMappedPort(9901)
 
-    envoyBAdminPort = envoyContainerB.getMappedPort(9901)
-
-    // Brief wait for ADS streams to establish on both proxies
+    // Brief wait for ADS streams to establish
     await new Promise((r) => setTimeout(r, 1000))
 
-    // ── 11. Peer the two orchestrators ────────────────────────────
+    // ── 9. Orchestrator A ──────────────────────────────────────────
+    console.log('[setup] Starting orch-a...')
+    orchA = await new GenericContainer(ORCH_IMAGE)
+      .withNetwork(network)
+      .withNetworkAliases('orch-a')
+      .withExposedPorts(3000)
+      .withEnvironment({
+        PORT: '3000',
+        CATALYST_NODE_ID: 'node-a.somebiz.local.io',
+        CATALYST_PEERING_ENDPOINT: 'ws://orch-a:3000/rpc',
+        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_AUTH_ENDPOINT: auth.endpoint,
+        CATALYST_SYSTEM_TOKEN: systemToken,
+        CATALYST_ENVOY_ENDPOINT: 'ws://envoy-svc-a:3000/api',
+        CATALYST_ENVOY_PORT_RANGE: `[${ENVOY_LISTENER_PORT}]`,
+        CATALYST_ENVOY_ADDRESS: 'envoy-proxy-a',
+      })
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator] listening'))
+      .withLogConsumer(withLogConsumer('orch-a'))
+      .start()
+
+    // ── 10. Orchestrator B ─────────────────────────────────────────
+    console.log('[setup] Starting orch-b...')
+    orchB = await new GenericContainer(ORCH_IMAGE)
+      .withNetwork(network)
+      .withNetworkAliases('orch-b')
+      .withExposedPorts(3000)
+      .withEnvironment({
+        PORT: '3000',
+        CATALYST_NODE_ID: 'node-b.somebiz.local.io',
+        CATALYST_PEERING_ENDPOINT: 'ws://orch-b:3000/rpc',
+        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_AUTH_ENDPOINT: auth.endpoint,
+        CATALYST_SYSTEM_TOKEN: systemToken,
+        CATALYST_ENVOY_ENDPOINT: 'ws://envoy-svc-b:3000/api',
+        CATALYST_ENVOY_PORT_RANGE: `[${ENVOY_LISTENER_PORT}]`,
+        CATALYST_ENVOY_ADDRESS: 'envoy-proxy-b',
+      })
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [orchestrator] listening'))
+      .withLogConsumer(withLogConsumer('orch-b'))
+      .start()
+
+    console.log('[setup] All 8 containers started.')
+
+    // ── 11. Peer the two orchestrators via RPC ─────────────────────
     console.log('[setup] Peering Node A and Node B...')
+    const clientA = getOrchestratorClient(orchA)
+    const clientB = getOrchestratorClient(orchB)
 
-    const peerAResult = await createPeerHandler({
-      name: 'node-b.somebiz.local.io',
-      endpoint: `ws://localhost:${ports.orchB}/rpc`,
-      domains: ['somebiz.local.io'],
-      orchestratorUrl: `ws://localhost:${ports.orchA}/rpc`,
-      token: cliToken,
-    })
-    if (!peerAResult.success) throw new Error(`Failed to peer A→B: ${peerAResult.error}`)
+    const netAResult = await clientA.getNetworkClient(systemToken)
+    const netBResult = await clientB.getNetworkClient(systemToken)
+    if (!netAResult.success) throw new Error(`Auth failed on orch-a: ${netAResult.error}`)
+    if (!netBResult.success) throw new Error(`Auth failed on orch-b: ${netBResult.error}`)
 
-    const peerBResult = await createPeerHandler({
+    const netA = (netAResult as { success: true; client: NetworkClient }).client
+    const netB = (netBResult as { success: true; client: NetworkClient }).client
+
+    // B accepts A, then A connects to B
+    await netB.addPeer({
       name: 'node-a.somebiz.local.io',
-      endpoint: `ws://localhost:${ports.orchA}/rpc`,
+      endpoint: 'ws://orch-a:3000/rpc',
       domains: ['somebiz.local.io'],
-      orchestratorUrl: `ws://localhost:${ports.orchB}/rpc`,
-      token: cliToken,
     })
-    if (!peerBResult.success) throw new Error(`Failed to peer B→A: ${peerBResult.error}`)
+    await netA.addPeer({
+      name: 'node-b.somebiz.local.io',
+      endpoint: 'ws://orch-b:3000/rpc',
+      domains: ['somebiz.local.io'],
+    })
 
     // Wait for BGP handshake
     console.log('[setup] Waiting for BGP peering handshake...')
-    await new Promise((r) => setTimeout(r, 3000))
+    await waitForPeerConnected(clientA, systemToken, 'node-b.somebiz.local.io')
+    await waitForPeerConnected(clientB, systemToken, 'node-a.somebiz.local.io')
+    console.log('[setup] BGP peering established.')
 
-    // ── 12. Create books-api route on Node A ──────────────────────
-    // Endpoint uses Docker DNS alias — Envoy A (inside Docker) reaches books-api.
+    // ── 12. Create books-api route on Node A ───────────────────────
+    // Endpoint uses Docker DNS alias so Envoy Proxy A can reach books-api.
     console.log('[setup] Creating books-api route on Node A...')
-    const routeResult = await createRouteHandler({
-      name: 'books-api',
-      endpoint: 'http://books:8080/graphql',
-      protocol: 'http:graphql',
-      orchestratorUrl: `ws://localhost:${ports.orchA}/rpc`,
-      token: cliToken,
-    })
-    if (!routeResult.success) throw new Error(`Failed to create route: ${routeResult.error}`)
+    const dataAResult = await clientA.getDataChannelClient(systemToken)
+    if (!dataAResult.success) throw new Error('Failed to get data client A')
 
-    // ── 13. Wait for xDS propagation ──────────────────────────────
+    const routeResult = await dataAResult.client.addRoute({
+      name: 'books-api',
+      protocol: 'http:graphql',
+      endpoint: 'http://books:8080/graphql',
+    })
+    if (!routeResult.success) {
+      throw new Error(`Failed to create route: ${routeResult.error || 'Unknown error'}`)
+    }
+
+    // ── 13. Wait for xDS propagation ───────────────────────────────
     // Node A: ingress listener for books-api
     console.log('[setup] Waiting for Envoy A ingress listener...')
     await waitForListener(envoyAAdminPort, 'ingress_books-api', 60_000)
@@ -508,25 +474,18 @@ describe.skipIf(skipTests)('Cross-Node Routing: Two-Node E2E with Real Envoy Pro
   }, SETUP_TIMEOUT)
 
   afterAll(async () => {
-    // 1. Stop Docker containers
-    await envoyContainerB?.stop().catch(() => {})
-    await envoyContainerA?.stop().catch(() => {})
+    console.log('[teardown] Stopping containers...')
+    // Stop in reverse order of dependency
+    await orchB?.stop().catch(() => {})
+    await orchA?.stop().catch(() => {})
+    await envoyProxyB?.stop().catch(() => {})
+    await envoyProxyA?.stop().catch(() => {})
+    await envoySvcB?.stop().catch(() => {})
+    await envoySvcA?.stop().catch(() => {})
     await booksContainer?.stop().catch(() => {})
+    await auth?.container.stop().catch(() => {})
     await network?.stop().catch(() => {})
-
-    // 2. Stop Bun servers
-    orchServerB?.stop()
-    orchServerA?.stop()
-    envoyServerB?.stop()
-    envoyServerA?.stop()
-    authServer?.stop()
-
-    // 3. Shutdown Catalyst services
-    await orchServiceB?.shutdown()
-    await orchServiceA?.shutdown()
-    await envoyServiceB?.shutdown()
-    await envoyServiceA?.shutdown()
-    await authService?.shutdown()
+    console.log('[teardown] Done.')
   }, SETUP_TIMEOUT)
 
   it(
@@ -562,8 +521,8 @@ describe.skipIf(skipTests)('Cross-Node Routing: Two-Node E2E with Real Envoy Pro
       // — egress is for local-node consumption). We use `exec` to run curl
       // from inside the Envoy B container to hit the egress port.
       //
-      // Path: curl (inside Envoy B) → egress :10000 → envoy-a:10000 (ingress) → books-api
-      const execResult = await envoyContainerB.exec([
+      // Path: curl (inside Envoy B) → egress :10000 → envoy-proxy-a:10000 (ingress) → books:8080
+      const execResult = await envoyProxyB.exec([
         'curl',
         '-s',
         '-X',
@@ -598,11 +557,14 @@ describe.skipIf(skipTests)('Cross-Node Routing: Two-Node E2E with Real Envoy Pro
   it(
     'route removal on Node A cleans up egress on Node B',
     async () => {
-      // Delete the books-api route on Node A
-      const deleteResult = await deleteRouteHandler({
+      // Delete the books-api route on Node A via RPC
+      const clientA = getOrchestratorClient(orchA)
+      const dataAResult = await clientA.getDataChannelClient(systemToken)
+      if (!dataAResult.success) throw new Error('Failed to get data client A')
+
+      const deleteResult = await dataAResult.client.removeRoute({
         name: 'books-api',
-        orchestratorUrl: `ws://localhost:${ports.orchA}/rpc`,
-        token: cliToken,
+        protocol: 'http:graphql',
       })
       expect(deleteResult.success).toBe(true)
 
