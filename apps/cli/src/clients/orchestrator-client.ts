@@ -1,6 +1,9 @@
 import type { RpcStub } from 'capnweb'
 import { newWebSocketRpcSession } from 'capnweb'
-import type { PeerInfo, DataChannelDefinition, InternalRoute } from '@catalyst/routing'
+import { resolveServiceUrl } from './resolve-url.js'
+import type { PeerInfo } from '@catalyst/orchestrator'
+import type { DataChannelDefinition } from '@catalyst/orchestrator'
+import type { InternalRoute } from '@catalyst/orchestrator'
 
 // Polyfill Symbol.asyncDispose if necessary
 // @ts-expect-error - polyfilling Symbol.asyncDispose
@@ -22,10 +25,11 @@ export interface ManagementScope {
   deletePeer(peerId: string): Promise<ActionResult>
 }
 
-export function resolveOrchestratorUrl(url?: string): string {
-  return url ?? process.env.CATALYST_ORCHESTRATOR_URL ?? 'ws://localhost:3000/rpc'
-}
-
 export async function createOrchestratorClient(url?: string): Promise<OrchestratorPublicApi> {
-  return newWebSocketRpcSession<OrchestratorPublicApi>(resolveOrchestratorUrl(url))
+  const resolved = resolveServiceUrl({
+    url,
+    envVar: 'CATALYST_ORCHESTRATOR_URL',
+    defaultPort: 3000,
+  })
+  return newWebSocketRpcSession<OrchestratorPublicApi>(resolved)
 }

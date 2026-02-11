@@ -1,4 +1,5 @@
 import { newWebSocketRpcSession } from 'capnweb'
+import { resolveServiceUrl } from './resolve-url.js'
 
 export interface CreateTokenRequest {
   subject: string
@@ -48,10 +49,7 @@ export interface AuthValidationHandlers {
   getJWKS(): Promise<{ keys: unknown[] }>
 }
 
-export function resolveAuthUrl(url?: string): string {
-  return url ?? process.env.CATALYST_AUTH_URL ?? 'ws://localhost:4000/rpc'
-}
-
 export async function createAuthClient(url?: string): Promise<AuthPublicApi> {
-  return newWebSocketRpcSession<AuthPublicApi>(resolveAuthUrl(url))
+  const resolved = resolveServiceUrl({ url, envVar: 'CATALYST_AUTH_URL', defaultPort: 4000 })
+  return newWebSocketRpcSession<AuthPublicApi>(resolved)
 }
