@@ -21,7 +21,7 @@ export function routeCommands(): Command {
     .argument('<endpoint>', 'Service endpoint URL')
     .option(
       '-p, --protocol <protocol>',
-      'Protocol (http, http:graphql, http:gql, http:grpc)',
+      'Protocol (http, http:graphql, http:gql, http:grpc, tcp)',
       'http:graphql'
     )
     .option('--region <region>', 'Region tag')

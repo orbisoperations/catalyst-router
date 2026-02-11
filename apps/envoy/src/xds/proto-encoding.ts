@@ -1,5 +1,5 @@
 import protobuf from 'protobufjs'
-import type { XdsListener, XdsCluster } from './resources.js'
+import type { XdsListener, XdsTcpProxyListener, XdsCluster } from './resources.js'
 
 // ---------------------------------------------------------------------------
 // Type URLs used for google.protobuf.Any wrapping
@@ -10,6 +10,8 @@ export const CLUSTER_TYPE_URL = 'type.googleapis.com/envoy.config.cluster.v3.Clu
 const HCM_TYPE_URL =
   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager'
 const ROUTER_TYPE_URL = 'type.googleapis.com/envoy.extensions.filters.http.router.v3.Router'
+export const TCP_PROXY_TYPE_URL =
+  'type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy'
 const HTTP_PROTOCOL_OPTIONS_TYPE_URL =
   'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions'
 
@@ -206,6 +208,15 @@ function buildProtoRoot(): protobuf.Root {
       )
   )
 
+  // envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+  root
+    .define('envoy.extensions.filters.network.tcp_proxy.v3')
+    .add(
+      new protobuf.Type('TcpProxy')
+        .add(new protobuf.Field('stat_prefix', 1, 'string'))
+        .add(new protobuf.Field('cluster', 2, 'string'))
+    )
+
   // envoy.config.listener.v3.Filter
   root
     .define('envoy.config.listener.v3')
@@ -360,6 +371,56 @@ export function encodeListener(listener: XdsListener): {
         }
       }),
     })),
+  }
+
+  const ListenerType = root.lookupType('envoy.config.listener.v3.Listener')
+  const msg = ListenerType.fromObject(protoListener)
+  return {
+    type_url: LISTENER_TYPE_URL,
+    value: ListenerType.encode(msg).finish(),
+  }
+}
+
+/**
+ * Encode a TCP proxy listener into protobuf bytes suitable for
+ * wrapping in a DiscoveryResponse.resources Any field.
+ */
+export function encodeTcpProxyListener(listener: XdsTcpProxyListener): {
+  type_url: string
+  value: Uint8Array
+} {
+  const root = getProtoRoot()
+
+  const tcpProxyProto = {
+    stat_prefix: listener.filter_chains[0].filters[0].typed_config.stat_prefix,
+    cluster: listener.filter_chains[0].filters[0].typed_config.cluster,
+  }
+
+  const tcpProxyAny = encodeAsAny(
+    root,
+    'envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy',
+    TCP_PROXY_TYPE_URL,
+    tcpProxyProto
+  )
+
+  const protoListener = {
+    name: listener.name,
+    address: {
+      socket_address: {
+        address: listener.address.socket_address.address,
+        port_value: listener.address.socket_address.port_value,
+      },
+    },
+    filter_chains: [
+      {
+        filters: [
+          {
+            name: 'envoy.filters.network.tcp_proxy',
+            typed_config: tcpProxyAny,
+          },
+        ],
+      },
+    ],
   }
 
   const ListenerType = root.lookupType('envoy.config.listener.v3.Listener')

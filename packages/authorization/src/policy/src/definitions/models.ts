@@ -24,7 +24,7 @@ export type PeerEntity = {
 
 export type RouteEntity = {
   name: string
-  protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc'
+  protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc' | 'tcp'
   endpoint?: string | undefined
   region?: string | undefined
   tags?: string[] | undefined
