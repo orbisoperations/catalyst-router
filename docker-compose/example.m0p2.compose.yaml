@@ -28,6 +28,8 @@ services:
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway:4000/api
       - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
       - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
+      - CATALYST_ENVOY_PORT_RANGE=[10000, [10001, 10100]]
       - PORT=3000
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
@@ -38,6 +40,8 @@ services:
       auth:
         condition: service_healthy
       gateway:
+        condition: service_healthy
+      envoy-service:
         condition: service_healthy
 
   gateway:
@@ -86,6 +90,49 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  envoy-service:
+    build:
+      context: ..
+      dockerfile: apps/envoy/Dockerfile
+    ports:
+      - '3010:3000'
+      - '18000:18000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-service
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  envoy-proxy:
+    image: envoyproxy/envoy:v1.32-latest
+    ports:
+      - '10000:10000'
+      - '9901:9901'
+    volumes:
+      - ./envoy-bootstrap.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:9901/server_info',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      envoy-service:
+        condition: service_healthy
 
 volumes:
   auth-data:
