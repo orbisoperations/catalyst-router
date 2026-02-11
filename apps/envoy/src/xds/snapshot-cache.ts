@@ -1,19 +1,19 @@
+import type { XdsListener, XdsCluster } from './resources.js'
+
 /**
  * xDS snapshot — a complete set of Envoy resources at a given version.
  *
- * The `listeners` and `clusters` arrays contain plain objects matching the
- * Envoy xDS JSON structure. The gRPC ADS server (Phase 5) will serialize
+ * The `listeners` and `clusters` arrays contain typed objects matching the
+ * Envoy xDS JSON structure. The gRPC ADS server (future phase) will serialize
  * these into protobuf `DiscoveryResponse` messages.
  */
 export interface XdsSnapshot {
   /** Monotonic version string. */
   version: string
   /** All LDS resources (ingress + egress listeners). */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  listeners: any[]
+  listeners: XdsListener[]
   /** All CDS resources (local + remote clusters). */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  clusters: any[]
+  clusters: XdsCluster[]
 }
 
 export interface SnapshotCache {

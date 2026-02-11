@@ -1,6 +1,7 @@
 import { describe, it, expect, mock } from 'bun:test'
 import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
 import type { XdsSnapshot } from '../src/xds/snapshot-cache.js'
+import { buildIngressListener, buildLocalCluster } from '../src/xds/resources.js'
 
 function makeSnapshot(version: string): XdsSnapshot {
   return { version, listeners: [], clusters: [] }
@@ -114,9 +115,14 @@ describe('SnapshotCache', () => {
   describe('snapshot contents', () => {
     it('stores listeners in the snapshot', () => {
       const cache = createSnapshotCache()
+      const listener = buildIngressListener({
+        channelName: 'books-api',
+        port: 8001,
+        bindAddress: '0.0.0.0',
+      })
       const snapshot: XdsSnapshot = {
         version: '1',
-        listeners: [{ name: 'ingress_books-api', address: {} }],
+        listeners: [listener],
         clusters: [],
       }
       cache.setSnapshot(snapshot)
@@ -126,10 +132,15 @@ describe('SnapshotCache', () => {
 
     it('stores clusters in the snapshot', () => {
       const cache = createSnapshotCache()
+      const cluster = buildLocalCluster({
+        channelName: 'books-api',
+        address: '127.0.0.1',
+        port: 5001,
+      })
       const snapshot: XdsSnapshot = {
         version: '1',
         listeners: [],
-        clusters: [{ name: 'local_books-api', type: 'STATIC' }],
+        clusters: [cluster],
       }
       cache.setSnapshot(snapshot)
       expect(cache.getSnapshot()?.clusters).toHaveLength(1)

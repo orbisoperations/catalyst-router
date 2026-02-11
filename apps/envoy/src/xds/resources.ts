@@ -2,13 +2,53 @@ import type { DataChannelDefinition } from '@catalyst/routing'
 import type { XdsSnapshot } from './snapshot-cache.js'
 
 // ---------------------------------------------------------------------------
-// Types for xDS JSON structures
+// xDS JSON structure types (matching Envoy's JSON config format)
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type EnvoyListener = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type EnvoyCluster = any
+export interface XdsListener {
+  name: string
+  address: { socket_address: { address: string; port_value: number } }
+  filter_chains: Array<{
+    filters: Array<{
+      name: string
+      typed_config: {
+        '@type': string
+        stat_prefix: string
+        route_config: {
+          virtual_hosts: Array<{
+            name: string
+            domains: string[]
+            routes: Array<{
+              match: { prefix: string }
+              route: { cluster: string }
+            }>
+          }>
+        }
+      }
+    }>
+  }>
+}
+
+export interface XdsCluster {
+  name: string
+  type: 'STATIC' | 'STRICT_DNS'
+  connect_timeout: string
+  lb_policy: string
+  load_assignment: {
+    cluster_name: string
+    endpoints: Array<{
+      lb_endpoints: Array<{
+        endpoint: {
+          address: { socket_address: { address: string; port_value: number } }
+        }
+      }>
+    }>
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 const HCM_TYPE_URL =
   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager'
@@ -47,7 +87,7 @@ function parseEndpointUrl(endpoint: string): { address: string; port: number } {
 function buildHttpConnectionManager(
   statPrefix: string,
   clusterName: string
-): Record<string, unknown> {
+): XdsListener['filter_chains'][0]['filters'][0]['typed_config'] {
   return {
     '@type': HCM_TYPE_URL,
     stat_prefix: statPrefix,
@@ -72,7 +112,7 @@ export function buildIngressListener(opts: {
   channelName: string
   port: number
   bindAddress: string
-}): EnvoyListener {
+}): XdsListener {
   const name = `ingress_${opts.channelName}`
   const clusterName = `local_${opts.channelName}`
 
@@ -101,7 +141,7 @@ export function buildEgressListener(opts: {
   channelName: string
   peerName: string
   port: number
-}): EnvoyListener {
+}): XdsListener {
   const name = `egress_${opts.channelName}_via_${opts.peerName}`
   const clusterName = `remote_${opts.channelName}_via_${opts.peerName}`
 
@@ -134,7 +174,7 @@ export function buildLocalCluster(opts: {
   channelName: string
   address: string
   port: number
-}): EnvoyCluster {
+}): XdsCluster {
   const name = `local_${opts.channelName}`
   return {
     name,
@@ -168,7 +208,7 @@ export function buildRemoteCluster(opts: {
   peerName: string
   peerAddress: string
   peerPort: number
-}): EnvoyCluster {
+}): XdsCluster {
   const name = `remote_${opts.channelName}_via_${opts.peerName}`
   const clusterType = isIpAddress(opts.peerAddress) ? 'STATIC' : 'STRICT_DNS'
 
@@ -231,8 +271,8 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
   versionCounter++
   const version = String(versionCounter)
 
-  const listeners: EnvoyListener[] = []
-  const clusters: EnvoyCluster[] = []
+  const listeners: XdsListener[] = []
+  const clusters: XdsCluster[] = []
 
   // Local routes -> ingress listeners + local clusters
   for (const route of input.local) {
