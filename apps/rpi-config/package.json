@@ -1,0 +1,26 @@
+{
+  "name": "@catalyst/rpi-config",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "catalyst-rpi-config": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "bun run src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:watch": "vitest --watch"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.0.0",
+    "commander": "^14.0.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
