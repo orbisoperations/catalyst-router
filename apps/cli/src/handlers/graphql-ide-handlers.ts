@@ -10,6 +10,10 @@ export type GraphqlIdeResult =
  * Uses CDN resources from esm.sh
  */
 function generateGraphiQLHtml(graphqlEndpoint: string): string {
+  // Escape for safe insertion into inline JS: JSON.stringify handles quotes/backslashes,
+  // and replacing </ prevents </script> breakout at the HTML parser level.
+  const safeEndpoint = JSON.stringify(graphqlEndpoint).replace(/<\//g, '\\u003c/')
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -42,7 +46,7 @@ function generateGraphiQLHtml(graphqlEndpoint: string): string {
     import { GraphiQL } from 'graphiql';
     import { explorerPlugin } from '@graphiql/plugin-explorer';
 
-    const endpoint = ${JSON.stringify(graphqlEndpoint)};
+    const endpoint = ${safeEndpoint};
 
     const fetcher = async (graphQLParams) => {
       const response = await fetch(endpoint, {
