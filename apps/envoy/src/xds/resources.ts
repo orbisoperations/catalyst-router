@@ -145,6 +145,7 @@ export function buildEgressListener(opts: {
   channelName: string
   peerName: string
   port: number
+  bindAddress?: string
 }): XdsListener {
   const name = `egress_${opts.channelName}_via_${opts.peerName}`
   const clusterName = `remote_${opts.channelName}_via_${opts.peerName}`
@@ -153,7 +154,7 @@ export function buildEgressListener(opts: {
     name,
     address: {
       socket_address: {
-        address: '127.0.0.1',
+        address: opts.bindAddress ?? '0.0.0.0',
         port_value: opts.port,
       },
     },
@@ -321,6 +322,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
         channelName: route.name,
         peerName: route.peerName,
         port: egressPort,
+        bindAddress: input.bindAddress,
       })
     )
 
