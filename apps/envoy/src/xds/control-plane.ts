@@ -120,7 +120,7 @@ export class XdsControlPlane {
     const subscribedTypes = new Set<string>()
     const sentVersions = new Map<string, string>()
     const ackedVersions = new Map<string, string>()
-    let latestSnapshot: XdsSnapshot | undefined = this.cache.getSnapshot()
+    let latestSnapshot: XdsSnapshot | undefined
 
     /** Send snapshot resources for subscribed types that haven't been sent at this version. */
     const sendSubscribed = (): void => {
@@ -128,7 +128,10 @@ export class XdsControlPlane {
       this.sendSnapshotForTypes(call, latestSnapshot, subscribedTypes, sentVersions)
     }
 
-    // Watch for snapshot changes — send updates for subscribed types
+    // Watch for snapshot changes — send updates for subscribed types.
+    // The cache uses BehaviorSubject semantics: if a snapshot already exists,
+    // the callback fires immediately with the current value, so late-connecting
+    // streams always receive the latest config.
     const unwatch = this.cache.watch((snapshot) => {
       latestSnapshot = snapshot
       sendSubscribed()

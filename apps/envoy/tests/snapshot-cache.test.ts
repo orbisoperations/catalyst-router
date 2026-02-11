@@ -99,6 +99,26 @@ describe('SnapshotCache', () => {
       expect(cb2).toHaveBeenCalledTimes(1)
     })
 
+    it('immediately replays current snapshot to new watchers', () => {
+      const cache = createSnapshotCache()
+      const snapshot = makeSnapshot('1')
+      cache.setSnapshot(snapshot)
+
+      const callback = mock(() => {})
+      cache.watch(callback)
+
+      expect(callback).toHaveBeenCalledTimes(1)
+      expect(callback).toHaveBeenCalledWith(snapshot)
+    })
+
+    it('does not replay when no snapshot exists', () => {
+      const cache = createSnapshotCache()
+      const callback = mock(() => {})
+      cache.watch(callback)
+
+      expect(callback).toHaveBeenCalledTimes(0)
+    })
+
     it('double unsubscribe is a no-op', () => {
       const cache = createSnapshotCache()
       const callback = mock(() => {})
