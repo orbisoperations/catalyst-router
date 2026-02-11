@@ -6,7 +6,6 @@ export type CliResult<T> = { success: true; data?: T } | { success: false; error
 
 export const BaseCliConfigSchema = z.object({
   orchestratorUrl: z
-    .string()
     .url()
     .default(process.env.CATALYST_ORCHESTRATOR_URL || 'ws://localhost:3000/rpc'),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),

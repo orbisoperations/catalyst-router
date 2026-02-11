@@ -27,19 +27,20 @@ export type DeleteRouteResult =
  */
 export async function createRouteHandler(input: CreateRouteInput): Promise<CreateRouteResult> {
   try {
+    const token = input.token || ''
     const client = await createOrchestratorClient(input.orchestratorUrl)
-    const mgmtScope = client.connectionFromManagementSDK()
+    const dataChannelResult = await client.getDataChannelClient(token)
 
-    const result = await mgmtScope.applyAction({
-      resource: 'localRoute',
-      resourceAction: 'create',
-      data: {
-        name: input.name,
-        endpoint: input.endpoint,
-        protocol: input.protocol,
-        region: input.region,
-        tags: input.tags,
-      },
+    if (!dataChannelResult.success) {
+      return { success: false, error: dataChannelResult.error }
+    }
+
+    const result = await dataChannelResult.client.addRoute({
+      name: input.name,
+      endpoint: input.endpoint,
+      protocol: input.protocol,
+      region: input.region,
+      tags: input.tags,
     })
 
     if (result.success) {
@@ -60,13 +61,18 @@ export async function createRouteHandler(input: CreateRouteInput): Promise<Creat
  */
 export async function listRoutesHandler(input: ListRoutesInput): Promise<ListRoutesResult> {
   try {
+    const token = input.token || ''
     const client = await createOrchestratorClient(input.orchestratorUrl)
-    const mgmtScope = client.connectionFromManagementSDK()
+    const dataChannelResult = await client.getDataChannelClient(token)
 
-    const result = await mgmtScope.listLocalRoutes()
+    if (!dataChannelResult.success) {
+      return { success: false, error: dataChannelResult.error }
+    }
+
+    const result = await dataChannelResult.client.listRoutes()
     const allRoutes = [
-      ...result.routes.local.map((r) => ({ ...r, source: 'local' as const })),
-      ...result.routes.internal.map((r) => ({
+      ...result.local.map((r) => ({ ...r, source: 'local' as const })),
+      ...result.internal.map((r) => ({
         ...r,
         source: 'internal' as const,
         peer: r.peerName,
@@ -87,15 +93,17 @@ export async function listRoutesHandler(input: ListRoutesInput): Promise<ListRou
  */
 export async function deleteRouteHandler(input: DeleteRouteInput): Promise<DeleteRouteResult> {
   try {
+    const token = input.token || ''
     const client = await createOrchestratorClient(input.orchestratorUrl)
-    const mgmtScope = client.connectionFromManagementSDK()
+    const dataChannelResult = await client.getDataChannelClient(token)
 
-    const result = await mgmtScope.applyAction({
-      resource: 'localRoute',
-      resourceAction: 'delete',
-      data: {
-        name: input.name,
-      },
+    if (!dataChannelResult.success) {
+      return { success: false, error: dataChannelResult.error }
+    }
+
+    const result = await dataChannelResult.client.removeRoute({
+      name: input.name,
+      protocol: 'http', // Default protocol for delete by name
     })
 
     if (result.success) {
