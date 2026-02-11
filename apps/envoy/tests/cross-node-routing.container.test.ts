@@ -366,6 +366,11 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       .start()
     envoyBAdminPort = envoyProxyB.getMappedPort(9901)
 
+    // Install curl in envoy-proxy-b for the traffic test (not included in the base image)
+    console.log('[setup] Installing curl in envoy-proxy-b...')
+    await envoyProxyB.exec(['apt-get', 'update', '-qq'])
+    await envoyProxyB.exec(['apt-get', 'install', '-y', '-qq', 'curl'])
+
     // Brief wait for ADS streams to establish
     await new Promise((r) => setTimeout(r, 1000))
 
