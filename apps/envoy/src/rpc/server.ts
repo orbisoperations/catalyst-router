@@ -6,6 +6,8 @@ import { newRpcResponse } from '@hono/capnweb'
 import { TelemetryBuilder } from '@catalyst/telemetry'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import { DataChannelDefinitionSchema } from '@catalyst/routing'
+import type { SnapshotCache } from '../xds/snapshot-cache.js'
+import { buildXdsSnapshot } from '../xds/resources.js'
 
 /**
  * Internal route entry — a data channel on a remote peer, with peer metadata.
@@ -36,19 +38,30 @@ export const UpdateResultSchema = z.discriminatedUnion('success', [
 
 export type UpdateResult = z.infer<typeof UpdateResultSchema>
 
+export interface EnvoyRpcServerOptions {
+  telemetry?: ServiceTelemetry
+  snapshotCache?: SnapshotCache
+  bindAddress?: string
+}
+
 /**
  * Envoy RPC server.
  *
- * Receives route updates from the orchestrator and stores them.
- * Phase 3 scope: validate + store only. xDS snapshot building is Phase 4.
+ * Receives route updates from the orchestrator, validates them, builds xDS
+ * resources, and pushes snapshots to the cache for delivery to Envoy.
  */
 export class EnvoyRpcServer extends RpcTarget {
   private readonly logger: ServiceTelemetry['logger']
+  private readonly snapshotCache: SnapshotCache | undefined
+  private readonly bindAddress: string
   private config: RouteConfig = { local: [], internal: [] }
 
-  constructor(telemetry: ServiceTelemetry = TelemetryBuilder.noop('envoy')) {
+  constructor(options: EnvoyRpcServerOptions = {}) {
     super()
+    const telemetry = options.telemetry ?? TelemetryBuilder.noop('envoy')
     this.logger = telemetry.logger.getChild('rpc')
+    this.snapshotCache = options.snapshotCache
+    this.bindAddress = options.bindAddress ?? '0.0.0.0'
   }
 
   /**
@@ -56,6 +69,9 @@ export class EnvoyRpcServer extends RpcTarget {
    *
    * Called by the orchestrator after port allocation. Each route includes
    * an `envoyPort` assigned by the orchestrator's port allocator.
+   *
+   * When a snapshot cache is configured, builds xDS resources (LDS + CDS)
+   * from the route config and pushes a new snapshot to the cache.
    */
   async updateRoutes(config: unknown): Promise<UpdateResult> {
     this.logger.info`Route update received via RPC`
@@ -73,6 +89,37 @@ export class EnvoyRpcServer extends RpcTarget {
     const total = this.config.local.length + this.config.internal.length
     this.logger
       .info`Stored ${total} route(s) (${this.config.local.length} local, ${this.config.internal.length} internal)`
+
+    // Build and push xDS snapshot if a cache is configured
+    if (this.snapshotCache) {
+      const portAllocations: Record<string, number> = {}
+
+      // Collect port allocations from local routes
+      for (const route of this.config.local) {
+        if (route.envoyPort) {
+          portAllocations[route.name] = route.envoyPort
+        }
+      }
+
+      // Collect port allocations from internal routes (egress ports)
+      for (const route of this.config.internal) {
+        if (route.envoyPort) {
+          const egressKey = `egress_${route.name}_via_${route.peerName}`
+          portAllocations[egressKey] = route.envoyPort
+        }
+      }
+
+      const snapshot = buildXdsSnapshot({
+        local: this.config.local,
+        internal: this.config.internal,
+        portAllocations,
+        bindAddress: this.bindAddress,
+      })
+
+      this.snapshotCache.setSnapshot(snapshot)
+      this.logger
+        .info`xDS snapshot v${snapshot.version} pushed (${snapshot.listeners.length} listeners, ${snapshot.clusters.length} clusters)`
+    }
 
     return { success: true }
   }

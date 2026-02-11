@@ -1,0 +1,60 @@
+/**
+ * xDS snapshot — a complete set of Envoy resources at a given version.
+ *
+ * The `listeners` and `clusters` arrays contain plain objects matching the
+ * Envoy xDS JSON structure. The gRPC ADS server (Phase 5) will serialize
+ * these into protobuf `DiscoveryResponse` messages.
+ */
+export interface XdsSnapshot {
+  /** Monotonic version string. */
+  version: string
+  /** All LDS resources (ingress + egress listeners). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  listeners: any[]
+  /** All CDS resources (local + remote clusters). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  clusters: any[]
+}
+
+export interface SnapshotCache {
+  /** Set a new snapshot. Notifies all connected watchers. */
+  setSnapshot(snapshot: XdsSnapshot): void
+
+  /** Get the current snapshot. */
+  getSnapshot(): XdsSnapshot | undefined
+
+  /** Subscribe to snapshot changes. Returns an unsubscribe function. */
+  watch(callback: (snapshot: XdsSnapshot) => void): () => void
+}
+
+/**
+ * Create an in-memory snapshot cache.
+ *
+ * Connects the Capnweb RPC input (from the Orchestrator) to the gRPC output
+ * (to Envoy). When a new snapshot is set, all watchers are notified
+ * synchronously.
+ */
+export function createSnapshotCache(): SnapshotCache {
+  let current: XdsSnapshot | undefined
+  const watchers = new Set<(snapshot: XdsSnapshot) => void>()
+
+  return {
+    setSnapshot(snapshot: XdsSnapshot): void {
+      current = snapshot
+      for (const callback of watchers) {
+        callback(snapshot)
+      }
+    },
+
+    getSnapshot(): XdsSnapshot | undefined {
+      return current
+    },
+
+    watch(callback: (snapshot: XdsSnapshot) => void): () => void {
+      watchers.add(callback)
+      return () => {
+        watchers.delete(callback)
+      }
+    },
+  }
+}
