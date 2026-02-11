@@ -34,15 +34,17 @@ describe('Auth Service Container', () => {
     }
 
     container = await new GenericContainer('auth-service:test')
-      .withExposedPorts(4020)
+      .withExposedPorts(5000)
       .withEnvironment({
-        CATALYST_AUTH_PORT: '4020',
-        CATALYST_AUTH_KEYS_DIR: '/tmp/keys',
+        PORT: '5000',
+        CATALYST_NODE_ID: 'test-node',
+        CATALYST_AUTH_KEYS_DB: ':memory:',
+        CATALYST_AUTH_TOKENS_DB: ':memory:',
       })
-      .withWaitStrategy(Wait.forHttp('/health', 4020))
+      .withWaitStrategy(Wait.forLogMessage('Catalyst server [auth] listening'))
       .start()
 
-    port = container.getMappedPort(4020)
+    port = container.getMappedPort(5000)
     console.log(`Container started on port ${port}`)
   }, TIMEOUT)
 

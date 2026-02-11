@@ -4,9 +4,11 @@ permit (
         CATALYST::Action::"PEER_CREATE",
         CATALYST::Action::"PEER_UPDATE",
         CATALYST::Action::"PEER_DELETE",
+        CATALYST::Action::"PEER_LIST",
         CATALYST::Action::"IBGP_CONNECT",
         CATALYST::Action::"IBGP_DISCONNECT",
-        CATALYST::Action::"IBGP_UPDATE"
+        CATALYST::Action::"IBGP_UPDATE",
+        CATALYST::Action::"IBGP_LIST"
     ],
     resource
 )

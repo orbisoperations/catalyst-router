@@ -1,5 +1,5 @@
-import { ConnectionPool, type CatalystNodeBus, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
+import { ConnectionPool, type CatalystNodeBus, type PublicApi } from '../src/orchestrator.js'
 
 export class MockConnectionPool extends ConnectionPool {
   private nodes = new Map<string, CatalystNodeBus>()
@@ -26,7 +26,10 @@ export class MockConnectionPool extends ConnectionPool {
         if (!targetNode) return { success: false, error: 'Node not found' }
         return targetNode.publicApi().getIBGPClient(token)
       },
-      updateConfig: async () => ({ success: true }),
+      getConfigClient: async () => ({
+        success: true,
+        client: { updateConfig: async () => ({ success: true }) },
+      }),
     } as unknown as RpcStub<PublicApi>
   }
 }

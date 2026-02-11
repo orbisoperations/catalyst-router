@@ -1,18 +1,15 @@
-import type { z } from 'zod'
 import {
-  Actions,
-  newRouteTable,
   type Action,
+  Actions,
   type DataChannelDefinition,
   type InternalRoute,
+  newRouteTable,
   type PeerInfo,
   type PeerRecord,
   type RouteTable,
   type UpdateMessageSchema,
 } from '@catalyst/routing'
-export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
-import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import {
   newHttpBatchRpcSession,
   newWebSocketRpcSession,
@@ -20,6 +17,9 @@ import {
   type RpcStub,
   RpcTarget,
 } from 'capnweb'
+import type { z } from 'zod'
+import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
+export type { InternalRoute, PeerInfo }
 
 export interface PublicApi {
   getNetworkClient(
@@ -31,7 +31,6 @@ export interface PublicApi {
   getIBGPClient(
     token: string
   ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
-  dispatch(action: Action): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export interface NetworkClient {
@@ -123,6 +122,11 @@ interface AuthServicePermissionsHandlers {
 }
 
 interface AuthServiceApi {
+  /** Pure JWT verification - checks signature, expiry, and revocation only */
+  authenticate(
+    token: string
+  ): Promise<{ valid: true; payload: Record<string, unknown> } | { valid: false; error: string }>
+  /** Cedar policy evaluation - verifies token AND checks action permissions */
   permissions(token: string): Promise<AuthServicePermissionsHandlers | { error: string }>
 }
 
@@ -178,28 +182,51 @@ export class CatalystNodeBus extends RpcTarget {
   }
 
   /**
-   * Validates an incoming caller token using the auth service permissions API.
+   * Authentication only: verifies the JWT token is valid (signature, expiry, revocation).
+   * Does NOT evaluate Cedar policies.
    *
-   * @param callerToken - The token provided by the caller that needs validation
-   * @param action - The action the caller wants to perform
+   * Used at entry-point level (getNetworkClient, getDataChannelClient, getIBGPClient)
+   * to verify the caller has a valid token before granting access to the client.
    */
-  private async validateToken(
-    callerToken: string,
-    action: string
+  private async authenticateToken(
+    callerToken: string
   ): Promise<{ valid: true } | { valid: false; error: string }> {
-    // If no auth client is configured, allow the operation (for testing/development)
     if (!this.authClient) {
       return { valid: true }
     }
 
     try {
-      // Use permissions API to validate the caller's token
+      const result = await this.authClient.authenticate(callerToken)
+      if (!result.valid) {
+        return { valid: false, error: `Authentication failed: ${result.error}` }
+      }
+      return { valid: true }
+    } catch (error) {
+      return { valid: false, error: `Authentication failed: ${error}` }
+    }
+  }
+
+  /**
+   * Authorization: evaluates Cedar policy for a specific action.
+   * Verifies the token AND checks if the action is permitted.
+   *
+   * Used inside handler methods (addPeer, updatePeer, etc.)
+   * to enforce fine-grained access control per operation.
+   */
+  private async authorizeToken(
+    callerToken: string,
+    action: string
+  ): Promise<{ valid: true } | { valid: false; error: string }> {
+    if (!this.authClient) {
+      return { valid: true }
+    }
+
+    try {
       const permissionsApi = await this.authClient.permissions(callerToken)
       if ('error' in permissionsApi) {
         return { valid: false, error: `Invalid token: ${permissionsApi.error}` }
       }
 
-      // Check if the validated token allows the requested action
       const result = await permissionsApi.authorizeAction({
         action,
         nodeContext: {
@@ -209,9 +236,10 @@ export class CatalystNodeBus extends RpcTarget {
       })
 
       if (!result.success) {
+        const detail = result.reason || result.reasons?.join(', ') || 'Permission denied'
         return {
           valid: false,
-          error: `Authorization failed: ${result.errorType} - ${result.reason || result.reasons?.join(', ')}`,
+          error: `Authorization failed: ${result.errorType} - ${detail}`,
         }
       }
 
@@ -221,7 +249,7 @@ export class CatalystNodeBus extends RpcTarget {
 
       return { valid: true }
     } catch (error) {
-      return { valid: false, error: `Token validation failed: ${error}` }
+      return { valid: false, error: `Authorization failed: ${error}` }
     }
   }
 
@@ -497,12 +525,17 @@ export class CatalystNodeBus extends RpcTarget {
           })),
         }
 
-        // @ts-expect-error - Gateway RPC implementation uses updateConfig
-        const result = await stub.updateConfig(config)
-        if (!result.success) {
-          this.logger.error`Gateway sync failed: ${result.error}`
+        // @ts-expect-error - Gateway RPC implementation uses getConfigClient
+        const configResult = await stub.getConfigClient(this.nodeToken || '')
+        if (!configResult.success) {
+          this.logger.error`Gateway auth failed: ${configResult.error}`
         } else {
-          this.logger.info`Gateway sync successful`
+          const result = await configResult.client.updateConfig(config)
+          if (!result.success) {
+            this.logger.error`Gateway sync failed: ${result.error}`
+          } else {
+            this.logger.info`Gateway sync successful`
+          }
         }
       }
     } catch (e) {
@@ -782,25 +815,34 @@ export class CatalystNodeBus extends RpcTarget {
       getNetworkClient: async (
         token: string
       ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> => {
-        // Validate token via auth service or fallback to secret
-        const validation = await this.validateToken(token, 'PEER_CREATE')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
+        // Authentication only: verify the token is valid (no policy evaluation)
+        const authentication = await this.authenticateToken(token)
+        if (!authentication.valid) {
+          return { success: false, error: authentication.error }
         }
 
         return {
           success: true,
           client: {
             addPeer: async (peer: PeerInfo) => {
+              // Authorization: evaluate Cedar policy for PEER_CREATE
+              const check = await this.authorizeToken(token, 'PEER_CREATE')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({ action: Actions.LocalPeerCreate, data: peer })
             },
             updatePeer: async (peer: PeerInfo) => {
+              const check = await this.authorizeToken(token, 'PEER_UPDATE')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({ action: Actions.LocalPeerUpdate, data: peer })
             },
             removePeer: async (peer: Pick<PeerInfo, 'name'>) => {
+              const check = await this.authorizeToken(token, 'PEER_DELETE')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({ action: Actions.LocalPeerDelete, data: peer })
             },
             listPeers: async () => {
+              const check = await this.authorizeToken(token, 'PEER_LIST')
+              if (!check.valid) throw new Error(check.error)
               return this.state.internal.peers
             },
           },
@@ -809,22 +851,29 @@ export class CatalystNodeBus extends RpcTarget {
       getDataChannelClient: async (
         token: string
       ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }> => {
-        // Validate token via auth service or fallback to secret
-        const validation = await this.validateToken(token, 'ROUTE_CREATE')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
+        // Authentication only: verify the token is valid (no policy evaluation)
+        const authentication = await this.authenticateToken(token)
+        if (!authentication.valid) {
+          return { success: false, error: authentication.error }
         }
 
         return {
           success: true,
           client: {
             addRoute: async (route: DataChannelDefinition) => {
+              // Authorization: evaluate Cedar policy for ROUTE_CREATE
+              const check = await this.authorizeToken(token, 'ROUTE_CREATE')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({ action: Actions.LocalRouteCreate, data: route })
             },
             removeRoute: async (route: DataChannelDefinition) => {
+              const check = await this.authorizeToken(token, 'ROUTE_DELETE')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({ action: Actions.LocalRouteDelete, data: route })
             },
             listRoutes: async () => {
+              const check = await this.authorizeToken(token, 'ROUTE_LIST')
+              if (!check.valid) throw new Error(check.error)
               return {
                 local: this.state.local.routes,
                 internal: this.state.internal.routes,
@@ -836,28 +885,35 @@ export class CatalystNodeBus extends RpcTarget {
       getIBGPClient: async (
         token: string
       ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }> => {
-        // Validate token via auth service or fallback to secret
-        const validation = await this.validateToken(token, 'IBGP_CONNECT')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
+        // Authentication only: verify the token is valid (no policy evaluation)
+        const authentication = await this.authenticateToken(token)
+        if (!authentication.valid) {
+          return { success: false, error: authentication.error }
         }
 
         return {
           success: true,
           client: {
             open: async (peer: PeerInfo) => {
+              // Authorization: evaluate Cedar policy for IBGP_CONNECT
+              const check = await this.authorizeToken(token, 'IBGP_CONNECT')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({
                 action: Actions.InternalProtocolOpen,
                 data: { peerInfo: peer },
               })
             },
             close: async (peer: PeerInfo, code: number, reason?: string) => {
+              const check = await this.authorizeToken(token, 'IBGP_DISCONNECT')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({
                 action: Actions.InternalProtocolClose,
                 data: { peerInfo: peer, code, reason },
               })
             },
             update: async (peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>) => {
+              const check = await this.authorizeToken(token, 'IBGP_UPDATE')
+              if (!check.valid) return { success: false, error: check.error }
               return this.dispatch({
                 action: Actions.InternalProtocolUpdate,
                 data: {
@@ -868,9 +924,6 @@ export class CatalystNodeBus extends RpcTarget {
             },
           },
         }
-      },
-      dispatch: async (action: Action) => {
-        return this.dispatch(action)
       },
     }
   }
