@@ -1,6 +1,32 @@
 import { z } from 'zod'
 
 /**
+ * Port entry: either a single port number or a [start, end] range tuple.
+ */
+const PortNumberSchema = z.number().int().min(1).max(65535)
+
+export const PortEntrySchema = z.union([
+  PortNumberSchema,
+  z
+    .tuple([PortNumberSchema, PortNumberSchema])
+    .refine(([start, end]) => start <= end, 'Start must be <= end'),
+])
+
+export type PortEntry = z.infer<typeof PortEntrySchema>
+
+/**
+ * Envoy proxy configuration.
+ */
+export const EnvoyConfigSchema = z.object({
+  portRange: z.array(PortEntrySchema).min(1),
+  adminPort: PortNumberSchema.default(9901),
+  xdsPort: PortNumberSchema.default(18000),
+  bindAddress: z.string().default('0.0.0.0'),
+})
+
+export type EnvoyConfig = z.infer<typeof EnvoyConfigSchema>
+
+/**
  * Shared Node Identity Schema
  */
 export const NodeConfigSchema = z.object({
@@ -26,6 +52,12 @@ export const OrchestratorConfigSchema = z.object({
     .object({
       endpoint: z.string(),
       systemToken: z.string(),
+    })
+    .optional(),
+  envoyConfig: z
+    .object({
+      endpoint: z.string(),
+      envoyAddress: z.string().optional(),
     })
     .optional(),
 })
@@ -66,12 +98,13 @@ export const CatalystConfigSchema = z.object({
   node: NodeConfigSchema,
   orchestrator: OrchestratorConfigSchema.optional(),
   auth: AuthConfigSchema.optional(),
+  envoy: EnvoyConfigSchema.optional(),
   port: z.number().default(3000),
 })
 
 export type CatalystConfig = z.infer<typeof CatalystConfigSchema>
 
-type ServiceType = 'gateway' | 'orchestrator' | 'auth'
+type ServiceType = 'gateway' | 'orchestrator' | 'auth' | 'envoy'
 
 /**
  * Configuration load options
@@ -109,6 +142,20 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
     ? process.env.CATALYST_DOMAINS.split(',').map((d) => d.trim())
     : []
 
+  const envoyPortRange = process.env.CATALYST_ENVOY_PORT_RANGE
+  const envoy = envoyPortRange
+    ? {
+        portRange: JSON.parse(envoyPortRange) as unknown,
+        adminPort: process.env.CATALYST_ENVOY_ADMIN_PORT
+          ? Number(process.env.CATALYST_ENVOY_ADMIN_PORT)
+          : undefined,
+        xdsPort: process.env.CATALYST_ENVOY_XDS_PORT
+          ? Number(process.env.CATALYST_ENVOY_XDS_PORT)
+          : undefined,
+        bindAddress: process.env.CATALYST_ENVOY_BIND_ADDRESS || undefined,
+      }
+    : undefined
+
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
     node: {
@@ -116,6 +163,7 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       endpoint: peeringEndpoint,
       domains: domains,
     },
+    envoy,
     orchestrator: {
       gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
         ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
