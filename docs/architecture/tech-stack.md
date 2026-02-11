@@ -2,7 +2,7 @@
 
 ## Core Runtime
 
-- **Language**: **TypeScript** (Running on **Node.js**).
+- **Language**: **TypeScript** (Running on **Bun**).
   - _Rationale_: Ubiquity, huge ecosystem, and strong typing for complex routing logic.
 - **Paradigm**: **Functional Programming (FP)**.
   - _Usage_: The core event loop and state transitions will be modeled as pure functions to ensure predictability and testability.
@@ -22,10 +22,9 @@
 
 ## Data Plane (Traffic)
 
-- **Proxy Engine**: **[Envoy Proxy](https://github.com/envoyproxy/envoy)**.
+- **Proxy Engine**: **[Envoy Proxy](https://github.com/envoyproxy/envoy)** (Planned).
+  - _Status_: Not yet implemented. Will provide L4 data plane routing with xDS configuration from the Orchestrator.
   - _Rationale_: Industry standard for high-performance sidecar/edge proxying.
-  - _Integration_:
-    - **Current**: xDS (REST) for dynamic streaming configuration.
 
 ## Build, Delivery & Containers
 

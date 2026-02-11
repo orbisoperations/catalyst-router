@@ -1,5 +1,13 @@
 # Internal Peering Architecture
 
+> **Note**: This document describes the original protocol design. The actual implementation has evolved:
+>
+> - **Authentication**: Uses JWT tokens via the progressive API pattern (`getIBGPClient(token)`) instead of the `authenticate(secret)` flow described below
+> - **Dispatch**: Uses the V2 dispatch pattern (`dispatch()` → `handleAction()` → `handleNotify()`) instead of the V1 plugin system
+> - **Transport**: Capnweb RPC over WebSocket (mTLS is planned but not yet implemented)
+>
+> See the [API Design](../api/api-design.md) document for the current progressive API pattern and the [Architecture Overview](../architecture/overview.md) for the V2 dispatch pattern.
+
 This document describes the implementation of Internal Peering (iBGP) for the Catalyst Router orchestrator, focusing on the use of Cap'n Proto RPC for bidirectional communication and route propagation between nodes within the same Autonomous System (AS).
 
 ## Overview: BGP in Catalyst
@@ -203,6 +211,9 @@ catalyst peer add --address 10.0.0.5 --secret mysecret
 This generates a `CREATE_PEER` action in the orchestrator.
 
 **Step 3: Internal Peering Plugin**
+
+> **Note**: The `InternalPeeringPlugin` / `BasePlugin` pattern below reflects the V1 plugin architecture and has been superseded by V2 dispatch actions. In the current implementation, peering is handled via `dispatch()` → `handleAction()` → `handleNotify()` and uses JWT token authentication rather than a shared secret. See the [Architecture Overview](../architecture/overview.md) for the V2 dispatch pattern.
+
 A specific plugin, `InternalPeeringPlugin`, listens for `CREATE_PEER` actions.
 
 ```typescript

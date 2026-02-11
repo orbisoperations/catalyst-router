@@ -17,11 +17,43 @@ Unlike centralized approaches, Catalyst Router requires no shared Kubernetes clu
 - BGP-inspired peer-to-peer route exchange across trust boundaries
 - GraphQL federation gateway with schema stitching
 - Cedar policy engine for fine-grained authorization
-- Principal-based JWT authentication with certificate-bound tokens
+- Principal-based JWT authentication with Cedar policy authorization
 - OpenTelemetry-native observability (logs, metrics, traces)
 - Docker-native deployment with Core Pod architecture
 - SQLite persistence with zero external database dependencies
 - Runs on Bun with a minimal resource footprint
+
+## Project Status
+
+The security architecture is built around three layers of defense-in-depth, working from the top down:
+
+1. **Cedar policy authorization** -- Fine-grained, declarative access control with typed principals and actions. Fully implemented.
+2. **Certificate-bound access tokens** -- JWTs bound to client TLS certificates ([RFC 8705](https://datatracker.ietf.org/doc/html/rfc8705)), preventing token theft and replay. Data model implemented; enforcement in progress.
+3. **Mutual TLS (mTLS)** -- Transport-layer identity verification and encryption. Planned.
+
+Cedar policies are the authorization backbone today. Certificate-bound tokens and mTLS will complete the identity and transport layers, giving each peering session cryptographic proof of both _who_ is calling and _what they're allowed to do_.
+
+### Implemented
+
+- **Cedar policy engine** for fine-grained authorization (5 principals, 13 actions)
+- **JWT authentication** (ES384 signing, JWKS distribution, token revocation via SQLite)
+- **Certificate-bound token data model** (ADR-0007 -- `cnf.x5t#S256` claim minted and stored)
+- BGP-inspired peer-to-peer route exchange (iBGP within an AS)
+- GraphQL federation gateway with dynamic schema stitching
+- Capnweb RPC for all inter-component communication
+- OpenTelemetry observability (logs, metrics, traces via OTLP)
+- SQLite persistence (key store, token store) with WAL mode
+- V2 dispatch pattern (handleAction / handleNotify)
+- CLI for node management (peers, routes, tokens)
+
+### Planned
+
+- **mTLS** for transport security (all connections currently use plaintext WebSocket)
+- **Certificate-bound token enforcement** (requires mTLS to extract client cert thumbprint for binding verification)
+- External BGP (eBGP) for cross-AS peering
+- Envoy proxy integration for L4 data plane routing (xDS configuration)
+- Route origin signing and PKI-based route validation
+- Production observability backends (currently exports to debug exporter)
 
 ## Architecture Overview
 
@@ -110,7 +142,7 @@ This project uses [Graphite](https://graphite.dev) for stacked PRs and follows [
 
 ## Security
 
-Catalyst Router uses mTLS for node-to-node communication, JWT with certificate-bound tokens for request authentication, and Cedar policies for fine-grained authorization. See [SECURITY.md](./SECURITY.md) for the full security protocol.
+Catalyst Router uses JWT authentication with Cedar policy-based authorization over Capnweb RPC (WebSocket) for inter-component and node-to-node communication. See [SECURITY.md](./SECURITY.md) for the full security protocol.
 
 ## License
 

@@ -1,5 +1,14 @@
 # JWT/JWKS Service Design
 
+> **Note**: This document describes the original design proposal for the JWT service. The actual implementation differs in several ways:
+>
+> - **Algorithm**: ES384 (not EdDSA)
+> - **Key Storage**: Persistent SQLite via `BunSqliteKeyStore` (not in-memory)
+> - **Package Location**: `packages/authorization` (not `packages/jwt`)
+> - **Key Manager**: `PersistentLocalKeyManager` class
+>
+> See the [Architecture Overview](./overview.md) for the current implementation details.
+
 This document outlines the design for the new standalone JWT service package. This service acts as a centralized authority for token signing and verification within the Catalyst control plane, replacing legacy logic.
 
 ## 1. System Overview
