@@ -1,6 +1,6 @@
-import { describe, it, expect, mock, beforeAll, afterAll } from 'bun:test'
-import { websocket } from 'hono/bun'
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test'
 import { newWebSocketRpcSession } from 'capnweb'
+import { websocket } from 'hono/bun'
 import type { GatewayUpdateResult } from '../src/rpc/server.js'
 import { createRpcHandler, GatewayRpcServer } from '../src/rpc/server.js'
 
@@ -18,7 +18,7 @@ describe('RPC Integration', () => {
 
   beforeAll(async () => {
     const rpcServer = new GatewayRpcServer(updateCallback)
-    const app = createRpcHandler(rpcServer)
+    const app = createRpcHandler(rpcServer.publicApi())
 
     server = Bun.serve({
       fetch: app.fetch,
@@ -47,7 +47,9 @@ describe('RPC Integration', () => {
       services: [{ name: 'test-service', url: 'http://localhost:8080/graphql' }],
     }
 
-    const result = await rpcClient.updateConfig(config)
+    const configClient = await rpcClient.getConfigClient('')
+    expect(configClient.success).toBe(true)
+    const result = await configClient.client.updateConfig(config)
 
     expect(result).toEqual({ success: true })
     expect(updateCallback).toHaveBeenCalled()
@@ -69,7 +71,9 @@ describe('RPC Integration', () => {
       ],
     }
 
-    const result = await rpcClient.updateConfig(invalidConfig)
+    const configClient = await rpcClient.getConfigClient('')
+    expect(configClient.success).toBe(true)
+    const result = await configClient.client.updateConfig(invalidConfig)
 
     expect(result.success).toBe(false)
     if (!result.success) {
@@ -95,7 +99,9 @@ describe('RPC Integration', () => {
       services: [{ name: 'test-service', url: 'http://localhost:8080/graphql' }],
     }
 
-    const result = await rpcClient.updateConfig(config)
+    const configClient = await rpcClient.getConfigClient('')
+    expect(configClient.success).toBe(true)
+    const result = await configClient.client.updateConfig(config)
 
     expect(result.success).toBe(false)
     if (!result.success) {

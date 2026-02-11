@@ -1,4 +1,5 @@
 import { newWebSocketRpcSession } from 'capnweb'
+import type { GatewayPublicApi } from '../src/rpc/server.js'
 
 async function main() {
   console.log('Connecting to RPC server...')
@@ -16,16 +17,20 @@ async function main() {
   // We get back a stub for the remote main (the GatewayRpcServer).
   // We cast it to 'any' because we don't have the shared type definition file setup for the client script perfectly here,
   // but we know it has updateConfig.
-  const gateway = newWebSocketRpcSession(ws as unknown as WebSocket) as unknown as {
-    updateConfig: (config: unknown) => Promise<{ success: boolean; error?: string }>
-  }
+  const gateway = newWebSocketRpcSession(ws as unknown as WebSocket) as unknown as GatewayPublicApi
 
-  console.log('Sending configuration update...')
+  console.log('Requesting config client...')
+  const token = process.env.CATALYST_AUTH_TOKEN || ''
 
   try {
-    // Call the remote method
-    // Note: in Cap'n Web, we await the result.
-    const result = await gateway.updateConfig({
+    const configResult = await gateway.getConfigClient(token)
+    if (!configResult.success) {
+      console.error('[error] Config client auth failed:', configResult.error)
+      process.exit(1)
+    }
+
+    console.log('Sending configuration update...')
+    const result = await configResult.client.updateConfig({
       services: [
         {
           name: 'countries',

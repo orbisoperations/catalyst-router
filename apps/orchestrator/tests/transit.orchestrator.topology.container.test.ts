@@ -129,9 +129,25 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       }
     })
 
-    const getClient = (node: StartedTestContainer) => {
+    const getClient = async (node: StartedTestContainer, retries = 5) => {
       const port = node.getMappedPort(3000)
-      return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+      const host = node.getHost()
+      const url = `ws://${host}:${port}/rpc`
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const ws = new WebSocket(url)
+          await new Promise<void>((resolve, reject) => {
+            ws.addEventListener('open', () => resolve())
+            ws.addEventListener('error', (e) => reject(e))
+          })
+          return newWebSocketRpcSession<PublicApi>(ws as unknown as WebSocket)
+        } catch {
+          if (attempt === retries - 1)
+            throw new Error(`WebSocket connection to ${url} failed after ${retries} attempts`)
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+      throw new Error('unreachable')
     }
 
     const waitForConnected = async (
@@ -153,9 +169,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
     it(
       'Transit Topology: A <-> B <-> C propagation, sync, and withdrawal',
       async () => {
-        const clientA = getClient(nodeA)
-        const clientB = getClient(nodeB)
-        const clientC = getClient(nodeC)
+        const clientA = await getClient(nodeA)
+        const clientB = await getClient(nodeB)
+        const clientC = await getClient(nodeC)
 
         // 1. Linear Peering: A <-> B and B <-> C
         console.log('Establishing peering A <-> B')
@@ -410,17 +426,33 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
       }
     })
 
-    const getClient = (node: StartedTestContainer) => {
+    const getClient = async (node: StartedTestContainer, retries = 5) => {
       const port = node.getMappedPort(3000)
-      return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+      const host = node.getHost()
+      const url = `ws://${host}:${port}/rpc`
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const ws = new WebSocket(url)
+          await new Promise<void>((resolve, reject) => {
+            ws.addEventListener('open', () => resolve())
+            ws.addEventListener('error', (e) => reject(e))
+          })
+          return newWebSocketRpcSession<PublicApi>(ws as unknown as WebSocket)
+        } catch {
+          if (attempt === retries - 1)
+            throw new Error(`WebSocket connection to ${url} failed after ${retries} attempts`)
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+      throw new Error('unreachable')
     }
 
     it(
       'Transit with separate auth servers',
       async () => {
-        const clientA = getClient(nodeA)
-        const clientB = getClient(nodeB)
-        const clientC = getClient(nodeC)
+        const clientA = await getClient(nodeA)
+        const clientB = await getClient(nodeB)
+        const clientC = await getClient(nodeC)
 
         // Tokens should be unique
         expect(authA.systemToken).not.toBe(authB.systemToken)

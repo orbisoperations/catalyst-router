@@ -175,15 +175,33 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       }
     }, TIMEOUT)
 
+    const getClient = async (node: StartedTestContainer, retries = 5) => {
+      const port = node.getMappedPort(3000)
+      const host = node.getHost()
+      const url = `ws://${host}:${port}/rpc`
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const ws = new WebSocket(url)
+          await new Promise<void>((resolve, reject) => {
+            ws.addEventListener('open', () => resolve())
+            ws.addEventListener('error', (e) => reject(e))
+          })
+          return newWebSocketRpcSession<PublicApi>(ws as unknown as WebSocket)
+        } catch {
+          if (attempt === retries - 1)
+            throw new Error(`WebSocket connection to ${url} failed after ${retries} attempts`)
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+      throw new Error('unreachable')
+    }
+
     it(
       'Mesh-wide GraphQL Sync: A -> B -> Gateway',
       async () => {
         console.log('Inside Mesh-wide Sync test')
-        const portA = peerA.getMappedPort(3000)
-        const clientA = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portA}/rpc`)
-
-        const portB = peerB.getMappedPort(3000)
-        const clientB = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portB}/rpc`)
+        const clientA = await getClient(peerA)
+        const clientB = await getClient(peerB)
 
         const netAResult = await clientA.getNetworkClient(auth.systemToken)
         const netBResult = await clientB.getNetworkClient(auth.systemToken)
@@ -363,15 +381,33 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       }
     }, TIMEOUT)
 
+    const getClient = async (node: StartedTestContainer, retries = 5) => {
+      const port = node.getMappedPort(3000)
+      const host = node.getHost()
+      const url = `ws://${host}:${port}/rpc`
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const ws = new WebSocket(url)
+          await new Promise<void>((resolve, reject) => {
+            ws.addEventListener('open', () => resolve())
+            ws.addEventListener('error', (e) => reject(e))
+          })
+          return newWebSocketRpcSession<PublicApi>(ws as unknown as WebSocket)
+        } catch {
+          if (attempt === retries - 1)
+            throw new Error(`WebSocket connection to ${url} failed after ${retries} attempts`)
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+      throw new Error('unreachable')
+    }
+
     it(
       'Gateway sync with separate auth servers',
       async () => {
         console.log('Inside Gateway sync test with separate auth')
-        const portA = peerA.getMappedPort(3000)
-        const clientA = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portA}/rpc`)
-
-        const portB = peerB.getMappedPort(3000)
-        const clientB = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portB}/rpc`)
+        const clientA = await getClient(peerA)
+        const clientB = await getClient(peerB)
 
         // Tokens should be unique
         expect(authA.systemToken).not.toBe(authB.systemToken)

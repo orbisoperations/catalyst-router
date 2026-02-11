@@ -126,9 +126,25 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
       }
     })
 
-    const getClient = (node: StartedTestContainer) => {
+    const getClient = async (node: StartedTestContainer, retries = 5) => {
       const port = node.getMappedPort(3000)
-      return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+      const host = node.getHost()
+      const url = `ws://${host}:${port}/rpc`
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const ws = new WebSocket(url)
+          await new Promise<void>((resolve, reject) => {
+            ws.addEventListener('open', () => resolve())
+            ws.addEventListener('error', (e) => reject(e))
+          })
+          return newWebSocketRpcSession<PublicApi>(ws as unknown as WebSocket)
+        } catch {
+          if (attempt === retries - 1)
+            throw new Error(`WebSocket connection to ${url} failed after ${retries} attempts`)
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+      throw new Error('unreachable')
     }
 
     const waitForConnected = async (
@@ -150,8 +166,8 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
     it(
       'Shared auth tokens work on all nodes',
       async () => {
-        const clientA = getClient(nodeA)
-        const clientB = getClient(nodeB)
+        const clientA = await getClient(nodeA)
+        const clientB = await getClient(nodeB)
 
         // SECURITY TEST: Verify invalid tokens are rejected (SKIP_AUTH not set)
         console.log('Testing invalid token rejection...')
@@ -176,8 +192,8 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
     it(
       'Simple Peering: A <-> B propagation',
       async () => {
-        const clientA = getClient(nodeA)
-        const clientB = getClient(nodeB)
+        const clientA = await getClient(nodeA)
+        const clientB = await getClient(nodeB)
 
         // 1. Linear Peering: A <-> B
         console.log('Establishing peering A <-> B')
@@ -344,16 +360,32 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
       }
     })
 
-    const getClient = (node: StartedTestContainer) => {
+    const getClient = async (node: StartedTestContainer, retries = 5) => {
       const port = node.getMappedPort(3000)
-      return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+      const host = node.getHost()
+      const url = `ws://${host}:${port}/rpc`
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const ws = new WebSocket(url)
+          await new Promise<void>((resolve, reject) => {
+            ws.addEventListener('open', () => resolve())
+            ws.addEventListener('error', (e) => reject(e))
+          })
+          return newWebSocketRpcSession<PublicApi>(ws as unknown as WebSocket)
+        } catch {
+          if (attempt === retries - 1)
+            throw new Error(`WebSocket connection to ${url} failed after ${retries} attempts`)
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+      throw new Error('unreachable')
     }
 
     it(
       'Each node uses its own auth server',
       async () => {
-        const clientA = getClient(nodeA)
-        const clientB = getClient(nodeB)
+        const clientA = await getClient(nodeA)
+        const clientB = await getClient(nodeB)
 
         // Tokens should be different
         expect(authA.systemToken).not.toBe(authB.systemToken)
@@ -392,8 +424,8 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
     it(
       'Cross-node peering works with cert-bound peer tokens',
       async () => {
-        const clientA = getClient(nodeA)
-        const clientB = getClient(nodeB)
+        const clientA = await getClient(nodeA)
+        const clientB = await getClient(nodeB)
 
         // Mint peer tokens: Auth-A mints token for B→A, Auth-B mints token for A→B
         console.log('Minting peer tokens...')
@@ -486,6 +518,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
 
         // Check B learned it
         let learnedOnB = false
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let matchingRoute: any = null
         for (let i = 0; i < 40; i++) {
           const dataBResult = await clientB.getDataChannelClient(authB.systemToken)

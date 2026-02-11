@@ -145,6 +145,22 @@ export const GetCurrentKeyIdResponseSchema = z.discriminatedUnion('success', [
 export type GetCurrentKeyIdResponse = z.infer<typeof GetCurrentKeyIdResponseSchema>
 
 /**
+ * Authenticate Response - pure JWT verification result (no Cedar policy evaluation)
+ */
+export const AuthenticateResponseSchema = z.discriminatedUnion('valid', [
+  z.object({
+    valid: z.literal(true),
+    payload: z.record(z.string(), z.unknown()),
+  }),
+  z.object({
+    valid: z.literal(false),
+    error: z.string(),
+  }),
+])
+
+export type AuthenticateResponse = z.infer<typeof AuthenticateResponseSchema>
+
+/**
  * progressive API handler interfaces
  */
 export interface TokenHandlers {

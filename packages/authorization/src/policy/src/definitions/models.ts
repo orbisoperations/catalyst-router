@@ -78,33 +78,46 @@ export enum Action {
   IBGP_CONNECT = 'IBGP_CONNECT',
   IBGP_DISCONNECT = 'IBGP_DISCONNECT',
   IBGP_UPDATE = 'IBGP_UPDATE',
+  IBGP_LIST = 'IBGP_LIST',
   PEER_CREATE = 'PEER_CREATE',
   PEER_UPDATE = 'PEER_UPDATE',
   PEER_DELETE = 'PEER_DELETE',
+  PEER_LIST = 'PEER_LIST',
   ROUTE_CREATE = 'ROUTE_CREATE',
   ROUTE_DELETE = 'ROUTE_DELETE',
+  ROUTE_LIST = 'ROUTE_LIST',
   TOKEN_CREATE = 'TOKEN_CREATE',
   TOKEN_REVOKE = 'TOKEN_REVOKE',
   TOKEN_LIST = 'TOKEN_LIST',
   TELEMETRY_EXPORT = 'TELEMETRY_EXPORT',
+  GATEWAY_UPDATE = 'GATEWAY_UPDATE',
 }
 
 /**
  * Default role-to-action permissions mapping.
  * Used as a reference for policy generation and documentation.
+ * Must stay in sync with Cedar policies in the definitions/ directory.
  */
 export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
   [Role.ADMIN]: Object.values(Action),
-  [Role.NODE]: [Action.IBGP_CONNECT, Action.IBGP_DISCONNECT, Action.IBGP_UPDATE],
+  [Role.NODE]: [
+    Action.IBGP_CONNECT,
+    Action.IBGP_DISCONNECT,
+    Action.IBGP_UPDATE,
+    Action.IBGP_LIST,
+    Action.GATEWAY_UPDATE,
+  ],
   [Role.NODE_CUSTODIAN]: [
     Action.PEER_CREATE,
     Action.PEER_UPDATE,
     Action.PEER_DELETE,
+    Action.PEER_LIST,
     Action.IBGP_CONNECT,
     Action.IBGP_DISCONNECT,
     Action.IBGP_UPDATE,
+    Action.IBGP_LIST,
   ],
-  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE],
-  [Role.USER]: [Action.LOGIN],
+  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE, Action.ROUTE_LIST],
+  [Role.USER]: [Action.LOGIN, Action.PEER_LIST, Action.ROUTE_LIST],
   [Role.TELEMETRY_EXPORTER]: [Action.TELEMETRY_EXPORT],
 }

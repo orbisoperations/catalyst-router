@@ -38,7 +38,6 @@ namespace CATALYST {
         id: String,
         name: String,
         type: String,
-        role: String,
         trustedNodes: Set<String>,
         trustedDomains: Set<String>
     };
@@ -67,6 +66,10 @@ namespace CATALYST {
         nodeId: String,
         domainId: String
     };
+    entity Gateway {
+        nodeId: String,
+        domainId: String
+    };
 
     action LOGIN appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
@@ -88,6 +91,11 @@ namespace CATALYST {
         resource: [IBGP, AdminPanel]
     };
 
+    action IBGP_LIST appliesTo {
+        principal: [ADMIN, NODE, NODE_CUSTODIAN],
+        resource: [IBGP, AdminPanel]
+    };
+
     action PEER_CREATE appliesTo {
         principal: [ADMIN, NODE_CUSTODIAN],
         resource: [Peer, AdminPanel]
@@ -103,6 +111,11 @@ namespace CATALYST {
         resource: [Peer, AdminPanel]
     };
 
+    action PEER_LIST appliesTo {
+        principal: [ADMIN, NODE_CUSTODIAN, USER],
+        resource: [Peer, AdminPanel]
+    };
+
     action ROUTE_CREATE appliesTo {
         principal: [ADMIN, DATA_CUSTODIAN],
         resource: [Route, AdminPanel]
@@ -110,6 +123,11 @@ namespace CATALYST {
 
     action ROUTE_DELETE appliesTo {
         principal: [ADMIN, DATA_CUSTODIAN],
+        resource: [Route, AdminPanel]
+    };
+
+    action ROUTE_LIST appliesTo {
+        principal: [ADMIN, DATA_CUSTODIAN, USER],
         resource: [Route, AdminPanel]
     };
 
@@ -128,11 +146,6 @@ namespace CATALYST {
         resource: Token
     };
 
-    action CHECK_PERMISSIONS appliesTo {
-        principal: NODE,
-        resource: AdminPanel
-    };
-
     action MANAGE appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
         resource: AdminPanel
@@ -141,5 +154,10 @@ namespace CATALYST {
     action TELEMETRY_EXPORT appliesTo {
         principal: [ADMIN, TELEMETRY_EXPORTER],
         resource: [Collector]
+    };
+
+    action GATEWAY_UPDATE appliesTo {
+        principal: [ADMIN, NODE],
+        resource: [Gateway, AdminPanel]
     };
 }

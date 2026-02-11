@@ -3,10 +3,10 @@ import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
 
-import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
-import { jwtToEntity } from '../../jwt/index.js'
-import { Principal, type CatalystPolicyEngine } from '../../policy/src/index.js'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
+import { jwtToEntity } from '../../jwt/index.js'
+import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
+import { Action, Principal, type CatalystPolicyEngine } from '../../policy/src/index.js'
 import {
   type AuthorizeActionRequest,
   type AuthorizeActionResult,
@@ -59,55 +59,76 @@ export class AuthRpcServer extends RpcTarget {
   // --- Progressive API Entry Points ---
 
   /**
+   * Pure authentication: verifies the JWT token is valid (signature, expiry, revocation).
+   * Does NOT evaluate Cedar policies.
+   *
+   * Use this at the entry-point level (e.g., getNetworkClient) where you only need
+   * to know if the caller has a valid token, not what they're allowed to do.
+   */
+  async authenticate(
+    token: string
+  ): Promise<{ valid: true; payload: Record<string, unknown> } | { valid: false; error: string }> {
+    const result = await this.tokenFactory.verify(token)
+    if (!result.valid) {
+      return { valid: false, error: result.error }
+    }
+    return { valid: true, payload: result.payload as Record<string, unknown> }
+  }
+
+  /**
+   * Authorize a specific action against a Token resource.
+   * Returns an error string if denied, or null if allowed.
+   */
+  private authorizeTokenAction(payload: Record<string, unknown>, action: Action): string | null {
+    const logger = this.telemetry.logger
+    const principal = jwtToEntity(payload)
+    const builder = this.policyService?.entityBuilderFactory.createEntityBuilder()
+    if (!builder) {
+      return 'Policy service not configured'
+    }
+    builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
+    builder
+      .entity('CATALYST::Token', 'token-resource')
+      .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
+    const entities = builder.build()
+    const result = this.policyService?.isAuthorized({
+      principal: principal.uid,
+      action: `CATALYST::Action::${action}`,
+      resource: { type: 'CATALYST::Token', id: 'token-resource' },
+      entities: entities.getAll(),
+      context: {},
+    })
+    if (result?.type === 'failure') {
+      void logger.error`Policy service error: ${result.errors}`
+      return 'Error authorizing request'
+    }
+    if (result?.type === 'evaluated' && !result.allowed) {
+      void logger.warn`Permission denied for ${action}: decision=${result.decision}, reasons=${result.reasons}`
+      return `Permission denied: ${action} not allowed for this principal`
+    }
+    return null
+  }
+
+  /**
    * Token management sub-api.
-   * Requires ADMIN principal.
+   * Each handler checks its specific Cedar action (TOKEN_CREATE, TOKEN_REVOKE, TOKEN_LIST).
    */
   async tokens(token: string): Promise<TokenHandlers | { error: string }> {
-    const logger = this.telemetry.logger
     const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
       return { error: 'Invalid token' }
     }
 
-    // For @team:
-    // A simple Demo/light integration with the policy service
-    //
-    // for @GABRIEL; TODO:
-    // just realized that (MAYBE) I can abstract this a bit more
-    // and do another class on top and be like:
-    //
-    // Ill give it some thought and see if it makes sense to do so.
-    //
-    // seems like the pattern of builder, authorized, will be very repetitive
-    const principal = jwtToEntity(auth.payload as Record<string, unknown>)
-    const builder = this.policyService?.entityBuilderFactory.createEntityBuilder()
-    if (!builder) {
+    if (!this.policyService) {
       return { error: 'Policy service not configured' }
     }
-    builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
-    builder
-      .entity('CATALYST::AdminPanel', 'admin-panel')
-      .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
-    const entities = builder.build()
-    const autorizedResult = this.policyService?.isAuthorized({
-      principal: principal.uid,
-      action: 'CATALYST::Action::MANAGE',
-      resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
-      entities: entities.getAll(),
-      context: {},
-    })
-    if (autorizedResult?.type === 'failure') {
-      void logger.error`Policy service error: ${autorizedResult.errors}`
-      return { error: 'Error authorizing request' }
-    }
 
-    if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
-      void logger.warn`Permission denied: decision=${autorizedResult.decision}, reasons=${autorizedResult.reasons}`
-      return { error: 'Permission denied: ADMIN principal required' }
-    }
+    const payload = auth.payload as Record<string, unknown>
 
     return {
       create: async (request) => {
+        const denied = this.authorizeTokenAction(payload, Action.TOKEN_CREATE)
+        if (denied) throw new Error(denied)
         return this.tokenFactory.mint({
           subject: request.subject,
           entity: request.entity,
@@ -118,9 +139,13 @@ export class AuthRpcServer extends RpcTarget {
         })
       },
       revoke: async (request) => {
+        const denied = this.authorizeTokenAction(payload, Action.TOKEN_REVOKE)
+        if (denied) throw new Error(denied)
         await this.tokenFactory.revoke({ jti: request.jti, san: request.san })
       },
       list: async (request) => {
+        const denied = this.authorizeTokenAction(payload, Action.TOKEN_LIST)
+        if (denied) throw new Error(denied)
         return this.tokenFactory.listTokens(request)
       },
     }
@@ -250,7 +275,7 @@ export class AuthRpcServer extends RpcTarget {
         // Perform Cedar authorization
         const result = this.policyService!.isAuthorized({
           principal: principal.uid,
-          action: `CATALYST::Action::${actionId}`,
+          action: `CATALYST::Action::${actionId}` as `CATALYST::Action::${Action}`,
           resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
           entities: entities.getAll(),
           context: {},

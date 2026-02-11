@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test'
 import { AuthorizationEngine } from '../../src/policy/src/authorization-engine.js'
-import { EntityBuilderFactory } from '../../src/policy/src/entity-builder.js'
+import type { CatalystPolicyDomain } from '../../src/policy/src/definitions/index.js'
 import {
+  Action,
   ALL_POLICIES,
   CATALYST_SCHEMA,
   Role,
-  Action,
 } from '../../src/policy/src/definitions/index.js'
-import type { CatalystPolicyDomain } from '../../src/policy/src/definitions/index.js'
+import { EntityBuilderFactory } from '../../src/policy/src/entity-builder.js'
 
 describe('Telemetry Authorization', () => {
   const engine = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
@@ -53,7 +53,6 @@ describe('Telemetry Authorization', () => {
         id: 'telemetry-exporter',
         name: 'Telemetry Exporter',
         type: 'service',
-        role: 'TELEMETRY_EXPORTER',
         trustedNodes: [],
         trustedDomains: [],
       })
@@ -84,7 +83,6 @@ describe('Telemetry Authorization', () => {
         id: 'admin-1',
         name: 'Admin',
         type: 'user',
-        role: 'ADMIN',
         trustedNodes: [],
         trustedDomains: [],
       })
@@ -115,7 +113,6 @@ describe('Telemetry Authorization', () => {
         id: 'user-1',
         name: 'Regular User',
         type: 'user',
-        role: 'USER',
         trustedNodes: [],
         trustedDomains: [],
       })
@@ -144,7 +141,6 @@ describe('Telemetry Authorization', () => {
         id: 'telemetry-exporter',
         name: 'Telemetry Exporter',
         type: 'service',
-        role: 'TELEMETRY_EXPORTER',
         trustedNodes: [],
         trustedDomains: ['domain-1'],
       })
@@ -175,7 +171,6 @@ describe('Telemetry Authorization', () => {
         id: 'telemetry-exporter',
         name: 'Telemetry Exporter',
         type: 'service',
-        role: 'TELEMETRY_EXPORTER',
         trustedNodes: [],
         trustedDomains: ['other-domain'],
       })
