@@ -185,7 +185,6 @@ export class XdsControlPlane {
     // CDS first (only if subscribed and not already sent at this version)
     if (
       subscribedTypes.has(CLUSTER_TYPE_URL) &&
-      snapshot.clusters.length > 0 &&
       sentVersions.get(CLUSTER_TYPE_URL) !== snapshot.version
     ) {
       const cdsResources = snapshot.clusters.map((c) => encodeCluster(c))
@@ -203,7 +202,6 @@ export class XdsControlPlane {
     // Then LDS (only if subscribed and not already sent at this version)
     if (
       subscribedTypes.has(LISTENER_TYPE_URL) &&
-      snapshot.listeners.length > 0 &&
       sentVersions.get(LISTENER_TYPE_URL) !== snapshot.version
     ) {
       const ldsResources = snapshot.listeners.map((l) => encodeListener(l))

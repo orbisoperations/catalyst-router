@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import { spawnSync } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import path from 'path'
 import {
@@ -20,6 +19,7 @@ import {
 // Configuration
 // ---------------------------------------------------------------------------
 
+const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 const repoRoot = path.resolve(__dirname, '../../..')
 
 /** Fixed Envoy listener port — used for both ingress (Node A) and egress (Node B). */
@@ -37,6 +37,7 @@ const TEST_TIMEOUT = 60_000 // 60 seconds
 
 const ORCH_IMAGE = 'catalyst-orchestrator:cross-node-e2e'
 const ENVOY_SVC_IMAGE = 'catalyst-envoy:cross-node-e2e'
+const ENVOY_PROXY_IMAGE = 'catalyst-envoy-proxy:cross-node-e2e'
 const AUTH_IMAGE = 'catalyst-auth:cross-node-e2e'
 const BOOKS_IMAGE = 'books-service:cross-node-e2e'
 
@@ -61,18 +62,20 @@ if (skipTests) {
 // Image builder with caching
 // ---------------------------------------------------------------------------
 
-function buildImageIfNeeded(imageName: string, dockerfile: string): void {
-  const check = spawnSync('docker', ['image', 'inspect', imageName])
-  if (check.status === 0) {
+async function buildImageIfNeeded(imageName: string, dockerfile: string): Promise<void> {
+  const check = Bun.spawnSync([CONTAINER_RUNTIME, 'image', 'inspect', imageName])
+  if (check.exitCode === 0) {
     console.log(`Using existing image: ${imageName}`)
     return
   }
   console.log(`Building image: ${imageName}...`)
-  const result = spawnSync('docker', ['build', '-f', dockerfile, '-t', imageName, '.'], {
+  const build = Bun.spawn([CONTAINER_RUNTIME, 'build', '-f', dockerfile, '-t', imageName, '.'], {
     cwd: repoRoot,
-    stdio: 'inherit',
+    stdout: 'ignore',
+    stderr: 'inherit',
   })
-  if (result.status !== 0) throw new Error(`Failed to build ${imageName}`)
+  const exitCode = await build.exited
+  if (exitCode !== 0) throw new Error(`Failed to build ${imageName}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -280,10 +283,11 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
 
   beforeAll(async () => {
     // ── 1. Build images ────────────────────────────────────────────
-    buildImageIfNeeded(AUTH_IMAGE, 'apps/auth/Dockerfile')
-    buildImageIfNeeded(ORCH_IMAGE, 'apps/orchestrator/Dockerfile')
-    buildImageIfNeeded(ENVOY_SVC_IMAGE, 'apps/envoy/Dockerfile')
-    buildImageIfNeeded(BOOKS_IMAGE, 'examples/books-api/Dockerfile')
+    await buildImageIfNeeded(AUTH_IMAGE, 'apps/auth/Dockerfile')
+    await buildImageIfNeeded(ORCH_IMAGE, 'apps/orchestrator/Dockerfile')
+    await buildImageIfNeeded(ENVOY_SVC_IMAGE, 'apps/envoy/Dockerfile')
+    await buildImageIfNeeded(ENVOY_PROXY_IMAGE, 'apps/envoy/Dockerfile.envoy-proxy')
+    await buildImageIfNeeded(BOOKS_IMAGE, 'examples/books-api/Dockerfile')
 
     // ── 2. Docker network ──────────────────────────────────────────
     network = await new Network().start()
@@ -339,7 +343,7 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
     // ── 7. Envoy Proxy A (ADS → envoy-svc-a:18000) ────────────────
     console.log('[setup] Starting envoy-proxy-a...')
     const bootstrapA = generateBootstrapYaml('envoy-svc-a', 18000)
-    envoyProxyA = await new GenericContainer('envoyproxy/envoy:v1.32-latest')
+    envoyProxyA = await new GenericContainer(ENVOY_PROXY_IMAGE)
       .withNetwork(network)
       .withNetworkAliases('envoy-proxy-a')
       .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
@@ -354,7 +358,7 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
     // ── 8. Envoy Proxy B (ADS → envoy-svc-b:18000) ────────────────
     console.log('[setup] Starting envoy-proxy-b...')
     const bootstrapB = generateBootstrapYaml('envoy-svc-b', 18000)
-    envoyProxyB = await new GenericContainer('envoyproxy/envoy:v1.32-latest')
+    envoyProxyB = await new GenericContainer(ENVOY_PROXY_IMAGE)
       .withNetwork(network)
       .withNetworkAliases('envoy-proxy-b')
       .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
@@ -365,11 +369,6 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       .withLogConsumer(withLogConsumer('envoy-proxy-b'))
       .start()
     envoyBAdminPort = envoyProxyB.getMappedPort(9901)
-
-    // Install curl in envoy-proxy-b for the traffic test (not included in the base image)
-    console.log('[setup] Installing curl in envoy-proxy-b...')
-    await envoyProxyB.exec(['apt-get', 'update', '-qq'])
-    await envoyProxyB.exec(['apt-get', 'install', '-y', '-qq', 'curl'])
 
     // Brief wait for ADS streams to establish
     await new Promise((r) => setTimeout(r, 1000))
@@ -523,25 +522,33 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
     'routes traffic from Node B through Envoy to books-api on Node A',
     async () => {
       // The egress listener binds to 127.0.0.1 inside the container (by design
-      // — egress is for local-node consumption). We use `exec` to run curl
-      // from inside the Envoy B container to hit the egress port.
+      // — egress is for local-node consumption). We use `docker exec` to run
+      // curl from inside the Envoy B container to hit the egress port.
       //
       // Path: curl (inside Envoy B) → egress :10000 → envoy-proxy-a:10000 (ingress) → books:8080
-      const execResult = await envoyProxyB.exec([
-        'curl',
-        '-s',
-        '-X',
-        'POST',
-        '-H',
-        'Content-Type: application/json',
-        '-d',
-        '{"query":"{ books { title author } }"}',
-        `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
-      ])
+      const proc = Bun.spawn(
+        [
+          CONTAINER_RUNTIME,
+          'exec',
+          envoyProxyB.getId(),
+          'curl',
+          '-s',
+          '-X',
+          'POST',
+          '-H',
+          'Content-Type: application/json',
+          '-d',
+          '{"query":"{ books { title author } }"}',
+          `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
+        ],
+        { stdout: 'pipe', stderr: 'pipe' }
+      )
+      const exitCode = await proc.exited
+      const stdout = await new Response(proc.stdout).text()
 
-      expect(execResult.exitCode).toBe(0)
+      expect(exitCode).toBe(0)
 
-      const json = JSON.parse(execResult.stdout.trim()) as {
+      const json = JSON.parse(stdout.trim()) as {
         data?: { books?: Array<{ title: string; author: string }> }
         errors?: unknown[]
       }
