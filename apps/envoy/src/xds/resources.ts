@@ -97,11 +97,10 @@ const DnsLookupFamily = {
 // IP detection — determines STATIC vs STRICT_DNS cluster type
 // ---------------------------------------------------------------------------
 
-const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/
-const IPV6_RE = /^[0-9a-fA-F:]+$/
+import { isIP } from 'node:net'
 
 function isIpAddress(address: string): boolean {
-  return IPV4_RE.test(address) || IPV6_RE.test(address)
+  return isIP(address) !== 0
 }
 
 // ---------------------------------------------------------------------------
