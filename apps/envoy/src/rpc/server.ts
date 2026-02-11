@@ -6,20 +6,35 @@ import { newRpcResponse } from '@hono/capnweb'
 import { TelemetryBuilder } from '@catalyst/telemetry'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import { DataChannelDefinitionSchema } from '@catalyst/routing'
-import type { DataChannelDefinition } from '@catalyst/routing'
 
 /**
- * Schema for the routes array passed to updateRoutes().
- * Each entry is a DataChannelDefinition (name, protocol, endpoint, envoyPort, etc.).
+ * Internal route entry — a data channel on a remote peer, with peer metadata.
  */
-export const EnvoyRoutesSchema = z.array(DataChannelDefinitionSchema)
+export const InternalRouteSchema = DataChannelDefinitionSchema.extend({
+  peer: z.object({ name: z.string(), envoyAddress: z.string().optional() }),
+  peerName: z.string(),
+  nodePath: z.array(z.string()),
+})
 
-export const EnvoyUpdateResultSchema = z.discriminatedUnion('success', [
+/**
+ * Route config from the orchestrator. Ports are already assigned.
+ *
+ * - `local`: data channels on this node
+ * - `internal`: data channels on remote peers, routed through envoy
+ */
+export const RouteConfigSchema = z.object({
+  local: z.array(DataChannelDefinitionSchema),
+  internal: z.array(InternalRouteSchema),
+})
+
+export type RouteConfig = z.infer<typeof RouteConfigSchema>
+
+export const UpdateResultSchema = z.discriminatedUnion('success', [
   z.object({ success: z.literal(true) }),
   z.object({ success: z.literal(false), error: z.string() }),
 ])
 
-export type EnvoyUpdateResult = z.infer<typeof EnvoyUpdateResultSchema>
+export type UpdateResult = z.infer<typeof UpdateResultSchema>
 
 /**
  * Envoy RPC server.
@@ -29,7 +44,7 @@ export type EnvoyUpdateResult = z.infer<typeof EnvoyUpdateResultSchema>
  */
 export class EnvoyRpcServer extends RpcTarget {
   private readonly logger: ServiceTelemetry['logger']
-  private routes: DataChannelDefinition[] = []
+  private config: RouteConfig = { local: [], internal: [] }
 
   constructor(telemetry: ServiceTelemetry = TelemetryBuilder.noop('envoy')) {
     super()
@@ -37,34 +52,36 @@ export class EnvoyRpcServer extends RpcTarget {
   }
 
   /**
-   * Update the current route set. Replaces all previous routes.
+   * Update the current route config. Replaces all previous routes.
    *
    * Called by the orchestrator after port allocation. Each route includes
    * an `envoyPort` assigned by the orchestrator's port allocator.
    */
-  async updateRoutes(routes: unknown): Promise<EnvoyUpdateResult> {
+  async updateRoutes(config: unknown): Promise<UpdateResult> {
     this.logger.info`Route update received via RPC`
 
-    const result = EnvoyRoutesSchema.safeParse(routes)
+    const result = RouteConfigSchema.safeParse(config)
     if (!result.success) {
-      this.logger.error`Malformed routes received`
+      this.logger.error`Malformed route config received`
       return {
         success: false,
         error: 'Malformed route configuration received and unable to parse',
       }
     }
 
-    this.routes = result.data
-    this.logger.info`Stored ${this.routes.length} route(s)`
+    this.config = result.data
+    const total = this.config.local.length + this.config.internal.length
+    this.logger
+      .info`Stored ${total} route(s) (${this.config.local.length} local, ${this.config.internal.length} internal)`
 
     return { success: true }
   }
 
   /**
-   * Return the current route set.
+   * Return the current route config.
    */
-  async getRoutes(): Promise<DataChannelDefinition[]> {
-    return this.routes
+  async getRoutes(): Promise<RouteConfig> {
+    return this.config
   }
 }
 

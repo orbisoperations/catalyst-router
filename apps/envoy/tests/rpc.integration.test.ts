@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { websocket } from 'hono/bun'
 import { newWebSocketRpcSession } from 'capnweb'
-import type { EnvoyUpdateResult } from '../src/rpc/server.js'
+import type { UpdateResult } from '../src/rpc/server.js'
 import { EnvoyRpcServer, createRpcHandler } from '../src/rpc/server.js'
 
 describe('Envoy RPC Integration', () => {
@@ -39,56 +39,88 @@ describe('Envoy RPC Integration', () => {
   }
 
   describe('updateRoutes', () => {
-    it('accepts valid routes with envoyPort', async () => {
+    it('accepts valid config with local routes', async () => {
       const { ws, rpc } = await connectClient()
 
-      const routes = [
-        {
-          name: 'books-api',
-          protocol: 'http',
-          endpoint: 'http://localhost:8080',
-          envoyPort: 9001,
-        },
-      ]
+      const config = {
+        local: [
+          {
+            name: 'books-api',
+            protocol: 'http',
+            endpoint: 'http://localhost:8080',
+            envoyPort: 9001,
+          },
+        ],
+        internal: [],
+      }
 
-      const result: EnvoyUpdateResult = await rpc.updateRoutes(routes)
+      const result: UpdateResult = await rpc.updateRoutes(config)
       expect(result.success).toBe(true)
 
       ws.close()
     })
 
-    it('accepts multiple routes', async () => {
+    it('accepts valid config with internal routes', async () => {
       const { ws, rpc } = await connectClient()
 
-      const routes = [
-        {
-          name: 'books-api',
-          protocol: 'http',
-          endpoint: 'http://localhost:8080',
-          envoyPort: 9001,
-        },
-        {
-          name: 'movies-api',
-          protocol: 'http:graphql',
-          endpoint: 'http://localhost:8081/graphql',
-          envoyPort: 9002,
-        },
-      ]
+      const config = {
+        local: [],
+        internal: [
+          {
+            name: 'movies-api',
+            protocol: 'http:graphql',
+            endpoint: 'http://peer-node:8081/graphql',
+            envoyPort: 9002,
+            peer: { name: 'peer-node-1', envoyAddress: 'https://10.0.0.5:443' },
+            peerName: 'peer-node-1',
+            nodePath: ['local-node', 'peer-node-1'],
+          },
+        ],
+      }
 
-      const result: EnvoyUpdateResult = await rpc.updateRoutes(routes)
+      const result: UpdateResult = await rpc.updateRoutes(config)
       expect(result.success).toBe(true)
 
       ws.close()
     })
 
-    it('rejects malformed routes', async () => {
+    it('accepts config with both local and internal routes', async () => {
       const { ws, rpc } = await connectClient()
 
-      const invalid = [
-        { name: 123, protocol: 'http' }, // name should be string
-      ]
+      const config = {
+        local: [
+          {
+            name: 'books-api',
+            protocol: 'http',
+            endpoint: 'http://localhost:8080',
+            envoyPort: 9001,
+          },
+        ],
+        internal: [
+          {
+            name: 'movies-api',
+            protocol: 'http:graphql',
+            endpoint: 'http://peer-node:8081/graphql',
+            envoyPort: 9002,
+            peer: { name: 'peer-node-1' },
+            peerName: 'peer-node-1',
+            nodePath: ['local-node', 'peer-node-1'],
+          },
+        ],
+      }
 
-      const result: EnvoyUpdateResult = await rpc.updateRoutes(invalid)
+      const result: UpdateResult = await rpc.updateRoutes(config)
+      expect(result.success).toBe(true)
+
+      ws.close()
+    })
+
+    it('rejects malformed config (flat array instead of object)', async () => {
+      const { ws, rpc } = await connectClient()
+
+      const invalid = [{ name: 'books-api', protocol: 'http' }]
+
+      const result: UpdateResult = await rpc.updateRoutes(invalid)
       expect(result.success).toBe(false)
       if (!result.success) {
         expect(result.error).toContain('Malformed')
@@ -97,86 +129,122 @@ describe('Envoy RPC Integration', () => {
       ws.close()
     })
 
-    it('rejects routes with invalid protocol', async () => {
+    it('rejects config with invalid local route', async () => {
       const { ws, rpc } = await connectClient()
 
-      const invalid = [
-        {
-          name: 'bad-service',
-          protocol: 'tcp', // not a valid DataChannelProtocol
-          endpoint: 'http://localhost:8080',
-          envoyPort: 9001,
-        },
-      ]
+      const invalid = {
+        local: [
+          { name: 123, protocol: 'http' }, // name should be string
+        ],
+        internal: [],
+      }
 
-      const result: EnvoyUpdateResult = await rpc.updateRoutes(invalid)
+      const result: UpdateResult = await rpc.updateRoutes(invalid)
       expect(result.success).toBe(false)
 
       ws.close()
     })
 
-    it('accepts empty routes array (clears config)', async () => {
+    it('rejects config with invalid internal route (missing peer)', async () => {
       const { ws, rpc } = await connectClient()
 
-      const result: EnvoyUpdateResult = await rpc.updateRoutes([])
+      const invalid = {
+        local: [],
+        internal: [
+          {
+            name: 'movies-api',
+            protocol: 'http',
+            endpoint: 'http://peer-node:8081',
+            envoyPort: 9002,
+            // missing peer, peerName, nodePath
+          },
+        ],
+      }
+
+      const result: UpdateResult = await rpc.updateRoutes(invalid)
+      expect(result.success).toBe(false)
+
+      ws.close()
+    })
+
+    it('accepts empty local and internal arrays (clears config)', async () => {
+      const { ws, rpc } = await connectClient()
+
+      const config = { local: [], internal: [] }
+
+      const result: UpdateResult = await rpc.updateRoutes(config)
       expect(result.success).toBe(true)
 
       ws.close()
     })
 
-    it('stores routes accessible via getRoutes', async () => {
+    it('stores config accessible via getRoutes', async () => {
       const { ws, rpc } = await connectClient()
 
-      const routes = [
-        {
-          name: 'books-api',
-          protocol: 'http',
-          endpoint: 'http://localhost:8080',
-          envoyPort: 9001,
-        },
-      ]
+      const config = {
+        local: [
+          {
+            name: 'books-api',
+            protocol: 'http',
+            endpoint: 'http://localhost:8080',
+            envoyPort: 9001,
+          },
+        ],
+        internal: [],
+      }
 
-      await rpc.updateRoutes(routes)
+      await rpc.updateRoutes(config)
       const current = await rpc.getRoutes()
 
-      expect(current).toEqual(routes)
+      expect(current.local).toEqual(config.local)
+      expect(current.internal).toEqual(config.internal)
 
       ws.close()
     })
 
-    it('replaces previous routes on subsequent calls', async () => {
+    it('replaces previous config on subsequent calls', async () => {
       const { ws, rpc } = await connectClient()
 
-      const first = [
-        {
-          name: 'books-api',
-          protocol: 'http',
-          endpoint: 'http://localhost:8080',
-          envoyPort: 9001,
-        },
-      ]
+      const first = {
+        local: [
+          {
+            name: 'books-api',
+            protocol: 'http',
+            endpoint: 'http://localhost:8080',
+            envoyPort: 9001,
+          },
+        ],
+        internal: [],
+      }
 
-      const second = [
-        {
-          name: 'movies-api',
-          protocol: 'http:graphql',
-          endpoint: 'http://localhost:8081/graphql',
-          envoyPort: 9002,
-        },
-      ]
+      const second = {
+        local: [],
+        internal: [
+          {
+            name: 'movies-api',
+            protocol: 'http:graphql',
+            endpoint: 'http://peer-node:8081/graphql',
+            envoyPort: 9002,
+            peer: { name: 'peer-node-1' },
+            peerName: 'peer-node-1',
+            nodePath: ['local-node', 'peer-node-1'],
+          },
+        ],
+      }
 
       await rpc.updateRoutes(first)
       await rpc.updateRoutes(second)
 
       const current = await rpc.getRoutes()
-      expect(current).toEqual(second)
+      expect(current.local).toEqual(second.local)
+      expect(current.internal).toEqual(second.internal)
 
       ws.close()
     })
   })
 
   describe('getRoutes', () => {
-    it('returns empty array when no routes configured', async () => {
+    it('returns empty config when no routes configured', async () => {
       // Fresh RPC server for this test
       const freshRpc = new EnvoyRpcServer()
       const freshApp = createRpcHandler(freshRpc)
@@ -192,7 +260,7 @@ describe('Envoy RPC Integration', () => {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const routes = await (rpc as any).getRoutes()
-      expect(routes).toEqual([])
+      expect(routes).toEqual({ local: [], internal: [] })
 
       ws.close()
       freshServer.stop()
