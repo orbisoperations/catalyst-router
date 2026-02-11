@@ -140,7 +140,7 @@ export class CatalystNodeBus extends RpcTarget {
     connectionPool?: { type?: 'ws' | 'http'; pool?: ConnectionPool }
     config: OrchestratorConfig
     nodeToken?: string
-    authEndpoint?: string
+    authEndpoint: string
   }) {
     super()
     this.state = opts.state ?? newRouteTable()
@@ -187,11 +187,6 @@ export class CatalystNodeBus extends RpcTarget {
     callerToken: string,
     action: string
   ): Promise<{ valid: true } | { valid: false; error: string }> {
-    // If no auth client is configured, allow the operation (for testing/development)
-    if (!this.authClient) {
-      return { valid: true }
-    }
-
     try {
       // Use permissions API to validate the caller's token
       const permissionsApi = await this.authClient.permissions(callerToken)

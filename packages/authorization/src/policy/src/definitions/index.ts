@@ -1,10 +1,11 @@
 import type { AuthorizationEngine } from '../authorization-engine.js'
 import adminPolicy from './admin.cedar' with { type: 'text' }
 import dataCustodianPolicy from './data-custodian.cedar' with { type: 'text' }
-import type { Action, IBGPEntity, PeerEntity, Role, RouteEntity } from './models.js'
+import type { Action, IBGPEntity, PeerEntity, Role, RouteEntity, StreamEntity } from './models.js'
 import nodeCustodianPolicy from './node-custodian.cedar' with { type: 'text' }
 import nodePolicy from './node.cedar' with { type: 'text' }
 import CATALYST_SCHEMA from './schema.cedar' with { type: 'text' }
+import streamDataCustodianPolicy from './stream-data-custodian.cedar' with { type: 'text' }
 import telemetryExporterPolicy from './telemetry-exporter.cedar' with { type: 'text' }
 import userPolicy from './user.cedar' with { type: 'text' }
 
@@ -14,6 +15,7 @@ export {
   dataCustodianPolicy,
   nodeCustodianPolicy,
   nodePolicy,
+  streamDataCustodianPolicy,
   telemetryExporterPolicy,
   userPolicy,
 }
@@ -27,6 +29,7 @@ export const ALL_POLICIES = [
   nodeCustodianPolicy,
   dataCustodianPolicy,
   userPolicy,
+  streamDataCustodianPolicy,
   telemetryExporterPolicy,
 ].join('\n')
 
@@ -51,6 +54,7 @@ export type CatalystPolicyDomain = [
       Token: Record<string, unknown>
       AdminPanel: Record<string, unknown>
       Collector: Record<string, unknown>
+      Stream: StreamEntity
     }
   },
 ]

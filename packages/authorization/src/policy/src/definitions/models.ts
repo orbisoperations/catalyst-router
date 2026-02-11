@@ -24,10 +24,17 @@ export type PeerEntity = {
 
 export type RouteEntity = {
   name: string
-  protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc'
+  protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc' | 'media'
   endpoint?: string | undefined
   region?: string | undefined
   tags?: string[] | undefined
+}
+
+export type StreamEntity = {
+  streamId: string
+  sourceNode: string
+  domainId: string
+  nodeId: string
 }
 
 /**
@@ -87,6 +94,8 @@ export enum Action {
   TOKEN_REVOKE = 'TOKEN_REVOKE',
   TOKEN_LIST = 'TOKEN_LIST',
   TELEMETRY_EXPORT = 'TELEMETRY_EXPORT',
+  STREAM_PUBLISH = 'STREAM_PUBLISH',
+  STREAM_SUBSCRIBE = 'STREAM_SUBSCRIBE',
 }
 
 /**
@@ -104,7 +113,12 @@ export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     Action.IBGP_DISCONNECT,
     Action.IBGP_UPDATE,
   ],
-  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE],
-  [Role.USER]: [Action.LOGIN],
+  [Role.DATA_CUSTODIAN]: [
+    Action.ROUTE_CREATE,
+    Action.ROUTE_DELETE,
+    Action.STREAM_PUBLISH,
+    Action.STREAM_SUBSCRIBE,
+  ],
+  [Role.USER]: [Action.LOGIN, Action.STREAM_SUBSCRIBE],
   [Role.TELEMETRY_EXPORTER]: [Action.TELEMETRY_EXPORT],
 }
