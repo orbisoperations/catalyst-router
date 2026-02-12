@@ -1,0 +1,16 @@
+node_modules/
+dist/
+fixtures
+*.env*
+docs/
+certs/
+tests/
+.github/
+.vscode/
+.editorconfig
+.gitignore
+.prettierignore
+.prettierrc
+.prettierignore
+fly.toml
+dist-tests/
