@@ -91,11 +91,28 @@ export class XdsControlPlane {
 
   /**
    * Gracefully shut down the gRPC server.
+   *
+   * Attempts a graceful shutdown first, falling back to forceShutdown
+   * after the timeout expires. This prevents indefinite hangs when
+   * long-lived ADS streams are active.
    */
-  async shutdown(): Promise<void> {
+  async shutdown(timeoutMs = 5000): Promise<void> {
     if (!this.started) return
-    return new Promise((resolve) => {
+    return new Promise<void>((resolve) => {
+      let settled = false
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        this.logger.warn`xDS ADS server graceful shutdown timed out, forcing`
+        this.server.forceShutdown()
+        this.started = false
+        resolve()
+      }, timeoutMs)
+
       this.server.tryShutdown(() => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
         this.started = false
         this.logger.info`xDS ADS server stopped`
         resolve()
