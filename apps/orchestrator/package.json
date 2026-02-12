@@ -12,7 +12,6 @@
     "test:integration": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -E 'integration|container')"
   },
   "dependencies": {
-    "@catalyst/auth-service": "catalog:",
     "@catalyst/authorization": "catalog:",
     "@catalyst/config": "catalog:",
     "@catalyst/envoy-service": "catalog:",
