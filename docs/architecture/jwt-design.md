@@ -7,7 +7,7 @@
 > - **Package Location**: `packages/authorization` (not `packages/jwt`)
 > - **Key Manager**: `PersistentLocalKeyManager` class
 >
-> See the [Architecture Overview](./overview.md) for the current implementation details.
+> See the [[overview|Architecture Overview]] for the current implementation details.
 
 This document outlines the design for the new standalone JWT service package. This service acts as a centralized authority for token signing and verification within the Catalyst control plane, replacing legacy logic.
 

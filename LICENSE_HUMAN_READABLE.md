@@ -59,7 +59,7 @@ immediately**.
 
 Contributions are welcome, but every contributor must sign the project's
 Contributor License Agreement before any contribution can be accepted. See
-[CLA.md](./CLA.md) for the full agreement.
+[[CLA|CLA.md]] for the full agreement.
 
 Key points of the CLA:
 

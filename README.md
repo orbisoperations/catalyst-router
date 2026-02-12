@@ -78,7 +78,7 @@ C4Container
 
 The Orchestrator is the brain of the pod -- it manages peering sessions, computes routes, and coordinates the Auth and Gateway sidecars. All components emit telemetry to the OTEL Collector.
 
-See [Architecture](./docs/architecture/overview.md) for the full design.
+See [[overview|Architecture]] for the full design.
 
 ## Quick Start
 
@@ -128,25 +128,25 @@ bun test
 
 ## Documentation
 
-- [Architecture](./docs/architecture/overview.md) -- system design and component interactions
-- [Constitution](./constitution.md) -- architectural principles and constraints
-- [Security](./SECURITY.md) -- peer security protocol and threat model
+- [[overview|Architecture]] -- system design and component interactions
+- [[constitution|Constitution]] -- architectural principles and constraints
+- [[SECURITY|Security]] -- peer security protocol and threat model
 - [ADRs](./docs/adr/) -- architecture decision records
-- [CLI Reference](./docs/api/cli.md) -- command-line usage and options
+- [[cli|CLI Reference]] -- command-line usage and options
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidelines. All contributors must sign the [Contributor License Agreement](./CLA.md).
+See [[CONTRIBUTING|CONTRIBUTING.md]] for development guidelines. All contributors must sign the [[CLA|Contributor License Agreement]].
 
 This project uses [Graphite](https://graphite.dev) for stacked PRs and follows [Conventional Commits](https://www.conventionalcommits.org/) for commit messages.
 
 ## Security
 
-Catalyst Router uses JWT authentication with Cedar policy-based authorization over Capnweb RPC (WebSocket) for inter-component and node-to-node communication. See [SECURITY.md](./SECURITY.md) for the full security protocol.
+Catalyst Router uses JWT authentication with Cedar policy-based authorization over Capnweb RPC (WebSocket) for inter-component and node-to-node communication. See [[SECURITY|SECURITY.md]] for the full security protocol.
 
 ## License
 
-Source-available under the [Commons Clause + Elastic License 2.0](./LICENSE). See [LICENSE_HUMAN_READABLE.md](./LICENSE_HUMAN_READABLE.md) for a plain-language summary.
+Source-available under the [Commons Clause + Elastic License 2.0](./LICENSE). See [[LICENSE_HUMAN_READABLE|LICENSE_HUMAN_READABLE.md]] for a plain-language summary.
 
 Licensor: **Orbis Operations LLC**
 

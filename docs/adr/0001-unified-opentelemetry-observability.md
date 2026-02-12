@@ -152,9 +152,9 @@ Services → @catalyst/telemetry → OTLP → OTEL Collector → Backends
 
 ## Related Decisions
 
-- [ADR-0002](./0002-logging-library-selection.md) - Logging Library Selection (LogTape vs Pino)
-- [ADR-0003](./0003-observability-backends.md) - Observability Backend Selection (observability storage)
-- [ADR-0004](./0004-sqlite-storage-backend.md) - Application Storage Backend (SQLite)
+- [[0002-logging-library-selection|ADR-0002]] - Logging Library Selection (LogTape vs Pino)
+- [[0003-observability-backends|ADR-0003]] - Observability Backend Selection (observability storage)
+- [[0004-sqlite-storage-backend|ADR-0004]] - Application Storage Backend (SQLite)
 
 ## References
 

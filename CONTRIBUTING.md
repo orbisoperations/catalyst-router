@@ -22,7 +22,7 @@ The CLA ensures that:
 
 ### How to sign
 
-1. Read the full agreement in [CLA.md](./CLA.md)
+1. Read the full agreement in [[CLA|CLA.md]]
 2. Print, sign, and scan the agreement (or apply a digital signature)
 3. Email the signed copy to the project maintainers
 4. Wait for confirmation before opening your first pull request
@@ -36,7 +36,7 @@ Pull requests from contributors who have not signed the CLA will not be reviewed
 1. **Fork** the repository on GitHub
 2. **Clone** your fork locally
 3. **Install dependencies** with `bun install`
-4. **Read** the [constitution.md](./constitution.md) -- it defines the
+4. **Read** the [[constitution|constitution.md]] -- it defines the
    architectural principles that all code must follow. Constitutional violations
    block merge with no exceptions.
 
@@ -113,7 +113,7 @@ test(orchestrator): add dispatch action coverage
 
 ## Coding conventions
 
-The project's [constitution.md](./constitution.md) is the authoritative source
+The project's [[constitution|constitution.md]] is the authoritative source
 for coding standards. Key conventions include:
 
 - **ESM modules** with `.js` extensions in all imports
@@ -170,4 +170,4 @@ constructively, and collaborate in good faith.
 
 By contributing to Catalyst Router, you agree that your contributions will be
 licensed under the project's [LICENSE](./LICENSE) (Commons Clause + Elastic
-License 2.0) and that you have signed the [CLA](./CLA.md).
+License 2.0) and that you have signed the [[CLA]].

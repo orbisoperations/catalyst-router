@@ -95,8 +95,8 @@ The implementation is centered in `apps/orchestrator/src/orchestrator.ts`:
 
 ## Related Decisions
 
-- [ADR-0005](./0005-docker-as-container-runtime.md) - Context for sidecar management.
+- [[0005-docker-as-container-runtime|ADR-0005]] - Context for sidecar management.
 
 ## References
 
-- [Architecture](../architecture/overview.md) - High-level system overview.
+- [[overview|Architecture]] - High-level system overview.

@@ -13,18 +13,18 @@ An ADR is a document that captures an important architectural decision made alon
 
 ## ADR Index
 
-| ADR                                                   | Title                                        | Status   | Date       |
-| ----------------------------------------------------- | -------------------------------------------- | -------- | ---------- |
-| [0001](./0001-unified-opentelemetry-observability.md) | Unified OpenTelemetry Observability          | Accepted | 2026-01-26 |
-| [0002](./0002-logging-library-selection.md)           | Logging Library Selection (LogTape vs Pino)  | Accepted | 2026-01-26 |
-| [0003](./0003-observability-backends.md)              | Observability Backend Selection              | Proposed | 2026-01-26 |
-| [0004](./0004-sqlite-storage-backend.md)              | SQLite as Unified Storage Backend            | Accepted | 2026-01-26 |
-| [0005](./0005-docker-as-container-runtime.md)         | Docker as Container Runtime                  | Accepted | 2026-01-27 |
-| [0006](./0006-node-orchestrator-architecture.md)      | Node Orchestrator Architecture               | Accepted | 2026-01-29 |
-| [0007](./0007-certificate-bound-access-tokens.md)     | Certificate Bound Access Tokens for BGP      | Proposed |            |
-| [0008](./0008-permission-policy-schema.md)            | Permission Policy Schema                     | Proposed | 2026-01-30 |
-| [0009](./0009-relational-database-style-guide.md)     | Relational Database Style Guide              | Accepted |            |
-| [0010](./0010-catalyst-service-base-class.md)         | Unified Service Base Class (CatalystService) | Accepted | 2026-02-09 |
+| ADR                                                | Title                                        | Status   | Date       |
+| -------------------------------------------------- | -------------------------------------------- | -------- | ---------- |
+| [[0001-unified-opentelemetry-observability\|0001]] | Unified OpenTelemetry Observability          | Accepted | 2026-01-26 |
+| [[0002-logging-library-selection\|0002]]           | Logging Library Selection (LogTape vs Pino)  | Accepted | 2026-01-26 |
+| [[0003-observability-backends\|0003]]              | Observability Backend Selection              | Proposed | 2026-01-26 |
+| [[0004-sqlite-storage-backend\|0004]]              | SQLite as Unified Storage Backend            | Accepted | 2026-01-26 |
+| [[0005-docker-as-container-runtime\|0005]]         | Docker as Container Runtime                  | Accepted | 2026-01-27 |
+| [[0006-node-orchestrator-architecture\|0006]]      | Node Orchestrator Architecture               | Accepted | 2026-01-29 |
+| [[0007-certificate-bound-access-tokens\|0007]]     | Certificate Bound Access Tokens for BGP      | Proposed |            |
+| [[0008-permission-policy-schema\|0008]]            | Permission Policy Schema                     | Proposed | 2026-01-30 |
+| [[0009-relational-database-style-guide\|0009]]     | Relational Database Style Guide              | Accepted |            |
+| [[0010-catalyst-service-base-class\|0010]]         | Unified Service Base Class (CatalystService) | Accepted | 2026-02-09 |
 
 ## Statuses
 
@@ -37,7 +37,7 @@ An ADR is a document that captures an important architectural decision made alon
 
 ## Creating a New ADR
 
-1. Copy [TEMPLATE.md](./TEMPLATE.md) to a new file
+1. Copy [[TEMPLATE|TEMPLATE.md]] to a new file
 2. Name it `XXXX-short-title.md` (use next available number)
 3. Fill in all sections
 4. Submit for review

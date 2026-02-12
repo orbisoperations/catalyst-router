@@ -6,13 +6,13 @@
 > - **Dispatch**: Uses the V2 dispatch pattern (`dispatch()` → `handleAction()` → `handleNotify()`) instead of the V1 plugin system
 > - **Transport**: Capnweb RPC over WebSocket (mTLS is planned but not yet implemented)
 >
-> See the [API Design](../api/api-design.md) document for the current progressive API pattern and the [Architecture Overview](../architecture/overview.md) for the V2 dispatch pattern.
+> See the [[api-design|API Design]] document for the current progressive API pattern and the [[overview|Architecture Overview]] for the V2 dispatch pattern.
 
 This document describes the implementation of Internal Peering (iBGP) for the Catalyst Router orchestrator, focusing on the use of Cap'n Proto RPC for bidirectional communication and route propagation between nodes within the same Autonomous System (AS).
 
 ## Overview: BGP in Catalyst
 
-As detailed in [BGP Protocol](./bgp-protocol.md), we adapted the Border Gateway Protocol (BGP) for service discovery. Nodes exchange "routes" which map logical service domains (e.g., `*.services.internal`) to specific node endpoints.
+As detailed in [[bgp-protocol|BGP Protocol]], we adapted the Border Gateway Protocol (BGP) for service discovery. Nodes exchange "routes" which map logical service domains (e.g., `*.services.internal`) to specific node endpoints.
 
 **Internal Peering (iBGP)** ensures that all nodes within a cluster or network share a consistent view of available services. When a new node joins, it synchronizes with existing peers to download the current routing table and subsequently receives real-time updates about service availability.
 
@@ -212,7 +212,7 @@ This generates a `CREATE_PEER` action in the orchestrator.
 
 **Step 3: Internal Peering Plugin**
 
-> **Note**: The `InternalPeeringPlugin` / `BasePlugin` pattern below reflects the V1 plugin architecture and has been superseded by V2 dispatch actions. In the current implementation, peering is handled via `dispatch()` → `handleAction()` → `handleNotify()` and uses JWT token authentication rather than a shared secret. See the [Architecture Overview](../architecture/overview.md) for the V2 dispatch pattern.
+> **Note**: The `InternalPeeringPlugin` / `BasePlugin` pattern below reflects the V1 plugin architecture and has been superseded by V2 dispatch actions. In the current implementation, peering is handled via `dispatch()` → `handleAction()` → `handleNotify()` and uses JWT token authentication rather than a shared secret. See the [[overview|Architecture Overview]] for the V2 dispatch pattern.
 
 A specific plugin, `InternalPeeringPlugin`, listens for `CREATE_PEER` actions.
 

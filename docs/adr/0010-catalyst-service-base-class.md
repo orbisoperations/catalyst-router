@@ -110,8 +110,8 @@ created --> initializing --> ready --> shutting_down --> stopped
 
 ## Related Decisions
 
-- [ADR-0001](./0001-unified-opentelemetry-observability.md) - CatalystService auto-configures OpenTelemetry via `TelemetryBuilder`
-- [ADR-0006](./0006-node-orchestrator-architecture.md) - CatalystService standardizes the service lifecycle within the pod architecture
+- [[0001-unified-opentelemetry-observability|ADR-0001]] - CatalystService auto-configures OpenTelemetry via `TelemetryBuilder`
+- [[0006-node-orchestrator-architecture|ADR-0006]] - CatalystService standardizes the service lifecycle within the pod architecture
 
 ## References
 
