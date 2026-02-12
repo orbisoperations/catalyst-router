@@ -1,6 +1,6 @@
 import type { PeerInfo, PeerRecord } from '@catalyst/routing'
 import { getLogger } from '@catalyst/telemetry'
-import type { ConnectionPool } from './orchestrator.js'
+import type { ConnectionPool } from './connection-pool.js'
 import type { Propagation, UpdateMessage } from './api-types.js'
 
 export type { Propagation, UpdateMessage } from './api-types.js'

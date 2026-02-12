@@ -11,13 +11,7 @@ export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import { createPortAllocator, type PortAllocator } from '@catalyst/envoy-service'
-import {
-  newHttpBatchRpcSession,
-  newWebSocketRpcSession,
-  type RpcCompatible,
-  type RpcStub,
-  RpcTarget,
-} from 'capnweb'
+import { newWebSocketRpcSession, type RpcStub, RpcTarget } from 'capnweb'
 import { PeerTransport } from './peer-transport.js'
 import type {
   PublicApi,
@@ -30,50 +24,13 @@ import type {
 } from './api-types.js'
 import { ActionQueue, type DispatchResult } from './action-queue.js'
 import { RoutingInformationBase, type CommitResult } from './rib.js'
+import { ConnectionPool } from './connection-pool.js'
+
+// Re-export for backward compatibility (tests, peer-transport, etc.)
+export { ConnectionPool } from './connection-pool.js'
+export { getHttpPeerSession, getWebSocketPeerSession } from './connection-pool.js'
 
 export type { PublicApi, NetworkClient, DataChannel, IBGPClient } from './api-types.js'
-
-export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
-  return newHttpBatchRpcSession<API>(endpoint)
-}
-
-export function getWebSocketPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
-  return newWebSocketRpcSession<API>(endpoint)
-}
-
-export class ConnectionPool {
-  private stubs: Map<string, RpcStub<PublicApi>>
-  constructor(private type: 'ws' | 'http' = 'http') {
-    this.stubs = new Map<string, RpcStub<PublicApi>>()
-  }
-
-  get(endpoint: string): RpcStub<PublicApi> {
-    const cached = this.stubs.get(endpoint)
-    if (cached) {
-      return cached
-    }
-    switch (this.type) {
-      case 'http': {
-        const stub = newHttpBatchRpcSession<PublicApi>(endpoint)
-        this.stubs.set(endpoint, stub)
-        return stub
-      }
-      case 'ws': {
-        const stub = newWebSocketRpcSession<PublicApi>(endpoint)
-        this.stubs.set(endpoint, stub)
-        return stub
-      }
-    }
-  }
-
-  getEnvoy(endpoint: string): RpcStub<EnvoyApi> {
-    return this.get(endpoint) as unknown as RpcStub<EnvoyApi>
-  }
-
-  getGateway(endpoint: string): RpcStub<GatewayApi> {
-    return this.get(endpoint) as unknown as RpcStub<GatewayApi>
-  }
-}
 
 /**
  * Auth Service RPC API interface
@@ -107,7 +64,6 @@ export class CatalystNodeBus extends RpcTarget {
   private connectionPool: ConnectionPool
   private peerTransport: PeerTransport
   private config: OrchestratorConfig
-  private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
   private portAllocator?: PortAllocator
   private rib: RoutingInformationBase
@@ -129,7 +85,6 @@ export class CatalystNodeBus extends RpcTarget {
       )
     }
     this.config = opts.config
-    this.nodeToken = opts.nodeToken
     if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
     }
@@ -139,7 +94,7 @@ export class CatalystNodeBus extends RpcTarget {
         ? new ConnectionPool(opts.connectionPool.type)
         : new ConnectionPool())
 
-    this.peerTransport = new PeerTransport(this.connectionPool, this.nodeToken)
+    this.peerTransport = new PeerTransport(this.connectionPool, opts.nodeToken)
 
     if (this.config.envoyConfig?.portRange) {
       this.portAllocator = createPortAllocator(this.config.envoyConfig.portRange)
@@ -169,9 +124,6 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
-  /**
-   * Validates an incoming caller token using the auth service permissions API.
-   */
   private async validateToken(
     callerToken: string,
     action: string
@@ -222,17 +174,14 @@ export class CatalystNodeBus extends RpcTarget {
       this.logger.debug`Route create data: ${JSON.stringify(sentAction.data)}`
     }
 
-    // 1. Plan: compute new state + propagations (does not mutate RIB state)
     const plan = this.rib.plan(sentAction)
     if (!plan.success) {
       this.logger.error`Action failed: ${sentAction.action} - ${plan.error}`
       return plan
     }
 
-    // 2. Commit: apply state atomically (synchronous)
     const commitResult = this.rib.commit(plan)
 
-    // 3. Post-commit side effects (fire-and-forget to avoid ActionQueue deadlock)
     this.lastNotificationPromise = this.handlePostCommit(sentAction, commitResult).catch((e) => {
       this.logger.error`Error in post-commit for ${sentAction.action}: ${e}`
     })
@@ -241,10 +190,8 @@ export class CatalystNodeBus extends RpcTarget {
   }
 
   private async handlePostCommit(sentAction: Action, commitResult: CommitResult): Promise<void> {
-    // Execute propagations (peer transport)
     const peerResults = await this.peerTransport.fanOut(commitResult.propagations)
 
-    // LocalPeerCreate: if open succeeded, trigger InternalProtocolConnected
     if (sentAction.action === Actions.LocalPeerCreate) {
       const openSucceeded = peerResults.some((r) => r.status === 'fulfilled')
       if (openSucceeded) {
@@ -256,20 +203,14 @@ export class CatalystNodeBus extends RpcTarget {
       }
     }
 
-    // Infrastructure side effects (envoy + graphql)
-    await this.handleEnvoyPush(sentAction, commitResult.newState, commitResult.prevState)
-    await this.handleGraphqlConfiguration()
+    await this.syncEnvoy(sentAction)
+    await this.syncGraphql()
   }
 
-  private async handleEnvoyPush(
-    action: Action,
-    _state: RouteTable,
-    _prevState: RouteTable
-  ): Promise<void> {
+  private async syncEnvoy(action: Action): Promise<void> {
     const envoyEndpoint = this.config.envoyConfig?.endpoint
     if (!envoyEndpoint || !this.portAllocator) return
 
-    // Only react to route-affecting actions
     const routeActions = [
       Actions.LocalRouteCreate,
       Actions.LocalRouteDelete,
@@ -280,7 +221,6 @@ export class CatalystNodeBus extends RpcTarget {
     ]
     if (!routeActions.includes(action.action)) return
 
-    // Push complete config to envoy service
     try {
       const stub = this.connectionPool.getEnvoy(envoyEndpoint)
       const result = await stub.updateRoutes({
@@ -296,7 +236,7 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
-  private async handleGraphqlConfiguration(): Promise<void> {
+  private async syncGraphql(): Promise<void> {
     const gatewayEndpoint = this.config.gqlGatewayConfig?.endpoint
     if (!gatewayEndpoint) return
 
@@ -313,14 +253,9 @@ export class CatalystNodeBus extends RpcTarget {
 
     try {
       const stub = this.connectionPool.getGateway(gatewayEndpoint)
-      const config = {
-        services: graphqlRoutes.map((r) => ({
-          name: r.name,
-          url: r.endpoint!,
-        })),
-      }
-
-      const result = await stub.updateConfig(config)
+      const result = await stub.updateConfig({
+        services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
+      })
       if (!result.success) {
         this.logger.error`Gateway sync failed: ${result.error}`
       } else {
@@ -333,96 +268,64 @@ export class CatalystNodeBus extends RpcTarget {
 
   publicApi(): PublicApi {
     return {
-      getNetworkClient: async (
-        token: string
-      ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> => {
+      getNetworkClient: async (token: string) => {
         const validation = await this.validateToken(token, 'PEER_CREATE')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
-        }
+        if (!validation.valid) return { success: false as const, error: validation.error }
 
         return {
-          success: true,
+          success: true as const,
           client: {
-            addPeer: async (peer: PeerInfo) => {
-              return this.dispatch({ action: Actions.LocalPeerCreate, data: peer })
-            },
-            updatePeer: async (peer: PeerInfo) => {
-              return this.dispatch({ action: Actions.LocalPeerUpdate, data: peer })
-            },
-            removePeer: async (peer: Pick<PeerInfo, 'name'>) => {
-              return this.dispatch({ action: Actions.LocalPeerDelete, data: peer })
-            },
-            listPeers: async () => {
-              return this.state.internal.peers
-            },
+            addPeer: (peer: PeerInfo) =>
+              this.dispatch({ action: Actions.LocalPeerCreate, data: peer }),
+            updatePeer: (peer: PeerInfo) =>
+              this.dispatch({ action: Actions.LocalPeerUpdate, data: peer }),
+            removePeer: (peer: Pick<PeerInfo, 'name'>) =>
+              this.dispatch({ action: Actions.LocalPeerDelete, data: peer }),
+            listPeers: async () => this.rib.getState().internal.peers,
           },
         }
       },
-      getDataChannelClient: async (
-        token: string
-      ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }> => {
+      getDataChannelClient: async (token: string) => {
         const validation = await this.validateToken(token, 'ROUTE_CREATE')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
-        }
+        if (!validation.valid) return { success: false as const, error: validation.error }
 
         return {
-          success: true,
+          success: true as const,
           client: {
-            addRoute: async (route: DataChannelDefinition) => {
-              return this.dispatch({ action: Actions.LocalRouteCreate, data: route })
-            },
-            removeRoute: async (route: DataChannelDefinition) => {
-              return this.dispatch({ action: Actions.LocalRouteDelete, data: route })
-            },
-            listRoutes: async () => {
-              return {
-                local: this.state.local.routes,
-                internal: this.state.internal.routes,
-              }
-            },
+            addRoute: (route: DataChannelDefinition) =>
+              this.dispatch({ action: Actions.LocalRouteCreate, data: route }),
+            removeRoute: (route: DataChannelDefinition) =>
+              this.dispatch({ action: Actions.LocalRouteDelete, data: route }),
+            listRoutes: async () => ({
+              local: this.rib.getState().local.routes,
+              internal: this.rib.getState().internal.routes,
+            }),
           },
         }
       },
-      getIBGPClient: async (
-        token: string
-      ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }> => {
+      getIBGPClient: async (token: string) => {
         const validation = await this.validateToken(token, 'IBGP_CONNECT')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
-        }
+        if (!validation.valid) return { success: false as const, error: validation.error }
 
         return {
-          success: true,
+          success: true as const,
           client: {
-            open: async (peer: PeerInfo) => {
-              return this.dispatch({
-                action: Actions.InternalProtocolOpen,
-                data: { peerInfo: peer },
-              })
-            },
-            close: async (peer: PeerInfo, code: number, reason?: string) => {
-              return this.dispatch({
+            open: (peer: PeerInfo) =>
+              this.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peer } }),
+            close: (peer: PeerInfo, code: number, reason?: string) =>
+              this.dispatch({
                 action: Actions.InternalProtocolClose,
                 data: { peerInfo: peer, code, reason },
-              })
-            },
-            update: async (peer: PeerInfo, update: UpdateMessage) => {
-              return this.dispatch({
+              }),
+            update: (peer: PeerInfo, update: UpdateMessage) =>
+              this.dispatch({
                 action: Actions.InternalProtocolUpdate,
-                data: {
-                  peerInfo: peer,
-                  update: update,
-                },
-              })
-            },
+                data: { peerInfo: peer, update },
+              }),
           },
         }
       },
-      dispatch: async (action: Action) => {
-        return this.dispatch(action)
-      },
+      dispatch: (action: Action) => this.dispatch(action),
     }
   }
 }
