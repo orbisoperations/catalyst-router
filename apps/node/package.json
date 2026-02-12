@@ -1,16 +1,20 @@
 {
   "name": "@catalyst/node-service",
   "version": "1.0.0",
-  "description": "",
+  "description": "Catalyst composite node — all services in a single binary",
   "type": "module",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "bin": {
+    "catalyst-node": "dist/index.js"
+  },
   "scripts": {
     "test": "vitest",
+    "test:integration": "bun test src/composite.integration.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "build": "tsup",
-    "dev": "tsup --watch",
-    "start": "node dist/index.js"
+    "dev": "bun src/index.ts",
+    "start": "bun dist/index.js"
   },
   "keywords": [],
   "author": "",
@@ -23,15 +27,16 @@
     "vitest": "catalog:testing"
   },
   "dependencies": {
+    "@catalyst/auth-service": "catalog:",
+    "@catalyst/authorization": "catalog:",
     "@catalyst/config": "catalog:",
+    "@catalyst/gateway-service": "catalog:",
+    "@catalyst/orchestrator-service": "catalog:",
     "@catalyst/service": "catalog:",
     "@catalyst/telemetry": "catalog:",
-    "@hono/node-server": "catalog:",
     "capnweb": "catalog:",
     "commander": "catalog:",
-    "graphql": "catalog:",
-    "graphql-yoga": "catalog:",
     "hono": "catalog:",
-    "ip": "catalog:"
+    "zod": "catalog:"
   }
 }

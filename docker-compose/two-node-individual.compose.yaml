@@ -1,0 +1,193 @@
+# Two nodes with individual containers for peering UAT.
+# Each node runs auth, orchestrator, and gateway as separate containers.
+# Nodes are network-isolated; only orchestrators share the peering network.
+#
+# Usage:
+#   docker compose -f docker-compose/two-node-individual.compose.yaml up --build
+#
+# Ports:
+#   Node A — gateway: http://localhost:4000, orchestrator: http://localhost:3001, auth: http://localhost:4020
+#   Node B — gateway: http://localhost:4001, orchestrator: http://localhost:3002, auth: http://localhost:4021
+
+services:
+  # ============================================================
+  # Node A: auth-a + gateway-a + orchestrator-a + books
+  # ============================================================
+
+  auth-a:
+    build:
+      context: ..
+      dockerfile: apps/auth/Dockerfile
+    ports:
+      - '4020:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      node-a-net:
+
+  gateway-a:
+    build:
+      context: ..
+      dockerfile: apps/gateway/Dockerfile
+    ports:
+      - '4000:4000'
+    environment:
+      - PORT=4000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      books-service:
+        condition: service_healthy
+    networks:
+      node-a-net:
+
+  books-service:
+    build:
+      context: ..
+      dockerfile: examples/books-api/Dockerfile
+    environment:
+      - PORT=8080
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      node-a-net:
+
+  orchestrator-a:
+    build:
+      context: ..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3001:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orchestrator-a:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_PEERING_SECRET=valid-secret
+      - CATALYST_AUTH_ENDPOINT=ws://auth-a:5000/rpc
+      - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-a:4000/api
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      auth-a:
+        condition: service_healthy
+      gateway-a:
+        condition: service_healthy
+    networks:
+      node-a-net:
+      peering:
+        aliases:
+          - orchestrator-a
+
+  # ============================================================
+  # Node B: auth-b + gateway-b + orchestrator-b + movies
+  # ============================================================
+
+  auth-b:
+    build:
+      context: ..
+      dockerfile: apps/auth/Dockerfile
+    ports:
+      - '4021:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      node-b-net:
+
+  gateway-b:
+    build:
+      context: ..
+      dockerfile: apps/gateway/Dockerfile
+    ports:
+      - '4001:4000'
+    environment:
+      - PORT=4000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      movies-service:
+        condition: service_healthy
+    networks:
+      node-b-net:
+
+  movies-service:
+    build:
+      context: ..
+      dockerfile: examples/movies-api/Dockerfile
+    environment:
+      - PORT=8080
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      node-b-net:
+
+  orchestrator-b:
+    build:
+      context: ..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3002:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orchestrator-b:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_PEERING_SECRET=valid-secret
+      - CATALYST_AUTH_ENDPOINT=ws://auth-b:5000/rpc
+      - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-b:4000/api
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      auth-b:
+        condition: service_healthy
+      gateway-b:
+        condition: service_healthy
+    networks:
+      node-b-net:
+      peering:
+        aliases:
+          - orchestrator-b
+
+networks:
+  node-a-net:
+    driver: bridge
+  node-b-net:
+    driver: bridge
+  peering:
+    driver: bridge
