@@ -409,4 +409,99 @@ describe('Keep-alive, peer expiry, and reconnection', () => {
     fastNode.stop()
     slowNode.stop()
   })
+
+  it('full degradation cycle: connected → degraded → reconnected with route recovery', async () => {
+    await connectTwoNodes(nodeA, nodeB, infoA, infoB)
+
+    // Add a route on A, propagate to B
+    const dataA = (
+      (await nodeA.publicApi().getDataChannelClient('secret')) as {
+        success: true
+        client: DataChannel
+      }
+    ).client
+    await dataA.addRoute({
+      name: 'service-full-cycle',
+      protocol: 'http' as const,
+      endpoint: 'http://cycle:8080',
+    })
+    await waitForNotification(nodeA)
+    await waitForNotification(nodeB)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Verify B has the route and A is connected
+    let stateB = getState(nodeB)
+    expect(stateB.internal.routes.find((r) => r.name === 'service-full-cycle')).toBeDefined()
+    expect(stateB.internal.peers.find((p) => p.name === infoA.name)?.connectionStatus).toBe(
+      'connected'
+    )
+
+    // Phase 2: Take A offline and expire its hold timer on B
+    pool.setOffline(infoA.name)
+    const expiredTime = new Date(Date.now() - 200_000)
+    setLastMessageReceived(nodeB, infoA.name, expiredTime)
+
+    await nodeB.dispatch({ action: Actions.InternalProtocolTick, data: {} })
+    await waitForNotification(nodeB)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Verify A is degraded and routes are withdrawn on B
+    stateB = getState(nodeB)
+    expect(stateB.internal.peers.find((p) => p.name === infoA.name)?.connectionStatus).toBe(
+      'degraded'
+    )
+    expect(stateB.internal.routes.find((r) => r.name === 'service-full-cycle')).toBeUndefined()
+
+    // Phase 3: Bring A back online, tick triggers reconnection
+    pool.setOnline(infoA.name)
+
+    await nodeB.dispatch({ action: Actions.InternalProtocolTick, data: {} })
+    await waitForNotification(nodeB)
+    await waitForNotification(nodeA)
+    await new Promise((r) => setTimeout(r, 100))
+
+    // Verify A is connected again on B
+    stateB = getState(nodeB)
+    expect(stateB.internal.peers.find((p) => p.name === infoA.name)?.connectionStatus).toBe(
+      'connected'
+    )
+
+    // Verify routes are re-synced: A's route should be back on B
+    // The OPEN on A triggers route sync back to B via InternalProtocolUpdate
+    await new Promise((r) => setTimeout(r, 100))
+    stateB = getState(nodeB)
+    expect(stateB.internal.routes.find((r) => r.name === 'service-full-cycle')).toBeDefined()
+  })
+
+  it('closed peers are NOT auto-reconnected by tick', async () => {
+    await connectTwoNodes(nodeA, nodeB, infoA, infoB)
+
+    // Explicitly close peer A on B with a non-hold-timer code (human intervention)
+    await nodeB.dispatch({
+      action: Actions.InternalProtocolClose,
+      data: {
+        peerInfo: infoA,
+        code: 1000, // Normal close, NOT hold timer expired (code 4)
+        reason: 'Administrative shutdown',
+      },
+    })
+    await waitForNotification(nodeB)
+
+    // Verify A is closed (not degraded)
+    let stateB = getState(nodeB)
+    expect(stateB.internal.peers.find((p) => p.name === infoA.name)?.connectionStatus).toBe(
+      'closed'
+    )
+
+    // Dispatch tick — should NOT attempt reconnection for closed peers
+    await nodeB.dispatch({ action: Actions.InternalProtocolTick, data: {} })
+    await waitForNotification(nodeB)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Verify A is still closed, not reconnected
+    stateB = getState(nodeB)
+    expect(stateB.internal.peers.find((p) => p.name === infoA.name)?.connectionStatus).toBe(
+      'closed'
+    )
+  })
 })

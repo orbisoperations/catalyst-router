@@ -253,7 +253,8 @@ export class CatalystNodeBus extends RpcTarget {
   }
 
   async dispatch(
-    sentAction: Action
+    sentAction: Action,
+    _retryCount = 0
   ): Promise<{ success: true } | { success: false; error: string }> {
     this.logger.info`Dispatching action: ${sentAction.action}`
 
@@ -264,8 +265,16 @@ export class CatalystNodeBus extends RpcTarget {
       this.logger.debug`Route create data: ${JSON.stringify(sentAction.data)}`
     }
 
-    const result = await this.handleAction(sentAction, this.state)
+    const result = await this.handleAction(sentAction, prevState)
     if (result.success) {
+      // CAS: if state was modified by a concurrent dispatch between read and write,
+      // retry with fresh state to prevent stale-state overwrites
+      if (this.state !== prevState && _retryCount < 3) {
+        this.logger
+          .debug`State changed during ${sentAction.action}, retrying (attempt ${_retryCount + 1})`
+        return this.dispatch(sentAction, _retryCount + 1)
+      }
+
       this.state = result.state
       // Fire and forget side effects to avoid deadlocks in distributed calls
 
