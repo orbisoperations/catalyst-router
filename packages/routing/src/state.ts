@@ -7,12 +7,19 @@ export const PeerInfoSchema = NodeConfigSchema
 
 export type PeerInfo = z.infer<typeof PeerInfoSchema>
 
-export const PeerConnectionStatusEnum = z.enum(['initializing', 'connected', 'closed'] as const)
+export const PeerConnectionStatusEnum = z.enum([
+  'initializing',
+  'connected',
+  'degraded',
+  'closed',
+] as const)
 export type PeerConnectionStatus = z.infer<typeof PeerConnectionStatusEnum>
 
 export const PeerRecordSchema = PeerInfoSchema.extend({
   connectionStatus: PeerConnectionStatusEnum,
   lastConnected: z.date().optional(),
+  lastMessageReceived: z.date().optional(),
+  holdTime: z.number().optional(),
 })
 
 export type PeerRecord = z.infer<typeof PeerRecordSchema>

@@ -64,6 +64,7 @@ export interface IBGPClient {
     peer: PeerInfo,
     update: z.infer<typeof UpdateMessageSchema>
   ): Promise<{ success: true } | { success: false; error: string }>
+  keepalive(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
@@ -126,6 +127,9 @@ interface AuthServiceApi {
   permissions(token: string): Promise<AuthServicePermissionsHandlers | { error: string }>
 }
 
+const DEFAULT_HOLD_TIME = 180 // seconds
+const DEFAULT_TICK_INTERVAL_MS = 20_000 // 20 seconds - tick frequency
+
 export class CatalystNodeBus extends RpcTarget {
   private readonly logger = getLogger(['catalyst', 'orchestrator'])
   private state: RouteTable
@@ -134,6 +138,8 @@ export class CatalystNodeBus extends RpcTarget {
   private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
   public lastNotificationPromise?: Promise<void>
+  private holdTime: number
+  private tickInterval: ReturnType<typeof setInterval> | null = null
 
   constructor(opts: {
     state?: RouteTable
@@ -141,6 +147,7 @@ export class CatalystNodeBus extends RpcTarget {
     config: OrchestratorConfig
     nodeToken?: string
     authEndpoint?: string
+    holdTime?: number
   }) {
     super()
     this.state = opts.state ?? newRouteTable()
@@ -152,6 +159,7 @@ export class CatalystNodeBus extends RpcTarget {
     }
     this.config = opts.config
     this.nodeToken = opts.nodeToken
+    this.holdTime = opts.holdTime ?? DEFAULT_HOLD_TIME
     if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
     }
@@ -162,6 +170,22 @@ export class CatalystNodeBus extends RpcTarget {
         : new ConnectionPool())
 
     this.validateNodeConfig()
+  }
+
+  start(): void {
+    if (this.tickInterval) return
+    this.tickInterval = setInterval(() => {
+      this.dispatch({ action: Actions.InternalProtocolTick, data: {} }).catch((e) => {
+        this.logger.error`Tick dispatch failed: ${e}`
+      })
+    }, DEFAULT_TICK_INTERVAL_MS)
+  }
+
+  stop(): void {
+    if (this.tickInterval) {
+      clearInterval(this.tickInterval)
+      this.tickInterval = null
+    }
   }
 
   private validateNodeConfig() {
@@ -340,14 +364,20 @@ export class CatalystNodeBus extends RpcTarget {
         // Find peer by matching info from sender
         const peer = peerList.find((p) => p.name === action.data.peerInfo.name)
 
-        // If found, remove it. If not found, it's already gone or never existed.
+        // Determine target status based on close reason:
+        // - code 4 (HOLD_TIMER_EXPIRED): 'degraded' - auto-reconnect will retry
+        // - other codes: 'closed' - requires human intervention to reopen
+        const targetStatus = action.data.code === 4 ? ('degraded' as const) : ('closed' as const)
+
         if (peer) {
           state = {
             ...state,
             internal: {
               ...state.internal,
               routes: state.internal.routes.filter((r) => r.peerName !== action.data.peerInfo.name),
-              peers: peerList.filter((p) => p.name !== action.data.peerInfo.name),
+              peers: peerList.map((p) =>
+                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: targetStatus } : p
+              ),
             },
           }
         }
@@ -373,6 +403,15 @@ export class CatalystNodeBus extends RpcTarget {
             },
           }
         }
+        state = {
+          ...state,
+          internal: {
+            ...state.internal,
+            peers: state.internal.peers.map((p) =>
+              p.name === action.data.peerInfo.name ? { ...p, lastMessageReceived: new Date() } : p
+            ),
+          },
+        }
         break
       }
       case Actions.InternalProtocolConnected: {
@@ -385,6 +424,15 @@ export class CatalystNodeBus extends RpcTarget {
               ...state.internal,
               peers: state.internal.peers.map((p) =>
                 p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
+              ),
+            },
+          }
+          state = {
+            ...state,
+            internal: {
+              ...state.internal,
+              peers: state.internal.peers.map((p) =>
+                p.name === action.data.peerInfo.name ? { ...p, lastMessageReceived: new Date() } : p
               ),
             },
           }
@@ -461,6 +509,34 @@ export class CatalystNodeBus extends RpcTarget {
             routes: currentInternalRoutes,
           },
         }
+        state = {
+          ...state,
+          internal: {
+            ...state.internal,
+            peers: state.internal.peers.map((p) =>
+              p.name === action.data.peerInfo.name ? { ...p, lastMessageReceived: new Date() } : p
+            ),
+          },
+        }
+        break
+      }
+      case Actions.InternalProtocolKeepalive: {
+        const peer = state.internal.peers.find((p) => p.name === action.data.peerInfo.name)
+        if (peer) {
+          state = {
+            ...state,
+            internal: {
+              ...state.internal,
+              peers: state.internal.peers.map((p) =>
+                p.name === action.data.peerInfo.name ? { ...p, lastMessageReceived: new Date() } : p
+              ),
+            },
+          }
+        }
+        break
+      }
+      case Actions.InternalProtocolTick: {
+        // Tick is a no-op for state mutation - all logic runs in handleNotify
         break
       }
       default: {
@@ -735,6 +811,81 @@ export class CatalystNodeBus extends RpcTarget {
         await this.propagateWithdrawalsForPeer(action.data.peerInfo.name, prevState, _state)
         break
       }
+      case Actions.InternalProtocolTick: {
+        const now = Date.now()
+        const holdTimeMs = (this.holdTime ?? DEFAULT_HOLD_TIME) * 1000
+        const keepaliveThresholdMs = holdTimeMs / 3
+
+        for (const peer of _state.internal.peers) {
+          if (peer.connectionStatus === 'connected') {
+            // Check hold timer expiry
+            if (peer.lastMessageReceived) {
+              const elapsed = now - peer.lastMessageReceived.getTime()
+              if (elapsed > holdTimeMs) {
+                this.logger
+                  .warn`Hold timer expired for peer ${peer.name} (${elapsed}ms > ${holdTimeMs}ms)`
+                await this.dispatch({
+                  action: Actions.InternalProtocolClose,
+                  data: {
+                    peerInfo: { name: peer.name, endpoint: peer.endpoint, domains: peer.domains },
+                    code: 4, // HOLD_TIMER_EXPIRED
+                    reason: 'Hold timer expired',
+                  },
+                })
+                continue
+              }
+
+              // Check if keepalive is due
+              if (elapsed > keepaliveThresholdMs) {
+                try {
+                  const stub = this.connectionPool.get(peer.endpoint)
+                  if (stub) {
+                    const token = peer.peerToken || this.nodeToken || ''
+                    const connectionResult = await stub.getIBGPClient(token)
+                    if (connectionResult.success) {
+                      await connectionResult.client.keepalive(this.config.node)
+                    }
+                  }
+                } catch (e) {
+                  this.logger.error`Failed to send keepalive to ${peer.name}: ${e}`
+                }
+              }
+            }
+          } else if (
+            peer.connectionStatus === 'degraded' ||
+            peer.connectionStatus === 'initializing'
+          ) {
+            // Reconnection attempt for degraded/initializing peers
+            // 'closed' peers require human intervention and are NOT auto-reconnected
+            try {
+              this.logger.info`Reconnection attempt for ${peer.name}`
+              const stub = this.connectionPool.get(peer.endpoint)
+              if (stub) {
+                const token = peer.peerToken || this.nodeToken || ''
+                const connectionResult = await stub.getIBGPClient(token)
+                if (connectionResult.success) {
+                  const result = await connectionResult.client.open(this.config.node)
+                  if (result.success) {
+                    this.logger.info`Reconnected to ${peer.name}`
+                    await this.dispatch({
+                      action: Actions.InternalProtocolConnected,
+                      data: { peerInfo: peer },
+                    })
+                  }
+                }
+              }
+            } catch (e) {
+              this.logger.debug`Reconnection failed for ${peer.name}: ${e}`
+            }
+          }
+        }
+        break
+      }
+      case Actions.InternalProtocolKeepalive: {
+        // Keepalive receipt is fully handled in handleAction (lastMessageReceived update)
+        // No side effects needed in notify phase
+        break
+      }
     }
   }
 
@@ -864,6 +1015,12 @@ export class CatalystNodeBus extends RpcTarget {
                   peerInfo: peer,
                   update: update,
                 },
+              })
+            },
+            keepalive: async (peer: PeerInfo) => {
+              return this.dispatch({
+                action: Actions.InternalProtocolKeepalive,
+                data: { peerInfo: peer },
               })
             },
           },
