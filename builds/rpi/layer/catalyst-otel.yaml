@@ -24,7 +24,9 @@ mmdebstrap:
       OTEL_VERSION="$IGconf_otel_version"
       OTEL_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTEL_VERSION}/otelcol-contrib_${OTEL_VERSION}_linux_arm64.tar.gz"
       echo "Downloading otelcol-contrib v${OTEL_VERSION}..."
+      curl -fsSL "${OTEL_URL}.sha256" -o /tmp/otelcol.sha256
       curl -fsSL "$OTEL_URL" -o /tmp/otelcol.tar.gz
+      cd /tmp && sha256sum -c otelcol.sha256
       tar -xzf /tmp/otelcol.tar.gz -C /tmp otelcol-contrib
       install -m 755 /tmp/otelcol-contrib "$1/usr/local/bin/otelcol-contrib"
       rm -f /tmp/otelcol.tar.gz /tmp/otelcol-contrib
@@ -89,6 +91,8 @@ mmdebstrap:
       ExecStart=/usr/local/bin/otelcol-contrib --config /etc/catalyst-node/otel-config.yaml
       Restart=on-failure
       RestartSec=5
+      StartLimitBurst=5
+      StartLimitIntervalSec=120
       MemoryMax=300M
       LimitNOFILE=65536
 

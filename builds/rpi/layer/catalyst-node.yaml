@@ -46,6 +46,8 @@
 # METAEND
 ---
 mmdebstrap:
+  packages:
+    - avahi-daemon
   customize-hooks:
     # Install the pre-built catalyst-node binary from source directory
     - install -m 755 "$SRCROOT/bin/catalyst-node" "$1/usr/local/bin/catalyst-node"
@@ -65,6 +67,7 @@ mmdebstrap:
       CATALYST_BOOTSTRAP_TOKEN=$IGconf_catalyst_bootstrap_token
       CATALYST_AUTH_KEYS_DB=/var/lib/catalyst-node/keys.db
       CATALYST_AUTH_TOKENS_DB=/var/lib/catalyst-node/tokens.db
+      CATALYST_LOG_LEVEL=$IGconf_catalyst_log_level
       OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
       OTEL_SERVICE_NAME=catalyst-node
       ENVEOF
@@ -90,6 +93,7 @@ mmdebstrap:
       # Ensure data directory exists with correct permissions
       mkdir -p /var/lib/catalyst-node
       chmod 750 /var/lib/catalyst-node
+      chown -R catalyst:catalyst /var/lib/catalyst-node
 
       echo "First boot setup complete"
       FBEOF
@@ -107,7 +111,7 @@ mmdebstrap:
       Type=oneshot
       ExecStart=/usr/local/bin/catalyst-firstboot
       ExecStartPost=/usr/bin/touch /var/lib/catalyst-node/.firstboot-done
-      RemainAfterExit=no
+      RemainAfterExit=yes
 
       [Install]
       WantedBy=multi-user.target
@@ -120,15 +124,23 @@ mmdebstrap:
       Description=Catalyst Node
       After=otelcol.service network-online.target catalyst-node-firstboot.service
       Wants=otelcol.service network-online.target
-      Requires=catalyst-node-firstboot.service
 
       [Service]
       Type=simple
+      User=catalyst
       EnvironmentFile=/etc/catalyst-node/catalyst-node.env
       ExecStart=/usr/local/bin/catalyst-node
       WorkingDirectory=/var/lib/catalyst-node
       Restart=on-failure
       RestartSec=5
+      StartLimitBurst=5
+      StartLimitIntervalSec=120
+      ProtectSystem=strict
+      ProtectHome=yes
+      NoNewPrivileges=yes
+      ReadWritePaths=/var/lib/catalyst-node
+      MemoryMax=512M
+      LimitNOFILE=65536
 
       [Install]
       WantedBy=multi-user.target

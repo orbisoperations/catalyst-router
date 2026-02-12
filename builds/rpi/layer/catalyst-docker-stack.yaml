@@ -54,6 +54,8 @@
 # METAEND
 ---
 mmdebstrap:
+  packages:
+    - avahi-daemon
   customize-hooks:
     # Create application directory
     - mkdir -p "$1/opt/catalyst-node"
@@ -247,7 +249,7 @@ mmdebstrap:
       Type=oneshot
       ExecStart=/usr/local/bin/catalyst-firstboot
       ExecStartPost=/usr/bin/touch /opt/catalyst-node/.firstboot-done
-      RemainAfterExit=no
+      RemainAfterExit=yes
 
       [Install]
       WantedBy=multi-user.target
@@ -259,14 +261,14 @@ mmdebstrap:
       [Unit]
       Description=Catalyst Node Stack (Docker Compose)
       After=docker.service network-online.target catalyst-stack-firstboot.service
-      Requires=docker.service catalyst-stack-firstboot.service
+      Requires=docker.service
       Wants=network-online.target
 
       [Service]
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=/opt/catalyst-node
-      ExecStartPre=/usr/bin/docker compose pull --quiet
+      ExecStartPre=-/usr/bin/docker compose pull --quiet
       ExecStart=/usr/bin/docker compose up -d --remove-orphans
       ExecStop=/usr/bin/docker compose down
       TimeoutStartSec=600

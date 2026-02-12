@@ -247,6 +247,12 @@ The binary is written to `dist/rpi-config/catalyst-rpi-config`.
 | `--cloudflared-token <token>` | Cloudflare Tunnel token (omit to skip) | --      |
 | `--no-cloudflared`            | Explicitly skip cloudflared            | --      |
 
+### Console
+
+| Flag             | Description                               | Default |
+| ---------------- | ----------------------------------------- | ------- |
+| `--no-autologin` | Skip console autologin and journal stream | --      |
+
 ### Image Layout
 
 | Flag                      | Description         | Default                           |
@@ -293,6 +299,7 @@ When run without `--dry-run`, the CLI writes this structure:
 │   ├── catalyst-otel.yaml       # (native mode)
 │   ├── catalyst-node.yaml       # (native mode)
 │   ├── catalyst-docker-stack.yaml # (docker mode)
+│   ├── catalyst-console.yaml     # (if autologin enabled — default)
 │   ├── catalyst-wifi.yaml       # (if WiFi enabled)
 │   └── catalyst-cloudflared.yaml # (if cloudflared enabled)
 └── bin/
