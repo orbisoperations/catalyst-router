@@ -124,7 +124,7 @@ describe('CatalystConfigSchema with envoy field', () => {
   const baseConfig = {
     node: {
       name: 'test-node',
-      domains: ['test.local'],
+      domain: 'test.local',
       endpoint: 'http://localhost:3000',
     },
     port: 3000,
@@ -171,27 +171,27 @@ describe('CatalystConfigSchema with envoy field', () => {
   })
 })
 
-describe('NodeConfigSchema without envoyAddress (removed)', () => {
-  it('parses without envoyAddress', () => {
+describe('NodeConfigSchema with single domain FQDN', () => {
+  it('parses with required fields', () => {
     const result = NodeConfigSchema.safeParse({
-      name: 'test-node',
-      domains: ['test.local'],
+      name: 'test-node.test.local',
+      domain: 'test.local',
     })
     expect(result.success).toBe(true)
   })
 
   it('existing fields still parse correctly', () => {
     const result = NodeConfigSchema.safeParse({
-      name: 'test-node',
-      domains: ['test.local'],
+      name: 'test-node.test.local',
+      domain: 'test.local',
       endpoint: 'http://localhost:3000',
       labels: { env: 'prod' },
       peerToken: 'tok-123',
     })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.name).toBe('test-node')
-      expect(result.data.domains).toEqual(['test.local'])
+      expect(result.data.name).toBe('test-node.test.local')
+      expect(result.data.domain).toBe('test.local')
       expect(result.data.endpoint).toBe('http://localhost:3000')
       expect(result.data.labels).toEqual({ env: 'prod' })
       expect(result.data.peerToken).toBe('tok-123')
@@ -318,9 +318,9 @@ describe('loadDefaultConfig with envoy env vars', () => {
   const originalEnv = { ...process.env }
 
   const setRequiredEnv = () => {
-    process.env.CATALYST_NODE_ID = 'test-node.somebiz.local.io'
+    process.env.CATALYST_NODE_ID = 'test-node'
     process.env.CATALYST_PEERING_ENDPOINT = 'ws://localhost:3000'
-    process.env.CATALYST_DOMAINS = 'somebiz.local.io'
+    process.env.CATALYST_ORG_DOMAIN = 'test.example'
   }
 
   const clearEnv = () => {

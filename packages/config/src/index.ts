@@ -27,10 +27,15 @@ export type EnvoyConfig = z.infer<typeof EnvoyConfigSchema>
 
 /**
  * Shared Node Identity Schema
+ *
+ * The `name` field is the node's fully-qualified domain name (FQDN),
+ * constructed as `{nodeId}.{orgDomain}` (e.g., `router-us-east-1.examplecompany.io`).
+ *
+ * The `domain` field is the organization's base domain (e.g., `examplecompany.io`).
  */
 export const NodeConfigSchema = z.object({
   name: z.string(),
-  domains: z.array(z.string()),
+  domain: z.string(),
   endpoint: z.string().optional(),
   labels: z.record(z.string(), z.string()).optional(),
   peerToken: z.string().optional(), // Token to use when connecting to this peer
@@ -137,10 +142,8 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
     )
   }
 
-  //Oonly required for the ORCH and AUTH
-  const domains = process.env.CATALYST_DOMAINS
-    ? process.env.CATALYST_DOMAINS.split(',').map((d) => d.trim())
-    : []
+  // Organization domain — used to construct FQDN: {nodeId}.{orgDomain}
+  const orgDomain = process.env.CATALYST_ORG_DOMAIN || ''
 
   const hasEnvoyEnv =
     process.env.CATALYST_ENVOY_ADMIN_PORT ||
@@ -172,9 +175,9 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
     node: {
-      name: nodeName,
+      name: orgDomain ? `${nodeName}.${orgDomain}` : nodeName,
+      domain: orgDomain,
       endpoint: peeringEndpoint,
-      domains: domains,
     },
     envoy,
     orchestrator: {
