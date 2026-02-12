@@ -152,9 +152,7 @@ services:
       - PRODUCER_ENABLED=true
       - PRODUCER_TOPIC=tak/cot
       - LOG_LEVEL=info
-      - TAK_HEARTBEAT_CALLSIGN=redweek-tak-publisher
-      - TAK_HEARTBEAT_CALLSIGN_UID=redweek-zeno-publisher-callsign-1234
-      - EMULATOR_PUBLISHERS=[{"emulator":"wiesbaden","topic":"tak/cot","intervalMs":1000},{"emulator":"virginia","topic":"tak/cot","intervalMs":500}]
+      - EMULATOR_PUBLISHERS=[{"emulator":"wiesbaden","topic":"tak/cot","intervalMs":1000},{"emulator":"virginia","topic":"tak/cot","intervalMs":500},{"emulator":"china","topic":"tak/cot","intervalMs":2000},{"emulator":"japan","topic":"tak/cot","intervalMs":500},{"emulator":"russia","topic":"tak/cot","intervalMs":2000}]
     labels:
       catalyst.stack: a
     depends_on:
@@ -382,6 +380,11 @@ services:
       # Subscribe to CoT data published by the emulators on Node A
       - ZENOH_SUBSCRIPTIONS=[{"topic":"tak/cot","transform":"identity"}]
       # TAK server connection (optional — uncomment for real TAK integration)
+      - TAK_HEARTBEAT_INTERVAL=5000
+      - TAK_HEARTBEAT_CALLSIGN=redweek-tak-publisher
+      - TAK_HEARTBEAT_CALLSIGN_UID=redweek-zeno-publisher-callsign-1234
+      - TAK_HEARTBEAT_GROUP_ROLE=Team Member
+      - TAK_HEARTBEAT_GROUP_NAME=Green Team
       - TAK_HOST=tak-server-feb-demo.fly.dev
       - TAK_PORT=8089
       - TAK_TLS_CERT=/app/certs/catalyst.cert.pem
