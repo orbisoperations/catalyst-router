@@ -54,7 +54,6 @@ export class XdsControlPlane {
   private readonly cache: SnapshotCache
   private readonly logger: ServiceTelemetry['logger']
   private started = false
-  private nonceCounter = 0
 
   constructor(options: XdsControlPlaneOptions) {
     this.port = options.port
@@ -122,11 +121,13 @@ export class XdsControlPlane {
     const subscribedTypes = new Set<string>()
     const sentVersions = new Map<string, string>()
     let latestSnapshot: XdsSnapshot | undefined = this.cache.getSnapshot()
+    let streamNonce = 0
+    const nextNonce = (): string => String(++streamNonce)
 
     /** Send snapshot resources for subscribed types that haven't been sent at this version. */
     const sendSubscribed = (): void => {
       if (!latestSnapshot) return
-      this.sendSnapshotForTypes(call, latestSnapshot, subscribedTypes, sentVersions)
+      this.sendSnapshotForTypes(call, latestSnapshot, subscribedTypes, sentVersions, nextNonce)
     }
 
     // Watch for snapshot changes — send updates for subscribed types
@@ -193,7 +194,8 @@ export class XdsControlPlane {
     call: grpc.ServerDuplexStream<Buffer, Buffer>,
     snapshot: XdsSnapshot,
     subscribedTypes: Set<string>,
-    sentVersions: Map<string, string>
+    sentVersions: Map<string, string>,
+    nextNonce: () => string
   ): void {
     // CDS first (only if subscribed and not already sent at this version)
     if (
@@ -205,7 +207,7 @@ export class XdsControlPlane {
         version_info: snapshot.version,
         resources: cdsResources,
         type_url: CLUSTER_TYPE_URL,
-        nonce: String(++this.nonceCounter),
+        nonce: nextNonce(),
       })
       call.write(cdsResponse)
       sentVersions.set(CLUSTER_TYPE_URL, snapshot.version)
@@ -224,7 +226,7 @@ export class XdsControlPlane {
         version_info: snapshot.version,
         resources: ldsResources,
         type_url: LISTENER_TYPE_URL,
-        nonce: String(++this.nonceCounter),
+        nonce: nextNonce(),
       })
       call.write(ldsResponse)
       sentVersions.set(LISTENER_TYPE_URL, snapshot.version)
