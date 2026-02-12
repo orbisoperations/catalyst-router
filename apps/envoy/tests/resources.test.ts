@@ -610,3 +610,205 @@ describe('buildXdsSnapshot', () => {
     expect(ep.port_value).toBe(5001)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Protocol-specific configuration
+// ---------------------------------------------------------------------------
+
+describe('protocol-specific listener config', () => {
+  it('adds WebSocket upgrade_configs for http:graphql protocol', () => {
+    const listener = buildIngressListener({
+      channelName: 'gql-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      protocol: 'http:graphql',
+    })
+    const hcm = listener.filter_chains[0].filters[0].typed_config
+    expect(hcm.upgrade_configs).toEqual([{ upgrade_type: 'websocket' }])
+  })
+
+  it('adds WebSocket upgrade_configs for http:gql protocol', () => {
+    const listener = buildIngressListener({
+      channelName: 'gql-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      protocol: 'http:gql',
+    })
+    const hcm = listener.filter_chains[0].filters[0].typed_config
+    expect(hcm.upgrade_configs).toEqual([{ upgrade_type: 'websocket' }])
+  })
+
+  it('disables route timeout for http:graphql (long-lived subscriptions)', () => {
+    const listener = buildIngressListener({
+      channelName: 'gql-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      protocol: 'http:graphql',
+    })
+    const route =
+      listener.filter_chains[0].filters[0].typed_config.route_config.virtual_hosts[0].routes[0]
+        .route
+    expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
+  })
+
+  it('disables route timeout for http:grpc (streaming)', () => {
+    const listener = buildIngressListener({
+      channelName: 'grpc-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      protocol: 'http:grpc',
+    })
+    const route =
+      listener.filter_chains[0].filters[0].typed_config.route_config.virtual_hosts[0].routes[0]
+        .route
+    expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
+  })
+
+  it('does not add upgrade_configs for http:grpc', () => {
+    const listener = buildIngressListener({
+      channelName: 'grpc-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      protocol: 'http:grpc',
+    })
+    const hcm = listener.filter_chains[0].filters[0].typed_config
+    expect(hcm.upgrade_configs).toBeUndefined()
+  })
+
+  it('does not add upgrade_configs or timeout for plain http', () => {
+    const listener = buildIngressListener({
+      channelName: 'rest-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      protocol: 'http',
+    })
+    const hcm = listener.filter_chains[0].filters[0].typed_config
+    expect(hcm.upgrade_configs).toBeUndefined()
+    const route = hcm.route_config.virtual_hosts[0].routes[0].route
+    expect(route.timeout).toBeUndefined()
+  })
+
+  it('applies protocol options to egress listeners too', () => {
+    const listener = buildEgressListener({
+      channelName: 'gql-api',
+      peerName: 'node-a',
+      port: 10001,
+      protocol: 'http:graphql',
+    })
+    const hcm = listener.filter_chains[0].filters[0].typed_config
+    expect(hcm.upgrade_configs).toEqual([{ upgrade_type: 'websocket' }])
+    const route = hcm.route_config.virtual_hosts[0].routes[0].route
+    expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
+  })
+})
+
+describe('protocol-specific cluster config', () => {
+  it('sets upstream_http2 for http:grpc local clusters', () => {
+    const cluster = buildLocalCluster({
+      channelName: 'grpc-api',
+      address: '127.0.0.1',
+      port: 5001,
+      protocol: 'http:grpc',
+    })
+    expect(cluster.upstream_http2).toBe(true)
+  })
+
+  it('does not set upstream_http2 for http local clusters', () => {
+    const cluster = buildLocalCluster({
+      channelName: 'rest-api',
+      address: '127.0.0.1',
+      port: 5001,
+      protocol: 'http',
+    })
+    expect(cluster.upstream_http2).toBeUndefined()
+  })
+
+  it('does not set upstream_http2 for http:graphql local clusters', () => {
+    const cluster = buildLocalCluster({
+      channelName: 'gql-api',
+      address: '127.0.0.1',
+      port: 5001,
+      protocol: 'http:graphql',
+    })
+    expect(cluster.upstream_http2).toBeUndefined()
+  })
+
+  it('sets upstream_http2 for http:grpc remote clusters', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'grpc-api',
+      peerName: 'node-a',
+      peerAddress: '10.0.0.5',
+      peerPort: 8001,
+      protocol: 'http:grpc',
+    })
+    expect(cluster.upstream_http2).toBe(true)
+  })
+
+  it('does not set upstream_http2 for http remote clusters', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'rest-api',
+      peerName: 'node-a',
+      peerAddress: '10.0.0.5',
+      peerPort: 8001,
+      protocol: 'http',
+    })
+    expect(cluster.upstream_http2).toBeUndefined()
+  })
+})
+
+describe('buildXdsSnapshot protocol-aware', () => {
+  it('propagates protocol to ingress listener and local cluster for gRPC', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [
+        {
+          name: 'grpc-svc',
+          protocol: 'http:grpc',
+          endpoint: 'http://localhost:50051',
+          envoyPort: 8001,
+        },
+      ],
+      internal: [],
+      portAllocations: { 'grpc-svc': 8001 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    // Listener: route timeout disabled
+    const route =
+      snapshot.listeners[0].filter_chains[0].filters[0].typed_config.route_config.virtual_hosts[0]
+        .routes[0].route
+    expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
+
+    // Cluster: HTTP/2 upstream enabled
+    expect(snapshot.clusters[0].upstream_http2).toBe(true)
+  })
+
+  it('propagates protocol to egress listener and remote cluster for GraphQL', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [],
+      internal: [
+        {
+          name: 'gql-api',
+          protocol: 'http:graphql',
+          endpoint: 'http://peer:4000/graphql',
+          envoyPort: 8002,
+          peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
+          peerName: 'node-a',
+          nodePath: ['local', 'node-a'],
+        },
+      ],
+      portAllocations: { 'egress_gql-api_via_node-a': 10001 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    // Listener: WebSocket upgrade + timeout disabled
+    const hcm = snapshot.listeners[0].filter_chains[0].filters[0].typed_config
+    expect(hcm.upgrade_configs).toEqual([{ upgrade_type: 'websocket' }])
+    const route = hcm.route_config.virtual_hosts[0].routes[0].route
+    expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
+
+    // Cluster: no HTTP/2 (GraphQL is HTTP/1.1)
+    expect(snapshot.clusters[0].upstream_http2).toBeUndefined()
+  })
+})
