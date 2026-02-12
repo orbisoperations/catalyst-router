@@ -70,7 +70,9 @@ export function createPortAllocator(
         return { success: true, port: existing }
       }
 
-      // Find next available port
+      // Take the first available port. Set iteration follows insertion order
+      // (ES2015 spec), so fresh ports come first and released ports go to the
+      // back — giving FIFO-like reuse that spreads port usage evenly.
       const next = available.values().next()
       if (next.done) {
         return { success: false, error: 'No ports available' }
