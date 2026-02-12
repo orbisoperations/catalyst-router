@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { DEFAULTS, DEVICES } from './defaults.js'
+import { validatePassword, PASSWORD_REQUIREMENTS } from './password.js'
 import type { ResolvedOptions } from './types.js'
 
 function section(title: string): void {
@@ -56,10 +57,19 @@ export async function promptMissing(opts: Record<string, unknown>): Promise<Reso
   }
 
   if (!resolved.password) {
-    resolved.password = await password({
-      message: 'Password:',
-      mask: '*',
-    })
+    let pass = ''
+    while (true) {
+      pass = await password({
+        message: 'Password:',
+        mask: '*',
+      })
+      const errors = validatePassword(pass)
+      if (errors.length === 0) break
+      console.log(`\n  Password does not meet rpi-image-gen requirements:`)
+      for (const err of errors) console.log(`    - ${err}`)
+      console.log(`  ${PASSWORD_REQUIREMENTS}\n`)
+    }
+    resolved.password = pass
   }
 
   // --- WiFi ---

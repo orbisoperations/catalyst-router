@@ -5,6 +5,7 @@ import { renderYaml } from './yaml-writer.js'
 import { validateLayers, printValidationResults } from './validator.js'
 import { writeOutputDir } from './output-writer.js'
 import { printInstructions } from './instructions.js'
+import { validatePassword, PASSWORD_REQUIREMENTS } from './password.js'
 import { DEFAULTS } from './defaults.js'
 
 const program = new Command()
@@ -89,6 +90,17 @@ program.hook('preAction', async (thisCommand) => {
 program.action(async (opts) => {
   // 1. Resolve missing options
   const resolved = opts.nonInteractive ? opts : await promptMissing(opts)
+
+  // 1.5. Validate password (interactive mode validates during prompt)
+  if (resolved.password) {
+    const pwErrors = validatePassword(resolved.password)
+    if (pwErrors.length > 0) {
+      process.stderr.write('\n\u2717 Password does not meet rpi-image-gen requirements:\n')
+      for (const err of pwErrors) process.stderr.write(`    - ${err}\n`)
+      process.stderr.write(`\n  ${PASSWORD_REQUIREMENTS}\n\n`)
+      process.exit(1)
+    }
+  }
 
   // 2. Build config object
   const config = buildConfig(resolved)
