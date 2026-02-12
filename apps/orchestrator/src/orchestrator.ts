@@ -104,6 +104,7 @@ export class CatalystNodeBus extends RpcTarget {
   private portAllocator?: PortAllocator
   private rib: RoutingInformationBase
   private queue: ActionQueue
+  private tickTimer?: ReturnType<typeof setInterval>
   public lastNotificationPromise?: Promise<void>
 
   constructor(opts: {
@@ -158,6 +159,36 @@ export class CatalystNodeBus extends RpcTarget {
         `Node name ${name} does not match any configured domains: ${domains.join(', ')}`
       )
     }
+  }
+
+  startTick(): void {
+    if (this.tickTimer) return
+    const intervalMs = this.computeTickInterval()
+    this.logger.info`Starting keepalive tick (interval: ${intervalMs}ms)`
+    this.tickTimer = setInterval(() => {
+      this.dispatch({ action: Actions.Tick, data: { now: Date.now() } }).catch((e) => {
+        this.logger.error`Tick dispatch failed: ${e}`
+      })
+    }, intervalMs)
+  }
+
+  stopTick(): void {
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer)
+      this.tickTimer = undefined
+    }
+  }
+
+  private computeTickInterval(): number {
+    const peers = this.rib.getState().internal.peers
+    const holdTimes = peers
+      .filter((p) => p.connectionStatus === 'connected' && p.holdTime != null)
+      .map((p) => p.holdTime!)
+
+    if (holdTimes.length === 0) return 30_000
+
+    const minHoldTime = Math.min(...holdTimes)
+    return Math.max(1000, (minHoldTime / 6) * 1000)
   }
 
   private async validateToken(

@@ -91,7 +91,28 @@ export class RoutingInformationBase {
    */
   commit(plan: Plan): CommitResult {
     const prevState = this.state
-    this.state = plan.newState
+    let newState = plan.newState
+
+    // Update lastSent for peers that will receive propagations
+    const sentPeerNames = new Set(
+      plan.propagations
+        .filter((p) => p.type === 'update' || p.type === 'keepalive')
+        .map((p) => p.peer.name)
+    )
+    if (sentPeerNames.size > 0) {
+      const now = Date.now()
+      newState = {
+        ...newState,
+        internal: {
+          ...newState.internal,
+          peers: newState.internal.peers.map((p) =>
+            sentPeerNames.has(p.name) ? { ...p, lastSent: now } : p
+          ),
+        },
+      }
+    }
+
+    this.state = newState
 
     const routesChanged =
       prevState.local.routes !== plan.newState.local.routes ||
@@ -100,7 +121,7 @@ export class RoutingInformationBase {
     return {
       action: plan.action,
       prevState: plan.prevState,
-      newState: plan.newState,
+      newState,
       propagations: plan.propagations,
       routesChanged,
     }
@@ -267,16 +288,17 @@ export class RoutingInformationBase {
           }
         }
 
-        if (peer.connectionStatus !== 'connected') {
-          state = {
-            ...state,
-            internal: {
-              ...state.internal,
-              peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
-              ),
-            },
-          }
+        const now = Date.now()
+        state = {
+          ...state,
+          internal: {
+            ...state.internal,
+            peers: state.internal.peers.map((p) =>
+              p.name === action.data.peerInfo.name
+                ? { ...p, connectionStatus: 'connected', lastReceived: now }
+                : p
+            ),
+          },
         }
         break
       }
@@ -284,12 +306,15 @@ export class RoutingInformationBase {
         const peerList = state.internal.peers
         const peer = peerList.find((p) => p.name === action.data.peerInfo.name)
         if (peer) {
+          const now = Date.now()
           state = {
             ...state,
             internal: {
               ...state.internal,
               peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
+                p.name === action.data.peerInfo.name
+                  ? { ...p, connectionStatus: 'connected', lastReceived: now }
+                  : p
               ),
             },
           }
@@ -357,12 +382,45 @@ export class RoutingInformationBase {
           }
         }
 
+        // Update lastReceived for the sending peer
+        const now = Date.now()
         state = {
           ...state,
           internal: {
             ...state.internal,
             routes: currentInternalRoutes,
+            peers: state.internal.peers.map((p) =>
+              p.name === sourcePeerName ? { ...p, lastReceived: now } : p
+            ),
           },
+        }
+        break
+      }
+      case Actions.Tick: {
+        const now = action.data.now
+        const expiredPeerNames: string[] = []
+
+        for (const peer of state.internal.peers) {
+          if (
+            peer.connectionStatus === 'connected' &&
+            peer.holdTime != null &&
+            peer.lastReceived != null &&
+            now - peer.lastReceived > peer.holdTime * 1000
+          ) {
+            expiredPeerNames.push(peer.name)
+            this.logger.info`Hold timer expired for peer ${peer.name}`
+          }
+        }
+
+        if (expiredPeerNames.length > 0) {
+          state = {
+            ...state,
+            internal: {
+              ...state.internal,
+              peers: state.internal.peers.filter((p) => !expiredPeerNames.includes(p.name)),
+              routes: state.internal.routes.filter((r) => !expiredPeerNames.includes(r.peerName)),
+            },
+          }
         }
         break
       }
@@ -548,6 +606,39 @@ export class RoutingInformationBase {
       }
       case Actions.InternalProtocolClose: {
         return this.computeWithdrawalPropagations(action.data.peerInfo.name, prevState, newState)
+      }
+      case Actions.Tick: {
+        const now = action.data.now
+        const propagations: Propagation[] = []
+
+        // 1. Withdrawals for expired peers (processed first)
+        const expiredPeerNames = prevState.internal.peers
+          .filter(
+            (p) =>
+              p.connectionStatus === 'connected' &&
+              p.holdTime != null &&
+              p.lastReceived != null &&
+              now - p.lastReceived > p.holdTime * 1000
+          )
+          .map((p) => p.name)
+
+        for (const expiredName of expiredPeerNames) {
+          propagations.push(...this.computeWithdrawalPropagations(expiredName, prevState, newState))
+        }
+
+        // 2. Keepalives for healthy peers (after expirations)
+        for (const peer of newState.internal.peers) {
+          if (
+            peer.connectionStatus === 'connected' &&
+            peer.holdTime != null &&
+            peer.lastSent != null &&
+            now - peer.lastSent > (peer.holdTime / 3) * 1000
+          ) {
+            propagations.push({ type: 'keepalive', peer })
+          }
+        }
+
+        return propagations
       }
       default:
         return []
