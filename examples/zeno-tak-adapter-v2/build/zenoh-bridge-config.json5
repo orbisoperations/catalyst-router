@@ -1,0 +1,49 @@
+{
+  // Zenoh bridge configuration - runs in peer mode to connect to an external Zenoh router.
+  //
+  // Data flow:
+  //   External Zenoh Router (tcp/:7447)
+  //       ^-- in-container zenohd (peer/bridge, tcp/:7447 + remote_api ws/:10000)
+  //             ^-- zenoh-ts adapter app (ws://localhost:10000)
+  //
+  mode: "peer",
+
+  // Connect to the external Zenoh router via native Zenoh TCP protocol.
+  // The __ZENOH_EXTERNAL_ROUTER_URL__ placeholder is replaced at runtime by docker-entrypoint.sh.
+  // Expected format: tcp/<host>:<port>   (e.g. tcp/host.docker.internal:7447)
+  connect: {
+    endpoints: [
+      "__ZENOH_EXTERNAL_ROUTER_URL__"
+    ]
+  },
+
+  // Listen locally so other Zenoh clients/peers could connect if needed.
+  listen: {
+    endpoints: [
+      "tcp/0.0.0.0:7447"
+    ]
+  },
+
+  // Plugin loading -- /usr/lib is where the Dockerfile places the remote_api .so
+  plugins_loading: {
+    enabled: true,
+    search_dirs: [
+      "/usr/lib",
+      "/usr/local/lib",
+      "~/.zenoh/lib"
+    ]
+  },
+
+  plugins: {
+    // Remote API plugin: exposes a WebSocket endpoint that zenoh-ts connects to.
+    // This is the ONLY WebSocket listener -- the adapter talks to zenohd through it.
+    remote_api: {
+      websocket_port: "10000"
+    },
+
+    // REST plugin for health checks (curl http://localhost:8000/@/router/local)
+    rest: {
+      http_port: 8000
+    }
+  }
+}
