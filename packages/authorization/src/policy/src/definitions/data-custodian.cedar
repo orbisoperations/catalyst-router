@@ -7,6 +7,6 @@ permit (
     resource
 )
 when {
-    principal.trustedDomains.contains(resource.domainId) &&
+    principal.orgDomain == resource.orgDomain &&
     (principal.trustedNodes.isEmpty() || principal.trustedNodes.contains(resource.nodeId))
 };

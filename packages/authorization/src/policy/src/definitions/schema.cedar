@@ -4,56 +4,56 @@ namespace CATALYST {
         name: String,
         type: String,
         trustedNodes: Set<String>,
-        trustedDomains: Set<String>
+        orgDomain: String
     };
     entity NODE {
         id: String,
         name: String,
         type: String,
         trustedNodes: Set<String>,
-        trustedDomains: Set<String>
+        orgDomain: String
     };
     entity DATA_CUSTODIAN {
         id: String,
         name: String,
         type: String,
         trustedNodes: Set<String>,
-        trustedDomains: Set<String>
+        orgDomain: String
     };
     entity NODE_CUSTODIAN {
         id: String,
         name: String,
         type: String,
         trustedNodes: Set<String>,
-        trustedDomains: Set<String>
+        orgDomain: String
     };
     entity USER {
         id: String,
         name: String,
         type: String,
         trustedNodes: Set<String>,
-        trustedDomains: Set<String>
+        orgDomain: String
     };
 
     entity IBGP {
         nodeId: String,
-        domainId: String
+        orgDomain: String
     };
     entity Peer {
         nodeId: String,
-        domainId: String
+        orgDomain: String
     };
     entity Route {
         nodeId: String,
-        domainId: String
+        orgDomain: String
     };
     entity Token {
         nodeId: String,
-        domainId: String
+        orgDomain: String
     };
     entity AdminPanel {
         nodeId: String,
-        domainId: String
+        orgDomain: String
     };
 
     action LOGIN appliesTo {

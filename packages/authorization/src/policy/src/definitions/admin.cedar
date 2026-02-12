@@ -4,6 +4,6 @@ permit (
     resource
 )
 when {
-    (principal.trustedDomains.isEmpty() || principal.trustedDomains.contains(resource.domainId)) &&
+    (principal.orgDomain == "" || principal.orgDomain == resource.orgDomain) &&
     (principal.trustedNodes.isEmpty() || principal.trustedNodes.contains(resource.nodeId))
 };

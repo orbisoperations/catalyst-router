@@ -35,7 +35,7 @@ describe('Auth Progressive API', () => {
         id: 'admin-user',
         name: 'Admin',
         type: 'user',
-        trustedDomains: ['test-domain'],
+        orgDomain: 'test-domain',
       },
       principal: Principal.ADMIN,
     })
@@ -47,7 +47,7 @@ describe('Auth Progressive API', () => {
         id: 'regular-user',
         name: 'User',
         type: 'user',
-        trustedDomains: ['test-domain'],
+        orgDomain: 'test-domain',
       },
       principal: Principal.USER,
     })
@@ -165,7 +165,7 @@ describe('Auth Progressive API', () => {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          trustedDomains: ['other-domain'],
+          orgDomain: 'other-domain',
         },
         principal: Principal.ADMIN,
       })
@@ -183,7 +183,7 @@ describe('Auth Progressive API', () => {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          trustedDomains: ['test-domain'],
+          orgDomain: 'test-domain',
           trustedNodes: ['other-node'],
         },
         principal: Principal.ADMIN,
@@ -202,7 +202,7 @@ describe('Auth Progressive API', () => {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          trustedDomains: ['test-domain'],
+          orgDomain: 'test-domain',
           trustedNodes: ['test-node'],
         },
         principal: Principal.ADMIN,
@@ -212,20 +212,20 @@ describe('Auth Progressive API', () => {
       expect(handlers).not.toHaveProperty('error')
     })
 
-    it('should grant access across multiple trusted domains', async () => {
-      // Token trusted for both A and B
-      const multiDomainToken = await tokenFactory.mint({
+    it('should grant access when orgDomain matches', async () => {
+      // Token with matching orgDomain
+      const matchingDomainToken = await tokenFactory.mint({
         subject: 'admin-user',
         entity: {
           id: 'admin-user',
           name: 'Admin',
           type: 'user',
-          trustedDomains: ['domain-A', 'test-domain'],
+          orgDomain: 'test-domain',
         },
         principal: Principal.ADMIN,
       })
 
-      const handlers = await rpcServer.tokens(multiDomainToken)
+      const handlers = await rpcServer.tokens(matchingDomainToken)
       expect(handlers).not.toHaveProperty('error')
     })
   })

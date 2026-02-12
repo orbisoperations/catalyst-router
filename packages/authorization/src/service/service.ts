@@ -67,7 +67,7 @@ export class AuthService extends CatalystService {
         id: 'system',
         name: 'System Admin',
         type: 'service',
-        trustedDomains: this.config.node.domain ? [this.config.node.domain] : [],
+        orgDomain: this.config.node.domain || '',
         trustedNodes: [],
       },
       principal: Principal.ADMIN,

@@ -45,7 +45,7 @@ export async function mintTokenHandler(input: MintTokenInput): Promise<MintToken
         name: input.name,
         type: input.type,
         nodeId: input.nodeId,
-        trustedDomains: input.trustedDomains,
+        orgDomain: input.orgDomain,
         trustedNodes: input.trustedNodes,
       },
       principal: input.principal,

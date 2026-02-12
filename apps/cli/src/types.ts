@@ -76,7 +76,7 @@ export const MintTokenInputSchema = z.object({
   type: z.enum(['user', 'service'] as const).default('user'),
   expiresIn: z.string().optional(),
   nodeId: z.string().optional(),
-  trustedDomains: z.array(z.string()).optional(),
+  orgDomain: z.string().optional(),
   trustedNodes: z.array(z.string()).optional(),
   authUrl: z.string().url().optional(),
   token: z.string().optional(),

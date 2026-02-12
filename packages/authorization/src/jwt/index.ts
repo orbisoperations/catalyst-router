@@ -49,8 +49,8 @@ export interface MintOptions {
     nodeId?: string
     /** Set of nodes that are trusted to use this token */
     trustedNodes?: string[]
-    /** Set of domains that are trusted to use this token */
-    trustedDomains?: string[]
+    /** Organization domain for this entity */
+    orgDomain?: string
   }
 }
 
@@ -101,7 +101,7 @@ export function jwtToEntity(payload: Record<string, unknown>): CedarEntity<Catal
     type: string
     nodeId?: string
     trustedNodes?: string[]
-    trustedDomains?: string[]
+    orgDomain?: string
   }
 
   // Read principal directly from token — falls back to USER if missing
@@ -122,9 +122,9 @@ export function jwtToEntity(payload: Record<string, unknown>): CedarEntity<Catal
       ...((payload.claims as Record<string, unknown>) || {}),
     }
 
-    // Map 'nodes' and 'domains' from entity OR top-level payload claims to trusted sets
+    // Map 'nodes' from entity OR top-level payload claims to trusted set
     attributes.trustedNodes = entity.trustedNodes || (payload.nodes as string[]) || []
-    attributes.trustedDomains = entity.trustedDomains || (payload.domains as string[]) || []
+    attributes.orgDomain = entity.orgDomain || (payload.orgDomain as string) || ''
 
     builder.setAttributes(attributes)
   }
