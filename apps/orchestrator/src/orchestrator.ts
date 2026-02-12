@@ -21,6 +21,7 @@ import {
   type RpcStub,
   RpcTarget,
 } from 'capnweb'
+import { PeerTransport, type Propagation } from './peer-transport.js'
 
 export interface PublicApi {
   getNetworkClient(
@@ -131,6 +132,7 @@ export class CatalystNodeBus extends RpcTarget {
   private readonly logger = getLogger(['catalyst', 'orchestrator'])
   private state: RouteTable
   private connectionPool: ConnectionPool
+  private peerTransport: PeerTransport
   private config: OrchestratorConfig
   private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
@@ -162,6 +164,8 @@ export class CatalystNodeBus extends RpcTarget {
       (opts.connectionPool?.type
         ? new ConnectionPool(opts.connectionPool.type)
         : new ConnectionPool())
+
+    this.peerTransport = new PeerTransport(this.connectionPool, this.nodeToken)
 
     if (this.config.envoyConfig?.portRange) {
       this.portAllocator = createPortAllocator(this.config.envoyConfig.portRange)
@@ -481,6 +485,38 @@ export class CatalystNodeBus extends RpcTarget {
     return { success: true, state }
   }
 
+  private buildRouteSyncPayload(
+    state: RouteTable,
+    targetPeerName: string
+  ): { updates: Array<{ action: 'add'; route: DataChannelDefinition; nodePath: string[] }> } {
+    return {
+      updates: [
+        ...state.local.routes.map((r) => ({
+          action: 'add' as const,
+          route: r,
+          nodePath: [this.config.node.name],
+        })),
+        ...state.internal.routes
+          .filter((r) => !r.nodePath.includes(targetPeerName))
+          .map((r) => {
+            let route = r as DataChannelDefinition
+            if (this.config.envoyConfig && this.portAllocator) {
+              const egressKey = `egress_${r.name}_via_${r.peerName}`
+              const localPort = this.portAllocator.getPort(egressKey)
+              if (localPort) {
+                route = { ...r, envoyPort: localPort }
+              }
+            }
+            return {
+              action: 'add' as const,
+              route,
+              nodePath: [this.config.node.name, ...r.nodePath],
+            }
+          }),
+      ],
+    }
+  }
+
   private async handleGraphqlConfiguration() {
     const gatewayEndpoint = this.config.gqlGatewayConfig?.endpoint
     if (!gatewayEndpoint) return
@@ -522,87 +558,36 @@ export class CatalystNodeBus extends RpcTarget {
   async handleBGPNotify(action: Action, _state: RouteTable, prevState: RouteTable): Promise<void> {
     switch (action.action) {
       case Actions.LocalPeerCreate: {
-        // Perform side effect: Try to open connection
+        this.logger
+          .info`LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`
         try {
-          this.logger
-            .info`LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`
-          const stub = this.connectionPool.get(action.data.endpoint)
-          if (stub) {
-            const token = action.data.peerToken!
-            const connectionResult = await stub.getIBGPClient(token)
-
-            if (connectionResult.success) {
-              const result = await connectionResult.client.open(this.config.node)
-
-              if (result.success) {
-                this.logger.info`Successfully opened connection to ${action.data.name}`
-                // Dispatch connected action
-                await this.dispatch({
-                  action: Actions.InternalProtocolConnected,
-                  data: { peerInfo: action.data },
-                })
-              }
-            } else {
-              this.logger.error`Failed to get peer connection: ${connectionResult.error}`
-            }
+          const peerRecord = _state.internal.peers.find((p) => p.name === action.data.name)
+          if (peerRecord) {
+            await this.peerTransport.sendOpen(peerRecord, this.config.node)
+            this.logger.info`Successfully opened connection to ${action.data.name}`
+            await this.dispatch({
+              action: Actions.InternalProtocolConnected,
+              data: { peerInfo: action.data },
+            })
           }
         } catch (e) {
-          // Connection failed, leave as initializing (or could transition to error state)
           this.logger.error`Failed to open connection to ${action.data.name}: ${e}`
         }
         break
       }
       case Actions.InternalProtocolOpen: {
         this.logger.info`InternalProtocolOpen: sync request from ${action.data.peerInfo.name}`
-        // Sync existing routes (local AND internal) back to the new peer
-        const allRoutes = [
-          ..._state.local.routes.map((r) => ({
-            action: 'add' as const,
-            route: r,
-            nodePath: [this.config.node.name],
-          })),
-          ..._state.internal.routes
-            .filter((r) => !r.nodePath.includes(action.data.peerInfo.name))
-            .map((r) => {
-              // Rewrite envoyPort for multi-hop: use locally allocated egress port
-              let route = r as DataChannelDefinition
-              if (this.config.envoyConfig && this.portAllocator) {
-                const egressKey = `egress_${r.name}_via_${r.peerName}`
-                const localPort = this.portAllocator.getPort(egressKey)
-                if (localPort) {
-                  route = { ...r, envoyPort: localPort }
-                }
-              }
-              return {
-                action: 'add' as const,
-                route,
-                nodePath: [this.config.node.name, ...r.nodePath],
-              }
-            }),
-        ]
+        const allRoutesOpen = this.buildRouteSyncPayload(_state, action.data.peerInfo.name)
 
-        if (allRoutes.length > 0) {
+        if (allRoutesOpen.updates.length > 0) {
+          const localPeer = _state.internal.peers.find((p) => p.name === action.data.peerInfo.name)
+          if (!localPeer?.peerToken) {
+            this.logger
+              .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
+            break
+          }
           try {
-            const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
-            if (stub) {
-              // Use the LOCAL peer record's peerToken (minted by the remote auth
-              // service for us) rather than action.data.peerInfo.peerToken which
-              // comes from the remote node's own config and won't contain our token.
-              const localPeer = _state.internal.peers.find(
-                (p) => p.name === action.data.peerInfo.name
-              )
-              if (!localPeer?.peerToken) {
-                this.logger
-                  .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
-                break
-              }
-              const connectionResult = await stub.getIBGPClient(localPeer.peerToken)
-              if (connectionResult.success) {
-                await connectionResult.client.update(this.config.node, {
-                  updates: allRoutes,
-                })
-              }
-            }
+            await this.peerTransport.sendUpdate(localPeer, this.config.node, allRoutesOpen)
           } catch (e) {
             this.logger.error`Failed to sync routes back to ${action.data.peerInfo.name}: ${e}`
           }
@@ -610,49 +595,21 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       case Actions.InternalProtocolConnected: {
-        // Sync existing routes (local AND internal) to the new peer
-        const allRoutes = [
-          ..._state.local.routes.map((r) => ({
-            action: 'add' as const,
-            route: r,
-            nodePath: [this.config.node.name],
-          })),
-          ..._state.internal.routes
-            .filter((r) => !r.nodePath.includes(action.data.peerInfo.name))
-            .map((r) => {
-              // Rewrite envoyPort for multi-hop: use locally allocated egress port
-              let route = r as DataChannelDefinition
-              if (this.config.envoyConfig && this.portAllocator) {
-                const egressKey = `egress_${r.name}_via_${r.peerName}`
-                const localPort = this.portAllocator.getPort(egressKey)
-                if (localPort) {
-                  route = { ...r, envoyPort: localPort }
-                }
-              }
-              return {
-                action: 'add' as const,
-                route,
-                nodePath: [this.config.node.name, ...r.nodePath],
-              }
-            }),
-        ]
+        const allRoutesConnected = this.buildRouteSyncPayload(_state, action.data.peerInfo.name)
 
-        if (allRoutes.length > 0) {
+        if (allRoutesConnected.updates.length > 0) {
+          if (!action.data.peerInfo.peerToken) {
+            this.logger
+              .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
+            break
+          }
+          const peerRecord: PeerRecord = {
+            ...action.data.peerInfo,
+            peerToken: action.data.peerInfo.peerToken,
+            connectionStatus: 'connected',
+          }
           try {
-            const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
-            if (stub) {
-              if (!action.data.peerInfo.peerToken) {
-                this.logger
-                  .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
-                break
-              }
-              const connectionResult = await stub.getIBGPClient(action.data.peerInfo.peerToken)
-              if (connectionResult.success) {
-                await connectionResult.client.update(this.config.node, {
-                  updates: allRoutes,
-                })
-              }
-            }
+            await this.peerTransport.sendUpdate(peerRecord, this.config.node, allRoutesConnected)
           } catch (e) {
             this.logger.error`Failed to sync routes to ${action.data.peerInfo.name}: ${e}`
           }
@@ -660,144 +617,105 @@ export class CatalystNodeBus extends RpcTarget {
         break
       }
       case Actions.LocalPeerDelete: {
-        // 1. Close connection to the deleted peer
-        const peer = prevState.internal.peers.find((p) => p.name === action.data.name)
-        if (peer) {
-          if (!peer.peerToken) {
-            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping close`
-          } else {
-            try {
-              const stub = this.connectionPool.get(peer.endpoint)
-              if (stub) {
-                const connectionResult = await stub.getIBGPClient(peer.peerToken)
-                if (connectionResult.success) {
-                  await connectionResult.client.close(this.config.node, 1000, 'Peer removed')
-                }
-              }
-            } catch (e) {
-              this.logger.error`Failed to close connection to ${peer.name}: ${e}`
-            }
+        const deletedPeer = prevState.internal.peers.find((p) => p.name === action.data.name)
+        if (deletedPeer) {
+          try {
+            await this.peerTransport.sendClose(deletedPeer, this.config.node, 1000, 'Peer removed')
+          } catch (e) {
+            this.logger.error`Failed to close connection to ${deletedPeer.name}: ${e}`
           }
         }
-
-        // 2. Propagate removal of routes learned FROM this peer to OTHER peers
         await this.propagateWithdrawalsForPeer(action.data.name, prevState, _state)
         break
       }
       case Actions.LocalRouteCreate: {
-        // Broadcast to all connected internal peers
         const connectedPeers = _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected'
         )
         this.logger
           .info`LocalRouteCreate: ${action.data.name}, broadcasting to ${connectedPeers.length} peers`
-        for (const peer of connectedPeers) {
-          if (!peer.peerToken) {
-            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping route broadcast`
-            continue
-          }
-          try {
-            const stub = this.connectionPool.get(peer.endpoint)
-            if (stub) {
-              this.logger.debug`Pushing local route ${action.data.name} to ${peer.name}`
-              const connectionResult = await stub.getIBGPClient(peer.peerToken)
-              if (connectionResult.success) {
-                await connectionResult.client.update(this.config.node, {
-                  updates: [
-                    { action: 'add', route: action.data, nodePath: [this.config.node.name] },
-                  ],
-                })
-              }
-            }
-          } catch (e) {
-            this.logger.error`Failed to broadcast route to ${peer.name}: ${e}`
-          }
+        const update = {
+          updates: [
+            { action: 'add' as const, route: action.data, nodePath: [this.config.node.name] },
+          ],
         }
+        const propagations: Propagation[] = connectedPeers.map((peer) => ({
+          type: 'update' as const,
+          peer,
+          localNode: this.config.node,
+          update,
+        }))
+        await this.peerTransport.fanOut(propagations)
         break
       }
       case Actions.LocalRouteDelete: {
-        for (const peer of _state.internal.peers.filter(
+        const connectedPeersDelete = _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected'
-        )) {
-          if (!peer.peerToken) {
-            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping route withdrawal`
-            continue
-          }
-          try {
-            const stub = this.connectionPool.get(peer.endpoint)
-            if (stub) {
-              const connectionResult = await stub.getIBGPClient(peer.peerToken)
-              if (connectionResult.success) {
-                await connectionResult.client.update(this.config.node, {
-                  updates: [{ action: 'remove', route: action.data }],
-                })
-              }
-            }
-          } catch (e) {
-            this.logger.error`Failed to broadcast route removal to ${peer.name}: ${e}`
-          }
+        )
+        const deleteUpdate = {
+          updates: [{ action: 'remove' as const, route: action.data }],
         }
+        const deletePropagations: Propagation[] = connectedPeersDelete.map((peer) => ({
+          type: 'update' as const,
+          peer,
+          localNode: this.config.node,
+          update: deleteUpdate,
+        }))
+        await this.peerTransport.fanOut(deletePropagations)
         break
       }
       case Actions.InternalProtocolUpdate: {
         const sourcePeerName = action.data.peerInfo.name
+        const updatePropagations: Propagation[] = []
+
         for (const peer of _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected' && p.name !== sourcePeerName
         )) {
-          if (!peer.peerToken) {
-            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping update propagation`
-            continue
-          }
-          try {
-            // Filter out updates that have a loop (including the local node,
-            // as we should have already dropped them, and the target peer,
-            // as they would drop it anyway).
-            const safeUpdates = action.data.update.updates.filter((u) => {
-              if (u.action === 'remove') return true
-              const path = u.nodePath ?? []
-              if (path.includes(this.config.node.name)) return false
-              if (path.includes(peer.name)) return false
-              return true
-            })
+          // Filter out updates that have a loop (including the local node,
+          // as we should have already dropped them, and the target peer,
+          // as they would drop it anyway).
+          const safeUpdates = action.data.update.updates.filter((u) => {
+            if (u.action === 'remove') return true
+            const path = u.nodePath ?? []
+            if (path.includes(this.config.node.name)) return false
+            if (path.includes(peer.name)) return false
+            return true
+          })
 
-            if (safeUpdates.length === 0) continue
+          if (safeUpdates.length === 0) continue
 
-            const stub = this.connectionPool.get(peer.endpoint)
-            if (stub) {
-              const connectionResult = await stub.getIBGPClient(peer.peerToken)
-              if (connectionResult.success) {
-                // Prepend my FQDN to the path and rewrite envoyPort/envoyAddress
-                // for multi-hop: downstream peers must connect to this node's
-                // Envoy proxy, not the original upstream's.
-                const updatesWithPrepend = {
-                  updates: safeUpdates.map((u) => {
-                    if (u.action === 'add') {
-                      const rewritten = {
-                        ...u,
-                        nodePath: [this.config.node.name, ...(u.nodePath ?? [])],
-                      }
-                      // Rewrite envoyPort to this node's allocated egress port
-                      // for multi-hop transit routing. Use port allocator directly
-                      // because route.envoyPort is the upstream's port (remote cluster target).
-                      if (this.config.envoyConfig && this.portAllocator) {
-                        const egressKey = `egress_${u.route.name}_via_${sourcePeerName}`
-                        const localPort = this.portAllocator.getPort(egressKey)
-                        if (localPort) {
-                          rewritten.route = { ...u.route, envoyPort: localPort }
-                        }
-                      }
-                      return rewritten
-                    }
-                    return u
-                  }),
+          // Prepend my FQDN to the path and rewrite envoyPort/envoyAddress
+          // for multi-hop: downstream peers must connect to this node's
+          // Envoy proxy, not the original upstream's.
+          const updatesWithPrepend = {
+            updates: safeUpdates.map((u) => {
+              if (u.action === 'add') {
+                const rewritten = {
+                  ...u,
+                  nodePath: [this.config.node.name, ...(u.nodePath ?? [])],
                 }
-                await connectionResult.client.update(this.config.node, updatesWithPrepend)
+                if (this.config.envoyConfig && this.portAllocator) {
+                  const egressKey = `egress_${u.route.name}_via_${sourcePeerName}`
+                  const localPort = this.portAllocator.getPort(egressKey)
+                  if (localPort) {
+                    rewritten.route = { ...u.route, envoyPort: localPort }
+                  }
+                }
+                return rewritten
               }
-            }
-          } catch (e) {
-            this.logger.error`Failed to propagate update to ${peer.name}: ${e}`
+              return u
+            }),
           }
+
+          updatePropagations.push({
+            type: 'update',
+            peer,
+            localNode: this.config.node,
+            update: updatesWithPrepend,
+          })
         }
+
+        await this.peerTransport.fanOut(updatePropagations)
         break
       }
       case Actions.InternalProtocolClose: {
@@ -913,28 +831,19 @@ export class CatalystNodeBus extends RpcTarget {
 
     this.logger.info`Propagating withdrawal of ${removedRoutes.length} routes from ${peerName}`
 
-    for (const peer of newState.internal.peers.filter(
-      (p) => p.connectionStatus === 'connected' && p.name !== peerName
-    )) {
-      if (!peer.peerToken) {
-        this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping withdrawal propagation`
-        continue
-      }
-      try {
-        const stub = this.connectionPool.get(peer.endpoint)
-        if (stub) {
-          const connectionResult = await stub.getIBGPClient(peer.peerToken)
-
-          if (connectionResult.success) {
-            await connectionResult.client.update(this.config.node, {
-              updates: removedRoutes.map((r) => ({ action: 'remove' as const, route: r })),
-            })
-          }
-        }
-      } catch (e) {
-        this.logger.error`Failed to propagate withdrawal to ${peer.name}: ${e}`
-      }
+    const withdrawalUpdate = {
+      updates: removedRoutes.map((r) => ({ action: 'remove' as const, route: r })),
     }
+    const propagations: Propagation[] = newState.internal.peers
+      .filter((p) => p.connectionStatus === 'connected' && p.name !== peerName)
+      .map((peer) => ({
+        type: 'update' as const,
+        peer,
+        localNode: this.config.node,
+        update: withdrawalUpdate,
+      }))
+
+    await this.peerTransport.fanOut(propagations)
   }
 
   publicApi(): PublicApi {
