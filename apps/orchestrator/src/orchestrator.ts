@@ -132,6 +132,8 @@ interface AuthServiceApi {
 
 const DEFAULT_HOLD_TIME = 180 // seconds
 const DEFAULT_TICK_INTERVAL_MS = 20_000 // 20 seconds - tick frequency
+const CAS_BASE_DELAY_MS = 10 // base delay for exponential backoff on CAS retry
+const CAS_MAX_RETRIES = 3
 
 export class CatalystNodeBus extends RpcTarget {
   private readonly logger = getLogger(['catalyst', 'orchestrator'])
@@ -268,10 +270,13 @@ export class CatalystNodeBus extends RpcTarget {
     const result = await this.handleAction(sentAction, prevState)
     if (result.success) {
       // CAS: if state was modified by a concurrent dispatch between read and write,
-      // retry with fresh state to prevent stale-state overwrites
-      if (this.state !== prevState && _retryCount < 3) {
+      // retry with fresh state to prevent stale-state overwrites.
+      // Uses exponential backoff to give the concurrent dispatch time to settle.
+      if (this.state !== prevState && _retryCount < CAS_MAX_RETRIES) {
+        const delayMs = CAS_BASE_DELAY_MS * 2 ** _retryCount
         this.logger
-          .debug`State changed during ${sentAction.action}, retrying (attempt ${_retryCount + 1})`
+          .debug`State changed during ${sentAction.action}, retrying in ${delayMs}ms (attempt ${_retryCount + 1})`
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
         return this.dispatch(sentAction, _retryCount + 1)
       }
 
