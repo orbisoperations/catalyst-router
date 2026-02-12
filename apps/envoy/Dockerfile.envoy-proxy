@@ -1,2 +1,2 @@
-FROM envoyproxy/envoy:v1.32-latest
+FROM envoyproxy/envoy:v1.32.13
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
