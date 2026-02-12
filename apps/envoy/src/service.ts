@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
 import { EnvoyRpcServer, createRpcHandler } from './rpc/server.js'
+import { createSnapshotCache } from './xds/snapshot-cache.js'
 
 export class EnvoyService extends CatalystService {
   readonly info = { name: 'envoy', version: '0.0.0' }
@@ -12,7 +13,14 @@ export class EnvoyService extends CatalystService {
   }
 
   protected async onInitialize(): Promise<void> {
-    const rpcServer = new EnvoyRpcServer(this.telemetry)
+    const snapshotCache = createSnapshotCache()
+    const bindAddress = this.config.envoy?.bindAddress ?? '0.0.0.0'
+
+    const rpcServer = new EnvoyRpcServer({
+      telemetry: this.telemetry,
+      snapshotCache,
+      bindAddress,
+    })
     const instrumentedRpc = this.telemetry.instrumentRpc(rpcServer)
     const rpcApp = createRpcHandler(instrumentedRpc)
 
