@@ -19,6 +19,7 @@ export interface XdsListener {
       typed_config: {
         '@type': string
         stat_prefix: string
+        codec_type?: 'AUTO' | 'HTTP1' | 'HTTP2'
         upgrade_configs?: Array<{ upgrade_type: string }>
         route_config: {
           virtual_hosts: Array<{
@@ -123,6 +124,8 @@ interface ListenerProtocolOptions {
   enableWebSocket?: boolean
   /** Disable route timeout for long-lived streams (SSE, gRPC streaming). */
   disableRouteTimeout?: boolean
+  /** Set codec_type to restrict accepted HTTP versions (e.g. HTTP2 for gRPC). */
+  codecType?: 'AUTO' | 'HTTP1' | 'HTTP2'
 }
 
 /** Derive listener options from a data channel protocol. */
@@ -132,7 +135,7 @@ function getListenerOptions(protocol?: DataChannelProtocol): ListenerProtocolOpt
     case 'http:gql':
       return { enableWebSocket: true, disableRouteTimeout: true }
     case 'http:grpc':
-      return { disableRouteTimeout: true }
+      return { disableRouteTimeout: true, codecType: 'HTTP2' }
     default:
       return {}
   }
@@ -151,6 +154,7 @@ function buildHttpConnectionManager(
   return {
     '@type': HCM_TYPE_URL,
     stat_prefix: statPrefix,
+    ...(options?.codecType && { codec_type: options.codecType }),
     ...(options?.enableWebSocket && {
       upgrade_configs: [{ upgrade_type: 'websocket' }],
     }),
