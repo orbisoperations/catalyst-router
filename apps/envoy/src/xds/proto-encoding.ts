@@ -396,10 +396,14 @@ export function encodeListener(listener: XdsListener): {
       filters: fc.filters.map((f) => {
         // The typed_config has an '@type' field — encode the inner HCM message
         const { '@type': _typeUrl, ...hcmFields } = f.typed_config
+        const codecTypeMap: Record<string, number> = { AUTO: 0, HTTP1: 1, HTTP2: 2 }
         const hcmProto: Record<string, unknown> = {
           stat_prefix: hcmFields.stat_prefix,
           route_config: hcmFields.route_config,
           http_filters: [{ name: 'envoy.filters.http.router', typed_config: routerAny }],
+        }
+        if (hcmFields.codec_type) {
+          hcmProto.codec_type = codecTypeMap[hcmFields.codec_type] ?? 0
         }
         if (hcmFields.upgrade_configs) {
           hcmProto.upgrade_configs = hcmFields.upgrade_configs
