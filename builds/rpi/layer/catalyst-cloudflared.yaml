@@ -1,0 +1,50 @@
+# METABEGIN
+# X-Env-Layer-Name: catalyst-cloudflared
+# X-Env-Layer-Category: net
+# X-Env-Layer-Desc: Cloudflare Tunnel for remote SSH access.
+#  Requires a tunnel token from the Cloudflare Zero Trust dashboard.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: ca-certificates,openssh-server
+#
+# X-Env-VarPrefix: cloudflared
+#
+# X-Env-Var-tunnel_token:
+# X-Env-Var-tunnel_token-Desc: Cloudflare Tunnel token (from dashboard or CLI)
+# X-Env-Var-tunnel_token-Required: y
+# X-Env-Var-tunnel_token-Valid: string
+# X-Env-Var-tunnel_token-Set: y
+# METAEND
+---
+mmdebstrap:
+  setup-hooks:
+    # Add Cloudflare apt signing key
+    - |-
+      mkdir -p "$1/usr/share/keyrings"
+      curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+        -o "$1/usr/share/keyrings/cloudflare-main.gpg"
+    # Add Cloudflare apt repository
+    - |-
+      cat > "$1/etc/apt/sources.list.d/cloudflared.list" <<REPOEOF
+      deb [arch=arm64 signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main
+      REPOEOF
+  packages:
+    - cloudflared
+  customize-hooks:
+    # Install systemd service with tunnel token
+    - |-
+      cat > "$1/etc/systemd/system/cloudflared-tunnel.service" <<SVCEOF
+      [Unit]
+      Description=Cloudflare Tunnel
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run --token $IGconf_cloudflared_tunnel_token
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" cloudflared-tunnel

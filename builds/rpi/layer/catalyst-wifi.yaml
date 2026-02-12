@@ -1,0 +1,64 @@
+# METABEGIN
+# X-Env-Layer-Name: catalyst-wifi
+# X-Env-Layer-Category: net
+# X-Env-Layer-Desc: WiFi via wpa_supplicant + systemd-networkd for headless boot
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: systemd-net-min
+#
+# X-Env-VarPrefix: wifi
+#
+# X-Env-Var-ssid:
+# X-Env-Var-ssid-Desc: WiFi network SSID
+# X-Env-Var-ssid-Required: y
+# X-Env-Var-ssid-Valid: string
+# X-Env-Var-ssid-Set: y
+#
+# X-Env-Var-password:
+# X-Env-Var-password-Desc: WiFi network password (WPA2-PSK)
+# X-Env-Var-password-Required: y
+# X-Env-Var-password-Valid: string
+# X-Env-Var-password-Set: y
+#
+# X-Env-Var-country: US
+# X-Env-Var-country-Desc: WiFi regulatory country code (ISO 3166-1 alpha-2)
+# X-Env-Var-country-Required: n
+# X-Env-Var-country-Valid: regex:^[A-Z]{2}$
+# X-Env-Var-country-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - wpasupplicant
+    - wireless-tools
+    - iw
+    - crda
+  customize-hooks:
+    # wpa_supplicant config for the specified network
+    - |-
+      mkdir -p "$1/etc/wpa_supplicant"
+      cat > "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf" <<WPAEOF
+      ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+      update_config=1
+      country=$IGconf_wifi_country
+
+      network={
+          ssid="$IGconf_wifi_ssid"
+          psk="$IGconf_wifi_password"
+          key_mgmt=WPA-PSK
+      }
+      WPAEOF
+      chmod 600 "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
+    # systemd-networkd config for wlan0 (DHCP)
+    - |-
+      cat > "$1/etc/systemd/network/20-wlan0.network" <<NETEOF
+      [Match]
+      Name=wlan0
+
+      [Network]
+      DHCP=yes
+
+      [DHCPv4]
+      RouteMetric=600
+      NETEOF
+    # Enable wpa_supplicant for wlan0
+    - $BDEBSTRAP_HOOKS/enable-units "$1" wpa_supplicant@wlan0
