@@ -1,6 +1,6 @@
 # Envoy Integration Architecture
 
-**Status**: Draft | **Author**: Architecture Team | **Date**: 2026-02-10
+**Status**: In Progress (Phase 6 complete) | **Author**: Architecture Team | **Date**: 2026-02-10
 
 > This document specifies the architecture for integrating Envoy as the data plane proxy
 > for the Catalyst Node system. It covers the new `@catalyst/envoy-service` package,
@@ -1247,14 +1247,119 @@ Each phase is a separate Graphite PR, targeting under 600 lines (Constitution XI
 - Unit tests with `MockConnectionPool`
 - Topology tests (multi-node with Envoy service mock)
 
-### Phase 6: Docker and Compose
+### Phase 6: Docker and Compose -- COMPLETE
 
 **PR**: `chore(envoy): add dockerfile and compose configuration`
 
-- `apps/envoy/Dockerfile`
-- Update compose files in `docker-compose/` to include Envoy service + Envoy proxy
-- Container test for Envoy service startup
-- End-to-end test: register data channel -> verify xDS push -> verify Envoy listener
+- `apps/envoy/Dockerfile` -- multi-stage Bun build (see [Dockerfile Structure](#dockerfile-structure))
+- Updated all three compose files in `docker-compose/` with `envoy-service` + `envoy-proxy` containers
+- Added `docker-compose/envoy-bootstrap.yaml` for Docker Compose Envoy proxy configuration
+- Container test: `apps/envoy/tests/envoy-proxy.container.test.ts` -- end-to-end traffic routing through a real Envoy proxy
+- Container test: `apps/envoy/tests/traffic-routing.container.test.ts` -- cross-node routing via Envoy
+
+#### Dockerfile Structure
+
+The Envoy service Dockerfile (`apps/envoy/Dockerfile`) follows the same two-stage pattern as all
+other Catalyst services:
+
+```
+Stage 1: deps (oven/bun:1.3.6-alpine)
+  - Copies all workspace package.json files for complete Bun resolution
+  - Runs `bun install --omit=dev --ignore-scripts` to cache external dependencies
+
+Stage 2: runtime (oven/bun:1.3.6-alpine)
+  - Copies cached node_modules from deps stage
+  - Copies app source + workspace dependencies:
+    apps/envoy, packages/config, packages/routing, packages/service, packages/telemetry
+  - Runs `bun install --omit=dev --ignore-scripts` to recreate workspace symlinks
+  - Non-root user (appuser:appgroup) for security
+  - Exposes ports 3000 (Hono/RPC) and 18000 (xDS gRPC)
+  - Entrypoint: bun run src/index.ts
+```
+
+Build from the repo root:
+
+```bash
+docker build -f apps/envoy/Dockerfile -t catalyst-envoy .
+```
+
+#### Compose Configuration
+
+All three compose files (`docker.compose.yaml`, `two-node.compose.yaml`,
+`example.m0p2.compose.yaml`) add two new services:
+
+**`envoy-service`** -- the Catalyst xDS control plane:
+
+| Setting      | Value                      | Purpose                           |
+| :----------- | :------------------------- | :-------------------------------- |
+| Build        | `apps/envoy/Dockerfile`    | Bun-based Envoy service           |
+| Ports        | `3010:3000`, `18000:18000` | Hono/RPC (WebSocket) + xDS gRPC   |
+| Health check | `GET /health` on port 3000 | Standard Catalyst health endpoint |
+| Depends on   | `otel-collector` (healthy) | Telemetry must be available       |
+
+**`envoy-proxy`** -- the Envoy data plane proxy:
+
+| Setting      | Value                           | Purpose                                             |
+| :----------- | :------------------------------ | :-------------------------------------------------- |
+| Image        | `envoyproxy/envoy:v1.32-latest` | Official Envoy proxy image                          |
+| Ports        | `10000:10000`, `9901:9901`      | Dynamic listener port + admin API                   |
+| Volume       | `envoy-bootstrap.yaml` (ro)     | Bootstrap config mounted to `/etc/envoy/envoy.yaml` |
+| Health check | `GET /server_info` on port 9901 | Envoy admin readiness                               |
+| Depends on   | `envoy-service` (healthy)       | xDS server must be up before Envoy connects         |
+
+The compose bootstrap file (`docker-compose/envoy-bootstrap.yaml`) differs from the
+in-repo `apps/envoy/envoy-bootstrap.yaml` in one key way: it uses `STRICT_DNS` with
+`dns_lookup_family: V4_ONLY` to resolve the `envoy-service` hostname via Docker DNS,
+rather than `STATIC` with `127.0.0.1`.
+
+The orchestrator containers gain two new environment variables to connect to the Envoy service:
+
+- `CATALYST_ENVOY_ENDPOINT` -- WebSocket URL to the Envoy service RPC endpoint
+- `CATALYST_ENVOY_PORT_RANGE` -- JSON array defining the Envoy listener port pool
+
+In the two-node compose, each node gets a separate port range to avoid collisions:
+Node A uses `[10000, [10001, 10050]]`, Node B uses `[[10051, 10100]]`.
+
+#### Environment Variables (Envoy Service)
+
+| Variable                      | Default   | Description                              |
+| :---------------------------- | :-------- | :--------------------------------------- |
+| `PORT`                        | `3000`    | Hono HTTP server port (RPC/WebSocket)    |
+| `CATALYST_NODE_ID`            | --        | Node identifier for telemetry            |
+| `CATALYST_ENVOY_XDS_PORT`     | `18000`   | gRPC port for the ADS xDS server         |
+| `CATALYST_ENVOY_BIND_ADDRESS` | `0.0.0.0` | Default bind address for Envoy listeners |
+| `OTEL_SERVICE_NAME`           | --        | OpenTelemetry service name               |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | --        | OTLP collector endpoint                  |
+
+#### Environment Variables (Orchestrator -- Envoy additions)
+
+| Variable                    | Default | Description                               |
+| :-------------------------- | :------ | :---------------------------------------- |
+| `CATALYST_ENVOY_ENDPOINT`   | --      | WebSocket URL to the Envoy service RPC    |
+| `CATALYST_ENVOY_PORT_RANGE` | --      | JSON array of port entries for Envoy pool |
+
+#### Running the Full Stack Locally
+
+Single-node stack with Envoy:
+
+```bash
+cd docker-compose
+docker compose -f docker.compose.yaml up --build
+```
+
+Two-node topology with Envoy:
+
+```bash
+cd docker-compose
+docker compose -f two-node.compose.yaml up --build
+```
+
+Once running, you can verify the Envoy data plane:
+
+- Envoy admin dashboard: `http://localhost:9901`
+- Envoy service health: `http://localhost:3010/health`
+- Dynamic listeners (after creating a route): `http://localhost:9901/listeners?format=json`
+- Upstream clusters: `http://localhost:9901/clusters?format=json`
 
 ### Phase 7: Cross-Node E2E
 
