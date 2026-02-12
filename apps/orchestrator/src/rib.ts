@@ -3,6 +3,8 @@ import {
   newRouteTable,
   type Action,
   type DataChannelDefinition,
+  type InternalRoute,
+  type LocRibEntry,
   type PeerRecord,
   type RouteTable,
 } from '@catalyst/routing'
@@ -17,6 +19,7 @@ export interface Plan {
   prevState: RouteTable
   newState: RouteTable
   propagations: Propagation[]
+  routeMetadata: Map<string, LocRibEntry>
 }
 
 export interface PlanFailure {
@@ -37,6 +40,7 @@ export interface CommitResult {
 export class RoutingInformationBase {
   private readonly logger = getLogger(['catalyst', 'rib'])
   private state: RouteTable
+  private routeMetadata: Map<string, LocRibEntry> = new Map()
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -48,6 +52,10 @@ export class RoutingInformationBase {
 
   getState(): RouteTable {
     return this.state
+  }
+
+  getRouteMetadata(): Map<string, LocRibEntry> {
+    return this.routeMetadata
   }
 
   /**
@@ -74,12 +82,15 @@ export class RoutingInformationBase {
 
     const propagations = this.computePropagations(action, newState, prevState)
 
+    const routeMetadata = this.computeRouteMetadata(newState)
+
     return {
       success: true,
       action,
       prevState,
       newState,
       propagations,
+      routeMetadata,
     }
   }
 
@@ -113,6 +124,7 @@ export class RoutingInformationBase {
     }
 
     this.state = newState
+    this.routeMetadata = plan.routeMetadata
 
     const routesChanged =
       prevState.local.routes !== plan.newState.local.routes ||
@@ -667,5 +679,42 @@ export class RoutingInformationBase {
         localNode: this.config.node,
         update: withdrawalUpdate,
       }))
+  }
+
+  private computeRouteMetadata(state: RouteTable): Map<string, LocRibEntry> {
+    const metadata = new Map<string, LocRibEntry>()
+
+    // Group internal routes by name (prefix)
+    const routesByName = new Map<string, InternalRoute[]>()
+    for (const route of state.internal.routes) {
+      const existing = routesByName.get(route.name)
+      if (existing) {
+        existing.push(route)
+      } else {
+        routesByName.set(route.name, [route])
+      }
+    }
+
+    for (const [name, routes] of routesByName) {
+      if (routes.length === 1) {
+        metadata.set(name, {
+          bestPath: routes[0],
+          alternatives: [],
+          selectionReason: 'only candidate',
+        })
+      } else {
+        // Select best: shortest nodePath wins
+        const sorted = [...routes].sort((a, b) => a.nodePath.length - b.nodePath.length)
+        const best = sorted[0]
+        const alternatives = sorted.slice(1)
+        metadata.set(name, {
+          bestPath: best,
+          alternatives,
+          selectionReason: 'shortest nodePath',
+        })
+      }
+    }
+
+    return metadata
   }
 }
