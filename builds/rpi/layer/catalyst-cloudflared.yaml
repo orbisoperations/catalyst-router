@@ -47,7 +47,7 @@ mmdebstrap:
       cat > "$1/etc/systemd/system/cloudflared-tunnel.service" <<SVCEOF
       [Unit]
       Description=Cloudflare Tunnel
-      After=network-online.target wpa_supplicant@wlan0.service
+      After=network-online.target
       Wants=network-online.target
 
       [Service]
@@ -55,6 +55,8 @@ mmdebstrap:
       ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run --token $IGconf_cloudflared_tunnel_token
       Restart=on-failure
       RestartSec=5
+      StartLimitBurst=5
+      StartLimitIntervalSec=120
       AmbientCapabilities=CAP_NET_RAW
       CapabilityBoundingSet=CAP_NET_RAW
 

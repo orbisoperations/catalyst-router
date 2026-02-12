@@ -37,7 +37,7 @@ Options:
                                (default: clone to ./rpi-image-gen next to this script)
   --build-dir <path>           Build output directory (passed as -B to rpi-image-gen)
   --skip-deps                  Skip dependency installation
-  --branch <branch>            Git branch to clone (default: main)
+  --branch <branch>            Git branch to clone (default: master)
   -h, --help                   Show this help
 
 Requirements:
@@ -226,7 +226,7 @@ install_deps() {
   echo ""
 
   # Run from the
-  pushd $RPI_IMAGE_GEN
+  pushd "$RPI_IMAGE_GEN"
   sudo ./install_deps.sh
   popd
 
@@ -243,7 +243,7 @@ validate_config() {
   # Basic YAML structure check — ensure it has the required top-level keys
   if ! python3 -c "
 import yaml, sys
-with open('$CONFIG_FILE') as f:
+with open(sys.argv[1]) as f:
     cfg = yaml.safe_load(f)
 required = ['include', 'device', 'image', 'layer']
 missing = [k for k in required if k not in cfg]
@@ -255,7 +255,7 @@ print(f'  Device:   {cfg[\"device\"].get(\"layer\", \"unknown\")}')
 print(f'  Image:    {cfg[\"image\"].get(\"name\", \"unknown\")}')
 layers = cfg.get('layer', {})
 print(f'  Layers:   {list(layers.values())}')
-" 2>&1; then
+" "$CONFIG_FILE" 2>&1; then
     echo ""
     echo "ERROR: Config validation failed."
     exit 1
@@ -302,11 +302,11 @@ print_results() {
   # Try to find the output image
   local image_name
   image_name="$(python3 -c "
-import yaml
-with open('$CONFIG_FILE') as f:
+import yaml, sys
+with open(sys.argv[1]) as f:
     cfg = yaml.safe_load(f)
 print(cfg.get('image', {}).get('name', 'unknown'))
-" 2>/dev/null || echo "unknown")"
+" "$CONFIG_FILE" 2>/dev/null || echo "unknown")"
 
   local image_dir="${work_dir}/image-${image_name}"
   local image_file="${image_dir}/${image_name}.img"

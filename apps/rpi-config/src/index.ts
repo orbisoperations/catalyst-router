@@ -26,10 +26,10 @@ program
   .addOption(new Option('--device <layer>', 'Device layer').default(DEFAULTS.device))
   .addOption(new Option('--hostname <name>', 'System hostname').default(DEFAULTS.hostname))
   .addOption(new Option('--username <user>', 'Login username').default(DEFAULTS.username))
-  .addOption(new Option('--password <pass>', 'Login password'))
+  .addOption(new Option('--password <pass>', 'Login password').env('CATALYST_PASSWORD'))
 
   .addOption(new Option('--wifi-ssid <ssid>', 'WiFi SSID'))
-  .addOption(new Option('--wifi-password <pass>', 'WiFi password'))
+  .addOption(new Option('--wifi-password <pass>', 'WiFi password').env('CATALYST_WIFI_PASSWORD'))
   .addOption(new Option('--wifi-country <code>', 'WiFi country code').default(DEFAULTS.wifiCountry))
   .addOption(new Option('--no-wifi', 'Skip WiFi'))
 
@@ -59,7 +59,11 @@ program
     new Option('--otel-version <ver>', 'OTEL Collector version').default(DEFAULTS.otelVersion)
   )
 
-  .addOption(new Option('--cloudflared-token <token>', 'Cloudflare Tunnel token'))
+  .addOption(
+    new Option('--cloudflared-token <token>', 'Cloudflare Tunnel token').env(
+      'CATALYST_CF_TUNNEL_TOKEN'
+    )
+  )
   .addOption(new Option('--no-cloudflared', 'Skip cloudflared'))
 
   .addOption(new Option('--no-autologin', 'Skip console autologin + journal stream'))
