@@ -20,17 +20,16 @@ export type DeletePeerResult =
 export async function createPeerHandler(input: CreatePeerInput): Promise<CreatePeerResult> {
   try {
     const client = await createOrchestratorClient(input.orchestratorUrl)
-    const mgmtScope = client.connectionFromManagementSDK()
+    const netResult = await client.getNetworkClient(input.token || '')
 
-    const result = await mgmtScope.applyAction({
-      resource: 'internalBGPConfig',
-      resourceAction: 'create',
-      data: {
-        name: input.name,
-        endpoint: input.endpoint,
-        domains: input.domains,
-        peerToken: input.peerToken,
-      },
+    if (!netResult.success) {
+      return { success: false, error: netResult.error }
+    }
+
+    const result = await netResult.client.addPeer({
+      name: input.name,
+      endpoint: input.endpoint,
+      domains: input.domains,
     })
 
     if (result.success) {
@@ -52,11 +51,15 @@ export async function createPeerHandler(input: CreatePeerInput): Promise<CreateP
 export async function listPeersHandler(input: ListPeersInput): Promise<ListPeersResult> {
   try {
     const client = await createOrchestratorClient(input.orchestratorUrl)
-    const mgmtScope = client.connectionFromManagementSDK()
+    const netResult = await client.getNetworkClient(input.token || '')
 
-    const result = await mgmtScope.listPeers()
+    if (!netResult.success) {
+      return { success: false, error: netResult.error }
+    }
 
-    return { success: true, data: { peers: result.peers } }
+    const peers = await netResult.client.listPeers()
+
+    return { success: true, data: { peers } }
   } catch (error) {
     return {
       success: false,
@@ -71,9 +74,13 @@ export async function listPeersHandler(input: ListPeersInput): Promise<ListPeers
 export async function deletePeerHandler(input: DeletePeerInput): Promise<DeletePeerResult> {
   try {
     const client = await createOrchestratorClient(input.orchestratorUrl)
-    const mgmtScope = client.connectionFromManagementSDK()
+    const netResult = await client.getNetworkClient(input.token || '')
 
-    const result = await mgmtScope.deletePeer(input.name)
+    if (!netResult.success) {
+      return { success: false, error: netResult.error }
+    }
+
+    const result = await netResult.client.removePeer({ name: input.name })
 
     if (result.success) {
       return { success: true, data: { name: input.name } }

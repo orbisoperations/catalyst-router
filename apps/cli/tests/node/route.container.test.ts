@@ -117,50 +117,44 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
     async () => {
       const orchestratorUrl = `ws://${orchestrator.getHost()}:${orchestrator.getMappedPort(3000)}/rpc`
 
-      // Create client
+      // Create client and get data channel scope
       const client = await createOrchestratorClient(orchestratorUrl)
-      const mgmtScope = client.connectionFromManagementSDK()
+      const dcResult = await client.getDataChannelClient(systemToken)
+      expect(dcResult.success).toBe(true)
+      if (!dcResult.success) throw new Error(dcResult.error)
+      const dcClient = dcResult.client
 
       // List routes (check initial state)
-      const initialList = await mgmtScope.listLocalRoutes()
-      expect(initialList.routes).toBeDefined()
-      expect(initialList.routes.local).toBeInstanceOf(Array)
-      const initialCount = initialList.routes.local.length
+      const initialList = await dcClient.listRoutes()
+      expect(initialList.local).toBeInstanceOf(Array)
+      const initialCount = initialList.local.length
 
       // Create route
-      const createResult = await mgmtScope.applyAction({
-        resource: 'localRoute',
-        resourceAction: 'create',
-        data: {
-          name: 'test-service',
-          endpoint: 'http://test-service:8080',
-          protocol: 'http:graphql',
-        },
+      const createResult = await dcClient.addRoute({
+        name: 'test-service',
+        endpoint: 'http://test-service:8080',
+        protocol: 'http:graphql',
       })
       expect(createResult.success).toBe(true)
 
       // List routes (should have new route)
-      const afterCreate = await mgmtScope.listLocalRoutes()
-      expect(afterCreate.routes.local.length).toBe(initialCount + 1)
-      const createdRoute = afterCreate.routes.local.find((r) => r.name === 'test-service')
+      const afterCreate = await dcClient.listRoutes()
+      expect(afterCreate.local.length).toBe(initialCount + 1)
+      const createdRoute = afterCreate.local.find((r) => r.name === 'test-service')
       expect(createdRoute).toBeDefined()
       expect(createdRoute?.endpoint).toBe('http://test-service:8080')
       expect(createdRoute?.protocol).toBe('http:graphql')
 
       // Delete route
-      const deleteResult = await mgmtScope.applyAction({
-        resource: 'localRoute',
-        resourceAction: 'delete',
-        data: {
-          name: 'test-service',
-        },
+      const deleteResult = await dcClient.removeRoute({
+        name: 'test-service',
       })
       expect(deleteResult.success).toBe(true)
 
       // List routes (should be back to initial count)
-      const afterDelete = await mgmtScope.listLocalRoutes()
-      expect(afterDelete.routes.local.length).toBe(initialCount)
-      const deletedRoute = afterDelete.routes.local.find((r) => r.name === 'test-service')
+      const afterDelete = await dcClient.listRoutes()
+      expect(afterDelete.local.length).toBe(initialCount)
+      const deletedRoute = afterDelete.local.find((r) => r.name === 'test-service')
       expect(deletedRoute).toBeUndefined()
     },
     TIMEOUT
