@@ -201,11 +201,13 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
           name: 'peer-a.somebiz.local.io',
           endpoint: 'ws://peer-a:3000/rpc',
           domains: ['somebiz.local.io'],
+          peerToken: auth.systemToken,
         })
         await netA.addPeer({
           name: 'peer-b.somebiz.local.io',
           endpoint: 'ws://peer-b:3000/rpc',
           domains: ['somebiz.local.io'],
+          peerToken: auth.systemToken,
         })
 
         // Give it a moment for the handshake

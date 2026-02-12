@@ -124,6 +124,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       name: 'node-b.somebiz.local.io',
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-b',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
@@ -173,6 +174,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       name: 'node-b.somebiz.local.io',
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-b',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
@@ -315,11 +317,13 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
       envoyAddress: 'envoy-proxy-b',
+      peerToken: 'token-for-b',
     }
     const peerC: PeerInfo = {
       name: 'node-c.somebiz.local.io',
       endpoint: 'http://node-c:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-c',
     }
 
     // Connect both peers
@@ -393,11 +397,13 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       name: 'node-b.somebiz.local.io',
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-b',
     }
     const peerC: PeerInfo = {
       name: 'node-c.somebiz.local.io',
       endpoint: 'http://node-c:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-c',
     }
 
     await plainBus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
@@ -452,6 +458,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
       envoyAddress: 'envoy-proxy-b',
+      peerToken: 'token-for-b',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
@@ -489,6 +496,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       name: 'node-c.somebiz.local.io',
       endpoint: 'http://node-c:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-c',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
@@ -521,6 +529,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       name: 'node-b.somebiz.local.io',
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-b',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
@@ -577,11 +586,13 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
       envoyAddress: 'envoy-proxy-b',
+      peerToken: 'token-for-b',
     }
     const peerC: PeerInfo = {
       name: 'node-c.somebiz.local.io',
       endpoint: 'http://node-c:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-c',
     }
 
     await envoyBus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
@@ -634,11 +645,13 @@ describe('CatalystNodeBus > Envoy Integration', () => {
       endpoint: 'http://node-b:3000',
       domains: ['somebiz.local.io'],
       envoyAddress: 'envoy-proxy-b',
+      peerToken: 'token-for-b',
     }
     const peerC: PeerInfo = {
       name: 'node-c.somebiz.local.io',
       endpoint: 'http://node-c:3000',
       domains: ['somebiz.local.io'],
+      peerToken: 'token-for-c',
     }
 
     // Connect both peers

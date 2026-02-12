@@ -374,11 +374,13 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
     name: 'node-a.somebiz.local.io',
     endpoint: 'ws://orch-a:3000/rpc',
     domains: ['somebiz.local.io'],
+    peerToken: systemToken,
   })
   await netA.addPeer({
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://orch-b:3000/rpc',
     domains: ['somebiz.local.io'],
+    peerToken: systemToken,
   })
 
   // Peer B <-> C: C accepts B, then B connects to C
@@ -386,11 +388,13 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://orch-b:3000/rpc',
     domains: ['somebiz.local.io'],
+    peerToken: systemToken,
   })
   await netB.addPeer({
     name: 'node-c.somebiz.local.io',
     endpoint: 'ws://orch-c:3000/rpc',
     domains: ['somebiz.local.io'],
+    peerToken: systemToken,
   })
 
   // Brief wait for BGP handshake before polling

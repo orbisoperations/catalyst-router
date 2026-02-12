@@ -1,0 +1,83 @@
+# Multi-stage Dockerfile for the 3-stack integration test.
+#
+# Copies the entire monorepo, runs bun install once, then provides
+# per-service targets that only set WORKDIR, PORT, and CMD.
+#
+# Usage in docker-compose:
+#   build:
+#     context: ..
+#     dockerfile: docker-compose/Dockerfile.test
+#     target: auth
+
+FROM oven/bun:1.3.6-alpine AS base
+
+WORKDIR /app
+
+# Copy root workspace config + lockfile
+COPY package.json bun.lock ./
+
+# Copy ALL workspace package.json files for complete resolution
+COPY apps/auth/package.json apps/auth/package.json
+COPY apps/cli/package.json apps/cli/package.json
+COPY apps/envoy/package.json apps/envoy/package.json
+COPY apps/gateway/package.json apps/gateway/package.json
+COPY apps/node/package.json apps/node/package.json
+COPY apps/orchestrator/package.json apps/orchestrator/package.json
+COPY packages/authorization/package.json packages/authorization/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/routing/package.json packages/routing/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/service/package.json packages/service/package.json
+COPY packages/telemetry/package.json packages/telemetry/package.json
+COPY packages/types/package.json packages/types/package.json
+COPY examples/books-api/package.json examples/books-api/package.json
+COPY examples/movies-api/package.json examples/movies-api/package.json
+COPY examples/orders-api/package.json examples/orders-api/package.json
+COPY examples/product-api/package.json examples/product-api/package.json
+
+# Single bun install for the entire monorepo
+RUN bun install --omit=dev --ignore-scripts
+
+# Copy ALL source code
+COPY apps apps
+COPY packages packages
+COPY examples examples
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# ── Service targets ──────────────────────────────────────────────────
+
+FROM base AS auth
+WORKDIR /app/apps/auth
+ENV PORT=5000
+EXPOSE 5000
+USER appuser
+CMD ["bun", "run", "src/server.ts"]
+
+FROM base AS orchestrator
+WORKDIR /app/apps/orchestrator
+ENV PORT=3000
+EXPOSE 3000
+USER appuser
+CMD ["bun", "run", "src/server.ts"]
+
+FROM base AS envoy
+WORKDIR /app/apps/envoy
+ENV PORT=3000
+EXPOSE 3000 18000
+USER appuser
+CMD ["bun", "run", "src/index.ts"]
+
+FROM base AS gateway
+WORKDIR /app/apps/gateway
+ENV PORT=4000
+EXPOSE 4000
+USER appuser
+CMD ["bun", "run", "src/index.ts"]
+
+FROM base AS books-api
+WORKDIR /app/examples/books-api
+ENV PORT=8080
+EXPOSE 8080
+USER appuser
+CMD ["bun", "run", "src/index.ts"]

@@ -435,11 +435,13 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       name: 'node-a.somebiz.local.io',
       endpoint: 'ws://orch-a:3000/rpc',
       domains: ['somebiz.local.io'],
+      peerToken: systemToken,
     })
     await netA.addPeer({
       name: 'node-b.somebiz.local.io',
       endpoint: 'ws://orch-b:3000/rpc',
       domains: ['somebiz.local.io'],
+      peerToken: systemToken,
     })
 
     // Wait for BGP handshake

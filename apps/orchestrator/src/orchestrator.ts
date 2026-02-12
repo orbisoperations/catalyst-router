@@ -276,6 +276,9 @@ export class CatalystNodeBus extends RpcTarget {
 
     switch (action.action) {
       case Actions.LocalPeerCreate: {
+        if (!action.data.peerToken) {
+          return { success: false, error: 'peerToken is required when creating a peer' }
+        }
         const peerList = state.internal.peers
         if (peerList.find((p) => p.name === action.data.name)) {
           return { success: false, error: 'Peer already exists' }
@@ -528,8 +531,7 @@ export class CatalystNodeBus extends RpcTarget {
             .info`LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`
           const stub = this.connectionPool.get(action.data.endpoint)
           if (stub) {
-            // Use peer-specific token if available, otherwise fall back to node token
-            const token = action.data.peerToken || this.nodeToken || ''
+            const token = action.data.peerToken!
             const connectionResult = await stub.getIBGPClient(token)
 
             if (connectionResult.success) {
@@ -586,8 +588,18 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const token = action.data.peerInfo.peerToken || this.nodeToken || ''
-              const connectionResult = await stub.getIBGPClient(token)
+              // Use the LOCAL peer record's peerToken (minted by the remote auth
+              // service for us) rather than action.data.peerInfo.peerToken which
+              // comes from the remote node's own config and won't contain our token.
+              const localPeer = _state.internal.peers.find(
+                (p) => p.name === action.data.peerInfo.name
+              )
+              if (!localPeer?.peerToken) {
+                this.logger
+                  .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
+                break
+              }
+              const connectionResult = await stub.getIBGPClient(localPeer.peerToken)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: allRoutes,
@@ -632,8 +644,12 @@ export class CatalystNodeBus extends RpcTarget {
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
-              const token = action.data.peerInfo.peerToken || this.nodeToken || ''
-              const connectionResult = await stub.getIBGPClient(token)
+              if (!action.data.peerInfo.peerToken) {
+                this.logger
+                  .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
+                break
+              }
+              const connectionResult = await stub.getIBGPClient(action.data.peerInfo.peerToken)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: allRoutes,
@@ -650,17 +666,20 @@ export class CatalystNodeBus extends RpcTarget {
         // 1. Close connection to the deleted peer
         const peer = prevState.internal.peers.find((p) => p.name === action.data.name)
         if (peer) {
-          try {
-            const stub = this.connectionPool.get(peer.endpoint)
-            if (stub) {
-              const token = peer.peerToken || this.nodeToken || ''
-              const connectionResult = await stub.getIBGPClient(token)
-              if (connectionResult.success) {
-                await connectionResult.client.close(this.config.node, 1000, 'Peer removed')
+          if (!peer.peerToken) {
+            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping close`
+          } else {
+            try {
+              const stub = this.connectionPool.get(peer.endpoint)
+              if (stub) {
+                const connectionResult = await stub.getIBGPClient(peer.peerToken)
+                if (connectionResult.success) {
+                  await connectionResult.client.close(this.config.node, 1000, 'Peer removed')
+                }
               }
+            } catch (e) {
+              this.logger.error`Failed to close connection to ${peer.name}: ${e}`
             }
-          } catch (e) {
-            this.logger.error`Failed to close connection to ${peer.name}: ${e}`
           }
         }
 
@@ -676,12 +695,15 @@ export class CatalystNodeBus extends RpcTarget {
         this.logger
           .info`LocalRouteCreate: ${action.data.name}, broadcasting to ${connectedPeers.length} peers`
         for (const peer of connectedPeers) {
+          if (!peer.peerToken) {
+            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping route broadcast`
+            continue
+          }
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
               this.logger.debug`Pushing local route ${action.data.name} to ${peer.name}`
-              const token = peer.peerToken || this.nodeToken || ''
-              const connectionResult = await stub.getIBGPClient(token)
+              const connectionResult = await stub.getIBGPClient(peer.peerToken)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: [
@@ -700,11 +722,14 @@ export class CatalystNodeBus extends RpcTarget {
         for (const peer of _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected'
         )) {
+          if (!peer.peerToken) {
+            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping route withdrawal`
+            continue
+          }
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const token = peer.peerToken || this.nodeToken || ''
-              const connectionResult = await stub.getIBGPClient(token)
+              const connectionResult = await stub.getIBGPClient(peer.peerToken)
               if (connectionResult.success) {
                 await connectionResult.client.update(this.config.node, {
                   updates: [{ action: 'remove', route: action.data }],
@@ -722,6 +747,10 @@ export class CatalystNodeBus extends RpcTarget {
         for (const peer of _state.internal.peers.filter(
           (p) => p.connectionStatus === 'connected' && p.name !== sourcePeerName
         )) {
+          if (!peer.peerToken) {
+            this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping update propagation`
+            continue
+          }
           try {
             // Filter out updates that have a loop (including the local node,
             // as we should have already dropped them, and the target peer,
@@ -738,8 +767,7 @@ export class CatalystNodeBus extends RpcTarget {
 
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
-              const token = peer.peerToken || this.nodeToken || ''
-              const connectionResult = await stub.getIBGPClient(token)
+              const connectionResult = await stub.getIBGPClient(peer.peerToken)
               if (connectionResult.success) {
                 // Prepend my FQDN to the path and rewrite envoyPort/envoyAddress
                 // for multi-hop: downstream peers must connect to this node's
@@ -891,11 +919,14 @@ export class CatalystNodeBus extends RpcTarget {
     for (const peer of newState.internal.peers.filter(
       (p) => p.connectionStatus === 'connected' && p.name !== peerName
     )) {
+      if (!peer.peerToken) {
+        this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping withdrawal propagation`
+        continue
+      }
       try {
         const stub = this.connectionPool.get(peer.endpoint)
         if (stub) {
-          const token = peer.peerToken || this.nodeToken || ''
-          const connectionResult = await stub.getIBGPClient(token)
+          const connectionResult = await stub.getIBGPClient(peer.peerToken)
 
           if (connectionResult.success) {
             await connectionResult.client.update(this.config.node, {

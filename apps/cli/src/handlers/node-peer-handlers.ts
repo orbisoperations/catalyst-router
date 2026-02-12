@@ -30,6 +30,7 @@ export async function createPeerHandler(input: CreatePeerInput): Promise<CreateP
       name: input.name,
       endpoint: input.endpoint,
       domains: input.domains,
+      peerToken: input.peerToken,
     })
 
     if (result.success) {

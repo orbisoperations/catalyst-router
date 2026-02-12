@@ -153,6 +153,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
         name: 'test-peer.somebiz.local.io',
         endpoint: 'ws://test-peer:3000/rpc',
         domains: ['example.com'],
+        peerToken: systemToken,
         connectionStatus: 'disconnected',
       })
       expect(createResult.success).toBe(true)
