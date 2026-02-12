@@ -32,7 +32,7 @@ describe('DataChannelDefinitionSchema', () => {
     })
 
     it('parses all valid protocol types', () => {
-      for (const protocol of ['http', 'http:graphql', 'http:gql', 'http:grpc']) {
+      for (const protocol of ['http', 'http:graphql', 'http:gql', 'http:grpc', 'tcp']) {
         const result = DataChannelDefinitionSchema.safeParse({
           name: 'test',
           protocol,
@@ -44,7 +44,7 @@ describe('DataChannelDefinitionSchema', () => {
     it('rejects invalid protocol', () => {
       const result = DataChannelDefinitionSchema.safeParse({
         name: 'test',
-        protocol: 'tcp',
+        protocol: 'ftp',
       })
       expect(result.success).toBe(false)
     })

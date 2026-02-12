@@ -5,6 +5,7 @@ import {
   encodeCluster,
   encodeDiscoveryResponse,
   decodeDiscoveryRequest,
+  encodeTcpProxyListener,
   LISTENER_TYPE_URL,
   CLUSTER_TYPE_URL,
 } from '../src/xds/proto-encoding.js'
@@ -13,6 +14,8 @@ import {
   buildEgressListener,
   buildLocalCluster,
   buildRemoteCluster,
+  buildTcpProxyIngressListener,
+  buildTcpProxyEgressListener,
 } from '../src/xds/resources.js'
 
 // ---------------------------------------------------------------------------
@@ -412,5 +415,94 @@ describe('DiscoveryRequest decoding', () => {
     expect(decoded.version_info).toBe('v1')
     expect(decoded.response_nonce).toBe('n1')
     expect(decoded.resource_names).toEqual(['cluster-a', 'cluster-b'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TCP proxy listener encoding
+// ---------------------------------------------------------------------------
+
+describe('encodeTcpProxyListener', () => {
+  it('encodes a TCP proxy listener to protobuf', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    const result = encodeTcpProxyListener(listener)
+    expect(result.type_url).toBe(LISTENER_TYPE_URL)
+    expect(result.value).toBeInstanceOf(Uint8Array)
+    expect(result.value.length).toBeGreaterThan(0)
+  })
+
+  it('roundtrips through encode/decode', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    const encoded = encodeTcpProxyListener(listener)
+
+    const root = getProtoRoot()
+    const ListenerType = root.lookupType('envoy.config.listener.v3.Listener')
+    const decoded = ListenerType.toObject(ListenerType.decode(encoded.value), {
+      defaults: true,
+      arrays: true,
+    }) as { name: string; address: { socket_address: { address: string; port_value: number } } }
+
+    expect(decoded.name).toBe('ingress_redis-cache')
+    expect(decoded.address.socket_address.address).toBe('0.0.0.0')
+    expect(decoded.address.socket_address.port_value).toBe(6379)
+  })
+
+  it('decodes the inner TcpProxy filter', () => {
+    const listener = buildTcpProxyIngressListener({
+      channelName: 'redis-cache',
+      port: 6379,
+      bindAddress: '0.0.0.0',
+    })
+    const encoded = encodeTcpProxyListener(listener)
+
+    const root = getProtoRoot()
+    const ListenerType = root.lookupType('envoy.config.listener.v3.Listener')
+    const decoded = ListenerType.toObject(ListenerType.decode(encoded.value), {
+      defaults: true,
+      arrays: true,
+    }) as Record<string, unknown>
+
+    // Navigate to the tcp_proxy filter's typed_config (it's an Any)
+    const filterChains = decoded.filter_chains as Array<{
+      filters: Array<{ name: string; typed_config: { type_url: string; value: Uint8Array } }>
+    }>
+    const tcpProxyAny = filterChains[0].filters[0].typed_config
+
+    // Decode the TcpProxy Any value
+    const TcpProxyType = root.lookupType('envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy')
+    const tcpProxy = TcpProxyType.toObject(TcpProxyType.decode(tcpProxyAny.value), {
+      defaults: true,
+    }) as { stat_prefix: string; cluster: string }
+
+    expect(tcpProxy.stat_prefix).toBe('ingress_redis-cache')
+    expect(tcpProxy.cluster).toBe('local_redis-cache')
+  })
+
+  it('encodes egress TCP proxy listener correctly', () => {
+    const listener = buildTcpProxyEgressListener({
+      channelName: 'redis-cache',
+      peerName: 'node-b',
+      port: 16379,
+    })
+    const encoded = encodeTcpProxyListener(listener)
+
+    const root = getProtoRoot()
+    const ListenerType = root.lookupType('envoy.config.listener.v3.Listener')
+    const decoded = ListenerType.toObject(ListenerType.decode(encoded.value), {
+      defaults: true,
+      arrays: true,
+    }) as { name: string }
+
+    expect(decoded.name).toBe('egress_redis-cache_via_node-b')
+    expect(encoded.type_url).toBe(LISTENER_TYPE_URL)
+    expect(encoded.value.length).toBeGreaterThan(0)
   })
 })

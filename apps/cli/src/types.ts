@@ -49,7 +49,7 @@ export const CreateRouteInputSchema = BaseCliConfigSchema.extend({
   name: z.string().min(1),
   endpoint: z.string().url(),
   protocol: z
-    .enum(['http', 'http:graphql', 'http:gql', 'http:grpc'] as const)
+    .enum(['http', 'http:graphql', 'http:gql', 'http:grpc', 'tcp'] as const)
     .default('http:graphql'),
   region: z.string().optional(),
   tags: z.array(z.string()).optional(),
