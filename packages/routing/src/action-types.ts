@@ -17,6 +17,8 @@ export const Actions = {
   InternalProtocolClose: 'internal:protocol:close',
   InternalProtocolConnected: 'internal:protocol:connected',
   InternalProtocolUpdate: 'internal:protocol:update',
+  InternalProtocolKeepalive: 'internal:protocol:keepalive',
+  InternalProtocolTick: 'internal:protocol:tick',
 } as const
 
 export type ActionType = (typeof Actions)[keyof typeof Actions]
