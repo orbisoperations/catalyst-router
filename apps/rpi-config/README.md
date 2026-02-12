@@ -33,7 +33,9 @@ Generate [rpi-image-gen](https://github.com/raspberrypi/rpi-image-gen) configura
 
 - **[Bun](https://bun.sh/)** >= 1.0 or **Node.js** >= 20 (for running from source)
 - This package lives inside the **catalyst-node** monorepo -- clone the full repo first
-- An **arm64 Debian host** (e.g. Raspberry Pi 5 running Pi OS) is required to build the image with `rpi-image-gen`
+- **Image build** requires one of:
+  - **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** -- build from macOS/Windows/Linux via `build-docker.sh`
+  - **arm64 Debian host** (e.g. Raspberry Pi 5 running Pi OS) -- build natively via `build.sh`
 
 ---
 
@@ -63,14 +65,36 @@ bun run rpi:config -- \
   -o dist/rpi
 ```
 
-### 3. Build the image (on arm64 Debian host)
+### 3. Build the image
+
+#### Option A: Docker (macOS / any host with Docker)
+
+No native arm64 Debian host needed. The build runs inside a Debian container.
+
+```bash
+# Native mode: cross-compile the binary first
+bun build --compile --target=bun-linux-arm64 \
+  --outfile dist/rpi/bin/catalyst-node apps/node/src/index.ts
+
+# Build the image via Docker (first run pulls ~1 GB base image)
+./builds/rpi/build-docker.sh --source-dir dist/rpi dist/rpi/config.yaml
+```
+
+On Apple Silicon Macs the container runs native arm64. On Intel hosts it uses
+QEMU emulation (slower but functional). The container needs `CAP_SYS_ADMIN`
+for filesystem mount operations — on macOS this is sandboxed inside Docker
+Desktop's Linux VM.
+
+The output `.img` file is written to `dist/rpi/build/` (or `--build-dir`).
+
+#### Option B: Native arm64 Debian host
 
 ```bash
 # Native mode: compile the binary first
 bun build --compile --target=bun-linux-arm64 \
   --outfile dist/rpi/bin/catalyst-node apps/node/src/index.ts
 
-# Run the build
+# Run the build directly (requires Debian Bookworm/Trixie arm64)
 ./builds/rpi/build.sh --source-dir dist/rpi dist/rpi/config.yaml
 ```
 
@@ -331,7 +355,7 @@ CLI flags take precedence over environment variables.
 ```bash
 # Example: generate, build, and clean up
 bun run rpi:config -- --non-interactive --password "pass" --peering-secret "s" -o /tmp/rpi-build
-./builds/rpi/build.sh --source-dir /tmp/rpi-build /tmp/rpi-build/config.yaml
+./builds/rpi/build-docker.sh --source-dir /tmp/rpi-build /tmp/rpi-build/config.yaml
 rm -rf /tmp/rpi-build
 ```
 
