@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'bun:test'
 import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
 import { newRouteTable, type PeerInfo, type RouteTable } from '@catalyst/routing'
 import { MockConnectionPool } from './mock-connection-pool.js'
+import { createMockAuthProvider } from './mock-auth-provider.js'
 
 describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
   let pool: MockConnectionPool
@@ -27,6 +28,7 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
         config: { node: info },
         connectionPool: { pool },
         state: newRouteTable(),
+        authClient: createMockAuthProvider(),
       })
       pool.registerNode(bus)
       return bus

@@ -17,6 +17,8 @@ import { Actions } from '@catalyst/routing'
 import path from 'path'
 import type { PeerInfo, PublicApi } from '../src/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
+import { startAuthService, type AuthServiceContext } from './auth-test-helpers'
+import { createMockAuthProvider } from './mock-auth-provider'
 
 const isDockerRunning = () => {
   try {
@@ -36,7 +38,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
-  let auth: StartedTestContainer
+  let auth: AuthServiceContext
   let nodeA: StartedTestContainer
   let nodeB: StartedTestContainer
   let nodeC: StartedTestContainer
@@ -64,42 +66,9 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
 
     // Start auth service first
     console.log('Starting auth service...')
-    const authLogs: string[] = []
-    auth = await new GenericContainer(authImage)
-      .withNetwork(network)
-      .withNetworkAliases('auth')
-      .withExposedPorts(5000)
-      .withEnvironment({
-        PORT: '5000',
-        CATALYST_NODE_ID: 'auth',
-        CATALYST_PEERING_ENDPOINT: 'ws://auth:5000/rpc',
-        CATALYST_BOOTSTRAP_TOKEN: 'test-bootstrap-token',
-        CATALYST_AUTH_KEYS_DB: ':memory:',
-        CATALYST_AUTH_TOKENS_DB: ':memory:',
-      })
-      .withWaitStrategy(Wait.forLogMessage('System Admin Token minted:'))
-      .withLogConsumer((stream: Readable) => {
-        stream.on('data', (chunk) => {
-          const text = chunk.toString()
-          authLogs.push(text)
-          process.stdout.write(text)
-        })
-      })
-      .start()
-
+    auth = await startAuthService(network, 'auth', authImage)
     console.log('Auth service started, extracting system token...')
-
-    // Extract system token from logs (with retry for race condition)
-    let tokenLog: string | undefined
-    for (let i = 0; i < 20; i++) {
-      tokenLog = authLogs.find((line) => line.includes('System Admin Token minted:'))
-      if (tokenLog) break
-      await new Promise((r) => setTimeout(r, 100))
-    }
-    if (!tokenLog) {
-      throw new Error('Failed to find system token in auth service logs')
-    }
-    systemToken = tokenLog.split('System Admin Token minted:')[1].trim()
+    systemToken = auth.systemToken
     console.log(`Extracted system token: ${systemToken.substring(0, 20)}...`)
 
     const startNode = async (name: string, alias: string) => {
@@ -135,7 +104,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
       if (nodeA) await nodeA.stop()
       if (nodeB) await nodeB.stop()
       if (nodeC) await nodeC.stop()
-      if (auth) await auth.stop()
+      if (auth.container) await auth.container.stop()
       if (network) await network.stop()
       console.log('Teardown: Success')
     } catch (e) {
@@ -312,6 +281,7 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
         gqlGatewayConfig: { endpoint: GATEWAY_ENDPOINT },
       },
       connectionPool: { pool },
+      authClient: createMockAuthProvider(),
     })
   })
 

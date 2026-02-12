@@ -1,71 +1,147 @@
-import { describe, it, expect, beforeEach } from 'bun:test'
-import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
 import { newRouteTable, type PeerInfo, type RouteTable } from '@catalyst/routing'
+import { beforeAll, beforeEach, describe, expect, it } from 'bun:test'
+import path from 'path'
+import { CatalystNodeBus, type DataChannel, type NetworkClient } from '../src/orchestrator.js'
 
+import { Network } from 'testcontainers'
+import {
+  mintDataCustodianToken,
+  mintNodeCustodianToken,
+  mintPeerToken,
+  startAuthService,
+} from './auth-test-helpers.js'
 import { MockConnectionPool } from './mock-connection-pool.js'
 
-describe('Orchestrator Topology Tests', () => {
+const isDockerRunning = () => {
+  try {
+    const result = Bun.spawnSync(['docker', 'info'])
+    return result.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+const skipTests = !isDockerRunning()
+if (skipTests) {
+  console.warn('Skipping topology tests: Docker is not running')
+}
+
+describe.skipIf(skipTests)('Orchestrator Topology Tests', () => {
   let pool: MockConnectionPool
   let nodeA: CatalystNodeBus
   let nodeB: CatalystNodeBus
   let nodeC: CatalystNodeBus
 
-  const infoA: PeerInfo = {
+  const infoA = {
     name: 'node-a.somebiz.local.io',
     endpoint: 'ws://node-a',
     domains: ['somebiz.local.io'],
-  }
-  const infoB: PeerInfo = {
+  } satisfies PeerInfo
+  const infoB = {
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://node-b',
     domains: ['somebiz.local.io'],
-  }
-  const infoC: PeerInfo = {
+  } satisfies PeerInfo
+  const infoC = {
     name: 'node-c.somebiz.local.io',
     endpoint: 'ws://node-c',
     domains: ['somebiz.local.io'],
+  } satisfies PeerInfo
+
+  const repoRoot = path.resolve(__dirname, '../../../')
+  const authImage = 'catalyst-auth'
+
+  const buildImages = async () => {
+    // check if auth image is built
+    console.log('Building Auth image...')
+    const authBuild = Bun.spawnSync(
+      ['docker', 'build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
+      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    )
+    if (authBuild.exitCode !== 0) {
+      throw new Error(`docker build auth failed: ${authBuild.exitCode}`)
+    }
   }
 
-  beforeEach(() => {
+  let nodeCustodianToken: string = ''
+  let dataCustodianToken: string = ''
+  let authHostUrl: string = ''
+  // NODE principal tokens for each node (used internally for IBGP communication)
+  let nodeTokenA: string = ''
+  let nodeTokenB: string = ''
+  let nodeTokenC: string = ''
+
+  beforeAll(async () => {
+    await buildImages()
+    const network = await new Network().start()
+    const auth = await startAuthService(network, 'auth', authImage)
+
+    authHostUrl = `ws://${auth.container.getHost()}:${auth.container.getFirstMappedPort()}/rpc`
+
+    // Mint NODE_CUSTODIAN token for peer operations (addPeer, removePeer, etc.)
+    nodeCustodianToken = await mintNodeCustodianToken(
+      authHostUrl,
+      auth.systemToken,
+      infoA.name,
+      infoA.domains
+    )
+
+    // Mint DATA_CUSTODIAN token for route operations (addRoute, removeRoute, etc.)
+    dataCustodianToken = await mintDataCustodianToken(
+      authHostUrl,
+      auth.systemToken,
+      infoA.name,
+      infoA.domains
+    )
+
+    // Mint NODE tokens for each node (used for IBGP inter-node communication)
+    nodeTokenA = await mintPeerToken(authHostUrl, auth.systemToken, infoA.name, infoA.domains)
+    nodeTokenB = await mintPeerToken(authHostUrl, auth.systemToken, infoB.name, infoB.domains)
+    nodeTokenC = await mintPeerToken(authHostUrl, auth.systemToken, infoC.name, infoC.domains)
+  })
+
+  beforeEach(async () => {
     pool = new MockConnectionPool()
 
-    const createNode = (info: PeerInfo) => {
+    const createNode = (info: PeerInfo & { endpoint: string }, nodeToken: string) => {
       const bus = new CatalystNodeBus({
         config: { node: info },
         connectionPool: { pool },
         state: newRouteTable(),
+        authEndpoint: authHostUrl,
+        nodeToken,
       })
       pool.registerNode(bus)
       return bus
     }
 
-    nodeA = createNode(infoA)
-    nodeB = createNode(infoB)
-    nodeC = createNode(infoC)
+    nodeA = createNode(infoA, nodeTokenA)
+    nodeB = createNode(infoB, nodeTokenB)
+    nodeC = createNode(infoC, nodeTokenC)
   })
 
   it('Linear Topology: A <-> B <-> C propagation and withdrawal', async () => {
     const netA = (
-      (await nodeA.publicApi().getNetworkClient('secret')) as {
+      (await nodeA.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
     const netB = (
-      (await nodeB.publicApi().getNetworkClient('secret')) as {
+      (await nodeB.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
     const netC = (
-      (await nodeC.publicApi().getNetworkClient('secret')) as {
+      (await nodeC.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataChannelClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient(dataCustodianToken)) as {
         success: true
         client: DataChannel
       }
@@ -84,7 +160,7 @@ describe('Orchestrator Topology Tests', () => {
     await dataA.addRoute(routeA)
 
     // Wait for propagation (async side-effects)
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 700))
 
     // Check B learned it
     const stateB = (nodeB as unknown as { state: RouteTable }).state
@@ -115,26 +191,27 @@ describe('Orchestrator Topology Tests', () => {
 
   it('Initial Sync: B learns A, then C connects to B -> C should learn A', async () => {
     const netA = (
-      (await nodeA.publicApi().getNetworkClient('secret')) as {
+      (await nodeA.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
+    expect(netA).toBeDefined()
     const netB = (
-      (await nodeB.publicApi().getNetworkClient('secret')) as {
+      (await nodeB.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
     const netC = (
-      (await nodeC.publicApi().getNetworkClient('secret')) as {
+      (await nodeC.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataChannelClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient(dataCustodianToken)) as {
         success: true
         client: DataChannel
       }
@@ -191,26 +268,26 @@ describe('Orchestrator Topology Tests', () => {
 
   it('Withdrawal on Disconnect: A <-> B <-> C. A disconnects from B -> C should remove A', async () => {
     const netA = (
-      (await nodeA.publicApi().getNetworkClient('secret')) as {
+      (await nodeA.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
     const netB = (
-      (await nodeB.publicApi().getNetworkClient('secret')) as {
+      (await nodeB.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
     const netC = (
-      (await nodeC.publicApi().getNetworkClient('secret')) as {
+      (await nodeC.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataChannelClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient(dataCustodianToken)) as {
         success: true
         client: DataChannel
       }
@@ -225,7 +302,7 @@ describe('Orchestrator Topology Tests', () => {
     // 2. A adds route
     const routeA = { name: 'service-a', protocol: 'http' as const, endpoint: 'http://a:8080' }
     await dataA.addRoute(routeA)
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 2000))
 
     expect(
       (nodeC as unknown as { state: RouteTable }).state.internal.routes.some(
@@ -245,30 +322,30 @@ describe('Orchestrator Topology Tests', () => {
       (r) => r.name === 'service-a'
     )
     expect(hasAOnC).toBe(false)
-  })
+  }, 10000)
 
   it('Loop Prevention: A -> B -> C -> A', async () => {
     const netA = (
-      (await nodeA.publicApi().getNetworkClient('secret')) as {
+      (await nodeA.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
     const netB = (
-      (await nodeB.publicApi().getNetworkClient('secret')) as {
+      (await nodeB.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
     const netC = (
-      (await nodeC.publicApi().getNetworkClient('secret')) as {
+      (await nodeC.publicApi().getNetworkClient(nodeCustodianToken)) as {
         success: true
         client: NetworkClient
       }
     ).client
 
     const dataA = (
-      (await nodeA.publicApi().getDataChannelClient('secret')) as {
+      (await nodeA.publicApi().getDataChannelClient(dataCustodianToken)) as {
         success: true
         client: DataChannel
       }

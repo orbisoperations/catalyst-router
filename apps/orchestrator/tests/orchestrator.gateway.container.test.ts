@@ -10,7 +10,13 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 import type { PublicApi } from '../src/orchestrator.js'
-import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
+import {
+  mintDataCustodianToken,
+  mintNodeCustodianToken,
+  mintPeerToken,
+  startAuthService,
+  type AuthServiceContext,
+} from './auth-test-helpers.js'
 
 const isDockerRunning = () => {
   try {
@@ -80,6 +86,8 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
     let peerB: StartedTestContainer
     let books: StartedTestContainer
     const peerBLogs: string[] = []
+    let dataCustodianToken: string = ''
+    let nodeCustodianToken: string = ''
 
     beforeAll(async () => {
       await buildImages()
@@ -127,6 +135,8 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         'Catalyst server [gateway] listening',
         {
           CATALYST_NODE_ID: 'gateway',
+          CATALYST_DOMAINS: 'somebiz.local.io',
+          CATALYST_AUTH_ENDPOINT: auth.endpoint,
         },
         [4000]
       )
@@ -157,6 +167,21 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       )
       books = await startContainer('books', 'books', 'BOOKS_STARTED', {}, [8080])
 
+      const hostUrl = `ws://${auth.container.getHost()}:${auth.container.getFirstMappedPort()}/rpc`
+
+      dataCustodianToken = await mintDataCustodianToken(
+        hostUrl,
+        auth.systemToken,
+        'peer-a.somebiz.local.io',
+        ['somebiz.local.io']
+      )
+      nodeCustodianToken = await mintNodeCustodianToken(
+        hostUrl,
+        auth.systemToken,
+        'peer-a.somebiz.local.io',
+        ['somebiz.local.io']
+      )
+
       console.log('Containers started')
     }, TIMEOUT)
 
@@ -185,8 +210,8 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         const portB = peerB.getMappedPort(3000)
         const clientB = newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${portB}/rpc`)
 
-        const netAResult = await clientA.getNetworkClient(auth.systemToken)
-        const netBResult = await clientB.getNetworkClient(auth.systemToken)
+        const netAResult = await clientA.getNetworkClient(nodeCustodianToken)
+        const netBResult = await clientB.getNetworkClient(nodeCustodianToken)
 
         if (!netAResult.success || !netBResult.success) {
           throw new Error('Failed to get network client')
@@ -214,7 +239,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
 
         // 2. A adds a GraphQL route
         console.log('Adding GraphQL route to A...')
-        const dataAResult = await clientA.getDataChannelClient(auth.systemToken)
+        const dataAResult = await clientA.getDataChannelClient(dataCustodianToken)
         if (!dataAResult.success) throw new Error(`Failed to get data client: ${dataAResult.error}`)
 
         await dataAResult.client.addRoute({
@@ -254,6 +279,9 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
     let peerB: StartedTestContainer
     let books: StartedTestContainer
     const peerBLogs: string[] = []
+    let nodeCustodianTokenA: string = ''
+    let nodeCustodianTokenB: string = ''
+    let dataCustodianTokenA: string = ''
 
     beforeAll(async () => {
       await buildImages()
@@ -302,6 +330,8 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         'Catalyst server [gateway] listening',
         {
           CATALYST_NODE_ID: 'gateway',
+          CATALYST_DOMAINS: 'somebiz.local.io',
+          CATALYST_AUTH_ENDPOINT: authB.endpoint,
         },
         [4000]
       )
@@ -344,6 +374,28 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
       )
       books = await startContainer('books', 'books', 'BOOKS_STARTED', {}, [8080])
 
+      const authAHostUrl = `ws://${authA.container.getHost()}:${authA.container.getFirstMappedPort()}/rpc`
+      const authBHostUrl = `ws://${authB.container.getHost()}:${authB.container.getFirstMappedPort()}/rpc`
+
+      nodeCustodianTokenA = await mintNodeCustodianToken(
+        authAHostUrl,
+        authA.systemToken,
+        'peer-a.somebiz.local.io',
+        ['somebiz.local.io']
+      )
+      nodeCustodianTokenB = await mintNodeCustodianToken(
+        authBHostUrl,
+        authB.systemToken,
+        'peer-b.somebiz.local.io',
+        ['somebiz.local.io']
+      )
+      dataCustodianTokenA = await mintDataCustodianToken(
+        authAHostUrl,
+        authA.systemToken,
+        'peer-a.somebiz.local.io',
+        ['somebiz.local.io']
+      )
+
       console.log('Containers started with separate auth servers')
     }, TIMEOUT)
 
@@ -377,8 +429,8 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         expect(authA.systemToken).not.toBe(authB.systemToken)
         console.log('Confirmed: Tokens are unique per auth server')
 
-        const netAResult = await clientA.getNetworkClient(authA.systemToken)
-        const netBResult = await clientB.getNetworkClient(authB.systemToken)
+        const netAResult = await clientA.getNetworkClient(nodeCustodianTokenA)
+        const netBResult = await clientB.getNetworkClient(nodeCustodianTokenB)
 
         if (!netAResult.success || !netBResult.success) {
           throw new Error('Failed to get network client')
@@ -426,7 +478,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
 
         // 2. A adds a GraphQL route
         console.log('Adding GraphQL route to A...')
-        const dataAResult = await clientA.getDataChannelClient(authA.systemToken)
+        const dataAResult = await clientA.getDataChannelClient(dataCustodianTokenA)
         if (!dataAResult.success) throw new Error(`Failed to get data client: ${dataAResult.error}`)
 
         await dataAResult.client.addRoute({

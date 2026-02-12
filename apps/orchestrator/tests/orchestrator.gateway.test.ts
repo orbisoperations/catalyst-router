@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { Actions, type PeerInfo } from '@catalyst/routing'
-import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
+import { beforeEach, describe, expect, it, mock } from 'bun:test'
 import type { RpcStub } from 'capnweb'
+import {
+  type AuthServiceApi,
+  CatalystNodeBus,
+  ConnectionPool,
+  type PublicApi,
+} from '../src/orchestrator.js'
+import { createMockAuthProvider } from './mock-auth-provider.js'
 
 const MOCK_NODE: PeerInfo = {
   name: 'node-a.somebiz.local.io',
@@ -53,10 +59,14 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
     pool = new MockConnectionPool('http')
     bus = new CatalystNodeBus({
       config: {
-        node: MOCK_NODE,
+        node: {
+          ...MOCK_NODE,
+          endpoint: MOCK_NODE.endpoint ?? '',
+        },
         gqlGatewayConfig: { endpoint: GATEWAY_ENDPOINT },
       },
       connectionPool: { pool },
+      authClient: createMockAuthProvider() as RpcStub<AuthServiceApi>,
     })
   })
 

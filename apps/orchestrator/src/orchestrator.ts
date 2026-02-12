@@ -1,18 +1,15 @@
-import type { z } from 'zod'
 import {
-  Actions,
-  newRouteTable,
   type Action,
+  Actions,
   type DataChannelDefinition,
   type InternalRoute,
+  newRouteTable,
   type PeerInfo,
   type PeerRecord,
   type RouteTable,
   type UpdateMessageSchema,
 } from '@catalyst/routing'
-export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
-import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import {
   newHttpBatchRpcSession,
   newWebSocketRpcSession,
@@ -20,6 +17,9 @@ import {
   type RpcStub,
   RpcTarget,
 } from 'capnweb'
+import type { z } from 'zod'
+import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
+export type { InternalRoute, PeerInfo }
 
 export interface PublicApi {
   getNetworkClient(
@@ -102,7 +102,7 @@ export class ConnectionPool {
 /**
  * Auth Service RPC API interface
  */
-interface AuthServicePermissionsHandlers {
+export interface AuthServicePermissionsHandlers {
   authorizeAction(request: {
     action: string
     nodeContext: { nodeId: string; domains: string[] }
@@ -122,7 +122,12 @@ interface AuthServicePermissionsHandlers {
   >
 }
 
-interface AuthServiceApi {
+export interface AuthServiceApi {
+  /** Pure JWT verification - checks signature, expiry, and revocation only */
+  authenticate(
+    token: string
+  ): Promise<{ valid: true; payload: Record<string, unknown> } | { valid: false; error: string }>
+  /** Cedar policy evaluation - verifies token AND checks action permissions */
   permissions(token: string): Promise<AuthServicePermissionsHandlers | { error: string }>
 }
 
@@ -132,7 +137,7 @@ export class CatalystNodeBus extends RpcTarget {
   private connectionPool: ConnectionPool
   private config: OrchestratorConfig
   private nodeToken?: string
-  private authClient?: RpcStub<AuthServiceApi>
+  private authClient: RpcStub<AuthServiceApi>
   public lastNotificationPromise?: Promise<void>
 
   constructor(opts: {
@@ -141,6 +146,7 @@ export class CatalystNodeBus extends RpcTarget {
     config: OrchestratorConfig
     nodeToken?: string
     authEndpoint?: string
+    authClient: RpcStub<AuthServiceApi>
   }) {
     super()
     this.state = opts.state ?? newRouteTable()
@@ -152,8 +158,16 @@ export class CatalystNodeBus extends RpcTarget {
     }
     this.config = opts.config
     this.nodeToken = opts.nodeToken
-    if (opts.authEndpoint) {
+    if (!opts.nodeToken) {
+      this.logger
+        .warn`No nodeToken provided — IBGP and gateway sync operations will fail authentication`
+    }
+    if (opts.authClient) {
+      this.authClient = opts.authClient
+    } else if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
+    } else {
+      throw new Error('Authentication failed: provide authEndpoint or authClient')
     }
     this.connectionPool =
       opts.connectionPool?.pool ??

@@ -1,8 +1,9 @@
-import { describe, it, expect, mock, beforeAll, afterAll } from 'bun:test'
-import { websocket } from 'hono/bun'
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test'
 import { newWebSocketRpcSession } from 'capnweb'
+import { websocket } from 'hono/bun'
 import type { GatewayUpdateResult } from '../src/rpc/server.js'
 import { createRpcHandler, GatewayRpcServer } from '../src/rpc/server.js'
+import { createMockAuthProvider } from './mock-auth-provider.js'
 
 describe('RPC Integration', () => {
   let server: ReturnType<typeof Bun.serve>
@@ -17,7 +18,11 @@ describe('RPC Integration', () => {
   })
 
   beforeAll(async () => {
-    const rpcServer = new GatewayRpcServer(updateCallback)
+    const rpcServer = new GatewayRpcServer(updateCallback, undefined, {
+      authClient: createMockAuthProvider(),
+      nodeId: 'test-gateway',
+      domains: ['test.local'],
+    })
     const app = createRpcHandler(rpcServer)
 
     server = Bun.serve({
