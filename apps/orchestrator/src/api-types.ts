@@ -74,3 +74,4 @@ export type Propagation =
   | { type: 'update'; peer: PeerRecord; localNode: PeerInfo; update: UpdateMessage }
   | { type: 'open'; peer: PeerRecord; localNode: PeerInfo }
   | { type: 'close'; peer: PeerRecord; localNode: PeerInfo; code: number; reason?: string }
+  | { type: 'keepalive'; peer: PeerRecord }
