@@ -22,6 +22,18 @@ FROM debian:bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ---------- Configure apt resilience ----------
+# mmdebstrap inherits the host apt configuration, so these settings apply to
+# both the Docker image build AND the chroot bootstrap (where transient mirror
+# issues like hash-sum mismatches from CDN sync races are common).
+RUN mkdir -p /etc/apt/apt.conf.d && \
+    printf '%s\n' \
+      'Acquire::Retries "3";' \
+      'Acquire::http::No-Cache "true";' \
+      'Acquire::https::No-Cache "true";' \
+      'Acquire::http::Pipeline-Depth "0";' \
+      > /etc/apt/apt.conf.d/80retries
+
 # ---------- Install all rpi-image-gen dependencies ----------
 # Sourced from rpi-image-gen/depends manifest. We install everything upfront
 # so install_deps.sh doesn't need to run at build time (avoids binfmt_misc
