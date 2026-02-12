@@ -314,6 +314,56 @@ describe("ServiceType includes 'envoy'", () => {
   })
 })
 
+describe('loadDefaultConfig FQDN construction', () => {
+  const originalEnv = { ...process.env }
+
+  const clearEnv = () => {
+    process.env = { ...originalEnv }
+  }
+
+  it('constructs FQDN as {nodeId}.{orgDomain} when CATALYST_ORG_DOMAIN is set', () => {
+    process.env.CATALYST_NODE_ID = 'router-east'
+    process.env.CATALYST_PEERING_ENDPOINT = 'ws://localhost:3000'
+    process.env.CATALYST_ORG_DOMAIN = 'acme.io'
+
+    try {
+      const config = loadDefaultConfig()
+      expect(config.node.name).toBe('router-east.acme.io')
+      expect(config.node.domain).toBe('acme.io')
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('uses bare node ID when CATALYST_ORG_DOMAIN is not set', () => {
+    process.env.CATALYST_NODE_ID = 'standalone-node'
+    process.env.CATALYST_PEERING_ENDPOINT = 'ws://localhost:3000'
+    delete process.env.CATALYST_ORG_DOMAIN
+
+    try {
+      const config = loadDefaultConfig()
+      expect(config.node.name).toBe('standalone-node')
+      expect(config.node.domain).toBe('')
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('uses bare node ID when CATALYST_ORG_DOMAIN is empty string', () => {
+    process.env.CATALYST_NODE_ID = 'standalone-node'
+    process.env.CATALYST_PEERING_ENDPOINT = 'ws://localhost:3000'
+    process.env.CATALYST_ORG_DOMAIN = ''
+
+    try {
+      const config = loadDefaultConfig()
+      expect(config.node.name).toBe('standalone-node')
+      expect(config.node.domain).toBe('')
+    } finally {
+      clearEnv()
+    }
+  })
+})
+
 describe('loadDefaultConfig with envoy env vars', () => {
   const originalEnv = { ...process.env }
 
