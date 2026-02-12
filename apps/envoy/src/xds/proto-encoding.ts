@@ -21,6 +21,15 @@ const HTTP_PROTOCOL_OPTIONS_TYPE_URL =
 
 const CLUSTER_TYPE = { STATIC: 0, STRICT_DNS: 1 } as const
 
+/** envoy.config.cluster.v3.Cluster.LbPolicy enum values */
+const LB_POLICY: Record<string, number> = {
+  ROUND_ROBIN: 0,
+  LEAST_REQUEST: 1,
+  RING_HASH: 2,
+  RANDOM: 3,
+  MAGLEV: 5,
+} as const
+
 // ---------------------------------------------------------------------------
 // Build the protobuf type hierarchy programmatically.
 //
@@ -460,7 +469,7 @@ export function encodeCluster(cluster: XdsCluster): {
     name: cluster.name,
     type: typeInt,
     connect_timeout: { seconds, nanos: 0 },
-    lb_policy: 0, // ROUND_ROBIN
+    lb_policy: LB_POLICY[cluster.lb_policy] ?? 0,
     dns_lookup_family: cluster.dns_lookup_family ?? 0,
     load_assignment: cluster.load_assignment,
   }
