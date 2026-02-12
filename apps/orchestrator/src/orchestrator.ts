@@ -29,6 +29,7 @@ import type {
   EnvoyApi,
   GatewayApi,
 } from './api-types.js'
+import { ActionQueue, type DispatchResult } from './action-queue.js'
 
 export type { PublicApi, NetworkClient, DataChannel, IBGPClient } from './api-types.js'
 
@@ -110,6 +111,7 @@ export class CatalystNodeBus extends RpcTarget {
   private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
   private portAllocator?: PortAllocator
+  private queue: ActionQueue
   public lastNotificationPromise?: Promise<void>
 
   constructor(opts: {
@@ -145,6 +147,7 @@ export class CatalystNodeBus extends RpcTarget {
     }
 
     this.validateNodeConfig()
+    this.queue = new ActionQueue((action) => this.pipeline(action))
   }
 
   private validateNodeConfig() {
@@ -208,9 +211,11 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
-  async dispatch(
-    sentAction: Action
-  ): Promise<{ success: true } | { success: false; error: string }> {
+  async dispatch(sentAction: Action): Promise<DispatchResult> {
+    return this.queue.enqueue(sentAction)
+  }
+
+  private async pipeline(sentAction: Action): Promise<DispatchResult> {
     this.logger.info`Dispatching action: ${sentAction.action}`
 
     const prevState = this.state
