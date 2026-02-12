@@ -7,7 +7,7 @@
 
 ## Context
 
-[ADR-0001](./0001-unified-opentelemetry-observability.md) established OpenTelemetry as the collection and instrumentation layer. This ADR addresses the separate concern of backend selection — where telemetry data is stored and visualized.
+[[0001-unified-opentelemetry-observability|ADR-0001]] established OpenTelemetry as the collection and instrumentation layer. This ADR addresses the separate concern of backend selection — where telemetry data is stored and visualized.
 
 ### Separation of Concerns
 
@@ -160,9 +160,9 @@ If license constraints change or we use backends as external services (not bundl
 
 ## Related Decisions
 
-- [ADR-0001](./0001-unified-opentelemetry-observability.md) — Collection layer (OpenTelemetry SDK)
-- [ADR-0002](./0002-logging-library-selection.md) — Logging library (LogTape)
-- [ADR-0004](./0004-sqlite-storage-backend.md) — Application storage layer (SQLite)
+- [[0001-unified-opentelemetry-observability|ADR-0001]] — Collection layer (OpenTelemetry SDK)
+- [[0002-logging-library-selection|ADR-0002]] — Logging library (LogTape)
+- [[0004-sqlite-storage-backend|ADR-0004]] — Application storage layer (SQLite)
 
 ## References
 

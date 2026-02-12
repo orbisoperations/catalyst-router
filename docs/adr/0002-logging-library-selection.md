@@ -154,7 +154,7 @@ logger.error`Connection failed: ${error.message}`
 
 ## Related Decisions
 
-- [ADR-0001](./0001-unified-opentelemetry-observability.md) - Unified OpenTelemetry Observability
+- [[0001-unified-opentelemetry-observability|ADR-0001]] - Unified OpenTelemetry Observability
 
 ## References
 

@@ -4,15 +4,15 @@ This document describes the API design philosophy, transport layer, and progress
 
 ## Table of Contents
 
-- [API Design Philosophy](#api-design-philosophy)
-- [Capnweb Transport Layer](#capnweb-transport-layer)
-- [The Progressive API Pattern](#the-progressive-api-pattern)
-- [Orchestrator API](#orchestrator-api)
-- [Auth API](#auth-api)
-- [Discriminated Union Response Pattern](#discriminated-union-response-pattern)
-- [REST Comparison](#rest-comparison)
-- [Client Usage Examples](#client-usage-examples)
-- [Connection Management](#connection-management)
+- [[#API Design Philosophy|API Design Philosophy]]
+- [[#Capnweb Transport Layer|Capnweb Transport Layer]]
+- [[#The Progressive API Pattern|The Progressive API Pattern]]
+- [[#Orchestrator API|Orchestrator API]]
+- [[#Auth API|Auth API]]
+- [[#Discriminated Union Response Pattern|Discriminated Union Response Pattern]]
+- [[#REST Comparison|REST Comparison]]
+- [[#Client Usage Examples|Client Usage Examples]]
+- [[#Connection Management|Connection Management]]
 
 ---
 

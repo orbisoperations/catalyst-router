@@ -35,9 +35,9 @@ In-memory stores exist across multiple packages:
 
 This ADR does **NOT** apply to:
 
-- **Logs** — Stored in InfluxDB per [ADR-0003](./0003-observability-backends.md)
-- **Metrics** — Stored in Prometheus per [ADR-0003](./0003-observability-backends.md)
-- **Traces** — Stored in Jaeger per [ADR-0003](./0003-observability-backends.md)
+- **Logs** — Stored in InfluxDB per [[0003-observability-backends|ADR-0003]]
+- **Metrics** — Stored in Prometheus per [[0003-observability-backends|ADR-0003]]
+- **Traces** — Stored in Jaeger per [[0003-observability-backends|ADR-0003]]
 - **Ephemeral caches** — Connection pools, RPC stubs (runtime-only, not persisted)
 - **Cryptographic keys** — Already handled by `FileSystemKeyManager`
 
@@ -240,8 +240,8 @@ See:
 
 ## Related Decisions
 
-- [ADR-0001](./0001-unified-opentelemetry-observability.md) — Observability (traces/metrics/logs go to dedicated backends)
-- [ADR-0003](./0003-observability-backends.md) — Telemetry backends (Prometheus, Jaeger, InfluxDB)
+- [[0001-unified-opentelemetry-observability|ADR-0001]] — Observability (traces/metrics/logs go to dedicated backends)
+- [[0003-observability-backends|ADR-0003]] — Telemetry backends (Prometheus, Jaeger, InfluxDB)
 
 ## References
 

@@ -2,7 +2,7 @@
 
 > **Licensor**: Orbis Operations LLC
 > **Last updated**: 2026-02-11
-> **Authoritative governance**: [constitution.md](./constitution.md)
+> **Authoritative governance**: [[constitution|constitution.md]]
 
 ---
 
@@ -12,7 +12,7 @@ Catalyst Router is a distributed control and data plane that uses a BGP-inspired
 
 The system is built around a "Core Pod" deployment model: each node runs an orchestrator process alongside sidecar services (auth, GraphQL gateway, OTEL collector) that communicate over Capnweb RPC (Cap'n Proto over WebSocket). This architecture ensures operational simplicity while maintaining clear separation of concerns between control plane, data plane, and observability.
 
-The [constitution.md](./constitution.md) is the authoritative governance document for all architectural decisions. It defines 18 immutable principles covering structural patterns, quality standards, and operational requirements. All code changes must comply with these principles; violations are critical findings that block merge.
+The [[constitution|constitution.md]] is the authoritative governance document for all architectural decisions. It defines 18 immutable principles covering structural patterns, quality standards, and operational requirements. All code changes must comply with these principles; violations are critical findings that block merge.
 
 ---
 
@@ -299,7 +299,7 @@ Authorization uses the [Cedar policy engine](https://www.cedarpolicy.com/) with 
 
 ### Authorization Flow
 
-JWT tokens carry a `principal` field (Cedar entity type, e.g., `CATALYST::ADMIN`) and an `entity` payload. At authorization time, `jwtToEntity()` converts the JWT payload into a Cedar entity, which is then evaluated against Cedar policies. See [ADR-0008](./docs/adr/0008-permission-policy-schema.md) for the full policy schema design.
+JWT tokens carry a `principal` field (Cedar entity type, e.g., `CATALYST::ADMIN`) and an `entity` payload. At authorization time, `jwtToEntity()` converts the JWT payload into a Cedar entity, which is then evaluated against Cedar policies. See [[0008-permission-policy-schema|ADR-0008]] for the full policy schema design.
 
 ---
 
@@ -324,7 +324,7 @@ PRAGMA busy_timeout = 5000;   -- Wait up to 5s on lock contention
 
 In-memory stores (`InMemoryStore` variants) are used for testing only. Ephemeral `:memory:` mode is available for test doubles, but production must use file-backed SQLite.
 
-See [ADR-0004](./docs/adr/0004-sqlite-storage-backend.md) for the decision rationale.
+See [[0004-sqlite-storage-backend|ADR-0004]] for the decision rationale.
 
 ---
 
@@ -361,7 +361,7 @@ const telemetry = new TelemetryBuilder('auth-service')
 - **W3C Trace Context**: Propagated across service boundaries for distributed tracing
 - **Hierarchical log categories**: e.g., `['catalyst', 'orchestrator']`, `['catalyst', 'auth', 'jwt']`
 
-See [ADR-0001](./docs/adr/0001-unified-opentelemetry-observability.md), [ADR-0002](./docs/adr/0002-logging-library-selection.md), [ADR-0003](./docs/adr/0003-observability-backends.md).
+See [[0001-unified-opentelemetry-observability|ADR-0001]], [[0002-logging-library-selection|ADR-0002]], [[0003-observability-backends|ADR-0003]].
 
 ---
 
@@ -388,7 +388,7 @@ All configuration uses `CATALYST_*` environment variables, validated at startup 
 
 ## 11. Architectural Invariants
 
-The [constitution.md](./constitution.md) defines 18 immutable principles. Key invariants that shape daily development:
+The [[constitution|constitution.md]] defines 18 immutable principles. Key invariants that shape daily development:
 
 | Principle                         | Summary                                                 | Impact                                                            |
 | --------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -407,20 +407,20 @@ The [constitution.md](./constitution.md) defines 18 immutable principles. Key in
 
 ## 12. Architecture Decision Records
 
-All ADRs are in [`docs/adr/`](./docs/adr/). ADRs elaborate on constitutional principles but cannot contradict them.
+All ADRs are in [`docs/adr/`](../adr/). ADRs elaborate on constitutional principles but cannot contradict them.
 
-| ADR                                                            | Title                                        | Status   |
-| -------------------------------------------------------------- | -------------------------------------------- | -------- |
-| [0001](./docs/adr/0001-unified-opentelemetry-observability.md) | Unified OpenTelemetry Observability          | Accepted |
-| [0002](./docs/adr/0002-logging-library-selection.md)           | Logging Library Selection (LogTape vs Pino)  | Accepted |
-| [0003](./docs/adr/0003-observability-backends.md)              | Observability Backend Selection              | Proposed |
-| [0004](./docs/adr/0004-sqlite-storage-backend.md)              | SQLite as Unified Storage Backend            | Accepted |
-| [0005](./docs/adr/0005-docker-as-container-runtime.md)         | Docker as Container Runtime                  | Accepted |
-| [0006](./docs/adr/0006-node-orchestrator-architecture.md)      | Node Orchestrator Architecture               | Accepted |
-| [0007](./docs/adr/0007-certificate-bound-access-tokens.md)     | Certificate Bound Access Tokens for BGP      | Proposed |
-| [0008](./docs/adr/0008-permission-policy-schema.md)            | Permission Policy Schema                     | Proposed |
-| [0009](./docs/adr/0009-relational-database-style-guide.md)     | Relational Database Style Guide              | Accepted |
-| [0010](./docs/adr/0010-catalyst-service-base-class.md)         | Unified Service Base Class (CatalystService) | Accepted |
+| ADR                                                | Title                                        | Status   |
+| -------------------------------------------------- | -------------------------------------------- | -------- |
+| [[0001-unified-opentelemetry-observability\|0001]] | Unified OpenTelemetry Observability          | Accepted |
+| [[0002-logging-library-selection\|0002]]           | Logging Library Selection (LogTape vs Pino)  | Accepted |
+| [[0003-observability-backends\|0003]]              | Observability Backend Selection              | Proposed |
+| [[0004-sqlite-storage-backend\|0004]]              | SQLite as Unified Storage Backend            | Accepted |
+| [[0005-docker-as-container-runtime\|0005]]         | Docker as Container Runtime                  | Accepted |
+| [[0006-node-orchestrator-architecture\|0006]]      | Node Orchestrator Architecture               | Accepted |
+| [[0007-certificate-bound-access-tokens\|0007]]     | Certificate Bound Access Tokens for BGP      | Proposed |
+| [[0008-permission-policy-schema\|0008]]            | Permission Policy Schema                     | Proposed |
+| [[0009-relational-database-style-guide\|0009]]     | Relational Database Style Guide              | Accepted |
+| [[0010-catalyst-service-base-class\|0010]]         | Unified Service Base Class (CatalystService) | Accepted |
 
 ---
 

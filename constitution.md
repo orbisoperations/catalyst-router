@@ -236,7 +236,7 @@ catalystHonoServer(app, { services: [auth, gateway] }).start()
 
 **Compliance Check**: Does this change store persistent data in-memory? Does SQLite usage include required pragmas?
 
-**ADR Reference**: [ADR-0004](../docs/adr/0004-sqlite-storage-backend.md)
+**ADR Reference**: [[0004-sqlite-storage-backend|ADR-0004]]
 
 ---
 
@@ -274,7 +274,7 @@ timestamp: z.iso.datetime({ offset: true }) // allows "+02:00"
 
 **Compliance Check**: Do table/column names follow snake_case singular conventions? No local timezone storage? Timestamps use `At`/`_at` suffix?
 
-**ADR Reference**: [ADR-0009](../docs/adr/0009-relational-database-style-guide.md)
+**ADR Reference**: [[0009-relational-database-style-guide|ADR-0009]]
 
 ---
 
@@ -378,7 +378,7 @@ gt fold                                    # Merge current branch into parent
 
 **Compliance Check**: No `===` for secrets; no literal secrets; auth params on protected paths; mTLS enforced; JWTs cert-bound where required; authorization delegated to policy engine.
 
-**ADR References**: [ADR-0007](../docs/adr/0007-certificate-bound-access-tokens.md), [ADR-0008](../docs/adr/0008-permission-policy-schema.md)
+**ADR References**: [[0007-certificate-bound-access-tokens|ADR-0007]], [[0008-permission-policy-schema|ADR-0008]]
 
 ---
 
@@ -396,7 +396,7 @@ gt fold                                    # Merge current branch into parent
 
 **Compliance Check**: Does this change use `console.log`? Does it bypass the OTEL Collector? Are logging categories hierarchical?
 
-**ADR References**: [ADR-0001](../docs/adr/0001-unified-opentelemetry-observability.md), [ADR-0002](../docs/adr/0002-logging-library-selection.md), [ADR-0003](../docs/adr/0003-observability-backends.md)
+**ADR References**: [[0001-unified-opentelemetry-observability|ADR-0001]], [[0002-logging-library-selection|ADR-0002]], [[0003-observability-backends|ADR-0003]]
 
 ---
 

@@ -7,9 +7,9 @@ This document outlines the adaptation of the Border Gateway Protocol (BGP) for s
 In this system, an **Autonomous System (AS)** represents a logical domain of services (e.g., a company, a datacenter, or a specific cloud environment). We use BGP-style messaging to exchange "routes" which are actually pointers to service endpoints.
 
 - **Standard BGP**: Routes `10.0.0.0/24` -> Next Hop IP.
-- **Catalyst BGP**: Routes `*.mydatacenter.mycompany` -> Envoy Node ID / Service Endpoint.
+- **Catalyst BGP**: Routes `*.mydatacenter.mycompany` → Catalyst Router Node / Service Endpoint.
 
-Traffic is routed via Envoy proxies, not at the IP layer. The "Next Hop" is a catalyst router that can forward the request or terminate it at a local service.
+Traffic is routed via the GraphQL federation gateway, not at the IP layer. The "Next Hop" is a catalyst router that can forward the request or terminate it at a local service.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ Nodes maintain two primary routing tables:
 
 ## Protocol Messages
 
-We use a simplified set of BGP messages encoded as JSON (or Protobuf in the future) over a secure channel (e.g., mTLS). The TypeScript implementation uses discriminated unions for these messages.
+We use a simplified set of BGP messages encoded as JSON (or Protobuf in the future) over Capnweb RPC (Cap'n Proto over WebSocket). Transport security via mTLS is planned but not yet implemented. The TypeScript implementation uses discriminated unions for these messages.
 
 ### 1. OPEN
 
@@ -42,7 +42,7 @@ Sent immediately upon connection establishment to negotiate parameters and capab
 - **BGP Identifier**: Unique ID of the sending node.
 - **Capabilities**: Supported features (e.g., specific service types).
 - **JWKS** (Optional): JSON Web Key Set (`{ keys: [...] }`) used for verifying signatures if mTLS is not sufficient or for application-layer integrity.
-- **PSK** (Optional): Pre-Shared Key identifier if using PSK-based auth.
+- **PSK** (Optional): Pre-Shared Key identifier if using PSK-based auth. _Note: PSK is not currently used in the implementation; peering authentication uses JWT tokens directly._
 
 ### 2. KEEPALIVE
 
