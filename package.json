@@ -47,6 +47,7 @@
       "@catalyst/authorization": "workspace:*",
       "@catalyst/cli": "workspace:*",
       "@catalyst/config": "workspace:*",
+      "@catalyst/envoy-service": "workspace:*",
       "@catalyst/gateway-service": "workspace:*",
       "@catalyst/node-service": "workspace:*",
       "@catalyst/orchestrator-service": "workspace:*",

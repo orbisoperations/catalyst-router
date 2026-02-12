@@ -1,8 +1,7 @@
-import { Role } from '@catalyst/authorization'
 import type { Action, RouteTable } from '@catalyst/routing'
 import { z } from 'zod'
 
-import { NodeConfigSchema } from '@catalyst/config'
+import { NodeConfigSchema, PortEntrySchema } from '@catalyst/config'
 
 export const OrchestratorConfigSchema = z.object({
   node: NodeConfigSchema.extend({
@@ -11,6 +10,13 @@ export const OrchestratorConfigSchema = z.object({
   gqlGatewayConfig: z
     .object({
       endpoint: z.string(),
+    })
+    .optional(),
+  envoyConfig: z
+    .object({
+      endpoint: z.string(),
+      envoyAddress: z.string().optional(),
+      portRange: z.array(PortEntrySchema).min(1),
     })
     .optional(),
 })
