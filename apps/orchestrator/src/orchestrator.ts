@@ -35,6 +35,7 @@ import { RoutingInformationBase, type CommitResult } from './rib.js'
 
 export type { PublicApi, NetworkClient, DataChannel, IBGPClient } from './api-types.js'
 
+<<<<<<< HEAD
 export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
   return newHttpBatchRpcSession<API>(endpoint)
 }
@@ -69,6 +70,8 @@ export class ConnectionPool {
   }
 }
 
+=======
+>>>>>>> 355a1b9 (refactor(orchestrator): reduce to thin shell coordinating RIB pipeline)
 /**
  * Auth Service RPC API interface
  */
@@ -101,7 +104,6 @@ export class CatalystNodeBus extends RpcTarget {
   private connectionPool: ConnectionPool
   private peerTransport: PeerTransport
   private config: OrchestratorConfig
-  private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
   private portAllocator?: PortAllocator
   private rib: RoutingInformationBase
@@ -123,7 +125,6 @@ export class CatalystNodeBus extends RpcTarget {
       )
     }
     this.config = opts.config
-    this.nodeToken = opts.nodeToken
     if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
     }
@@ -133,7 +134,7 @@ export class CatalystNodeBus extends RpcTarget {
         ? new ConnectionPool(opts.connectionPool.type)
         : new ConnectionPool())
 
-    this.peerTransport = new PeerTransport(this.connectionPool, this.nodeToken)
+    this.peerTransport = new PeerTransport(this.connectionPool, opts.nodeToken)
 
     if (this.config.envoyConfig?.portRange) {
       this.portAllocator = createPortAllocator(this.config.envoyConfig.portRange)
@@ -306,22 +307,14 @@ export class CatalystNodeBus extends RpcTarget {
     this.logger.info`Syncing ${graphqlRoutes.length} GraphQL routes to gateway`
 
     try {
-      const stub = this.connectionPool.get(gatewayEndpoint)
-      if (stub) {
-        const config = {
-          services: graphqlRoutes.map((r) => ({
-            name: r.name,
-            url: r.endpoint!,
-          })),
-        }
-
-        // @ts-expect-error - Gateway RPC implementation uses updateConfig
-        const result = await stub.updateConfig(config)
-        if (!result.success) {
-          this.logger.error`Gateway sync failed: ${result.error}`
-        } else {
-          this.logger.info`Gateway sync successful`
-        }
+      const stub = this.connectionPool.getGateway(gatewayEndpoint)
+      const result = await stub.updateConfig({
+        services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
+      })
+      if (!result.success) {
+        this.logger.error`Gateway sync failed: ${result.error}`
+      } else {
+        this.logger.info`Gateway sync successful`
       }
     } catch (e) {
       this.logger.error`Error syncing to gateway: ${e}`
@@ -334,25 +327,18 @@ export class CatalystNodeBus extends RpcTarget {
         token: string
       ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> => {
         const validation = await this.validateToken(token, 'PEER_CREATE')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
-        }
+        if (!validation.valid) return { success: false as const, error: validation.error }
 
         return {
-          success: true,
+          success: true as const,
           client: {
-            addPeer: async (peer: PeerInfo) => {
-              return this.dispatch({ action: Actions.LocalPeerCreate, data: peer })
-            },
-            updatePeer: async (peer: PeerInfo) => {
-              return this.dispatch({ action: Actions.LocalPeerUpdate, data: peer })
-            },
-            removePeer: async (peer: Pick<PeerInfo, 'name'>) => {
-              return this.dispatch({ action: Actions.LocalPeerDelete, data: peer })
-            },
-            listPeers: async () => {
-              return this.state.internal.peers
-            },
+            addPeer: (peer: PeerInfo) =>
+              this.dispatch({ action: Actions.LocalPeerCreate, data: peer }),
+            updatePeer: (peer: PeerInfo) =>
+              this.dispatch({ action: Actions.LocalPeerUpdate, data: peer }),
+            removePeer: (peer: Pick<PeerInfo, 'name'>) =>
+              this.dispatch({ action: Actions.LocalPeerDelete, data: peer }),
+            listPeers: async () => this.rib.getState().internal.peers,
           },
         }
       },
@@ -360,25 +346,19 @@ export class CatalystNodeBus extends RpcTarget {
         token: string
       ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }> => {
         const validation = await this.validateToken(token, 'ROUTE_CREATE')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
-        }
+        if (!validation.valid) return { success: false as const, error: validation.error }
 
         return {
-          success: true,
+          success: true as const,
           client: {
-            addRoute: async (route: DataChannelDefinition) => {
-              return this.dispatch({ action: Actions.LocalRouteCreate, data: route })
-            },
-            removeRoute: async (route: DataChannelDefinition) => {
-              return this.dispatch({ action: Actions.LocalRouteDelete, data: route })
-            },
-            listRoutes: async () => {
-              return {
-                local: this.state.local.routes,
-                internal: this.state.internal.routes,
-              }
-            },
+            addRoute: (route: DataChannelDefinition) =>
+              this.dispatch({ action: Actions.LocalRouteCreate, data: route }),
+            removeRoute: (route: DataChannelDefinition) =>
+              this.dispatch({ action: Actions.LocalRouteDelete, data: route }),
+            listRoutes: async () => ({
+              local: this.rib.getState().local.routes,
+              internal: this.rib.getState().internal.routes,
+            }),
           },
         }
       },
@@ -386,37 +366,27 @@ export class CatalystNodeBus extends RpcTarget {
         token: string
       ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }> => {
         const validation = await this.validateToken(token, 'IBGP_CONNECT')
-        if (!validation.valid) {
-          return { success: false, error: validation.error }
-        }
+        if (!validation.valid) return { success: false as const, error: validation.error }
 
         return {
-          success: true,
+          success: true as const,
           client: {
-            open: async (peer: PeerInfo) => {
-              return this.dispatch({
-                action: Actions.InternalProtocolOpen,
-                data: { peerInfo: peer },
-              })
-            },
-            close: async (peer: PeerInfo, code: number, reason?: string) => {
-              return this.dispatch({
+            open: (peer: PeerInfo) =>
+              this.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peer } }),
+            close: (peer: PeerInfo, code: number, reason?: string) =>
+              this.dispatch({
                 action: Actions.InternalProtocolClose,
                 data: { peerInfo: peer, code, reason },
-              })
-            },
-            update: async (peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>) => {
-              return this.dispatch({
+              }),
+            update: (peer: PeerInfo, update: UpdateMessage) =>
+              this.dispatch({
                 action: Actions.InternalProtocolUpdate,
-                data: {
-                  peerInfo: peer,
-                  update: update,
-                },
-              })
-            },
+                data: { peerInfo: peer, update },
+              }),
           },
         }
       },
+      dispatch: (action: Action) => this.dispatch(action),
     }
   }
 }
