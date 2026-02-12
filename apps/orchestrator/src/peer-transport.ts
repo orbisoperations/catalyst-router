@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 import type { PeerInfo, PeerRecord, UpdateMessageSchema } from '@catalyst/routing'
 import { getLogger } from '@catalyst/telemetry'
-import type { ConnectionPool } from './orchestrator.js'
+import type { ConnectionPool } from './connection-pool.js'
 
 export type UpdateMessage = z.infer<typeof UpdateMessageSchema>
 
