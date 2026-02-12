@@ -107,8 +107,8 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         return container
       }
 
-      nodeA = await startNode('node-a.somebiz.local.io', 'node-a')
-      nodeB = await startNode('node-b.somebiz.local.io', 'node-b')
+      nodeA = await startNode('node-a.somebiz.local.io', 'shared-node-a')
+      nodeB = await startNode('node-b.somebiz.local.io', 'shared-node-b')
 
       console.log('All nodes started.')
     }, TIMEOUT)
@@ -197,12 +197,12 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         // Setup B to accept A first, then A connects to B
         await netB.addPeer({
           name: 'node-a.somebiz.local.io',
-          endpoint: 'ws://node-a:3000/rpc',
+          endpoint: 'ws://shared-node-a:3000/rpc',
           domains: ['somebiz.local.io'],
         })
         await netA.addPeer({
           name: 'node-b.somebiz.local.io',
-          endpoint: 'ws://node-b:3000/rpc',
+          endpoint: 'ws://shared-node-b:3000/rpc',
           domains: ['somebiz.local.io'],
         })
 
@@ -316,13 +316,13 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
 
       nodeA = await startNode(
         'node-a.somebiz.local.io',
-        'node-a',
+        'sep-node-a',
         authA.endpoint,
         authA.systemToken
       )
       nodeB = await startNode(
         'node-b.somebiz.local.io',
-        'node-b',
+        'sep-node-b',
         authB.endpoint,
         authB.systemToken
       )
@@ -428,14 +428,14 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         // B→A uses token minted by Auth-A
         await netB.addPeer({
           name: 'node-a.somebiz.local.io',
-          endpoint: 'ws://node-a:3000/rpc',
+          endpoint: 'ws://sep-node-a:3000/rpc',
           domains: ['somebiz.local.io'],
           peerToken: peerTokenBtoA,
         })
         // A→B uses token minted by Auth-B
         await netA.addPeer({
           name: 'node-b.somebiz.local.io',
-          endpoint: 'ws://node-b:3000/rpc',
+          endpoint: 'ws://sep-node-b:3000/rpc',
           domains: ['somebiz.local.io'],
           peerToken: peerTokenAtoB,
         })

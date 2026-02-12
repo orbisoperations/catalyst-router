@@ -233,7 +233,7 @@ function buildProtoRoot(): protobuf.Root {
       .add(
         new protobuf.Field(
           'upgrade_configs',
-          6,
+          23,
           'envoy.extensions.filters.network.http_connection_manager.v3.UpgradeConfig',
           'repeated'
         )

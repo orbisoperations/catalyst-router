@@ -38,24 +38,6 @@
         "vitest": "^1.2.1",
       },
     },
-    "apps/catalyst-zenoh-bridge": {
-      "name": "@catalyst/zenoh-bridge",
-      "version": "0.0.1",
-      "dependencies": {
-        "@catalyst/config": "catalog:",
-        "@catalyst/routing": "catalog:",
-        "@catalyst/service": "catalog:",
-        "@catalyst/telemetry": "catalog:",
-        "@hono/capnweb": "catalog:",
-        "capnweb": "catalog:",
-        "hono": "catalog:",
-        "zod": "catalog:",
-      },
-      "devDependencies": {
-        "@types/bun": "catalog:dev",
-        "typescript": "catalog:dev",
-      },
-    },
     "apps/cli": {
       "name": "@catalyst/cli",
       "version": "0.0.0",
@@ -104,6 +86,7 @@
         "@catalyst/authorization": "catalog:",
         "@catalyst/orchestrator-service": "catalog:",
         "@types/bun": "catalog:dev",
+        "testcontainers": "catalog:testing",
         "typescript": "catalog:dev",
       },
     },
@@ -542,8 +525,6 @@
     "@catalyst/telemetry": ["@catalyst/telemetry@workspace:packages/telemetry"],
 
     "@catalyst/types": ["@catalyst/types@workspace:packages/types"],
-
-    "@catalyst/zenoh-bridge": ["@catalyst/zenoh-bridge@workspace:apps/catalyst-zenoh-bridge"],
 
     "@cedar-policy/cedar-wasm": ["@cedar-policy/cedar-wasm@4.8.2", "", {}, "sha512-S37Kd4wP/IMZN3pdKEcsV8av7jMj4AKRovxzJEYZNTEYq0Wj4fno3dsw8xHHDXqT0dkQGTNUBuQNF8CTvOgE/Q=="],
 
