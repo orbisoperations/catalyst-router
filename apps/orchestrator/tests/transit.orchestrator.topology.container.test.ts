@@ -185,11 +185,13 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           name: 'node-a.somebiz.local.io',
           endpoint: 'ws://node-a:3000/rpc',
           domains: ['somebiz.local.io'],
+          peerToken: auth.systemToken,
         })
         await netA.addPeer({
           name: 'node-b.somebiz.local.io',
           endpoint: 'ws://node-b:3000/rpc',
           domains: ['somebiz.local.io'],
+          peerToken: auth.systemToken,
         })
 
         // Wait for handshake
@@ -228,11 +230,13 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           name: 'node-b.somebiz.local.io',
           endpoint: 'ws://node-b:3000/rpc',
           domains: ['somebiz.local.io'],
+          peerToken: auth.systemToken,
         })
         await netB.addPeer({
           name: 'node-c.somebiz.local.io',
           endpoint: 'ws://node-c:3000/rpc',
           domains: ['somebiz.local.io'],
+          peerToken: auth.systemToken,
         })
 
         // Wait for B-C handshake and sync

@@ -1,7 +1,6 @@
 import { Command } from 'commander'
 import { nodeCommands } from './commands/node/index.js'
 import { authCommands } from './commands/auth/index.js'
-import { graphqlCommands } from './commands/graphql/index.js'
 
 const program = new Command()
 
@@ -24,6 +23,5 @@ program
 
 program.addCommand(nodeCommands())
 program.addCommand(authCommands())
-program.addCommand(graphqlCommands())
 
 program.parse(process.argv)

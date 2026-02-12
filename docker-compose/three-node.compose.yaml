@@ -1,0 +1,460 @@
+# 3-Stack Integration Test — 14 containers, 8 networks
+#
+# Topology:
+#   Stack A: auth-a, orchestrator-a, envoy-svc-a, envoy-proxy-a, books-a
+#   Stack B: auth-b, orchestrator-b, envoy-svc-b, envoy-proxy-b, books-b
+#   Stack C: auth-c, orchestrator-c, envoy-svc-c, envoy-proxy-c, curl-client
+#
+# Networks:
+#   stack-{a,b,c}-control — auth + orchestrator + envoy-svc + envoy-proxy
+#   stack-{a,b,c}-data    — envoy-proxy + downstream (books / curl)
+#   orchestrator-mesh     — orchestrator-a, orchestrator-b, orchestrator-c
+#   envoy-mesh            — envoy-proxy-a, envoy-proxy-b, envoy-proxy-c
+#
+# Build:
+#   All Bun services share a single Dockerfile (docker-compose/Dockerfile.test)
+#   with per-service build targets. The base stage copies the entire monorepo
+#   and runs bun install once; service targets only set WORKDIR + CMD.
+#
+# Bootstrap:
+#   1. Start auth services first:
+#        docker compose -f three-node.compose.yaml up auth-a auth-b auth-c
+#   2. Extract system tokens from logs:
+#        docker compose -f three-node.compose.yaml logs auth-a | grep "System Admin Token minted:"
+#   3. Export tokens and start the rest:
+#        export SYSTEM_TOKEN_A=<token-a>
+#        export SYSTEM_TOKEN_B=<token-b>
+#        export SYSTEM_TOKEN_C=<token-c>
+#        docker compose -f three-node.compose.yaml up
+
+services:
+  # ===================================================================
+  # Stack A
+  # ===================================================================
+
+  auth-a:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: auth
+    ports:
+      - '5001:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=auth-a
+      - CATALYST_PEERING_ENDPOINT=ws://auth-a:5000/rpc
+      - CATALYST_BOOTSTRAP_TOKEN=bootstrap-a
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      stack-a-control:
+        aliases:
+          - auth
+
+  envoy-svc-a:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: envoy
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-a
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stack-a-control
+
+  envoy-proxy-a:
+    build:
+      context: ..
+      dockerfile: apps/envoy/Dockerfile.envoy-proxy
+    ports:
+      - '9911:9901'
+      - '10001:10000'
+      - '10011:10001'
+      - '10012:10002'
+    volumes:
+      - ./envoy-bootstrap-a.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://127.0.0.1:9901/server_info']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      envoy-svc-a:
+        condition: service_healthy
+    networks:
+      - stack-a-control
+      - stack-a-data
+      - envoy-mesh
+
+  books-a:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: books-api
+    environment:
+      - PORT=8080
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      stack-a-data:
+        aliases:
+          - books
+
+  orchestrator-a:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: orchestrator
+    ports:
+      - '3001:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-a:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${SYSTEM_TOKEN_A}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-a:3000/api
+      - 'CATALYST_ENVOY_PORT_RANGE=[10000,10001,10002]'
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-a
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      auth-a:
+        condition: service_healthy
+      envoy-svc-a:
+        condition: service_healthy
+      envoy-proxy-a:
+        condition: service_healthy
+      books-a:
+        condition: service_healthy
+    networks:
+      stack-a-control:
+        aliases:
+          - orch-a
+      orchestrator-mesh:
+        aliases:
+          - orch-a
+
+  # ===================================================================
+  # Stack B
+  # ===================================================================
+
+  auth-b:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: auth
+    ports:
+      - '5002:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=auth-b
+      - CATALYST_PEERING_ENDPOINT=ws://auth-b:5000/rpc
+      - CATALYST_BOOTSTRAP_TOKEN=bootstrap-b
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      stack-b-control:
+        aliases:
+          - auth
+
+  envoy-svc-b:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: envoy
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-b
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stack-b-control
+
+  envoy-proxy-b:
+    build:
+      context: ..
+      dockerfile: apps/envoy/Dockerfile.envoy-proxy
+    ports:
+      - '9912:9901'
+      - '10002:10000'
+      - '10021:10001'
+      - '10022:10002'
+    volumes:
+      - ./envoy-bootstrap-b.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://127.0.0.1:9901/server_info']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      envoy-svc-b:
+        condition: service_healthy
+    networks:
+      - stack-b-control
+      - stack-b-data
+      - envoy-mesh
+
+  books-b:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: books-api
+    environment:
+      - PORT=8080
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      stack-b-data:
+        aliases:
+          - books
+
+  orchestrator-b:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: orchestrator
+    ports:
+      - '3002:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-b:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${SYSTEM_TOKEN_B}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-b:3000/api
+      - 'CATALYST_ENVOY_PORT_RANGE=[10000,10001,10002]'
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-b
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      auth-b:
+        condition: service_healthy
+      envoy-svc-b:
+        condition: service_healthy
+      envoy-proxy-b:
+        condition: service_healthy
+      books-b:
+        condition: service_healthy
+    networks:
+      stack-b-control:
+        aliases:
+          - orch-b
+      orchestrator-mesh:
+        aliases:
+          - orch-b
+
+  # ===================================================================
+  # Stack C
+  # ===================================================================
+
+  auth-c:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: auth
+    ports:
+      - '5003:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=auth-c
+      - CATALYST_PEERING_ENDPOINT=ws://auth-c:5000/rpc
+      - CATALYST_BOOTSTRAP_TOKEN=bootstrap-c
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      stack-c-control:
+        aliases:
+          - auth
+
+  envoy-svc-c:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: envoy
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-c
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stack-c-control
+
+  envoy-proxy-c:
+    build:
+      context: ..
+      dockerfile: apps/envoy/Dockerfile.envoy-proxy
+    ports:
+      - '9913:9901'
+      - '10003:10000'
+      - '10031:10001'
+      - '10032:10002'
+    volumes:
+      - ./envoy-bootstrap-c.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://127.0.0.1:9901/server_info']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      envoy-svc-c:
+        condition: service_healthy
+    networks:
+      - stack-c-control
+      - stack-c-data
+      - envoy-mesh
+
+  orchestrator-c:
+    build:
+      context: ..
+      dockerfile: docker-compose/Dockerfile.test
+      target: orchestrator
+    ports:
+      - '3003:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-c.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-c:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${SYSTEM_TOKEN_C}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-c:3000/api
+      - 'CATALYST_ENVOY_PORT_RANGE=[10000,10001,10002]'
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-c
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      auth-c:
+        condition: service_healthy
+      envoy-svc-c:
+        condition: service_healthy
+      envoy-proxy-c:
+        condition: service_healthy
+    networks:
+      stack-c-control:
+        aliases:
+          - orch-c
+      orchestrator-mesh:
+        aliases:
+          - orch-c
+
+  curl-client:
+    image: curlimages/curl:8.11.1
+    command: ['sleep', 'infinity']
+    depends_on:
+      orchestrator-a:
+        condition: service_healthy
+      orchestrator-b:
+        condition: service_healthy
+      orchestrator-c:
+        condition: service_healthy
+    networks:
+      - stack-c-data
+
+# =====================================================================
+# Networks
+# =====================================================================
+
+networks:
+  # Per-stack control planes: auth <-> orchestrator <-> envoy-svc <-> envoy-proxy
+  stack-a-control:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.1.0/28
+  stack-b-control:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.2.0/28
+  stack-c-control:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.3.0/28
+
+  # Per-stack data planes: envoy-proxy <-> downstream service
+  stack-a-data:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.1.16/28
+  stack-b-data:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.2.16/28
+  stack-c-data:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.3.16/28
+
+  # Cross-stack mesh: orchestrator peering
+  orchestrator-mesh:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.10.0/28
+
+  # Cross-stack mesh: envoy data plane
+  envoy-mesh:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.11.0/28

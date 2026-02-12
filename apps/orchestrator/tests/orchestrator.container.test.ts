@@ -7,7 +7,6 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 
-
 import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
@@ -170,11 +169,13 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
         name: 'node-a.somebiz.local.io',
         endpoint: 'ws://node-a:3000/rpc',
         domains: ['somebiz.local.io'],
+        peerToken: systemToken,
       })
       await netA.addPeer({
         name: 'node-b.somebiz.local.io',
         endpoint: 'ws://node-b:3000/rpc',
         domains: ['somebiz.local.io'],
+        peerToken: systemToken,
       })
 
       // Give it a moment for the handshake
@@ -228,11 +229,13 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
         name: 'node-b.somebiz.local.io',
         endpoint: 'ws://node-b:3000/rpc',
         domains: ['somebiz.local.io'],
+        peerToken: systemToken,
       })
       await netB.addPeer({
         name: 'node-c.somebiz.local.io',
         endpoint: 'ws://node-c:3000/rpc',
         domains: ['somebiz.local.io'],
+        peerToken: systemToken,
       })
 
       // Give it a moment for the handshake

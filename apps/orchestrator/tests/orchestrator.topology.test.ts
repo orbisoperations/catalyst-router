@@ -14,16 +14,19 @@ describe('Orchestrator Topology Tests', () => {
     name: 'node-a.somebiz.local.io',
     endpoint: 'ws://node-a',
     domains: ['somebiz.local.io'],
+    peerToken: 'token-for-a',
   }
   const infoB: PeerInfo = {
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://node-b',
     domains: ['somebiz.local.io'],
+    peerToken: 'token-for-b',
   }
   const infoC: PeerInfo = {
     name: 'node-c.somebiz.local.io',
     endpoint: 'ws://node-c',
     domains: ['somebiz.local.io'],
+    peerToken: 'token-for-c',
   }
 
   beforeEach(() => {
