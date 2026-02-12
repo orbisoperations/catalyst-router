@@ -1,0 +1,84 @@
+# Dockerfile for building Raspberry Pi images on non-Linux hosts (macOS, Windows).
+#
+# Encapsulates rpi-image-gen and all its Debian dependencies inside a container
+# so you don't need a native arm64 Debian host.
+#
+# The build output (/build/output) is declared as a VOLUME so dpkg/mmdebstrap
+# always writes to a real Linux filesystem, avoiding virtiofs limitations on
+# macOS (broken symlinks, permission errors, missing temp dirs).
+#
+# Usage (via wrapper script — preferred):
+#   ./builds/rpi/build-docker.sh --source-dir dist/rpi dist/rpi/config.yaml
+#
+# Usage (manual):
+#   docker build --platform linux/arm64 -t catalyst-rpi-builder -f Dockerfile.build .
+#   docker run --name rpi-build --privileged \
+#     -v ./dist/rpi:/src:ro catalyst-rpi-builder \
+#     /opt/rpi-image-gen/rpi-image-gen build -S /src -c /src/config.yaml -B /build/output
+#   docker cp rpi-build:/build/output/image-catalyst-node-image/catalyst-node-image.img .
+#   docker rm rpi-build
+
+FROM debian:bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ---------- Install all rpi-image-gen dependencies ----------
+# Sourced from rpi-image-gen/depends manifest. We install everything upfront
+# so install_deps.sh doesn't need to run at build time (avoids binfmt_misc
+# checks that can fail inside Docker build).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # core (all)
+    coreutils \
+    bash \
+    python-is-python3 \
+    dbus-user-session \
+    # bootstrap
+    python3-yaml \
+    python3-debian \
+    dpkg-dev \
+    # build
+    mmdebstrap \
+    podman \
+    uidmap \
+    zip \
+    dosfstools \
+    e2fsprogs \
+    grep \
+    rsync \
+    curl \
+    mtools \
+    zstd \
+    pv \
+    btrfs-progs \
+    dctrl-tools \
+    uuid-runtime \
+    fdisk \
+    python3-jsonschema \
+    # pkg buildsys (for building bdebstrap/genimage from source)
+    python3-pip \
+    make \
+    build-essential \
+    autoconf \
+    automake \
+    libtool \
+    autopoint \
+    flex \
+    gettext \
+    pkg-config \
+    # additional tools
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------- Clone rpi-image-gen ----------
+ARG RPI_IMAGE_GEN_BRANCH=master
+RUN git clone --depth 1 --branch ${RPI_IMAGE_GEN_BRANCH} \
+    https://github.com/raspberrypi/rpi-image-gen.git /opt/rpi-image-gen
+
+# Declare /build/output as a volume so the chroot filesystem is always written
+# to a proper Linux filesystem (ext4/overlay2), not a virtiofs/gRPC-FUSE bind
+# mount from macOS which cannot handle symlinks, hardlinks, and device nodes
+# that dpkg/mmdebstrap require.
+VOLUME /build/output
+
+WORKDIR /build

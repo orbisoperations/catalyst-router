@@ -42,6 +42,14 @@ ${prerequisite}
 
   To flash the image:
 
+    # macOS (requires Raspberry Pi Imager — https://www.raspberrypi.com/software/):
+    #   1. Find your SD card device:  diskutil list
+    #   2. Flash (replace diskN with your SD card):
+    /Applications/Raspberry\\ Pi\\ Imager.app/Contents/MacOS/rpi-imager --cli \\
+      ${absDir}/build/image-${opts.imageName}/${opts.imageName}.img \\
+      /dev/rdiskN
+
+    # Linux:
     sudo rpi-imager --cli \\
       ${absDir}/build/image-${opts.imageName}/${opts.imageName}.img \\
       /dev/sdX
