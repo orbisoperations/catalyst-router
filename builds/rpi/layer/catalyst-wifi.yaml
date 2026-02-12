@@ -14,9 +14,9 @@
 # X-Env-Var-ssid-Set: y
 #
 # X-Env-Var-password:
-# X-Env-Var-password-Desc: WiFi network password (WPA2-PSK)
-# X-Env-Var-password-Required: y
-# X-Env-Var-password-Valid: string
+# X-Env-Var-password-Desc: WiFi network password (WPA2-PSK, leave empty for open network)
+# X-Env-Var-password-Required: n
+# X-Env-Var-password-Valid: string-or-empty
 # X-Env-Var-password-Set: y
 #
 # X-Env-Var-country: US
@@ -31,8 +31,11 @@ mmdebstrap:
     - wpasupplicant
     - wireless-tools
     - iw
+    - firmware-brcm80211
+    - wireless-regdb
+    - w3m
   customize-hooks:
-    # wpa_supplicant config with hashed PSK for the specified network
+    # wpa_supplicant config — WPA2-PSK when password is set, open network otherwise
     - |-
       mkdir -p "$1/etc/wpa_supplicant"
       {
@@ -40,8 +43,15 @@ mmdebstrap:
         echo "update_config=1"
         echo "country=$IGconf_wifi_country"
         echo ""
-        chroot "$1" wpa_passphrase "$IGconf_wifi_ssid" "$IGconf_wifi_password" \
-          | grep -v '#psk='
+        if [ -n "$IGconf_wifi_password" ]; then
+          chroot "$1" wpa_passphrase "$IGconf_wifi_ssid" "$IGconf_wifi_password" \
+            | grep -v '#psk='
+        else
+          echo "network={"
+          echo "    ssid=\"$IGconf_wifi_ssid\""
+          echo "    key_mgmt=NONE"
+          echo "}"
+        fi
       } > "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
       chmod 600 "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
     # systemd-networkd config for wlan0 (DHCP)
@@ -56,8 +66,23 @@ mmdebstrap:
       [DHCPv4]
       RouteMetric=600
       NETEOF
-    # Ensure WiFi radio is not soft-blocked (common on minimal images)
-    - chroot "$1" rfkill unblock wifi 2>/dev/null || true
+    # Ensure WiFi radio is not soft-blocked at boot (rfkill needs real hardware)
+    - |-
+      cat > "$1/etc/systemd/system/wifi-rfkill-unblock.service" <<'RFKEOF'
+      [Unit]
+      Description=Unblock WiFi radio
+      Before=wpa_supplicant@wlan0.service
+      ConditionPathExists=/dev/rfkill
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/sbin/rfkill unblock wifi
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+      RFKEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" wifi-rfkill-unblock
     # Ensure resolv.conf points to systemd-resolved stub (safety net)
     - ln -sf /run/systemd/resolve/stub-resolv.conf "$1/etc/resolv.conf"
     # Ensure network-online.target waits for an interface to get an address
