@@ -30,7 +30,7 @@ export function tokenCommands(): Command {
     .option('--type <type>', 'Entity type (user, service)', 'user')
     .option('--expires-in <duration>', 'Expiration (e.g., 1h, 7d, 30m)')
     .option('--node-id <nodeId>', 'Node ID (for NODE principal)')
-    .option('--trusted-domains <domains>', 'Comma-separated trusted domains')
+    .option('--org-domain <domain>', 'Organization domain')
     .option('--trusted-nodes <nodes>', 'Comma-separated trusted nodes')
     .option('--token <token>', 'Admin auth token')
     .action(async (subject, options, cmd) => {
@@ -42,7 +42,7 @@ export function tokenCommands(): Command {
         type: options.type,
         expiresIn: options.expiresIn,
         nodeId: options.nodeId,
-        trustedDomains: options.trustedDomains?.split(',').map((d: string) => d.trim()),
+        orgDomain: options.orgDomain,
         trustedNodes: options.trustedNodes?.split(',').map((n: string) => n.trim()),
         token: options.token || globals.token || process.env.CATALYST_AUTH_TOKEN,
         authUrl: globals.authUrl || process.env.CATALYST_AUTH_URL,

@@ -19,7 +19,7 @@ interface AuthServiceApi {
             id: string
             name: string
             type: 'user' | 'service'
-            trustedDomains?: string[]
+            orgDomain?: string
             trustedNodes?: string[]
           }
           principal: string
@@ -148,7 +148,7 @@ export async function mintPeerToken(
       id: peerName,
       name: peerName,
       type: 'service',
-      trustedDomains: domain ? [domain] : [],
+      orgDomain: domain || '',
       trustedNodes: [], // Empty = trust all nodes
     },
     principal: Principal.NODE,

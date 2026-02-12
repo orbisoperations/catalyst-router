@@ -31,14 +31,14 @@ describe('Auth Token Handlers', () => {
         type: 'service',
         expiresIn: '7d',
         nodeId: 'node-456',
-        trustedDomains: ['example.com'],
+        orgDomain: 'example.com',
         trustedNodes: ['node-123'],
         token: 'admin-token',
         authUrl: 'ws://localhost:4000/rpc',
       }
       expect(input.expiresIn).toBe('7d')
       expect(input.nodeId).toBe('node-456')
-      expect(input.trustedDomains).toEqual(['example.com'])
+      expect(input.orgDomain).toBe('example.com')
       expect(input.trustedNodes).toEqual(['node-123'])
     })
 

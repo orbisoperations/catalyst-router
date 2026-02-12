@@ -9,7 +9,7 @@ export interface CreateTokenRequest {
     type: 'user' | 'service'
     nodeId?: string
     trustedNodes?: string[]
-    trustedDomains?: string[]
+    orgDomain?: string
   }
   principal: string
   sans?: string[]

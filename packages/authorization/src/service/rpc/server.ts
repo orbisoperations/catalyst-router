@@ -51,7 +51,7 @@ export class AuthRpcServer extends RpcTarget {
     private telemetry: ServiceTelemetry,
     private policyService?: CatalystPolicyEngine,
     private nodeId: string = 'unknown',
-    private domainId: string = ''
+    private orgDomain: string = ''
   ) {
     super()
   }
@@ -87,7 +87,7 @@ export class AuthRpcServer extends RpcTarget {
     builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
     builder
       .entity('CATALYST::AdminPanel', 'admin-panel')
-      .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
+      .setAttributes({ nodeId: this.nodeId, orgDomain: this.orgDomain })
     const entities = builder.build()
     const autorizedResult = this.policyService?.isAuthorized({
       principal: principal.uid,
@@ -144,7 +144,7 @@ export class AuthRpcServer extends RpcTarget {
     builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
     builder
       .entity('CATALYST::AdminPanel', 'admin-panel')
-      .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
+      .setAttributes({ nodeId: this.nodeId, orgDomain: this.orgDomain })
     const entities = builder.build()
     const autorizedResult = this.policyService?.isAuthorized({
       principal: principal.uid,
@@ -242,7 +242,7 @@ export class AuthRpcServer extends RpcTarget {
         builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
         builder.entity('CATALYST::AdminPanel', 'admin-panel').setAttributes({
           nodeId: request.nodeContext.nodeId,
-          domainId: request.nodeContext.domain,
+          orgDomain: request.nodeContext.domain,
         })
 
         const entities = builder.build()
