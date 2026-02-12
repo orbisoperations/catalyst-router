@@ -54,7 +54,10 @@ export interface DataChannel {
 }
 
 export interface IBGPClient {
-  open(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
+  open(
+    peer: PeerInfo,
+    holdTime?: number
+  ): Promise<{ success: true; holdTime?: number } | { success: false; error: string }>
   close(
     peer: PeerInfo,
     code: number,
@@ -392,23 +395,25 @@ export class CatalystNodeBus extends RpcTarget {
           }
         }
 
-        if (peer.connectionStatus !== 'connected') {
-          state = {
-            ...state,
-            internal: {
-              ...state.internal,
-              peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
-              ),
-            },
-          }
-        }
+        // Negotiate hold time: min(local, remote) per BGP spec
+        const remoteHoldTime = action.data.holdTime
+        const negotiatedHoldTime = remoteHoldTime
+          ? Math.min(this.holdTime, remoteHoldTime)
+          : this.holdTime
+
         state = {
           ...state,
           internal: {
             ...state.internal,
             peers: state.internal.peers.map((p) =>
-              p.name === action.data.peerInfo.name ? { ...p, lastMessageReceived: new Date() } : p
+              p.name === action.data.peerInfo.name
+                ? {
+                    ...p,
+                    connectionStatus: 'connected' as const,
+                    lastMessageReceived: new Date(),
+                    holdTime: negotiatedHoldTime,
+                  }
+                : p
             ),
           },
         }
@@ -418,21 +423,25 @@ export class CatalystNodeBus extends RpcTarget {
         const peerList = state.internal.peers
         const peer = peerList.find((p) => p.name === action.data.peerInfo.name)
         if (peer) {
+          // Negotiate hold time if the remote sent theirs
+          const remoteHoldTime = action.data.holdTime
+          const negotiatedHoldTime = remoteHoldTime
+            ? Math.min(this.holdTime, remoteHoldTime)
+            : this.holdTime
+
           state = {
             ...state,
             internal: {
               ...state.internal,
               peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
-              ),
-            },
-          }
-          state = {
-            ...state,
-            internal: {
-              ...state.internal,
-              peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, lastMessageReceived: new Date() } : p
+                p.name === action.data.peerInfo.name
+                  ? {
+                      ...p,
+                      connectionStatus: 'connected' as const,
+                      lastMessageReceived: new Date(),
+                      holdTime: negotiatedHoldTime,
+                    }
+                  : p
               ),
             },
           }
@@ -600,14 +609,14 @@ export class CatalystNodeBus extends RpcTarget {
             const connectionResult = await stub.getIBGPClient(token)
 
             if (connectionResult.success) {
-              const result = await connectionResult.client.open(this.config.node)
+              const result = await connectionResult.client.open(this.config.node, this.holdTime)
 
               if (result.success) {
                 this.logger.info`Successfully opened connection to ${action.data.name}`
-                // Dispatch connected action
+                // Dispatch connected action with remote's holdTime for negotiation
                 await this.dispatch({
                   action: Actions.InternalProtocolConnected,
-                  data: { peerInfo: action.data },
+                  data: { peerInfo: action.data, holdTime: result.holdTime },
                 })
               }
             } else {
@@ -813,17 +822,19 @@ export class CatalystNodeBus extends RpcTarget {
       }
       case Actions.InternalProtocolTick: {
         const now = Date.now()
-        const holdTimeMs = (this.holdTime ?? DEFAULT_HOLD_TIME) * 1000
-        const keepaliveThresholdMs = holdTimeMs / 3
 
         for (const peer of _state.internal.peers) {
+          // Use per-peer negotiated holdTime, falling back to global default
+          const peerHoldTimeMs = (peer.holdTime ?? this.holdTime ?? DEFAULT_HOLD_TIME) * 1000
+          const keepaliveThresholdMs = peerHoldTimeMs / 3
+
           if (peer.connectionStatus === 'connected') {
             // Check hold timer expiry
             if (peer.lastMessageReceived) {
               const elapsed = now - peer.lastMessageReceived.getTime()
-              if (elapsed > holdTimeMs) {
+              if (elapsed > peerHoldTimeMs) {
                 this.logger
-                  .warn`Hold timer expired for peer ${peer.name} (${elapsed}ms > ${holdTimeMs}ms)`
+                  .warn`Hold timer expired for peer ${peer.name} (${elapsed}ms > ${peerHoldTimeMs}ms)`
                 await this.dispatch({
                   action: Actions.InternalProtocolClose,
                   data: {
@@ -864,12 +875,12 @@ export class CatalystNodeBus extends RpcTarget {
                 const token = peer.peerToken || this.nodeToken || ''
                 const connectionResult = await stub.getIBGPClient(token)
                 if (connectionResult.success) {
-                  const result = await connectionResult.client.open(this.config.node)
+                  const result = await connectionResult.client.open(this.config.node, this.holdTime)
                   if (result.success) {
                     this.logger.info`Reconnected to ${peer.name}`
                     await this.dispatch({
                       action: Actions.InternalProtocolConnected,
-                      data: { peerInfo: peer },
+                      data: { peerInfo: peer, holdTime: result.holdTime },
                     })
                   }
                 }
@@ -996,11 +1007,15 @@ export class CatalystNodeBus extends RpcTarget {
         return {
           success: true,
           client: {
-            open: async (peer: PeerInfo) => {
-              return this.dispatch({
+            open: async (peer: PeerInfo, holdTime?: number) => {
+              const result = await this.dispatch({
                 action: Actions.InternalProtocolOpen,
-                data: { peerInfo: peer },
+                data: { peerInfo: peer, holdTime },
               })
+              if (result.success) {
+                return { success: true as const, holdTime: this.holdTime }
+              }
+              return result
             },
             close: async (peer: PeerInfo, code: number, reason?: string) => {
               return this.dispatch({

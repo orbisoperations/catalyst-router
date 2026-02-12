@@ -24,6 +24,7 @@ export const InternalProtocolOpenMessageSchema = z.object({
   action: z.literal(Actions.InternalProtocolOpen),
   data: z.object({
     peerInfo: PeerInfoSchema,
+    holdTime: z.number().optional(),
   }),
 })
 
@@ -48,6 +49,7 @@ export const InternalProtocolConnectedMessageSchema = z.object({
   action: z.literal(Actions.InternalProtocolConnected),
   data: z.object({
     peerInfo: PeerInfoSchema,
+    holdTime: z.number().optional(),
   }),
 })
 

@@ -388,4 +388,25 @@ describe('Keep-alive, peer expiry, and reconnection', () => {
     expect(stateA.internal.routes.find((r) => r.name === 'service-b')).toBeUndefined()
     expect(stateA.internal.routes.find((r) => r.name === 'service-c')).toBeDefined()
   })
+
+  it('hold time negotiation uses min(local, remote)', async () => {
+    // Create nodes with different hold times
+    const pool2 = new MockConnectionPool()
+    const fastNode = createNode(infoA, pool2, 10) // holdTime = 10s
+    const slowNode = createNode(infoB, pool2, 30) // holdTime = 30s
+
+    await connectTwoNodes(fastNode, slowNode, infoA, infoB)
+
+    // Both sides should have negotiated holdTime = min(10, 30) = 10
+    const stateFast = getState(fastNode)
+    const peerSlowOnFast = stateFast.internal.peers.find((p) => p.name === infoB.name)
+    expect(peerSlowOnFast?.holdTime).toBe(10)
+
+    const stateSlow = getState(slowNode)
+    const peerFastOnSlow = stateSlow.internal.peers.find((p) => p.name === infoA.name)
+    expect(peerFastOnSlow?.holdTime).toBe(10)
+
+    fastNode.stop()
+    slowNode.stop()
+  })
 })
