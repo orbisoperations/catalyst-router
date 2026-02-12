@@ -143,11 +143,12 @@ export class XdsControlPlane {
     const sentVersions = new Map<string, string>()
     let latestSnapshot: XdsSnapshot | undefined = this.cache.getSnapshot()
     let streamNonce = 0
+    let streamClosed = false
     const nextNonce = (): string => String(++streamNonce)
 
     /** Send snapshot resources for subscribed types that haven't been sent at this version. */
     const sendSubscribed = (): void => {
-      if (!latestSnapshot) return
+      if (streamClosed || !latestSnapshot) return
       this.sendSnapshotForTypes(call, latestSnapshot, subscribedTypes, sentVersions, nextNonce)
     }
 
@@ -193,12 +194,14 @@ export class XdsControlPlane {
     })
 
     call.on('end', () => {
+      streamClosed = true
       this.logger.info`ADS stream disconnected`
       unwatch()
       call.end()
     })
 
     call.on('error', (err) => {
+      streamClosed = true
       // CANCELLED is normal when Envoy disconnects
       if ((err as grpc.ServiceError).code !== grpc.status.CANCELLED) {
         this.logger.error`ADS stream error: ${err}`
