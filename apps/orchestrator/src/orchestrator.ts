@@ -159,7 +159,7 @@ export class CatalystNodeBus extends RpcTarget {
     }
     this.config = opts.config
     this.nodeToken = opts.nodeToken
-    this.holdTime = opts.holdTime ?? DEFAULT_HOLD_TIME
+    this.holdTime = opts.holdTime ?? this.config.holdTime ?? DEFAULT_HOLD_TIME
     if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
     }

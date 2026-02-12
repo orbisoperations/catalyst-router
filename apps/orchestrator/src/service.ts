@@ -91,7 +91,11 @@ export class OrchestratorService extends CatalystService {
       connectionPool: { type: 'ws' },
       nodeToken: this._nodeToken,
       authEndpoint: this.config.orchestrator?.auth?.endpoint,
+      holdTime: this.config.orchestrator?.holdTime,
     })
+
+    // Start the BGP tick interval for keep-alive and peer expiry
+    this._bus.start()
 
     // Mount RPC route
     this.handler.all('/rpc', (c) => {
@@ -104,6 +108,7 @@ export class OrchestratorService extends CatalystService {
   }
 
   protected async onShutdown(): Promise<void> {
+    this._bus.stop()
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval)
       this._refreshInterval = undefined

@@ -1,4 +1,3 @@
-import { Role } from '@catalyst/authorization'
 import type { Action, RouteTable } from '@catalyst/routing'
 import { z } from 'zod'
 
@@ -13,6 +12,7 @@ export const OrchestratorConfigSchema = z.object({
       endpoint: z.string(),
     })
     .optional(),
+  holdTime: z.number().min(3).default(180).optional(), // BGP hold time in seconds
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>

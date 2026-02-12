@@ -28,6 +28,7 @@ export const OrchestratorConfigSchema = z.object({
       systemToken: z.string(),
     })
     .optional(),
+  holdTime: z.number().min(3).default(180), // BGP hold time in seconds (min 3s per BGP spec)
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -127,6 +128,7 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
               systemToken: process.env.CATALYST_SYSTEM_TOKEN,
             }
           : undefined,
+      holdTime: process.env.CATALYST_HOLD_TIME ? Number(process.env.CATALYST_HOLD_TIME) : undefined,
     },
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,
