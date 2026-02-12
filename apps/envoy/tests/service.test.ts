@@ -52,7 +52,7 @@ function createMinimalConfig(overrides: Partial<CatalystConfig> = {}): CatalystC
   return {
     node: {
       name: 'test-node',
-      domains: ['test.local'],
+      domain: 'test.local',
     },
     port: 3000,
     ...overrides,

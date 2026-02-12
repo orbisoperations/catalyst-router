@@ -109,7 +109,7 @@ export class ConnectionPool {
 interface AuthServicePermissionsHandlers {
   authorizeAction(request: {
     action: string
-    nodeContext: { nodeId: string; domains: string[] }
+    nodeContext: { nodeId: string; domain: string }
   }): Promise<
     | { success: true; allowed: boolean }
     | {
@@ -174,14 +174,10 @@ export class CatalystNodeBus extends RpcTarget {
   }
 
   private validateNodeConfig() {
-    const { name, domains } = this.config.node
-    if (!name.endsWith('.somebiz.local.io')) {
-      throw new Error(`Invalid node name: ${name}. Must end with .somebiz.local.io`)
-    }
-    const domainMatch = domains.some((d) => name.endsWith(`.${d}`))
-    if (!domainMatch && domains.length > 0) {
+    const { name, domain } = this.config.node
+    if (domain && !name.endsWith(`.${domain}`)) {
       throw new Error(
-        `Node name ${name} does not match any configured domains: ${domains.join(', ')}`
+        `Node name ${name} does not match configured domain: ${domain}. Expected format: {nodeId}.${domain}`
       )
     }
   }
@@ -213,7 +209,7 @@ export class CatalystNodeBus extends RpcTarget {
         action,
         nodeContext: {
           nodeId: this.config.node.name,
-          domains: this.config.node.domains,
+          domain: this.config.node.domain,
         },
       })
 
@@ -291,7 +287,7 @@ export class CatalystNodeBus extends RpcTarget {
               {
                 name: action.data.name,
                 endpoint: action.data.endpoint,
-                domains: action.data.domains,
+                domain: action.data.domain,
                 peerToken: action.data.peerToken,
                 connectionStatus: 'initializing' as const,
                 lastConnected: undefined,
@@ -318,7 +314,7 @@ export class CatalystNodeBus extends RpcTarget {
                 ? {
                     ...p,
                     endpoint: action.data.endpoint,
-                    domains: action.data.domains,
+                    domain: action.data.domain,
                     peerToken: action.data.peerToken,
                     connectionStatus: 'initializing',
                     lastConnected: undefined,

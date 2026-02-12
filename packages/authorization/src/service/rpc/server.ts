@@ -242,7 +242,7 @@ export class AuthRpcServer extends RpcTarget {
         builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
         builder.entity('CATALYST::AdminPanel', 'admin-panel').setAttributes({
           nodeId: request.nodeContext.nodeId,
-          domainId: request.nodeContext.domains[0] || '', // Use first domain
+          domainId: request.nodeContext.domain,
         })
 
         const entities = builder.build()

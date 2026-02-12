@@ -136,7 +136,7 @@ export class OrchestratorService extends CatalystService {
           type: 'service',
           nodeId: this.config.node.name,
           trustedNodes: [], // Empty for now - could be populated from peer config
-          trustedDomains: this.config.node.domains, // Domains this node trusts
+          trustedDomains: this.config.node.domain ? [this.config.node.domain] : [],
         },
         principal: Principal.NODE,
         expiresIn: '7d', // Node token valid for 7 days

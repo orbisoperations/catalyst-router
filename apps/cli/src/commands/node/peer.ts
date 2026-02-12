@@ -15,7 +15,7 @@ export function peerCommands(): Command {
     .description('Create a new peer connection')
     .argument('<name>', 'Peer name (FQDN)')
     .argument('<endpoint>', 'WebSocket endpoint (e.g., ws://localhost:3000/rpc)')
-    .option('--domains <domains>', 'Comma-separated list of domains')
+    .option('--domain <domain>', 'Organization domain for the peer')
     .option('--peer-token <token>', 'Token for authenticating with peer')
     .option('--token <token>', 'Auth token for this operation')
     .action(async (name, endpoint, options, cmd) => {
@@ -23,7 +23,7 @@ export function peerCommands(): Command {
       const validation = CreatePeerInputSchema.safeParse({
         name,
         endpoint,
-        domains: options.domains?.split(',').map((d: string) => d.trim()) || [],
+        domain: options.domain || '',
         peerToken: options.peerToken,
         token: options.token || globals.token || process.env.CATALYST_AUTH_TOKEN,
         orchestratorUrl: globals.orchestratorUrl,
@@ -77,7 +77,7 @@ export function peerCommands(): Command {
             result.data.peers.map((p) => ({
               Name: p.name,
               Endpoint: p.endpoint,
-              Domains: p.domains?.join(', ') || '-',
+              Domain: p.domain || '-',
               Status: p.connectionStatus || 'unknown',
             }))
           )

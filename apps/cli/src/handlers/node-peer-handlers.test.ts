@@ -7,13 +7,13 @@ describe('Node Peer Handlers', () => {
       const input: CreatePeerInput = {
         name: 'test-peer.example.com',
         endpoint: 'ws://test:3000/rpc',
-        domains: ['example.com'],
+        domain: 'example.com',
         orchestratorUrl: 'ws://localhost:3000/rpc',
         logLevel: 'info',
       }
       expect(input.name).toBe('test-peer.example.com')
       expect(input.endpoint).toBe('ws://test:3000/rpc')
-      expect(input.domains).toEqual(['example.com'])
+      expect(input.domain).toBe('example.com')
     })
 
     it('should have DeletePeerInput type with required fields', () => {
@@ -60,7 +60,7 @@ describe('Node Peer Handlers', () => {
           peers: Array<{
             name: string
             endpoint: string
-            domains: string[]
+            domain: string
             connectionStatus: string
           }>
         }
@@ -71,7 +71,7 @@ describe('Node Peer Handlers', () => {
             {
               name: 'peer-a',
               endpoint: 'ws://peer-a:3000/rpc',
-              domains: ['example.com'],
+              domain: 'example.com',
               connectionStatus: 'connected',
             },
           ],
