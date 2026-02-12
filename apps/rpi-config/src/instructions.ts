@@ -34,12 +34,16 @@ export function printInstructions(
 ${prerequisite}
   To build the image:
 
+    # Option A — Docker (macOS / any host)
+    ./builds/rpi/build-docker.sh --source-dir ${absDir} ${configPath}
+
+    # Option B — Native arm64 Debian host
     ./builds/rpi/build.sh --source-dir ${absDir} ${configPath}
 
   To flash the image:
 
     sudo rpi-imager --cli \\
-      ./work/image-${opts.imageName}/${opts.imageName}.img \\
-      /dev/mmcblk0
+      ${absDir}/build/image-${opts.imageName}/${opts.imageName}.img \\
+      /dev/sdX
 `)
 }
