@@ -140,3 +140,65 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
     expect(lastSync).toContainEqual({ name: 'remote-movies', url: 'http://rm:8080' })
   })
 })
+
+describe('CatalystNodeBus > FQDN Domain Validation', () => {
+  it('accepts valid FQDN where name ends with .domain', () => {
+    expect(() => {
+      new CatalystNodeBus({
+        config: {
+          node: {
+            name: 'router-1.acme.io',
+            endpoint: 'http://localhost:3000',
+            domain: 'acme.io',
+          },
+        },
+        connectionPool: { pool: new MockConnectionPool('http') },
+      })
+    }).not.toThrow()
+  })
+
+  it('accepts node with empty domain (standalone mode)', () => {
+    expect(() => {
+      new CatalystNodeBus({
+        config: {
+          node: {
+            name: 'standalone-node',
+            endpoint: 'http://localhost:3000',
+            domain: '',
+          },
+        },
+        connectionPool: { pool: new MockConnectionPool('http') },
+      })
+    }).not.toThrow()
+  })
+
+  it('rejects mismatched name and domain', () => {
+    expect(() => {
+      new CatalystNodeBus({
+        config: {
+          node: {
+            name: 'router-1.wrong.io',
+            endpoint: 'http://localhost:3000',
+            domain: 'acme.io',
+          },
+        },
+        connectionPool: { pool: new MockConnectionPool('http') },
+      })
+    }).toThrow('does not match configured domain')
+  })
+
+  it('rejects name that does not end with domain suffix', () => {
+    expect(() => {
+      new CatalystNodeBus({
+        config: {
+          node: {
+            name: 'acme.io',
+            endpoint: 'http://localhost:3000',
+            domain: 'acme.io',
+          },
+        },
+        connectionPool: { pool: new MockConnectionPool('http') },
+      })
+    }).toThrow('does not match configured domain')
+  })
+})
