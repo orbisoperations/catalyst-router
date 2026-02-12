@@ -141,6 +141,18 @@ export async function promptMissing(opts: Record<string, unknown>): Promise<Reso
     })
   }
 
+  // --- Console autologin ---
+  section('Console')
+  if (resolved.autologin !== false) {
+    const wantAutologin = await confirm({
+      message: 'Enable autologin with journal streaming on console?',
+      default: true,
+    })
+    if (!wantAutologin) {
+      resolved.autologin = false
+    }
+  }
+
   // --- Cloudflared ---
   section('Remote Access')
   if (resolved.cloudflared !== false && !resolved.cloudflaredToken) {
