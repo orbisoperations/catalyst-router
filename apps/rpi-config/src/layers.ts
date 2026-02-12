@@ -38,20 +38,17 @@ mmdebstrap:
     - wireless-tools
     - iw
   customize-hooks:
-    # wpa_supplicant config for the specified network
+    # wpa_supplicant config with hashed PSK for the specified network
     - |-
       mkdir -p "$1/etc/wpa_supplicant"
-      cat > "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf" <<WPAEOF
-      ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-      update_config=1
-      country=$IGconf_wifi_country
-
-      network={
-          ssid="$IGconf_wifi_ssid"
-          psk="$IGconf_wifi_password"
-          key_mgmt=WPA-PSK
-      }
-      WPAEOF
+      {
+        echo "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev"
+        echo "update_config=1"
+        echo "country=$IGconf_wifi_country"
+        echo ""
+        chroot "$1" wpa_passphrase "$IGconf_wifi_ssid" "$IGconf_wifi_password" \\
+          | grep -v '#psk='
+      } > "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
       chmod 600 "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
     # systemd-networkd config for wlan0 (DHCP)
     - |-
@@ -65,6 +62,12 @@ mmdebstrap:
       [DHCPv4]
       RouteMetric=600
       NETEOF
+    # Ensure WiFi radio is not soft-blocked (common on minimal images)
+    - chroot "$1" rfkill unblock wifi 2>/dev/null || true
+    # Ensure resolv.conf points to systemd-resolved stub (safety net)
+    - ln -sf /run/systemd/resolve/stub-resolv.conf "$1/etc/resolv.conf"
+    # Ensure network-online.target waits for an interface to get an address
+    - $BDEBSTRAP_HOOKS/enable-units "$1" systemd-networkd-wait-online
     # Enable wpa_supplicant for wlan0
     - $BDEBSTRAP_HOOKS/enable-units "$1" wpa_supplicant@wlan0
 `
@@ -665,12 +668,18 @@ mmdebstrap:
       deb [arch=arm64 signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main
       EOF
     - sed -i '/pkg\\.cloudflare\\.com/d' $1/etc/apt/sources.list
+    # Allow unprivileged ICMP ping sockets (required by cloudflared health checks)
+    - |-
+      mkdir -p "$1/etc/sysctl.d"
+      cat > "$1/etc/sysctl.d/50-cloudflared-ping.conf" <<SYSEOF
+      net.ipv4.ping_group_range = 0 2147483647
+      SYSEOF
     # Install systemd service with tunnel token
     - |-
       cat > "$1/etc/systemd/system/cloudflared-tunnel.service" <<SVCEOF
       [Unit]
       Description=Cloudflare Tunnel
-      After=network-online.target
+      After=network-online.target wpa_supplicant@wlan0.service
       Wants=network-online.target
 
       [Service]
@@ -678,6 +687,8 @@ mmdebstrap:
       ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run --token $IGconf_cloudflared_tunnel_token
       Restart=on-failure
       RestartSec=5
+      AmbientCapabilities=CAP_NET_RAW
+      CapabilityBoundingSet=CAP_NET_RAW
 
       [Install]
       WantedBy=multi-user.target
