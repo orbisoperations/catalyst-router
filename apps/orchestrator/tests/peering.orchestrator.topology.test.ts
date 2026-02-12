@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
-import { newRouteTable, type PeerInfo, type RouteTable } from '@catalyst/routing'
+import { newRouteTable, type RouteTable } from '@catalyst/routing'
+import type { OrchestratorConfig } from '../src/types.js'
 import { MockConnectionPool } from './mock-connection-pool.js'
 
 describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
@@ -8,13 +9,13 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
   let nodeA: CatalystNodeBus
   let nodeB: CatalystNodeBus
 
-  const infoA: PeerInfo = {
+  const infoA: OrchestratorConfig['node'] = {
     name: 'node-a.somebiz.local.io',
     endpoint: 'ws://node-a',
     domains: ['somebiz.local.io'],
     peerToken: 'token-for-a',
   }
-  const infoB: PeerInfo = {
+  const infoB: OrchestratorConfig['node'] = {
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://node-b',
     domains: ['somebiz.local.io'],
@@ -24,7 +25,7 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
   beforeEach(() => {
     pool = new MockConnectionPool()
 
-    const createNode = (info: PeerInfo) => {
+    const createNode = (info: OrchestratorConfig['node']) => {
       const bus = new CatalystNodeBus({
         config: { node: info },
         connectionPool: { pool },

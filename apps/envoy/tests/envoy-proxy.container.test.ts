@@ -10,7 +10,7 @@ import {
 import { serve } from '@hono/node-server'
 import path from 'path'
 import { CatalystConfigSchema } from '@catalyst/config'
-import { AuthService } from '@catalyst/authorization'
+import { AuthService, Principal } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
 import { OrchestratorService } from '../../orchestrator/src/service.js'
@@ -278,7 +278,7 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     // ── 4. Mint CLI token ──────────────────────────────────────────
     const mintResult = await mintTokenHandler({
       subject: 'test-cli',
-      principal: 'CATALYST::ADMIN',
+      principal: Principal.ADMIN,
       name: 'Test CLI',
       type: 'service',
       authUrl: `ws://localhost:${authPort}/rpc`,
@@ -324,6 +324,7 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
       protocol: 'http:graphql',
       orchestratorUrl: `ws://localhost:${orchPort}/rpc`,
       token: cliToken,
+      logLevel: 'info',
     })
     if (!routeResult.success) throw new Error(`Failed to create route: ${routeResult.error}`)
 

@@ -223,7 +223,6 @@ describe('Envoy RPC Integration', () => {
             endpoint: 'http://peer-node:8081/graphql',
             envoyPort: 9002,
             peer: { name: 'peer-node-1' },
-            peerName: 'peer-node-1',
             nodePath: ['local-node', 'peer-node-1'],
           },
         ],

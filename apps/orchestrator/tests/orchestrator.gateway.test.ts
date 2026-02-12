@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
+import type { OrchestratorConfig } from '../src/types.js'
 import type { RpcStub } from 'capnweb'
 
-const MOCK_NODE: PeerInfo = {
+const MOCK_NODE: OrchestratorConfig['node'] = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
