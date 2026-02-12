@@ -1,0 +1,410 @@
+# Zenoh 3-Node Demo — Catalyst Mesh TCP Passthrough
+#
+# Architecture (15 containers):
+#   Node A (Origin):   auth-a, orch-a, envoy-svc-a, envoy-proxy-a, zenoh-router, tak-adapter-publisher
+#   Node B (Transit):  auth-b, orch-b, envoy-svc-b, envoy-proxy-b
+#   Node C (Consumer): auth-c, orch-c, envoy-svc-c, envoy-proxy-c, tak-adapter-consumer
+#
+# Each node has its own auth server, isolated network stack, and shared mesh.
+# Both tak-adapter services use the zeno-tak-adapter-v2 image with different configs:
+#   - Publisher (Node A): Emulators generate CoT data, publish to zenoh-router (direct)
+#   - Consumer (Node C): Subscribes via TCP passthrough through the 3-node Envoy mesh
+#
+# Traffic flow: consumer zenohd -> envoy-proxy-c -> envoy-proxy-b -> envoy-proxy-a -> zenoh-router
+#
+# Usage:
+#   docker compose -f demo/zenoh-tak/docker-compose.yaml up --build
+#   # Then run the init script to bootstrap auth, peer nodes, and create routes:
+#   bun run demo/zenoh-tak/init.ts
+
+services:
+  # ============================================================
+  # Node A (Origin): auth-a + orch-a + envoy + zenoh + publisher
+  # ============================================================
+
+  auth-a:
+    build:
+      context: ../..
+      dockerfile: apps/auth/Dockerfile
+    ports:
+      - '5050:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+      - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    labels:
+      catalyst.stack: a
+    networks:
+      stack-a:
+
+  envoy-svc-a:
+    build:
+      context: ../..
+      dockerfile: apps/envoy/Dockerfile
+    ports:
+      - '3010:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-a
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: a
+    networks:
+      stack-a:
+
+  envoy-proxy-a:
+    image: envoyproxy/envoy:v1.32-latest
+    ports:
+      - '10000:10000'
+      - '9901:9901'
+    volumes:
+      - ./envoy-bootstrap-a.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test: ['CMD-SHELL', 'bash -c "</dev/tcp/127.0.0.1/9901"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: a
+    depends_on:
+      envoy-svc-a:
+        condition: service_healthy
+    networks:
+      stack-a:
+      mesh:
+        aliases:
+          - envoy-proxy-a
+
+  orch-a:
+    build:
+      context: ../..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3001:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-a:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth-a:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-a:3000/api
+      - CATALYST_ENVOY_PORT_RANGE=[10000]
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-a
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: a
+    depends_on:
+      auth-a:
+        condition: service_healthy
+      envoy-svc-a:
+        condition: service_healthy
+    networks:
+      stack-a:
+      mesh:
+        aliases:
+          - orch-a
+
+  zenoh-router:
+    image: eclipse/zenoh:latest
+    command: ['-c', '/zenoh.json5']
+    ports:
+      - '7447:7447' # Zenoh protocol
+      - '8000:8000' # REST API
+    volumes:
+      - ./zenoh-router-config.json5:/zenoh.json5:ro
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8000/@/local']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    labels:
+      catalyst.stack: a
+    networks:
+      stack-a:
+
+  tak-adapter-publisher:
+    build:
+      context: ../../examples/zeno-tak-adapter-v2
+      dockerfile: Dockerfile
+    environment:
+      # Connect internal zenohd to the co-located zenoh-router (direct, no mesh)
+      - ZENOH_EXTERNAL_ROUTER_URL=tcp/zenoh-router:7447
+      # Emulator configuration — generates NATO 2525C CoT data
+      - PRODUCER_ENABLED=true
+      - PRODUCER_TOPIC=tak/cot
+      - LOG_LEVEL=info
+      - EMULATOR_PUBLISHERS=[{"emulator":"wiesbaden","topic":"tak/cot","intervalMs":1000},{"emulator":"virginia","topic":"tak/cot","intervalMs":500}]
+    labels:
+      catalyst.stack: a
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    networks:
+      stack-a:
+
+  # ============================================================
+  # Node B (Transit relay): auth-b + orch-b + envoy
+  # ============================================================
+
+  auth-b:
+    build:
+      context: ../..
+      dockerfile: apps/auth/Dockerfile
+    ports:
+      - '5051:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+      - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    labels:
+      catalyst.stack: b
+    networks:
+      stack-b:
+
+  envoy-svc-b:
+    build:
+      context: ../..
+      dockerfile: apps/envoy/Dockerfile
+    ports:
+      - '3011:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-b
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: b
+    networks:
+      stack-b:
+
+  envoy-proxy-b:
+    image: envoyproxy/envoy:v1.32-latest
+    ports:
+      - '10001:10000'
+      - '9902:9901'
+    volumes:
+      - ./envoy-bootstrap-b.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test: ['CMD-SHELL', 'bash -c "</dev/tcp/127.0.0.1/9901"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: b
+    depends_on:
+      envoy-svc-b:
+        condition: service_healthy
+    networks:
+      stack-b:
+      mesh:
+        aliases:
+          - envoy-proxy-b
+
+  orch-b:
+    build:
+      context: ../..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3002:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-b:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth-b:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-b:3000/api
+      - CATALYST_ENVOY_PORT_RANGE=[10000]
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-b
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: b
+    depends_on:
+      auth-b:
+        condition: service_healthy
+      envoy-svc-b:
+        condition: service_healthy
+    networks:
+      stack-b:
+      mesh:
+        aliases:
+          - orch-b
+
+  # ============================================================
+  # Node C (Consumer): auth-c + orch-c + envoy + tak consumer
+  # ============================================================
+
+  auth-c:
+    build:
+      context: ../..
+      dockerfile: apps/auth/Dockerfile
+    ports:
+      - '5052:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=node-c.somebiz.local.io
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+      - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    labels:
+      catalyst.stack: c
+    networks:
+      stack-c:
+
+  envoy-svc-c:
+    build:
+      context: ../..
+      dockerfile: apps/envoy/Dockerfile
+    ports:
+      - '3012:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-c
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: c
+    networks:
+      stack-c:
+
+  envoy-proxy-c:
+    image: envoyproxy/envoy:v1.32-latest
+    ports:
+      - '10002:10000'
+      - '9903:9901'
+    volumes:
+      - ./envoy-bootstrap-c.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test: ['CMD-SHELL', 'bash -c "</dev/tcp/127.0.0.1/9901"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: c
+    depends_on:
+      envoy-svc-c:
+        condition: service_healthy
+    networks:
+      stack-c:
+      mesh:
+        aliases:
+          - envoy-proxy-c
+
+  orch-c:
+    build:
+      context: ../..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3003:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-c.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-c:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth-c:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-c:3000/api
+      - CATALYST_ENVOY_PORT_RANGE=[10000]
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-c
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      catalyst.stack: c
+    depends_on:
+      auth-c:
+        condition: service_healthy
+      envoy-svc-c:
+        condition: service_healthy
+    networks:
+      stack-c:
+      mesh:
+        aliases:
+          - orch-c
+
+  tak-adapter-consumer:
+    build:
+      context: ../../examples/zeno-tak-adapter-v2
+      dockerfile: Dockerfile
+    environment:
+      # Connect internal zenohd through the Envoy TCP passthrough mesh
+      # Traffic: zenohd -> envoy-proxy-c:10000 -> envoy-proxy-b -> envoy-proxy-a -> zenoh-router:7447
+      - ZENOH_EXTERNAL_ROUTER_URL=tcp/envoy-proxy-c:10000
+      # Subscribe to CoT data published by the emulators on Node A
+      - ZENOH_SUBSCRIPTIONS=[{"topic":"tak/cot","transform":"identity"}]
+      # TAK server connection (optional — uncomment for real TAK integration)
+      - TAK_HOST=tak-server-feb-demo.fly.dev
+      - TAK_PORT=8089
+      - TAK_TLS_CERT=/app/certs/catalyst.cert.pem
+      - TAK_TLS_KEY=/app/certs/catalyst.key.pem
+      - LOG_LEVEL=info
+    volumes:
+      - ./catalyst.cert.pem:/app/certs/catalyst.cert.pem:ro
+      - ./catalyst.key.pem:/app/certs/catalyst.key.pem:ro
+    labels:
+      catalyst.stack: c
+    depends_on:
+      envoy-proxy-c:
+        condition: service_healthy
+    networks:
+      stack-c:
+
+networks:
+  stack-a:
+    driver: bridge
+  stack-b:
+    driver: bridge
+  stack-c:
+    driver: bridge
+  mesh:
+    driver: bridge

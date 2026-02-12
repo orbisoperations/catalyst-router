@@ -29,6 +29,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# TLS certificates and private keys
+*.pem
+
 # Docker
 docker-compose.override.yml
 

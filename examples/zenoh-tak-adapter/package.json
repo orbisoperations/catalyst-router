@@ -1,0 +1,12 @@
+{
+  "name": "@catalyst-examples/zenoh-tak-adapter",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:dev"
+  }
+}

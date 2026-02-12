@@ -1,0 +1,343 @@
+# Zenoh 3-Node Demo — Catalyst Mesh TCP Passthrough
+#
+# Architecture (14 containers):
+#   Shared:  otel-collector, auth
+#   Node A (Origin):   orch-a, envoy-svc-a, envoy-proxy-a, zenoh-router, radar-publisher
+#   Node B (Transit):  orch-b, envoy-svc-b, envoy-proxy-b
+#   Node C (Consumer): orch-c, envoy-svc-c, envoy-proxy-c, tak-adapter
+#
+# Traffic flow: tak-adapter -> envoy-proxy-c -> envoy-proxy-b -> envoy-proxy-a -> zenoh-router
+#
+# Usage:
+#   docker compose -f docker-compose/zenoh-3node.compose.yaml up --build
+#   # Then run the init script to bootstrap auth, peer nodes, and create routes:
+#   bun run docker-compose/zenoh-3node-init.ts
+
+services:
+  # --- Observability stack ---
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.144.0
+    container_name: catalyst-otel-collector-z3n
+    command: ['--config', '/etc/otel-collector-config.yaml']
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:13133']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Shared auth ---
+
+  auth:
+    build:
+      context: ..
+      dockerfile: apps/auth/Dockerfile
+    ports:
+      - '5000:5000'
+    environment:
+      - PORT=5000
+      - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
+      - CATALYST_AUTH_KEYS_DB=/data/keys.db
+      - CATALYST_AUTH_TOKENS_DB=/data/tokens.db
+    volumes:
+      - auth-data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- Node A (Origin): Zenoh router + radar-publisher ---
+
+  envoy-svc-a:
+    build:
+      context: ..
+      dockerfile: apps/envoy/Dockerfile
+    ports:
+      - '3010:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-a
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+      - OTEL_SERVICE_NAME=envoy-svc-a
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+
+  envoy-proxy-a:
+    image: envoyproxy/envoy:v1.32-latest
+    ports:
+      - '10000:10000'
+      - '9901:9901'
+    volumes:
+      - ./envoy-bootstrap-a.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:9901/server_info',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      envoy-svc-a:
+        condition: service_healthy
+
+  orch-a:
+    build:
+      context: ..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3001:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-a:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-a:3000/api
+      - CATALYST_ENVOY_PORT_RANGE=[10000]
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-a
+      - OTEL_SERVICE_NAME=orch-a
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      default:
+        aliases:
+          - orch-a
+    depends_on:
+      auth:
+        condition: service_healthy
+      envoy-svc-a:
+        condition: service_healthy
+
+  zenoh-router:
+    image: eclipse/zenoh:latest
+    ports:
+      - '7447:7447' # Zenoh protocol
+      - '8000:8000' # REST API
+    volumes:
+      - ./zenoh-router-config.json5:/zenoh.json5:ro
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8000/@/local']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  radar-publisher:
+    build:
+      context: ..
+      dockerfile: examples/zenoh-radar-publisher/Dockerfile
+    environment:
+      - ZENOH_ROUTER_URL=http://zenoh-router:8000
+      - PUBLISH_KEY=demo/radar/tracks
+      - PUBLISH_INTERVAL_MS=1000
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+
+  # --- Node B (Transit relay) ---
+
+  envoy-svc-b:
+    build:
+      context: ..
+      dockerfile: apps/envoy/Dockerfile
+    ports:
+      - '3011:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-b
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+      - OTEL_SERVICE_NAME=envoy-svc-b
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+
+  envoy-proxy-b:
+    image: envoyproxy/envoy:v1.32-latest
+    ports:
+      - '10001:10000'
+      - '9902:9901'
+    volumes:
+      - ./envoy-bootstrap-b.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:9901/server_info',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      envoy-svc-b:
+        condition: service_healthy
+
+  orch-b:
+    build:
+      context: ..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3002:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-b:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-b:3000/api
+      - CATALYST_ENVOY_PORT_RANGE=[10000]
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-b
+      - OTEL_SERVICE_NAME=orch-b
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      default:
+        aliases:
+          - orch-b
+    depends_on:
+      auth:
+        condition: service_healthy
+      envoy-svc-b:
+        condition: service_healthy
+
+  # --- Node C (Consumer): TAK adapter ---
+
+  envoy-svc-c:
+    build:
+      context: ..
+      dockerfile: apps/envoy/Dockerfile
+    ports:
+      - '3012:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=envoy-svc-c
+      - CATALYST_ENVOY_XDS_PORT=18000
+      - CATALYST_ENVOY_BIND_ADDRESS=0.0.0.0
+      - OTEL_SERVICE_NAME=envoy-svc-c
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+
+  envoy-proxy-c:
+    image: envoyproxy/envoy:v1.32-latest
+    ports:
+      - '10002:10000'
+      - '9903:9901'
+    volumes:
+      - ./envoy-bootstrap-c.yaml:/etc/envoy/envoy.yaml:ro
+    command: ['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:9901/server_info',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      envoy-svc-c:
+        condition: service_healthy
+
+  orch-c:
+    build:
+      context: ..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3003:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-c.somebiz.local.io
+      - CATALYST_PEERING_ENDPOINT=ws://orch-c:3000/rpc
+      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+      - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-c:3000/api
+      - CATALYST_ENVOY_PORT_RANGE=[10000]
+      - CATALYST_ENVOY_ADDRESS=envoy-proxy-c
+      - OTEL_SERVICE_NAME=orch-c
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      default:
+        aliases:
+          - orch-c
+    depends_on:
+      auth:
+        condition: service_healthy
+      envoy-svc-c:
+        condition: service_healthy
+
+  tak-adapter:
+    build:
+      context: ..
+      dockerfile: examples/zenoh-tak-adapter/Dockerfile
+    environment:
+      - ZENOH_CONNECT=tcp/envoy-proxy-c:10000
+      - SUBSCRIBE_KEY=demo/radar/tracks
+      - ZENOHD_REST_PORT=8080
+    volumes:
+      - ./catalyst.cert.pem:/app/cert.pem:ro
+      - ./catalyst.key.pem:/app/key.pem:ro
+    depends_on:
+      envoy-proxy-c:
+        condition: service_healthy
+
+volumes:
+  auth-data:
