@@ -4,9 +4,9 @@ import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestr
 import type { RpcStub } from 'capnweb'
 
 const MOCK_NODE: PeerInfo = {
-  name: 'node-a.somebiz.local.io',
+  name: 'node-a.test.example',
   endpoint: 'http://node-a:3000',
-  domains: ['somebiz.local.io'],
+  domain: 'test.example',
 }
 
 const GATEWAY_ENDPOINT = 'http://gateway:4000'
@@ -110,9 +110,9 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
 
     // 2. Add internal route (from peer)
     const peerInfo: PeerInfo = {
-      name: 'peer-b.somebiz.local.io',
+      name: 'peer-b.test.example',
       endpoint: 'http://pb',
-      domains: [],
+      domain: '',
     }
     await bus.dispatch({
       action: Actions.InternalProtocolUpdate,
@@ -123,7 +123,7 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
             {
               action: 'add',
               route: { name: 'remote-movies', protocol: 'http:gql', endpoint: 'http://rm:8080' },
-              nodePath: ['peer-b.somebiz.local.io'],
+              nodePath: ['peer-b.test.example'],
             },
           ],
         },

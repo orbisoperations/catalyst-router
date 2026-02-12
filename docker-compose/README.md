@@ -41,13 +41,13 @@ Two Catalyst routers peered on the same domain, each with their own gateway and 
 - **otel-collector**: OpenTelemetry Collector (OTLP gRPC :4317, HTTP :4318)
 - **auth**: Shared authentication service (:4020)
 
-**Node A** (`node-a.somebiz.local.io`):
+**Node A** (`node-a.example.local`):
 
 - **node-a**: Orchestrator (:3001)
 - **gateway-a**: Gateway (:4000)
 - **books-service**: Books subgraph (:8081)
 
-**Node B** (`node-b.somebiz.local.io`):
+**Node B** (`node-b.example.local`):
 
 - **node-b**: Orchestrator (:3002)
 - **gateway-b**: Gateway (:4001)
@@ -59,7 +59,7 @@ Two Catalyst routers peered on the same domain, each with their own gateway and 
 docker compose -f docker-compose/two-node.compose.yaml up --build
 ```
 
-Both nodes share `CATALYST_PEERING_SECRET=valid-secret` and `CATALYST_DOMAINS=somebiz.local.io`, so they can establish a peering session and exchange service routes. Node A advertises the books subgraph; Node B advertises the movies subgraph.
+Both nodes share `CATALYST_PEERING_SECRET=valid-secret` and `CATALYST_ORG_DOMAIN=example.local`, so they can establish a peering session and exchange service routes. Node A advertises the books subgraph; Node B advertises the movies subgraph.
 
 ## M0P2 Example with Auth Integration (`example.m0p2.compose.yaml`)
 

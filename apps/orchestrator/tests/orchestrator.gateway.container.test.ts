@@ -135,24 +135,24 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         PORT: '3000',
         CATALYST_NODE_ID: name,
         CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_ORG_DOMAIN: 'test.example',
         CATALYST_AUTH_ENDPOINT: auth.endpoint,
         CATALYST_SYSTEM_TOKEN: auth.systemToken,
         CATALYST_GQL_GATEWAY_ENDPOINT: gq,
       })
 
       peerA = await startContainer(
-        'peer-a.somebiz.local.io',
+        'peer-a.test.example',
         'peer-a',
         'Catalyst server [orchestrator] listening',
-        nodeEnv('peer-a.somebiz.local.io', 'peer-a'),
+        nodeEnv('peer-a.test.example', 'peer-a'),
         [3000]
       )
       peerB = await startContainer(
-        'peer-b.somebiz.local.io',
+        'peer-b.test.example',
         'peer-b',
         'Catalyst server [orchestrator] listening',
-        nodeEnv('peer-b.somebiz.local.io', 'peer-b', 'ws://gateway:4000/api'),
+        nodeEnv('peer-b.test.example', 'peer-b', 'ws://gateway:4000/api'),
         [3000]
       )
       books = await startContainer('books', 'books', 'BOOKS_STARTED', {}, [8080])
@@ -198,14 +198,14 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         // 1. Peer A and B
         console.log('Peering nodes A and B...')
         await netB.addPeer({
-          name: 'peer-a.somebiz.local.io',
+          name: 'peer-a.test.example',
           endpoint: 'ws://peer-a:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
         await netA.addPeer({
-          name: 'peer-b.somebiz.local.io',
+          name: 'peer-b.test.example',
           endpoint: 'ws://peer-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
 
         // Give it a moment for the handshake
@@ -316,25 +316,25 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         PORT: '3000',
         CATALYST_NODE_ID: name,
         CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_ORG_DOMAIN: 'test.example',
         CATALYST_AUTH_ENDPOINT: authEndpoint,
         CATALYST_SYSTEM_TOKEN: systemToken,
         CATALYST_GQL_GATEWAY_ENDPOINT: gq,
       })
 
       peerA = await startContainer(
-        'peer-a.somebiz.local.io',
+        'peer-a.test.example',
         'peer-a',
         'Catalyst server [orchestrator] listening',
-        nodeEnv('peer-a.somebiz.local.io', 'peer-a', authA.endpoint, authA.systemToken),
+        nodeEnv('peer-a.test.example', 'peer-a', authA.endpoint, authA.systemToken),
         [3000]
       )
       peerB = await startContainer(
-        'peer-b.somebiz.local.io',
+        'peer-b.test.example',
         'peer-b',
         'Catalyst server [orchestrator] listening',
         nodeEnv(
-          'peer-b.somebiz.local.io',
+          'peer-b.test.example',
           'peer-b',
           authB.endpoint,
           authB.systemToken,
@@ -395,28 +395,28 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         const peerTokenBtoA = await mintPeerToken(
           `ws://127.0.0.1:${authAPort}/rpc`,
           authA.systemToken,
-          'peer-b.somebiz.local.io',
-          ['somebiz.local.io']
+          'peer-b.test.example',
+          'test.example'
         )
         const peerTokenAtoB = await mintPeerToken(
           `ws://127.0.0.1:${authBPort}/rpc`,
           authB.systemToken,
-          'peer-a.somebiz.local.io',
-          ['somebiz.local.io']
+          'peer-a.test.example',
+          'test.example'
         )
 
         // 1. Peer A and B
         console.log('Peering nodes A and B with separate auth...')
         await netB.addPeer({
-          name: 'peer-a.somebiz.local.io',
+          name: 'peer-a.test.example',
           endpoint: 'ws://peer-a:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenBtoA,
         })
         await netA.addPeer({
-          name: 'peer-b.somebiz.local.io',
+          name: 'peer-b.test.example',
           endpoint: 'ws://peer-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenAtoB,
         })
 

@@ -45,9 +45,9 @@ services:
       - '3000:3000'
     environment:
       - PORT=3000
-      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_NODE_ID=node-a
       - CATALYST_PEERING_ENDPOINT=ws://orchestrator:3000/rpc
-      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_ORG_DOMAIN=example.local
       - CATALYST_PEERING_SECRET=valid-secret
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway:4000/api
       - OTEL_SERVICE_NAME=orchestrator

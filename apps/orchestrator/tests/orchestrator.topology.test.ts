@@ -11,19 +11,19 @@ describe('Orchestrator Topology Tests', () => {
   let nodeC: CatalystNodeBus
 
   const infoA: PeerInfo = {
-    name: 'node-a.somebiz.local.io',
+    name: 'node-a.test.example',
     endpoint: 'ws://node-a',
-    domains: ['somebiz.local.io'],
+    domain: 'test.example',
   }
   const infoB: PeerInfo = {
-    name: 'node-b.somebiz.local.io',
+    name: 'node-b.test.example',
     endpoint: 'ws://node-b',
-    domains: ['somebiz.local.io'],
+    domain: 'test.example',
   }
   const infoC: PeerInfo = {
-    name: 'node-c.somebiz.local.io',
+    name: 'node-c.test.example',
     endpoint: 'ws://node-c',
-    domains: ['somebiz.local.io'],
+    domain: 'test.example',
   }
 
   beforeEach(() => {
@@ -94,7 +94,7 @@ describe('Orchestrator Topology Tests', () => {
     const stateC = (nodeC as unknown as { state: RouteTable }).state
     const routeOnC = stateC.internal.routes.find((r) => r.name === 'service-a')
     expect(routeOnC).toBeDefined()
-    expect(routeOnC?.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])
+    expect(routeOnC?.nodePath).toEqual(['node-b.test.example', 'node-a.test.example'])
 
     // 4. A withdraws route
     await dataA.removeRoute(routeA)

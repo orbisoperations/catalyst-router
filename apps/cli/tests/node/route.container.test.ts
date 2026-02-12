@@ -96,7 +96,7 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
       .withExposedPorts(3000)
       .withEnvironment({
         CATALYST_NODE_ID: 'test-node',
-        CATALYST_DOMAINS: 'test.local',
+        CATALYST_ORG_DOMAIN: 'test.local',
         CATALYST_ORCHESTRATOR_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
         CATALYST_ORCHESTRATOR_AUTH_SYSTEM_TOKEN: systemToken,
       })
