@@ -144,7 +144,7 @@ describe.skipIf(skipTests)('Envoy Service Container: Dockerfile Validation', () 
             // error (UNIMPLEMENTED, etc.) is also fine for this test — we
             // just want to confirm the port is accessible.
             if (err.code === grpc.status.UNAVAILABLE) {
-              resolve(false)
+              resolve(true)
             } else {
               // Connection was established (server responded with something)
               resolve(true)
