@@ -1,47 +1,38 @@
-import { existsSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { findLayer } from './layers.js'
 import type { RpiImageGenConfig } from './types.js'
+
+const BUILTIN_LAYERS = new Set([
+  'rpi5',
+  'pi4',
+  'cm5',
+  'cm4',
+  'zero2w',
+  'image-rpios',
+  'docker-debian-bookworm',
+])
+
+const BUILTIN_CONFIGS = new Set(['bookworm-minbase.yaml'])
 
 export interface ValidationResult {
   name: string
   kind: 'config' | 'layer'
   found: boolean
-  location: 'built-in' | 'source-dir' | 'not-found'
-  path?: string
+  location: 'embedded' | 'built-in' | 'not-found'
 }
 
-export function validateLayers(
-  config: RpiImageGenConfig,
-  rpiImageGenPath: string,
-  sourceDir: string
-): ValidationResult[] {
-  const igRoot = resolve(rpiImageGenPath)
-  const srcRoot = resolve(sourceDir)
+export function validateLayers(config: RpiImageGenConfig): ValidationResult[] {
   const results: ValidationResult[] = []
 
   // 1. Validate include config file
   const includeFile = config.include.file
-  const configSearchPaths = [join(srcRoot, 'config'), join(igRoot, 'config')]
-  const includePath = findFile(includeFile, configSearchPaths)
   results.push({
     name: includeFile,
     kind: 'config',
-    found: includePath !== undefined,
-    location: classifyLocation(includePath, igRoot, srcRoot),
-    path: includePath,
+    found: BUILTIN_CONFIGS.has(includeFile),
+    location: BUILTIN_CONFIGS.has(includeFile) ? 'built-in' : 'not-found',
   })
 
   // 2. Validate all layer references
-  const layerSearchPaths = [
-    join(srcRoot, 'layer'),
-    join(srcRoot, 'device'),
-    join(srcRoot, 'image'),
-    join(igRoot, 'layer'),
-    join(igRoot, 'device'),
-    join(igRoot, 'image'),
-  ]
-
-  // Collect layer names from device.layer, image.layer, and layer.*
   const layerNames = new Set<string>()
   if (config.device.layer) layerNames.add(config.device.layer)
   if (config.image.layer) layerNames.add(config.image.layer)
@@ -50,67 +41,21 @@ export function validateLayers(
   }
 
   for (const name of layerNames) {
-    const found = findLayerYaml(name, layerSearchPaths)
-    results.push({
-      name,
-      kind: 'layer',
-      found: found !== undefined,
-      location: classifyLocation(found, igRoot, srcRoot),
-      path: found,
-    })
+    const embedded = findLayer(name)
+    const isBuiltin = BUILTIN_LAYERS.has(name)
+    const found = embedded !== undefined || isBuiltin
+
+    let location: ValidationResult['location'] = 'not-found'
+    if (embedded !== undefined) {
+      location = 'embedded'
+    } else if (isBuiltin) {
+      location = 'built-in'
+    }
+
+    results.push({ name, kind: 'layer', found, location })
   }
 
   return results
-}
-
-function classifyLocation(
-  path: string | undefined,
-  igRoot: string,
-  srcRoot: string
-): 'built-in' | 'source-dir' | 'not-found' {
-  if (!path) return 'not-found'
-  if (path.startsWith(igRoot)) return 'built-in'
-  if (path.startsWith(srcRoot)) return 'source-dir'
-  return 'not-found'
-}
-
-function findFile(filename: string, dirs: string[]): string | undefined {
-  for (const dir of dirs) {
-    const candidate = join(dir, filename)
-    if (existsSync(candidate)) return candidate
-  }
-  return undefined
-}
-
-function findLayerYaml(layerName: string, searchDirs: string[]): string | undefined {
-  for (const dir of searchDirs) {
-    if (!existsSync(dir)) continue
-    // Direct: dir/<name>.yaml
-    const direct = join(dir, `${layerName}.yaml`)
-    if (existsSync(direct)) return direct
-    // Nested: dir/**/<name>.yaml (up to 3 levels)
-    const found = findRecursive(dir, `${layerName}.yaml`, 3)
-    if (found) return found
-  }
-  return undefined
-}
-
-function findRecursive(dir: string, filename: string, maxDepth: number): string | undefined {
-  if (maxDepth <= 0) return undefined
-  try {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isFile() && entry.name === filename) {
-        return join(dir, entry.name)
-      }
-      if (entry.isDirectory()) {
-        const found = findRecursive(join(dir, entry.name), filename, maxDepth - 1)
-        if (found) return found
-      }
-    }
-  } catch {
-    // Permission denied, etc.
-  }
-  return undefined
 }
 
 export function printValidationResults(results: ValidationResult[]): void {
