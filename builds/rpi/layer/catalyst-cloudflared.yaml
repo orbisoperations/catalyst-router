@@ -36,12 +36,18 @@ mmdebstrap:
       deb [arch=arm64 signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main
       EOF
     - sed -i '/pkg\.cloudflare\.com/d' $1/etc/apt/sources.list
+    # Allow unprivileged ICMP ping sockets (required by cloudflared health checks)
+    - |-
+      mkdir -p "$1/etc/sysctl.d"
+      cat > "$1/etc/sysctl.d/50-cloudflared-ping.conf" <<SYSEOF
+      net.ipv4.ping_group_range = 0 2147483647
+      SYSEOF
     # Install systemd service with tunnel token
     - |-
       cat > "$1/etc/systemd/system/cloudflared-tunnel.service" <<SVCEOF
       [Unit]
       Description=Cloudflare Tunnel
-      After=network-online.target
+      After=network-online.target wpa_supplicant@wlan0.service
       Wants=network-online.target
 
       [Service]
@@ -49,6 +55,8 @@ mmdebstrap:
       ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run --token $IGconf_cloudflared_tunnel_token
       Restart=on-failure
       RestartSec=5
+      AmbientCapabilities=CAP_NET_RAW
+      CapabilityBoundingSet=CAP_NET_RAW
 
       [Install]
       WantedBy=multi-user.target
