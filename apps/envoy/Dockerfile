@@ -1,5 +1,5 @@
 # Build from repo root: docker build -f apps/envoy/Dockerfile -t catalyst-envoy .
-FROM oven/bun:1.3.6-alpine AS deps
+FROM oven/bun:1.3.6-alpine@sha256:819f91180e721ba09e0e5d3eb7fb985832fd23f516e18ddad7e55aaba8100be7 AS deps
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ COPY examples/product-api/package.json examples/product-api/package.json
 RUN bun install --omit=dev --ignore-scripts
 
 # Runtime stage
-FROM oven/bun:1.3.6-alpine
+FROM oven/bun:1.3.6-alpine@sha256:819f91180e721ba09e0e5d3eb7fb985832fd23f516e18ddad7e55aaba8100be7
 
 WORKDIR /app
 
