@@ -6,7 +6,7 @@ RPI_IMAGE_GEN=""
 BUILD_DIR=""
 SOURCE_DIR=""
 SKIP_DEPS=false
-CLONE_BRANCH="main"
+CLONE_BRANCH="master"
 CONFIG_FILE=""
 
 # ---------- Usage ----------
@@ -44,6 +44,9 @@ Requirements:
   - Debian Bookworm or Trixie arm64 host (Pi 5 with Pi OS recommended)
   - sudo access for one-time dependency installation
   - ~4GB free disk space for a minimal image build
+
+Not on Linux? Use the Docker-based builder instead:
+  ./builds/rpi/build-docker.sh --source-dir dist/rpi dist/rpi/config.yaml
 
 Examples:
   # Generate config with the CLI, then build from output dir
@@ -103,6 +106,29 @@ CONFIG_FILE="$(cd "$(dirname "$CONFIG_FILE")" && pwd)/$(basename "$CONFIG_FILE")
 
 check_host() {
   echo "=== Host Environment ==="
+
+  local os
+  os="$(uname -s)"
+
+  # Non-Linux hosts cannot run rpi-image-gen natively
+  if [[ "$os" != "Linux" ]]; then
+    echo "ERROR: This script requires a Linux host (detected: $os)."
+    echo ""
+    echo "  On macOS/Windows, use the Docker-based builder instead:"
+    echo ""
+
+    # Reconstruct the equivalent build-docker.sh command
+    local docker_cmd="${SCRIPT_DIR}/build-docker.sh"
+    [[ -n "$SOURCE_DIR" ]] && docker_cmd+=" --source-dir ${SOURCE_DIR}"
+    [[ -n "$BUILD_DIR" ]]  && docker_cmd+=" --build-dir ${BUILD_DIR}"
+    docker_cmd+=" ${CONFIG_FILE}"
+    echo "    $docker_cmd"
+    echo ""
+    echo "  This runs the build inside a Debian arm64 container with all"
+    echo "  dependencies pre-installed. Requires Docker Desktop."
+    echo ""
+    exit 1
+  fi
 
   # Check architecture
   local arch
@@ -199,7 +225,10 @@ install_deps() {
   echo "  This requires sudo and only needs to run once per host."
   echo ""
 
-  sudo "$install_script"
+  # Run from the
+  pushd $RPI_IMAGE_GEN
+  sudo ./install_deps.sh
+  popd
 
   echo ""
   echo "Dependencies installed."
