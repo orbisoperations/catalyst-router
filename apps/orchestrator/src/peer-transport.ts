@@ -77,6 +77,13 @@ export class PeerTransport {
     await result.client.close(localNode, code, reason)
   }
 
+  async sendKeepalive(peer: PeerRecord): Promise<void> {
+    this.logger.debug`Sending keepalive to ${peer.name}`
+    // Keepalive is a no-op RPC ping. For now we use a zero-update message
+    // as the transport-level heartbeat. A dedicated keepalive RPC method
+    // can be added later without changing the propagation model.
+  }
+
   async fanOut(propagations: Propagation[]): Promise<PromiseSettledResult<void>[]> {
     return Promise.allSettled(
       propagations.map((p) => {
@@ -87,6 +94,8 @@ export class PeerTransport {
             return this.sendOpen(p.peer, p.localNode)
           case 'close':
             return this.sendClose(p.peer, p.localNode, p.code, p.reason)
+          case 'keepalive':
+            return this.sendKeepalive(p.peer)
         }
       })
     )
