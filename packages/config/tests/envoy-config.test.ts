@@ -171,13 +171,28 @@ describe('CatalystConfigSchema with envoy field', () => {
   })
 })
 
-describe('NodeConfigSchema without envoyAddress (removed)', () => {
+describe('NodeConfigSchema with optional envoyAddress', () => {
   it('parses without envoyAddress', () => {
     const result = NodeConfigSchema.safeParse({
       name: 'test-node',
       domains: ['test.local'],
     })
     expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.envoyAddress).toBeUndefined()
+    }
+  })
+
+  it('parses with envoyAddress', () => {
+    const result = NodeConfigSchema.safeParse({
+      name: 'test-node',
+      domains: ['test.local'],
+      envoyAddress: 'http://envoy-proxy-a:10000',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.envoyAddress).toBe('http://envoy-proxy-a:10000')
+    }
   })
 
   it('existing fields still parse correctly', () => {
