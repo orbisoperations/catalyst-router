@@ -28,7 +28,7 @@ export async function createPeerHandler(input: CreatePeerInput): Promise<CreateP
       data: {
         name: input.name,
         endpoint: input.endpoint,
-        domains: input.domains,
+        domain: input.domain,
         peerToken: input.peerToken,
       },
     })

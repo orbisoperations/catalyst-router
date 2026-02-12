@@ -67,7 +67,7 @@ export class AuthService extends CatalystService {
         id: 'system',
         name: 'System Admin',
         type: 'service',
-        trustedDomains: this.config.node.domains,
+        trustedDomains: this.config.node.domain ? [this.config.node.domain] : [],
         trustedNodes: [],
       },
       principal: Principal.ADMIN,
@@ -82,7 +82,7 @@ export class AuthService extends CatalystService {
       this.telemetry,
       policyService,
       this.config.node.name,
-      this.config.node.domains[0] || ''
+      this.config.node.domain
     )
     this._rpcServer.setSystemToken(this._systemToken)
 

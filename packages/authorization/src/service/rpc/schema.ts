@@ -206,7 +206,7 @@ export const PermissionsApiRequestSchema = z.string() // token
 
 export const NodeContextSchema = z.object({
   nodeId: z.string(),
-  domains: z.array(z.string()),
+  domain: z.string(),
 })
 
 export type NodeContext = z.infer<typeof NodeContextSchema>

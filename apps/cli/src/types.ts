@@ -27,7 +27,7 @@ export type ListServicesInput = z.infer<typeof ListServicesInputSchema>
 export const CreatePeerInputSchema = BaseCliConfigSchema.extend({
   name: z.string().min(1),
   endpoint: z.string().url(),
-  domains: z.array(z.string()).default([]),
+  domain: z.string().default(''),
   peerToken: z.string().optional(),
   token: z.string().optional(),
 })

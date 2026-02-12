@@ -125,14 +125,14 @@ export function extractSystemTokenFromLogs(logs: string[]): string {
  * @param authEndpoint - WebSocket endpoint of the auth service
  * @param systemToken - System admin token for the auth service
  * @param peerName - Name of the peer node that will use this token
- * @param domains - Domains the peer token should be valid for
+ * @param domain - Organization domain the peer token should be valid for
  * @returns Peer token string
  */
 export async function mintPeerToken(
   authEndpoint: string,
   systemToken: string,
   peerName: string,
-  domains: string[]
+  domain: string
 ): Promise<string> {
   console.log(`Minting peer token for ${peerName} from ${authEndpoint}...`)
   const authClient = newWebSocketRpcSession<AuthServiceApi>(authEndpoint)
@@ -148,7 +148,7 @@ export async function mintPeerToken(
       id: peerName,
       name: peerName,
       type: 'service',
-      trustedDomains: domains,
+      trustedDomains: domain ? [domain] : [],
       trustedNodes: [], // Empty = trust all nodes
     },
     principal: Principal.NODE,
