@@ -31,6 +31,34 @@ const LB_POLICY: Record<string, number> = {
 } as const
 
 // ---------------------------------------------------------------------------
+// Duration parsing — converts strings like "5s", "0.25s", "500ms" to
+// google.protobuf.Duration { seconds, nanos }.
+// ---------------------------------------------------------------------------
+
+function parseDuration(value: string): { seconds: number; nanos: number } {
+  // Try seconds (integer or decimal): "5s", "0.25s", "1.5s"
+  const secMatch = value.match(/^(\d+(?:\.\d+)?)s$/)
+  if (secMatch) {
+    const total = parseFloat(secMatch[1])
+    const seconds = Math.floor(total)
+    const nanos = Math.round((total - seconds) * 1e9)
+    return { seconds, nanos }
+  }
+
+  // Try milliseconds: "500ms"
+  const msMatch = value.match(/^(\d+(?:\.\d+)?)ms$/)
+  if (msMatch) {
+    const totalMs = parseFloat(msMatch[1])
+    const seconds = Math.floor(totalMs / 1000)
+    const nanos = Math.round((totalMs % 1000) * 1e6)
+    return { seconds, nanos }
+  }
+
+  // Fallback: 5s default
+  return { seconds: 5, nanos: 0 }
+}
+
+// ---------------------------------------------------------------------------
 // Build the protobuf type hierarchy programmatically.
 //
 // Only the fields actually used by the resource builders are defined.
@@ -461,14 +489,14 @@ export function encodeCluster(cluster: XdsCluster): {
   // Convert string type to enum int
   const typeInt = CLUSTER_TYPE[cluster.type] ?? 0
 
-  // Convert connect_timeout string (e.g. "5s") to Duration
-  const match = cluster.connect_timeout.match(/^(\d+)s$/)
-  const seconds = match ? parseInt(match[1], 10) : 5
+  // Convert connect_timeout string to google.protobuf.Duration.
+  // Supports: "5s", "0.25s", "1.5s", "500ms"
+  const duration = parseDuration(cluster.connect_timeout)
 
   const protoCluster: Record<string, unknown> = {
     name: cluster.name,
     type: typeInt,
-    connect_timeout: { seconds, nanos: 0 },
+    connect_timeout: duration,
     lb_policy: LB_POLICY[cluster.lb_policy] ?? 0,
     dns_lookup_family: cluster.dns_lookup_family ?? 0,
     load_assignment: cluster.load_assignment,
