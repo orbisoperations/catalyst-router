@@ -42,7 +42,13 @@ export function createSnapshotCache(): SnapshotCache {
     setSnapshot(snapshot: XdsSnapshot): void {
       current = snapshot
       for (const callback of watchers) {
-        callback(snapshot)
+        try {
+          callback(snapshot)
+        } catch {
+          // Isolate watcher failures so remaining watchers still receive
+          // the update. Without this, a single throwing callback would
+          // break the notification chain for all subsequent watchers.
+        }
       }
     },
 
