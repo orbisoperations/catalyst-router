@@ -74,11 +74,6 @@ export function getProtoRoot(): protobuf.Root {
   return _root
 }
 
-/** Reset the cached root (for testing only). */
-export function resetProtoRoot(): void {
-  _root = undefined
-}
-
 function buildProtoRoot(): protobuf.Root {
   const root = new protobuf.Root()
 
