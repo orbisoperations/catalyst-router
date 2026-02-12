@@ -53,5 +53,15 @@ ${prerequisite}
     sudo rpi-imager --cli \\
       ${absDir}/build/image-${opts.imageName}/${opts.imageName}.img \\
       /dev/sdX
-`)
+${
+  opts.autologin !== false
+    ? `
+  Console:
+
+    Autologin is enabled on tty1. The physical console will automatically
+    log in as "${opts.username}" and stream the systemd journal.
+    Press Ctrl+C on the console to drop to an interactive shell.
+`
+    : ''
+}`)
 }

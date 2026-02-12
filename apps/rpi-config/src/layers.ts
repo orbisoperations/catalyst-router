@@ -588,6 +588,45 @@ mmdebstrap:
     - chroot "$1" chown -R root:root /opt/catalyst-node
 `
 
+const CATALYST_CONSOLE_YAML = `# METABEGIN
+# X-Env-Layer-Name: catalyst-console
+# X-Env-Layer-Category: sys
+# X-Env-Layer-Desc: Autologin on tty1 and live systemd journal stream.
+#  Automatically logs in the configured user on the physical console
+#  and follows all journal entries so you can monitor services at a glance.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: systemd-min,rpi-user-credentials
+#
+# X-Env-VarRequires: IGconf_device_user1
+# X-Env-VarRequires-Valid: string
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    # Enable autologin on tty1 for the configured user
+    - |-
+      mkdir -p "$1/etc/systemd/system/getty@tty1.service.d"
+      cat > "$1/etc/systemd/system/getty@tty1.service.d/autologin.conf" <<ALEOF
+      [Service]
+      ExecStart=
+      ExecStart=-/sbin/agetty --autologin $IGconf_device_user1 --noclear %I \\$TERM
+      ALEOF
+    # Stream systemd journal on tty1 login
+    - |-
+      HOME_DIR="$1/home/$IGconf_device_user1"
+      mkdir -p "$HOME_DIR"
+      cat >> "$HOME_DIR/.bash_profile" <<'BPEOF'
+
+      # --- Catalyst Console: live journal stream on tty1 ---
+      if [ "$(tty)" = "/dev/tty1" ]; then
+        printf '\\n\\033[1m=== Catalyst Node — Journal Stream ===\\033[0m\\n'
+        printf 'Press Ctrl+C for an interactive shell.\\n\\n'
+        journalctl -f --no-hostname -o short-precise
+      fi
+      BPEOF
+      chown -R 1000:1000 "$HOME_DIR/.bash_profile"
+`
+
 const CATALYST_CLOUDFLARED_YAML = `# METABEGIN
 # X-Env-Layer-Name: catalyst-cloudflared
 # X-Env-Layer-Category: net
@@ -666,6 +705,11 @@ export const EMBEDDED_LAYERS: readonly EmbeddedLayer[] = [
     filename: 'catalyst-docker-stack.yaml',
     name: 'catalyst-docker-stack',
     content: CATALYST_DOCKER_STACK_YAML,
+  },
+  {
+    filename: 'catalyst-console.yaml',
+    name: 'catalyst-console',
+    content: CATALYST_CONSOLE_YAML,
   },
   {
     filename: 'catalyst-cloudflared.yaml',
