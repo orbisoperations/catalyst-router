@@ -294,11 +294,27 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     if (!mintResult.success) throw new Error(`Failed to mint CLI token: ${mintResult.error}`)
     const cliToken = mintResult.data.token
 
-    // ── 5. Start Envoy proxy container ─────────────────────────────
-    // Start Envoy BEFORE creating routes so the ADS stream is established
-    // first. The route creation (step 6) will push the snapshot via the
-    // watcher callback over the already-connected stream, avoiding a race
-    // where the initial sendSnapshot on connect drops the CDS write.
+    // ── 5. Create route (endpoint uses Docker DNS hostname) ────────
+    // The endpoint `http://books:8080/graphql` uses the Docker network
+    // alias so Envoy proxy (inside Docker) can reach books-api.
+    // Routes are created BEFORE the Envoy container starts — the ADS
+    // control plane re-reads the snapshot after registering each new
+    // stream watcher, so late-connecting proxies receive the current
+    // snapshot on their first subscribe.
+    console.log('[setup] Creating books-api route...')
+    const routeResult = await createRouteHandler({
+      name: 'books-api',
+      endpoint: 'http://books:8080/graphql',
+      protocol: 'http:graphql',
+      orchestratorUrl: `ws://localhost:${orchPort}/rpc`,
+      token: cliToken,
+    })
+    if (!routeResult.success) throw new Error(`Failed to create route: ${routeResult.error}`)
+
+    // ── 6. Start Envoy proxy container ─────────────────────────────
+    // Envoy connects to the ADS server AFTER the snapshot has already
+    // been pushed. The control plane sends the current snapshot to new
+    // streams on subscribe, so ordering no longer matters.
     console.log(`[setup] Starting Envoy proxy (ADS at host.docker.internal:${xdsPort})...`)
     const bootstrapYaml = generateBootstrapYaml(xdsPort)
 
@@ -315,24 +331,6 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
 
     envoyMappedPort = envoyContainer.getMappedPort(ENVOY_LISTENER_PORT)
     adminMappedPort = envoyContainer.getMappedPort(9901)
-
-    // Brief wait for ADS stream to fully establish
-    await new Promise((r) => setTimeout(r, 500))
-
-    // ── 6. Create route (endpoint uses Docker DNS hostname) ────────
-    // The endpoint `http://books:8080/graphql` uses the Docker network
-    // alias so Envoy proxy (inside Docker) can reach books-api.
-    // Creating the route AFTER Envoy connects ensures the snapshot push
-    // goes through the watcher callback on the established ADS stream.
-    console.log('[setup] Creating books-api route...')
-    const routeResult = await createRouteHandler({
-      name: 'books-api',
-      endpoint: 'http://books:8080/graphql',
-      protocol: 'http:graphql',
-      orchestratorUrl: `ws://localhost:${orchPort}/rpc`,
-      token: cliToken,
-    })
-    if (!routeResult.success) throw new Error(`Failed to create route: ${routeResult.error}`)
 
     // ── 7. Wait for dynamic listener ───────────────────────────────
     // Envoy receives CDS + LDS from ADS, then creates the listener.

@@ -52,6 +52,11 @@ export function createSnapshotCache(): SnapshotCache {
 
     watch(callback: (snapshot: XdsSnapshot) => void): () => void {
       watchers.add(callback)
+      // Immediately replay the current snapshot to new watchers (BehaviorSubject pattern).
+      // This ensures late-connecting ADS streams receive the latest config.
+      if (current) {
+        callback(current)
+      }
       return () => {
         watchers.delete(callback)
       }
