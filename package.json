@@ -87,6 +87,7 @@
     "globals": "^17.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
+    "pptxgenjs": "^4.0.1",
     "prettier": "^3.7.4",
     "typescript-eslint": "^8.52.0"
   },
