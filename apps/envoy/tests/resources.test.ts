@@ -83,11 +83,23 @@ describe('buildEgressListener', () => {
     expect(listener.name).toBe('egress_books-api_via_node-a')
   })
 
-  it('binds to 127.0.0.1 (localhost only)', () => {
+  it('defaults bind address to 0.0.0.0', () => {
     const listener = buildEgressListener({
       channelName: 'books-api',
       peerName: 'node-a',
       port: 10001,
+    })
+    const addr = listener.address.socket_address
+    expect(addr.address).toBe('0.0.0.0')
+    expect(addr.port_value).toBe(10001)
+  })
+
+  it('uses custom bind address when provided', () => {
+    const listener = buildEgressListener({
+      channelName: 'books-api',
+      peerName: 'node-a',
+      port: 10001,
+      bindAddress: '127.0.0.1',
     })
     const addr = listener.address.socket_address
     expect(addr.address).toBe('127.0.0.1')
@@ -504,7 +516,7 @@ describe('buildXdsSnapshot', () => {
     })
 
     const addr = snapshot.listeners[0].address.socket_address
-    expect(addr.address).toBe('127.0.0.1')
+    expect(addr.address).toBe('0.0.0.0')
     expect(addr.port_value).toBe(10001)
   })
 

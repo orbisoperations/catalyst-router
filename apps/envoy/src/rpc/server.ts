@@ -23,10 +23,15 @@ export const InternalRouteSchema = DataChannelDefinitionSchema.extend({
  *
  * - `local`: data channels on this node
  * - `internal`: data channels on remote peers, routed through envoy
+ * - `portAllocations`: explicit port→key map from the orchestrator's port allocator.
+ *   When provided, these override the ports derived from route.envoyPort.
+ *   This is needed for multi-hop: the local listener port (allocated by this node)
+ *   may differ from route.envoyPort (the upstream peer's port, used for the remote cluster).
  */
 export const RouteConfigSchema = z.object({
   local: z.array(DataChannelDefinitionSchema),
   internal: z.array(InternalRouteSchema),
+  portAllocations: z.record(z.string(), z.number()).optional(),
 })
 
 export type RouteConfig = z.infer<typeof RouteConfigSchema>
@@ -93,20 +98,26 @@ export class EnvoyRpcServer extends RpcTarget {
 
     // Build and push xDS snapshot if a cache is configured
     if (this.snapshotCache) {
-      const portAllocations: Record<string, number> = {}
+      // Use explicit portAllocations from orchestrator when available.
+      // These separate local listener ports from upstream remote ports,
+      // which is required for multi-hop transit routing.
+      let portAllocations: Record<string, number>
 
-      // Collect port allocations from local routes
-      for (const route of this.config.local) {
-        if (route.envoyPort) {
-          portAllocations[route.name] = route.envoyPort
+      if (result.data.portAllocations) {
+        portAllocations = { ...result.data.portAllocations }
+      } else {
+        // Backward compat: derive from route.envoyPort (2-node mode)
+        portAllocations = {}
+        for (const route of this.config.local) {
+          if (route.envoyPort) {
+            portAllocations[route.name] = route.envoyPort
+          }
         }
-      }
-
-      // Collect port allocations from internal routes (egress ports)
-      for (const route of this.config.internal) {
-        if (route.envoyPort) {
-          const egressKey = `egress_${route.name}_via_${route.peerName}`
-          portAllocations[egressKey] = route.envoyPort
+        for (const route of this.config.internal) {
+          if (route.envoyPort) {
+            const egressKey = `egress_${route.name}_via_${route.peerName}`
+            portAllocations[egressKey] = route.envoyPort
+          }
         }
       }
 

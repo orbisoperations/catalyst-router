@@ -564,11 +564,22 @@ export class CatalystNodeBus extends RpcTarget {
           })),
           ..._state.internal.routes
             .filter((r) => !r.nodePath.includes(action.data.peerInfo.name))
-            .map((r) => ({
-              action: 'add' as const,
-              route: r,
-              nodePath: [this.config.node.name, ...r.nodePath],
-            })),
+            .map((r) => {
+              // Rewrite envoyPort for multi-hop: use locally allocated egress port
+              let route = r as DataChannelDefinition
+              if (this.config.envoyConfig && this.portAllocator) {
+                const egressKey = `egress_${r.name}_via_${r.peerName}`
+                const localPort = this.portAllocator.getPort(egressKey)
+                if (localPort) {
+                  route = { ...r, envoyPort: localPort }
+                }
+              }
+              return {
+                action: 'add' as const,
+                route,
+                nodePath: [this.config.node.name, ...r.nodePath],
+              }
+            }),
         ]
 
         if (allRoutes.length > 0) {
@@ -599,11 +610,22 @@ export class CatalystNodeBus extends RpcTarget {
           })),
           ..._state.internal.routes
             .filter((r) => !r.nodePath.includes(action.data.peerInfo.name))
-            .map((r) => ({
-              action: 'add' as const,
-              route: r,
-              nodePath: [this.config.node.name, ...r.nodePath],
-            })),
+            .map((r) => {
+              // Rewrite envoyPort for multi-hop: use locally allocated egress port
+              let route = r as DataChannelDefinition
+              if (this.config.envoyConfig && this.portAllocator) {
+                const egressKey = `egress_${r.name}_via_${r.peerName}`
+                const localPort = this.portAllocator.getPort(egressKey)
+                if (localPort) {
+                  route = { ...r, envoyPort: localPort }
+                }
+              }
+              return {
+                action: 'add' as const,
+                route,
+                nodePath: [this.config.node.name, ...r.nodePath],
+              }
+            }),
         ]
 
         if (allRoutes.length > 0) {
@@ -719,14 +741,27 @@ export class CatalystNodeBus extends RpcTarget {
               const token = peer.peerToken || this.nodeToken || ''
               const connectionResult = await stub.getIBGPClient(token)
               if (connectionResult.success) {
-                // Prepend my FQDN to the path of propagated updates
+                // Prepend my FQDN to the path and rewrite envoyPort/envoyAddress
+                // for multi-hop: downstream peers must connect to this node's
+                // Envoy proxy, not the original upstream's.
                 const updatesWithPrepend = {
                   updates: safeUpdates.map((u) => {
                     if (u.action === 'add') {
-                      return {
+                      const rewritten = {
                         ...u,
                         nodePath: [this.config.node.name, ...(u.nodePath ?? [])],
                       }
+                      // Rewrite envoyPort to this node's allocated egress port
+                      // for multi-hop transit routing. Use port allocator directly
+                      // because route.envoyPort is the upstream's port (remote cluster target).
+                      if (this.config.envoyConfig && this.portAllocator) {
+                        const egressKey = `egress_${u.route.name}_via_${sourcePeerName}`
+                        const localPort = this.portAllocator.getPort(egressKey)
+                        if (localPort) {
+                          rewritten.route = { ...u.route, envoyPort: localPort }
+                        }
+                      }
+                      return rewritten
                     }
                     return u
                   }),
@@ -788,16 +823,21 @@ export class CatalystNodeBus extends RpcTarget {
       }
     }
 
-    // Allocate egress ports for internal routes
+    // Allocate egress ports for internal routes.
+    // Always allocate a local port (even if route has envoyPort from upstream).
+    // The local port is the listener port; route.envoyPort is preserved as the
+    // remote cluster target. Port allocations are sent explicitly to the envoy service.
     for (const route of this.state.internal.routes) {
-      if (!route.envoyPort) {
-        const egressKey = `egress_${route.name}_via_${route.peerName}`
-        const result = this.portAllocator.allocate(egressKey)
-        if (result.success) {
+      const egressKey = `egress_${route.name}_via_${route.peerName}`
+      const result = this.portAllocator.allocate(egressKey)
+      if (result.success) {
+        // Only set envoyPort if the upstream didn't provide one.
+        // When upstream sets envoyPort, it's preserved for the remote cluster.
+        if (!route.envoyPort) {
           route.envoyPort = result.port
-        } else {
-          this.logger.error`Egress port allocation failed for ${egressKey}: ${result.error}`
         }
+      } else {
+        this.logger.error`Egress port allocation failed for ${egressKey}: ${result.error}`
       }
     }
 
@@ -818,6 +858,7 @@ export class CatalystNodeBus extends RpcTarget {
         const result = await stub.updateRoutes({
           local: this.state.local.routes,
           internal: this.state.internal.routes,
+          portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
         })
         if (!result.success) {
           this.logger.error`Envoy config sync failed: ${result.error}`
