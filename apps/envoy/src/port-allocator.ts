@@ -53,9 +53,10 @@ export function createPortAllocator(
   const available = new Set<number>(pool)
   const allocations = new Map<string, number>()
 
-  // Re-hydrate existing allocations
+  // Re-hydrate existing allocations — only accept ports within the configured range
   if (existing) {
     for (const [name, port] of existing) {
+      if (!available.has(port)) continue
       allocations.set(name, port)
       available.delete(port)
     }

@@ -209,5 +209,38 @@ describe('createPortAllocator', () => {
       expect(allocator.availableCount()).toBe(2)
       expect(allocator.getAllocations().size).toBe(0)
     })
+
+    it('ignores re-hydrated ports outside the configured range', () => {
+      const existing = new Map<string, number>([['service', 9999]])
+      const allocator = createPortAllocator([8000, 8001], existing)
+      // Out-of-range port should be dropped entirely
+      expect(allocator.getPort('service')).toBeUndefined()
+      expect(allocator.getAllocations().size).toBe(0)
+      expect(allocator.availableCount()).toBe(2)
+    })
+
+    it('releasing a dropped out-of-range re-hydration does not pollute the pool', () => {
+      const existing = new Map<string, number>([['service', 9999]])
+      const allocator = createPortAllocator([8000, 8001], existing)
+      allocator.release('service')
+      // Pool should still only contain in-range ports
+      const first = allocator.allocate('a')
+      const second = allocator.allocate('b')
+      const third = allocator.allocate('c')
+      expect(first).toEqual({ success: true, port: 8000 })
+      expect(second).toEqual({ success: true, port: 8001 })
+      expect(third).toEqual({ success: false, error: 'No ports available' })
+    })
+
+    it('accepts in-range ports and rejects out-of-range ports in same re-hydration', () => {
+      const existing = new Map<string, number>([
+        ['books-api', 8000],
+        ['rogue-service', 9999],
+      ])
+      const allocator = createPortAllocator([8000, 8001], existing)
+      expect(allocator.getPort('books-api')).toBe(8000)
+      expect(allocator.getPort('rogue-service')).toBeUndefined()
+      expect(allocator.availableCount()).toBe(1)
+    })
   })
 })
