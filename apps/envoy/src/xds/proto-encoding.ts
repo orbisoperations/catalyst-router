@@ -217,6 +217,7 @@ function buildProtoRoot(): protobuf.Root {
       .add(new protobuf.Field('type', 2, 'int32'))
       .add(new protobuf.Field('connect_timeout', 4, 'google.protobuf.Duration'))
       .add(new protobuf.Field('lb_policy', 6, 'int32'))
+      .add(new protobuf.Field('dns_lookup_family', 17, 'int32'))
       .add(
         new protobuf.Field('load_assignment', 33, 'envoy.config.endpoint.v3.ClusterLoadAssignment')
       )
@@ -338,6 +339,7 @@ export function encodeCluster(cluster: XdsCluster): {
     type: typeInt,
     connect_timeout: { seconds, nanos: 0 },
     lb_policy: 0, // ROUND_ROBIN
+    dns_lookup_family: cluster.dns_lookup_family ?? 0,
     load_assignment: cluster.load_assignment,
   }
 
