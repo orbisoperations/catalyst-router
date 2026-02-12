@@ -1,5 +1,5 @@
 export interface ResolvedOptions {
-  output: string
+  outputDir: string
   mode: 'native' | 'docker'
   dryRun?: boolean
   device: string
@@ -26,8 +26,6 @@ export interface ResolvedOptions {
   imageName: string
   bootPartSize: string
   rootPartSize: string
-  rpiImageGen?: string
-  skipValidation?: boolean
   nonInteractive?: boolean
 }
 
