@@ -1,5 +1,59 @@
 import { z } from 'zod'
 
+// --- FQDN / Domain Schemas ---
+
+/** Single DNS label: a-z, 0-9, hyphen; max 63 chars; no leading/trailing hyphen */
+const DNS_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i
+
+/** Validates a single DNS label (RFC 1035, max 63 chars). */
+export const NodeIdSchema = z
+  .string()
+  .min(1)
+  .max(63)
+  .regex(DNS_LABEL_RE, 'Must be a valid DNS label (a-z, 0-9, hyphen, no leading/trailing hyphen)')
+
+/** Validates an organization domain (at least 2 DNS labels, e.g., "example.com"). */
+export const OrgDomainSchema = z
+  .string()
+  .min(3)
+  .max(253)
+  .refine(
+    (val) => {
+      const labels = val.split('.')
+      return labels.length >= 2 && labels.every((l) => DNS_LABEL_RE.test(l))
+    },
+    { message: 'Must be a valid domain with at least 2 labels (e.g., "example.com")' }
+  )
+
+/** Validates a well-formed FQDN (RFC 1035, max 253 chars, at least 2 labels). */
+export const FqdnSchema = z
+  .string()
+  .min(3)
+  .max(253)
+  .refine(
+    (val) => {
+      const labels = val.split('.')
+      return labels.length >= 2 && labels.every((l) => DNS_LABEL_RE.test(l))
+    },
+    { message: 'Must be a valid FQDN (e.g., "node-a.example.com")' }
+  )
+
+export type NodeId = z.infer<typeof NodeIdSchema>
+export type OrgDomain = z.infer<typeof OrgDomainSchema>
+export type Fqdn = z.infer<typeof FqdnSchema>
+
+/** Computes the node FQDN: `{nodeId}.{orgDomain}` */
+export function nodeFqdn(nodeId: string, orgDomain: string): string {
+  return `${nodeId}.${orgDomain}`
+}
+
+/** Computes a data channel FQDN: `{channel}.{nodeId}.{orgDomain}` */
+export function channelFqdn(channel: string, nodeId: string, orgDomain: string): string {
+  return `${channel}.${nodeId}.${orgDomain}`
+}
+
+// --- Port Schemas ---
+
 /**
  * Port entry: either a single port number or a [start, end] range tuple.
  */
