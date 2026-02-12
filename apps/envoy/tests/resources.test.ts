@@ -17,6 +17,7 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     expect(listener.name).toBe('ingress_books-api')
   })
@@ -26,6 +27,7 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     const addr = listener.address.socket_address
     expect(addr.address).toBe('0.0.0.0')
@@ -37,6 +39,7 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     const hcm = listener.filter_chains[0].filters[0].typed_config
     const route = hcm.route_config.virtual_hosts[0].routes[0].route
@@ -48,6 +51,7 @@ describe('buildIngressListener', () => {
       channelName: 'movies-api',
       port: 9001,
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     const hcm = listener.filter_chains[0].filters[0].typed_config
     expect(hcm.stat_prefix).toBe('ingress_movies-api')
@@ -58,6 +62,7 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     const filter = listener.filter_chains[0].filters[0]
     expect(filter.name).toBe('envoy.filters.network.http_connection_manager')
@@ -292,25 +297,29 @@ describe('buildXdsSnapshot', () => {
       internal: [],
       portAllocations: {},
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     expect(snapshot.version).toBeDefined()
     expect(typeof snapshot.version).toBe('string')
   })
 
-  it('generates monotonically increasing versions', () => {
+  it('uses the caller-provided version string', () => {
     const s1 = buildXdsSnapshot({
       local: [],
       internal: [],
       portAllocations: {},
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     const s2 = buildXdsSnapshot({
       local: [],
       internal: [],
       portAllocations: {},
       bindAddress: '0.0.0.0',
+      version: '2',
     })
-    expect(Number(s2.version)).toBeGreaterThan(Number(s1.version))
+    expect(s1.version).toBe('1')
+    expect(s2.version).toBe('2')
   })
 
   it('returns empty listeners and clusters for empty routes', () => {
@@ -319,6 +328,7 @@ describe('buildXdsSnapshot', () => {
       internal: [],
       portAllocations: {},
       bindAddress: '0.0.0.0',
+      version: '1',
     })
     expect(snapshot.listeners).toEqual([])
     expect(snapshot.clusters).toEqual([])
@@ -337,6 +347,7 @@ describe('buildXdsSnapshot', () => {
       internal: [],
       portAllocations: { 'books-api': 8001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     expect(snapshot.listeners).toHaveLength(1)
@@ -362,6 +373,7 @@ describe('buildXdsSnapshot', () => {
       ],
       portAllocations: { 'egress_movies-api_via_node-a': 10001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     expect(snapshot.listeners).toHaveLength(1)
@@ -397,6 +409,7 @@ describe('buildXdsSnapshot', () => {
         'egress_movies-api_via_node-a': 10001,
       },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     expect(snapshot.listeners).toHaveLength(2)
@@ -422,6 +435,7 @@ describe('buildXdsSnapshot', () => {
       internal: [],
       portAllocations: { 'books-api': 8001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     const addr = snapshot.listeners[0].address.socket_address
@@ -444,6 +458,7 @@ describe('buildXdsSnapshot', () => {
       ],
       portAllocations: { 'egress_movies-api_via_node-a': 10001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     const addr = snapshot.listeners[0].address.socket_address
@@ -467,6 +482,7 @@ describe('buildXdsSnapshot', () => {
       ],
       portAllocations: { 'egress_movies-api_via_node-a': 10001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     const ep =
@@ -487,6 +503,7 @@ describe('buildXdsSnapshot', () => {
       internal: [],
       portAllocations: { 'no-endpoint': 8001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     expect(snapshot.listeners).toHaveLength(0)
@@ -509,6 +526,7 @@ describe('buildXdsSnapshot', () => {
       ],
       portAllocations: { 'egress_movies-api_via_node-a': 10001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     expect(snapshot.listeners).toHaveLength(0)
@@ -528,6 +546,7 @@ describe('buildXdsSnapshot', () => {
       internal: [],
       portAllocations: { 'books-api': 8001 },
       bindAddress: '0.0.0.0',
+      version: '1',
     })
 
     const ep =
