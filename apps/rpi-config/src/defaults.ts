@@ -1,5 +1,5 @@
 export const DEFAULTS = {
-  output: './catalyst-node.yaml',
+  outputDir: 'dist/rpi',
   mode: 'native' as const,
   device: 'rpi5',
   hostname: 'catalyst-node',

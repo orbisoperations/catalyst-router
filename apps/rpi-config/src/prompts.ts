@@ -20,7 +20,10 @@ export async function promptMissing(opts: Record<string, unknown>): Promise<Reso
     resolved.mode = await select({
       message: 'How should Catalyst Node be deployed?',
       choices: [
-        { name: 'Native binary (recommended \u2014 lower RAM, faster boot)', value: 'native' as const },
+        {
+          name: 'Native binary (recommended \u2014 lower RAM, faster boot)',
+          value: 'native' as const,
+        },
         { name: 'Docker Compose (multi-container, service isolation)', value: 'docker' as const },
       ],
     })
@@ -142,10 +145,10 @@ export async function promptMissing(opts: Record<string, unknown>): Promise<Reso
 
   // --- Output ---
   section('Output')
-  if (!resolved.output || resolved.output === DEFAULTS.output) {
-    resolved.output = await input({
-      message: 'Output file path:',
-      default: DEFAULTS.output,
+  if (!resolved.outputDir || resolved.outputDir === DEFAULTS.outputDir) {
+    resolved.outputDir = await input({
+      message: 'Output directory:',
+      default: DEFAULTS.outputDir,
     })
   }
 

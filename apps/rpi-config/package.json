@@ -9,6 +9,8 @@
     "build": "tsup",
     "dev": "bun run src/index.ts",
     "start": "node dist/index.js",
+    "compile": "bun build --compile --target=bun-linux-arm64 --outfile ../../dist/rpi-config/catalyst-rpi-config src/index.ts",
+    "compile:native": "bun build --compile --outfile ../../dist/rpi-config/catalyst-rpi-config src/index.ts",
     "test": "vitest",
     "test:watch": "vitest --watch"
   },
