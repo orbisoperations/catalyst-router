@@ -82,6 +82,10 @@ export class XdsControlPlane {
             return
           }
           this.started = true
+          if (this.bindAddress !== '127.0.0.1' && this.bindAddress !== '::1') {
+            this.logger
+              .warn`xDS ADS server using insecure credentials on ${this.bindAddress}:${boundPort} — xDS traffic is unencrypted`
+          }
           this.logger.info`xDS ADS server listening on ${this.bindAddress}:${boundPort}`
           resolve()
         }
