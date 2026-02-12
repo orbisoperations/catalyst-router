@@ -37,7 +37,6 @@ mmdebstrap:
     - wpasupplicant
     - wireless-tools
     - iw
-    - crda
   customize-hooks:
     # wpa_supplicant config for the specified network
     - |-
@@ -597,6 +596,9 @@ const CATALYST_CLOUDFLARED_YAML = `# METABEGIN
 # X-Env-Layer-Version: 1.0.0
 # X-Env-Layer-Requires: ca-certificates,openssh-server
 #
+# X-Env-VarRequires: IGconf_sys_apt_keydir
+# X-Env-VarRequires-Valid: string
+#
 # X-Env-VarPrefix: cloudflared
 #
 # X-Env-Var-tunnel_token:
@@ -607,20 +609,23 @@ const CATALYST_CLOUDFLARED_YAML = `# METABEGIN
 # METAEND
 ---
 mmdebstrap:
+  mirrors:
+    - deb https://pkg.cloudflare.com/cloudflared bookworm main
   setup-hooks:
-    # Add Cloudflare apt signing key
-    - |-
-      mkdir -p "$1/usr/share/keyrings"
-      curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \\
-        -o "$1/usr/share/keyrings/cloudflare-main.gpg"
-    # Add Cloudflare apt repository
-    - |-
-      cat > "$1/etc/apt/sources.list.d/cloudflared.list" <<REPOEOF
-      deb [arch=arm64 signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main
-      REPOEOF
+    - mkdir -p $1/usr/share/keyrings/
+    - curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o $1/usr/share/keyrings/cloudflare-main.gpg
+    - chmod a+r $1/usr/share/keyrings/cloudflare-main.gpg
+    - cp -p $1/usr/share/keyrings/cloudflare-main.gpg $IGconf_sys_apt_keydir
   packages:
     - cloudflared
   customize-hooks:
+    # Permanent sources.list entry for the installed system
+    - mkdir -p $1/etc/apt/sources.list.d
+    - |-
+      cat <<- EOF > $1/etc/apt/sources.list.d/cloudflared.list
+      deb [arch=arm64 signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main
+      EOF
+    - sed -i '/pkg\\.cloudflare\\.com/d' $1/etc/apt/sources.list
     # Install systemd service with tunnel token
     - |-
       cat > "$1/etc/systemd/system/cloudflared-tunnel.service" <<SVCEOF

@@ -31,7 +31,6 @@ mmdebstrap:
     - wpasupplicant
     - wireless-tools
     - iw
-    - crda
   customize-hooks:
     # wpa_supplicant config for the specified network
     - |-
