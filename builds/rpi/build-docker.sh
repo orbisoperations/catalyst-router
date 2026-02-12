@@ -199,36 +199,66 @@ run_build() {
   echo "  The .img file will be extracted via docker cp when the build finishes."
   echo ""
 
-  # Run the build. The wrapper script:
-  #   1. Runs rpi-image-gen build
-  #   2. Writes a manifest of produced .img files (even on partial success)
-  #   3. Exits with the build's original exit code
+  # Run the build with retry logic. Transient apt mirror issues (hash-sum
+  # mismatches from CDN sync races) are common with archive.raspberrypi.com.
+  # Between attempts we clean apt caches and refresh indices.
+  local max_retries=3
   local build_exit=0
-  docker run \
-    --name "${container_name}" \
-    --platform linux/arm64 \
-    --privileged \
-    -v "${SOURCE_DIR}:/src:ro" \
-    ${extra_mounts[@]+"${extra_mounts[@]}"} \
-    "${IMAGE_NAME}:${IMAGE_TAG}" \
-    /bin/bash -c '
-      /opt/rpi-image-gen/rpi-image-gen build \
-        -S /src \
-        -c "'"${config_container_path}"'" \
-        -B /build/output
-      build_rc=$?
-      find /build/output -name "*.img" -type f > /build/output/.img-manifest 2>/dev/null || true
-      exit $build_rc
-    ' || build_exit=$?
+
+  for attempt in $(seq 1 "$max_retries"); do
+    build_exit=0
+
+    if [[ "$attempt" -gt 1 ]]; then
+      echo ""
+      echo "=== Retry ${attempt}/${max_retries}: cleaning caches and refreshing indices ==="
+      echo ""
+      # Remove the failed container so we can reuse the name
+      docker rm "${container_name}" >/dev/null 2>&1 || true
+      sleep 5
+    fi
+
+    docker run \
+      --name "${container_name}" \
+      --platform linux/arm64 \
+      --privileged \
+      -v "${SOURCE_DIR}:/src:ro" \
+      ${extra_mounts[@]+"${extra_mounts[@]}"} \
+      "${IMAGE_NAME}:${IMAGE_TAG}" \
+      /bin/bash -c '
+        # Refresh apt indices to avoid stale hash mismatches from CDN sync
+        apt-get update -qq 2>/dev/null || true
+
+        /opt/rpi-image-gen/rpi-image-gen build \
+          -S /src \
+          -c "'"${config_container_path}"'" \
+          -B /build/output
+        build_rc=$?
+        find /build/output -name "*.img" -type f > /build/output/.img-manifest 2>/dev/null || true
+        exit $build_rc
+      ' || build_exit=$?
+
+    if [[ "$build_exit" -eq 0 ]]; then
+      break
+    fi
+
+    if [[ "$attempt" -lt "$max_retries" ]]; then
+      echo ""
+      echo "WARNING: Build attempt ${attempt} failed (exit code ${build_exit})."
+      echo "  This may be a transient apt mirror issue. Retrying..."
+    fi
+  done
 
   # --- Handle build failure ---
   if [[ "$build_exit" -ne 0 ]]; then
     echo ""
-    echo "ERROR: Build failed (exit code ${build_exit})."
+    echo "ERROR: Build failed after ${max_retries} attempts (exit code ${build_exit})."
     echo ""
     echo "  The build container has been kept for debugging:"
     echo "    docker logs ${container_name}        # view full build log"
     echo "    docker rm ${container_name}           # clean up when done"
+    echo ""
+    echo "  If the error is 'Hash Sum mismatch', the Raspberry Pi apt mirror"
+    echo "  may be temporarily out of sync. Wait 15-30 minutes and try again."
     echo ""
     # Don't remove the container — leave it for inspection
     exit "$build_exit"
