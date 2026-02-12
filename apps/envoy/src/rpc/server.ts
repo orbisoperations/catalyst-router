@@ -31,7 +31,7 @@ export const InternalRouteSchema = DataChannelDefinitionSchema.extend({
 export const RouteConfigSchema = z.object({
   local: z.array(DataChannelDefinitionSchema),
   internal: z.array(InternalRouteSchema),
-  portAllocations: z.record(z.string(), z.number()).optional(),
+  portAllocations: z.record(z.string(), z.number().int().min(1).max(65535)).optional(),
 })
 
 export type RouteConfig = z.infer<typeof RouteConfigSchema>
