@@ -106,7 +106,12 @@ export class EnvoyRpcServer extends RpcTarget {
       if (result.data.portAllocations) {
         portAllocations = { ...result.data.portAllocations }
       } else {
-        // Backward compat: derive from route.envoyPort (2-node mode)
+        // Backward compat: derive from route.envoyPort (2-node mode).
+        // This conflates local listener ports with remote upstream ports,
+        // which only works when ports are symmetric (direct 2-node links).
+        // Multi-hop routing requires explicit portAllocations.
+        this.logger
+          .warn`No portAllocations in route config — using legacy envoyPort derivation (2-node only)`
         portAllocations = {}
         for (const route of this.config.local) {
           if (route.envoyPort) {
