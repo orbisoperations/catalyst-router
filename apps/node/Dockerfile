@@ -77,10 +77,13 @@ WORKDIR /app/apps/node
 RUN mkdir -p /app/data
 
 ENV PORT=3000
+ENV CATALYST_AUTH_KEYS_DB=/app/data/keys.db
+ENV CATALYST_AUTH_TOKENS_DB=/app/data/tokens.db
 EXPOSE 3000
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-RUN chown -R appuser:appgroup /app/data
+# Chown both the data directory AND the working directory
+RUN chown -R appuser:appgroup /app/data /app/apps/node
 USER appuser
 
 CMD ["bun", "run", "src/index.ts"]
