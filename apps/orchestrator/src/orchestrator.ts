@@ -1,6 +1,5 @@
 import {
   Actions,
-  newRouteTable,
   type Action,
   type DataChannelDefinition,
   type InternalRoute,
@@ -19,7 +18,7 @@ import {
   type RpcStub,
   RpcTarget,
 } from 'capnweb'
-import { PeerTransport, type Propagation } from './peer-transport.js'
+import { PeerTransport } from './peer-transport.js'
 import type {
   PublicApi,
   NetworkClient,
@@ -30,6 +29,7 @@ import type {
   GatewayApi,
 } from './api-types.js'
 import { ActionQueue, type DispatchResult } from './action-queue.js'
+import { RoutingInformationBase, type CommitResult } from './rib.js'
 
 export type { PublicApi, NetworkClient, DataChannel, IBGPClient } from './api-types.js'
 
@@ -104,13 +104,13 @@ interface AuthServiceApi {
 
 export class CatalystNodeBus extends RpcTarget {
   private readonly logger = getLogger(['catalyst', 'orchestrator'])
-  private state: RouteTable
   private connectionPool: ConnectionPool
   private peerTransport: PeerTransport
   private config: OrchestratorConfig
   private nodeToken?: string
   private authClient?: RpcStub<AuthServiceApi>
   private portAllocator?: PortAllocator
+  private rib: RoutingInformationBase
   private queue: ActionQueue
   public lastNotificationPromise?: Promise<void>
 
@@ -122,7 +122,6 @@ export class CatalystNodeBus extends RpcTarget {
     authEndpoint?: string
   }) {
     super()
-    this.state = opts.state ?? newRouteTable()
     const parsedConfig = OrchestratorConfigSchema.safeParse(opts.config)
     if (!parsedConfig.success) {
       throw new Error(
@@ -146,8 +145,15 @@ export class CatalystNodeBus extends RpcTarget {
       this.portAllocator = createPortAllocator(this.config.envoyConfig.portRange)
     }
 
+    this.rib = new RoutingInformationBase(this.config, this.portAllocator, opts.state)
+
     this.validateNodeConfig()
     this.queue = new ActionQueue((action) => this.pipeline(action))
+  }
+
+  /** Expose state for tests that read it via casting */
+  private get state(): RouteTable {
+    return this.rib.getState()
   }
 
   private validateNodeConfig() {
@@ -165,27 +171,21 @@ export class CatalystNodeBus extends RpcTarget {
 
   /**
    * Validates an incoming caller token using the auth service permissions API.
-   *
-   * @param callerToken - The token provided by the caller that needs validation
-   * @param action - The action the caller wants to perform
    */
   private async validateToken(
     callerToken: string,
     action: string
   ): Promise<{ valid: true } | { valid: false; error: string }> {
-    // If no auth client is configured, allow the operation (for testing/development)
     if (!this.authClient) {
       return { valid: true }
     }
 
     try {
-      // Use permissions API to validate the caller's token
       const permissionsApi = await this.authClient.permissions(callerToken)
       if ('error' in permissionsApi) {
         return { valid: false, error: `Invalid token: ${permissionsApi.error}` }
       }
 
-      // Check if the validated token allows the requested action
       const result = await permissionsApi.authorizeAction({
         action,
         nodeContext: {
@@ -218,284 +218,85 @@ export class CatalystNodeBus extends RpcTarget {
   private async pipeline(sentAction: Action): Promise<DispatchResult> {
     this.logger.info`Dispatching action: ${sentAction.action}`
 
-    const prevState = this.state
-
-    // Log detailed data for route creation to debug
     if (sentAction.action === Actions.LocalRouteCreate) {
       this.logger.debug`Route create data: ${JSON.stringify(sentAction.data)}`
     }
 
-    const result = await this.handleAction(sentAction, this.state)
-    if (result.success) {
-      this.state = result.state
-      // Fire and forget side effects to avoid deadlocks in distributed calls
-
-      // Note: Hono's waitUntil is not available here easily as we are in the core class.
-      // The catch below handles unhandled rejections for the side effect chain.
-      // Ideally in a serverless evironment we would use ctx.waitUntil.
-      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState).catch(
-        (e) => {
-          this.logger.error`Error in handleNotify for ${sentAction.action}: ${e}`
-        }
-      )
-      return { success: true }
-    } else {
-      this.logger.error`Action failed: ${sentAction.action} - ${result.error}`
+    // 1. Plan: compute new state + propagations (does not mutate RIB state)
+    const plan = this.rib.plan(sentAction)
+    if (!plan.success) {
+      this.logger.error`Action failed: ${sentAction.action} - ${plan.error}`
+      return plan
     }
-    return result
+
+    // 2. Commit: apply state atomically (synchronous)
+    const commitResult = this.rib.commit(plan)
+
+    // 3. Post-commit side effects (fire-and-forget to avoid ActionQueue deadlock)
+    this.lastNotificationPromise = this.handlePostCommit(sentAction, commitResult).catch((e) => {
+      this.logger.error`Error in post-commit for ${sentAction.action}: ${e}`
+    })
+
+    return { success: true }
   }
 
-  async handleAction(
+  private async handlePostCommit(sentAction: Action, commitResult: CommitResult): Promise<void> {
+    // Execute propagations (peer transport)
+    const peerResults = await this.peerTransport.fanOut(commitResult.propagations)
+
+    // LocalPeerCreate: if open succeeded, trigger InternalProtocolConnected
+    if (sentAction.action === Actions.LocalPeerCreate) {
+      const openSucceeded = peerResults.some((r) => r.status === 'fulfilled')
+      if (openSucceeded) {
+        this.logger.info`Successfully opened connection to ${sentAction.data.name}`
+        await this.dispatch({
+          action: Actions.InternalProtocolConnected,
+          data: { peerInfo: sentAction.data },
+        })
+      }
+    }
+
+    // Infrastructure side effects (envoy + graphql)
+    await this.handleEnvoyPush(sentAction, commitResult.newState, commitResult.prevState)
+    await this.handleGraphqlConfiguration()
+  }
+
+  private async handleEnvoyPush(
     action: Action,
-    state: RouteTable
-  ): Promise<{ success: true; state: RouteTable } | { success: false; error: string }> {
-    // Permission enforcement is now handled via token validation in client methods
-    // (getIBGPClient, getNetworkClient, getDataChannelClient)
-    // This method assumes the caller has already been authorized
+    _state: RouteTable,
+    _prevState: RouteTable
+  ): Promise<void> {
+    const envoyEndpoint = this.config.envoyConfig?.endpoint
+    if (!envoyEndpoint || !this.portAllocator) return
 
-    switch (action.action) {
-      case Actions.LocalPeerCreate: {
-        if (!action.data.peerToken) {
-          return { success: false, error: 'peerToken is required when creating a peer' }
-        }
-        const peerList = state.internal.peers
-        if (peerList.find((p) => p.name === action.data.name)) {
-          return { success: false, error: 'Peer already exists' }
-        }
+    // Only react to route-affecting actions
+    const routeActions = [
+      Actions.LocalRouteCreate,
+      Actions.LocalRouteDelete,
+      Actions.InternalProtocolUpdate,
+      Actions.InternalProtocolClose,
+      Actions.InternalProtocolOpen,
+      Actions.InternalProtocolConnected,
+    ]
+    if (!routeActions.includes(action.action)) return
 
-        // Optimistically add peer as initializing
-        const newState = {
-          ...state,
-          internal: {
-            ...state.internal,
-            peers: [
-              ...state.internal.peers,
-              {
-                name: action.data.name,
-                endpoint: action.data.endpoint,
-                domains: action.data.domains,
-                peerToken: action.data.peerToken,
-                connectionStatus: 'initializing' as const,
-                lastConnected: undefined,
-              },
-            ],
-          },
-        }
-
-        state = newState
-        break
+    // Push complete config to envoy service
+    try {
+      const stub = this.connectionPool.getEnvoy(envoyEndpoint)
+      const result = await stub.updateRoutes({
+        local: this.state.local.routes,
+        internal: this.state.internal.routes,
+        portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
+      })
+      if (!result.success) {
+        this.logger.error`Envoy config sync failed: ${result.error}`
       }
-      case Actions.LocalPeerUpdate: {
-        const peerList = state.internal.peers
-        const peer = peerList.find((p) => p.name === action.data.name)
-        if (!peer) {
-          return { success: false, error: 'Peer not found' }
-        }
-        state = {
-          ...state,
-          internal: {
-            ...state.internal,
-            peers: peerList.map((p) =>
-              p.name === action.data.name
-                ? {
-                    ...p,
-                    endpoint: action.data.endpoint,
-                    domains: action.data.domains,
-                    peerToken: action.data.peerToken,
-                    connectionStatus: 'initializing',
-                    lastConnected: undefined,
-                  }
-                : p
-            ),
-          },
-        }
-        break
-      }
-      case Actions.LocalPeerDelete: {
-        const peerList = state.internal.peers
-        const peer = peerList.find((p) => p.name === action.data.name)
-        if (!peer) {
-          return { success: false, error: 'Peer not found' }
-        }
-        state = {
-          ...state,
-          internal: {
-            ...state.internal,
-            peers: peerList.filter((p) => p.name !== action.data.name),
-          },
-        }
-        break
-      }
-      case Actions.InternalProtocolClose: {
-        const peerList = state.internal.peers
-        // Find peer by matching info from sender
-        const peer = peerList.find((p) => p.name === action.data.peerInfo.name)
-
-        // If found, remove it. If not found, it's already gone or never existed.
-        if (peer) {
-          state = {
-            ...state,
-            internal: {
-              ...state.internal,
-              routes: state.internal.routes.filter((r) => r.peerName !== action.data.peerInfo.name),
-              peers: peerList.filter((p) => p.name !== action.data.peerInfo.name),
-            },
-          }
-        }
-        break
-      }
-      case Actions.InternalProtocolOpen: {
-        const peer = state.internal.peers.find((p) => p.name === action.data.peerInfo.name)
-        if (!peer) {
-          return {
-            success: false,
-            error: `Peer '${action.data.peerInfo.name}' is not configured on this node`,
-          }
-        }
-
-        if (peer.connectionStatus !== 'connected') {
-          state = {
-            ...state,
-            internal: {
-              ...state.internal,
-              peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
-              ),
-            },
-          }
-        }
-        break
-      }
-      case Actions.InternalProtocolConnected: {
-        const peerList = state.internal.peers
-        const peer = peerList.find((p) => p.name === action.data.peerInfo.name)
-        if (peer) {
-          state = {
-            ...state,
-            internal: {
-              ...state.internal,
-              peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
-              ),
-            },
-          }
-        }
-        break
-      }
-      case Actions.LocalRouteCreate: {
-        // Check if route already exists
-        if (state.local.routes.find((r) => r.name === action.data.name)) {
-          return { success: false, error: 'Route already exists' }
-        }
-        state = {
-          ...state,
-          local: {
-            ...state.local,
-            routes: [...state.local.routes, action.data],
-          },
-        }
-        break
-      }
-      case Actions.LocalRouteDelete: {
-        // Check if route exists
-        if (!state.local.routes.find((r) => r.name === action.data.name)) {
-          return { success: false, error: 'Route not found' }
-        }
-        state = {
-          ...state,
-          local: {
-            ...state.local,
-            routes: state.local.routes.filter((r) => r.name !== action.data.name),
-          },
-        }
-        break
-      }
-      case Actions.InternalProtocolUpdate: {
-        const { peerInfo, update } = action.data
-        this.logger
-          .info`InternalProtocolUpdate: received ${update.updates.length} updates from ${peerInfo.name}`
-        const sourcePeerName = peerInfo.name
-        let currentInternalRoutes = [...state.internal.routes]
-
-        for (const u of update.updates) {
-          if (u.action === 'add') {
-            const nodePath = u.nodePath ?? []
-
-            // Loop Prevention
-            if (nodePath.includes(this.config.node.name)) {
-              this.logger
-                .debug`Drop update from ${peerInfo.name}: loop detected in path [${nodePath.join(', ')}]`
-              continue
-            }
-
-            // Remove existing if any (upsert)
-            currentInternalRoutes = currentInternalRoutes.filter(
-              (r) => !(r.name === u.route.name && r.peerName === sourcePeerName)
-            )
-            currentInternalRoutes.push({
-              ...u.route,
-              peerName: sourcePeerName,
-              peer: peerInfo,
-              nodePath: nodePath,
-            })
-          } else if (u.action === 'remove') {
-            currentInternalRoutes = currentInternalRoutes.filter(
-              (r) => r.name !== u.route.name || r.peerName !== sourcePeerName
-            )
-          }
-        }
-
-        state = {
-          ...state,
-          internal: {
-            ...state.internal,
-            routes: currentInternalRoutes,
-          },
-        }
-        break
-      }
-      default: {
-        this.logger.warn`Unknown action: ${(action as Action).action}`
-        break
-      }
-    }
-
-    return { success: true, state }
-  }
-
-  private buildRouteSyncPayload(
-    state: RouteTable,
-    targetPeerName: string
-  ): { updates: Array<{ action: 'add'; route: DataChannelDefinition; nodePath: string[] }> } {
-    return {
-      updates: [
-        ...state.local.routes.map((r) => ({
-          action: 'add' as const,
-          route: r,
-          nodePath: [this.config.node.name],
-        })),
-        ...state.internal.routes
-          .filter((r) => !r.nodePath.includes(targetPeerName))
-          .map((r) => {
-            let route = r as DataChannelDefinition
-            if (this.config.envoyConfig && this.portAllocator) {
-              const egressKey = `egress_${r.name}_via_${r.peerName}`
-              const localPort = this.portAllocator.getPort(egressKey)
-              if (localPort) {
-                route = { ...r, envoyPort: localPort }
-              }
-            }
-            return {
-              action: 'add' as const,
-              route,
-              nodePath: [this.config.node.name, ...r.nodePath],
-            }
-          }),
-      ],
+    } catch (e) {
+      this.logger.error`Error syncing to Envoy service: ${e}`
     }
   }
 
-  private async handleGraphqlConfiguration() {
+  private async handleGraphqlConfiguration(): Promise<void> {
     const gatewayEndpoint = this.config.gqlGatewayConfig?.endpoint
     if (!gatewayEndpoint) return
 
@@ -530,300 +331,11 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
-  async handleBGPNotify(action: Action, _state: RouteTable, prevState: RouteTable): Promise<void> {
-    switch (action.action) {
-      case Actions.LocalPeerCreate: {
-        this.logger
-          .info`LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`
-        try {
-          const peerRecord = _state.internal.peers.find((p) => p.name === action.data.name)
-          if (peerRecord) {
-            await this.peerTransport.sendOpen(peerRecord, this.config.node)
-            this.logger.info`Successfully opened connection to ${action.data.name}`
-            await this.dispatch({
-              action: Actions.InternalProtocolConnected,
-              data: { peerInfo: action.data },
-            })
-          }
-        } catch (e) {
-          this.logger.error`Failed to open connection to ${action.data.name}: ${e}`
-        }
-        break
-      }
-      case Actions.InternalProtocolOpen: {
-        this.logger.info`InternalProtocolOpen: sync request from ${action.data.peerInfo.name}`
-        const allRoutesOpen = this.buildRouteSyncPayload(_state, action.data.peerInfo.name)
-
-        if (allRoutesOpen.updates.length > 0) {
-          const localPeer = _state.internal.peers.find((p) => p.name === action.data.peerInfo.name)
-          if (!localPeer?.peerToken) {
-            this.logger
-              .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
-            break
-          }
-          try {
-            await this.peerTransport.sendUpdate(localPeer, this.config.node, allRoutesOpen)
-          } catch (e) {
-            this.logger.error`Failed to sync routes back to ${action.data.peerInfo.name}: ${e}`
-          }
-        }
-        break
-      }
-      case Actions.InternalProtocolConnected: {
-        const allRoutesConnected = this.buildRouteSyncPayload(_state, action.data.peerInfo.name)
-
-        if (allRoutesConnected.updates.length > 0) {
-          if (!action.data.peerInfo.peerToken) {
-            this.logger
-              .error`CRITICAL: no peerToken for ${action.data.peerInfo.name} — cannot sync routes`
-            break
-          }
-          const peerRecord: PeerRecord = {
-            ...action.data.peerInfo,
-            peerToken: action.data.peerInfo.peerToken,
-            connectionStatus: 'connected',
-          }
-          try {
-            await this.peerTransport.sendUpdate(peerRecord, this.config.node, allRoutesConnected)
-          } catch (e) {
-            this.logger.error`Failed to sync routes to ${action.data.peerInfo.name}: ${e}`
-          }
-        }
-        break
-      }
-      case Actions.LocalPeerDelete: {
-        const deletedPeer = prevState.internal.peers.find((p) => p.name === action.data.name)
-        if (deletedPeer) {
-          try {
-            await this.peerTransport.sendClose(deletedPeer, this.config.node, 1000, 'Peer removed')
-          } catch (e) {
-            this.logger.error`Failed to close connection to ${deletedPeer.name}: ${e}`
-          }
-        }
-        await this.propagateWithdrawalsForPeer(action.data.name, prevState, _state)
-        break
-      }
-      case Actions.LocalRouteCreate: {
-        const connectedPeers = _state.internal.peers.filter(
-          (p) => p.connectionStatus === 'connected'
-        )
-        this.logger
-          .info`LocalRouteCreate: ${action.data.name}, broadcasting to ${connectedPeers.length} peers`
-        const update = {
-          updates: [
-            { action: 'add' as const, route: action.data, nodePath: [this.config.node.name] },
-          ],
-        }
-        const propagations: Propagation[] = connectedPeers.map((peer) => ({
-          type: 'update' as const,
-          peer,
-          localNode: this.config.node,
-          update,
-        }))
-        await this.peerTransport.fanOut(propagations)
-        break
-      }
-      case Actions.LocalRouteDelete: {
-        const connectedPeersDelete = _state.internal.peers.filter(
-          (p) => p.connectionStatus === 'connected'
-        )
-        const deleteUpdate = {
-          updates: [{ action: 'remove' as const, route: action.data }],
-        }
-        const deletePropagations: Propagation[] = connectedPeersDelete.map((peer) => ({
-          type: 'update' as const,
-          peer,
-          localNode: this.config.node,
-          update: deleteUpdate,
-        }))
-        await this.peerTransport.fanOut(deletePropagations)
-        break
-      }
-      case Actions.InternalProtocolUpdate: {
-        const sourcePeerName = action.data.peerInfo.name
-        const updatePropagations: Propagation[] = []
-
-        for (const peer of _state.internal.peers.filter(
-          (p) => p.connectionStatus === 'connected' && p.name !== sourcePeerName
-        )) {
-          // Filter out updates that have a loop (including the local node,
-          // as we should have already dropped them, and the target peer,
-          // as they would drop it anyway).
-          const safeUpdates = action.data.update.updates.filter((u) => {
-            if (u.action === 'remove') return true
-            const path = u.nodePath ?? []
-            if (path.includes(this.config.node.name)) return false
-            if (path.includes(peer.name)) return false
-            return true
-          })
-
-          if (safeUpdates.length === 0) continue
-
-          // Prepend my FQDN to the path and rewrite envoyPort/envoyAddress
-          // for multi-hop: downstream peers must connect to this node's
-          // Envoy proxy, not the original upstream's.
-          const updatesWithPrepend = {
-            updates: safeUpdates.map((u) => {
-              if (u.action === 'add') {
-                const rewritten = {
-                  ...u,
-                  nodePath: [this.config.node.name, ...(u.nodePath ?? [])],
-                }
-                if (this.config.envoyConfig && this.portAllocator) {
-                  const egressKey = `egress_${u.route.name}_via_${sourcePeerName}`
-                  const localPort = this.portAllocator.getPort(egressKey)
-                  if (localPort) {
-                    rewritten.route = { ...u.route, envoyPort: localPort }
-                  }
-                }
-                return rewritten
-              }
-              return u
-            }),
-          }
-
-          updatePropagations.push({
-            type: 'update',
-            peer,
-            localNode: this.config.node,
-            update: updatesWithPrepend,
-          })
-        }
-
-        await this.peerTransport.fanOut(updatePropagations)
-        break
-      }
-      case Actions.InternalProtocolClose: {
-        await this.propagateWithdrawalsForPeer(action.data.peerInfo.name, prevState, _state)
-        break
-      }
-    }
-  }
-
-  private async handleEnvoyConfiguration(
-    action: Action,
-    _state: RouteTable,
-    prevState: RouteTable
-  ): Promise<void> {
-    const envoyEndpoint = this.config.envoyConfig?.endpoint
-    if (!envoyEndpoint || !this.portAllocator) return
-
-    // Only react to route-affecting actions
-    const routeActions = [
-      Actions.LocalRouteCreate,
-      Actions.LocalRouteDelete,
-      Actions.InternalProtocolUpdate,
-      Actions.InternalProtocolClose,
-      Actions.InternalProtocolOpen,
-      Actions.InternalProtocolConnected,
-    ]
-    if (!routeActions.includes(action.action)) return
-
-    // Allocate ports for local routes that need them
-    for (const route of this.state.local.routes) {
-      if (!route.envoyPort) {
-        const result = this.portAllocator.allocate(route.name)
-        if (result.success) {
-          route.envoyPort = result.port
-        } else {
-          this.logger.error`Port allocation failed for ${route.name}: ${result.error}`
-        }
-      }
-    }
-
-    // Release ports for deleted local routes
-    if (action.action === Actions.LocalRouteDelete) {
-      const deletedRoute = prevState.local.routes.find(
-        (r) => !this.state.local.routes.some((lr) => lr.name === r.name)
-      )
-      if (deletedRoute) {
-        this.portAllocator.release(deletedRoute.name)
-      }
-    }
-
-    // Allocate egress ports for internal routes.
-    // Always allocate a local port (even if route has envoyPort from upstream).
-    // The local port is the listener port; route.envoyPort is preserved as the
-    // remote cluster target. Port allocations are sent explicitly to the envoy service.
-    for (const route of this.state.internal.routes) {
-      const egressKey = `egress_${route.name}_via_${route.peerName}`
-      const result = this.portAllocator.allocate(egressKey)
-      if (result.success) {
-        // Only set envoyPort if the upstream didn't provide one.
-        // When upstream sets envoyPort, it's preserved for the remote cluster.
-        if (!route.envoyPort) {
-          route.envoyPort = result.port
-        }
-      } else {
-        this.logger.error`Egress port allocation failed for ${egressKey}: ${result.error}`
-      }
-    }
-
-    // Release egress ports for closed peer connections
-    if (action.action === Actions.InternalProtocolClose) {
-      const closedPeer = action.data.peerInfo.name
-      const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === closedPeer)
-      for (const route of removedRoutes) {
-        this.portAllocator.release(`egress_${route.name}_via_${route.peerName}`)
-      }
-    }
-
-    // Push complete config to envoy service (fire-and-forget)
-    try {
-      const stub = this.connectionPool.getEnvoy(envoyEndpoint)
-      const result = await stub.updateRoutes({
-        local: this.state.local.routes,
-        internal: this.state.internal.routes,
-        portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
-      })
-      if (!result.success) {
-        this.logger.error`Envoy config sync failed: ${result.error}`
-      }
-    } catch (e) {
-      this.logger.error`Error syncing to Envoy service: ${e}`
-    }
-  }
-
-  /**
-   * Handle side effects after state changes.
-   */
-  async handleNotify(action: Action, _state: RouteTable, prevState: RouteTable): Promise<void> {
-    await this.handleEnvoyConfiguration(action, _state, prevState)
-    await this.handleBGPNotify(action, _state, prevState)
-    await this.handleGraphqlConfiguration()
-  }
-
-  private async propagateWithdrawalsForPeer(
-    peerName: string,
-    prevState: RouteTable,
-    newState: RouteTable
-  ) {
-    const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === peerName)
-    if (removedRoutes.length === 0) return
-
-    this.logger.info`Propagating withdrawal of ${removedRoutes.length} routes from ${peerName}`
-
-    const withdrawalUpdate = {
-      updates: removedRoutes.map((r) => ({ action: 'remove' as const, route: r })),
-    }
-    const propagations: Propagation[] = newState.internal.peers
-      .filter((p) => p.connectionStatus === 'connected' && p.name !== peerName)
-      .map((peer) => ({
-        type: 'update' as const,
-        peer,
-        localNode: this.config.node,
-        update: withdrawalUpdate,
-      }))
-
-    await this.peerTransport.fanOut(propagations)
-  }
-
   publicApi(): PublicApi {
     return {
       getNetworkClient: async (
         token: string
       ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> => {
-        // Validate token via auth service or fallback to secret
         const validation = await this.validateToken(token, 'PEER_CREATE')
         if (!validation.valid) {
           return { success: false, error: validation.error }
@@ -850,7 +362,6 @@ export class CatalystNodeBus extends RpcTarget {
       getDataChannelClient: async (
         token: string
       ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }> => {
-        // Validate token via auth service or fallback to secret
         const validation = await this.validateToken(token, 'ROUTE_CREATE')
         if (!validation.valid) {
           return { success: false, error: validation.error }
@@ -877,7 +388,6 @@ export class CatalystNodeBus extends RpcTarget {
       getIBGPClient: async (
         token: string
       ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }> => {
-        // Validate token via auth service or fallback to secret
         const validation = await this.validateToken(token, 'IBGP_CONNECT')
         if (!validation.valid) {
           return { success: false, error: validation.error }
