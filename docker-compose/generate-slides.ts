@@ -3,23 +3,27 @@ import PptxGenJS from 'pptxgenjs'
 // ─── Theme ───────────────────────────────────────────────────────────────────
 
 const T = {
-  BG: '1B1F2B',
-  BG_DARK: '141724',
-  BG_BOX: '252A3A',
-  BORDER: '3A4055',
+  // Orbis Brand — Surfaces
+  BG: '01103B', // Midnight (content slides)
+  BG_DARK: '080E28', // Deeper midnight (title slide)
+  BG_BOX: '152048', // Elevated surface
+  BORDER: '2D4BA9', // Navy
 
+  // Orbis Brand — Text
   WHITE: 'FFFFFF',
-  TEXT: 'E8ECF1',
-  MUTED: '8B95A5',
+  TEXT: 'E0E8F5', // Cool off-white
+  MUTED: '7B8FB8', // Steel blue
 
-  BLUE: '4A9EFF',
-  TEAL: '00D1B2',
-  ORANGE: 'FF8C42',
-  PURPLE: 'A37EFF',
-  RED: 'FF5C5C',
-  GREEN: '4ADE80',
+  // Orbis Brand — Semantic Accents
+  BLUE: '0183CA', // Space (routing / BGP)
+  TEAL: '39A5D8', // Daylight (data / connections)
+  ORANGE: 'F8A451', // Sunset (auth)
+  PURPLE: '707FDC', // Lavender (envoy)
+  RED: 'FF5C5C', // Alert
+  GREEN: '6DCFF6', // Pacific (success / peers)
 
-  FONT: 'Arial',
+  // Orbis Brand — Typography
+  FONT: 'Inter',
   MONO: 'Courier New',
 } as const
 
@@ -36,7 +40,7 @@ function heading(slide: Slide, text: string, opts?: { y?: number; fontSize?: num
     fontSize: opts?.fontSize ?? 28,
     fontFace: T.FONT,
     color: T.WHITE,
-    bold: true,
+    bold: false,
   })
 }
 
@@ -157,7 +161,7 @@ function codeBlock(slide: Slide, text: string, x: number, y: number, w: number, 
     valign: 'top',
     shape: 'roundRect' as unknown as PptxGenJS.ShapeType,
     rectRadius: 0.06,
-    fill: { color: '0D1117' },
+    fill: { color: T.BG_DARK },
     margin: [6, 10, 6, 10],
   })
 }
@@ -283,8 +287,9 @@ function defineMasters(pres: PptxGenJS) {
     title: 'TITLE',
     background: { color: T.BG_DARK },
     objects: [
+      // Thin Navy accent line
       {
-        rect: { x: 0.75, y: 3.4, w: 8.5, h: 0.006, fill: { color: T.BLUE } },
+        rect: { x: 0.75, y: 3.4, w: 8.5, h: 0.006, fill: { color: T.BORDER } },
       },
     ],
     slideNumber: { x: 9.2, y: '95%', color: T.MUTED, fontSize: 8 },
@@ -294,8 +299,9 @@ function defineMasters(pres: PptxGenJS) {
     title: 'CONTENT',
     background: { color: T.BG },
     objects: [
+      // Thin Navy top bar
       {
-        rect: { x: 0, y: 0, w: '100%', h: 0.04, fill: { color: T.BLUE } },
+        rect: { x: 0, y: 0, w: '100%', h: 0.04, fill: { color: T.BORDER } },
       },
     ],
     slideNumber: { x: 9.2, y: '95%', color: T.MUTED, fontSize: 8 },
@@ -307,20 +313,38 @@ function defineMasters(pres: PptxGenJS) {
 // 1. Title
 function buildTitle(pres: PptxGenJS) {
   const s = pres.addSlide({ masterName: 'TITLE' })
+
+  // Orbital decoration — large ring in upper-right (brand visual element)
+  s.addShape('ellipse' as unknown as PptxGenJS.ShapeType, {
+    x: 6.0,
+    y: -1.2,
+    w: 5.5,
+    h: 5.5,
+    line: { color: T.BORDER, width: 0.8 },
+  })
+  // Smaller inner orbital ring
+  s.addShape('ellipse' as unknown as PptxGenJS.ShapeType, {
+    x: 7.0,
+    y: -0.5,
+    w: 3.8,
+    h: 3.8,
+    line: { color: T.BORDER, width: 0.5, dashType: 'dash' },
+  })
+
   s.addText('Catalyst Router', {
     x: 0.75,
-    y: 1.6,
-    w: 8.5,
-    h: 1,
-    fontSize: 42,
+    y: 1.4,
+    w: 6.0,
+    h: 1.2,
+    fontSize: 48,
     fontFace: T.FONT,
     color: T.WHITE,
-    bold: true,
+    bold: false,
   })
   s.addText('BGP-Inspired Service Discovery\nwith Envoy Data Plane', {
     x: 0.75,
     y: 3.6,
-    w: 8.5,
+    w: 6.0,
     h: 0.8,
     fontSize: 18,
     fontFace: T.FONT,
@@ -330,11 +354,12 @@ function buildTitle(pres: PptxGenJS) {
   s.addText('Architecture & Demo Walkthrough', {
     x: 0.75,
     y: 4.5,
-    w: 8.5,
+    w: 6.0,
     h: 0.4,
     fontSize: 13,
     fontFace: T.FONT,
     color: T.BLUE,
+    bold: true,
   })
 }
 
@@ -344,7 +369,14 @@ function buildAgenda(pres: PptxGenJS) {
   heading(s, 'Agenda')
 
   const sections = [
-    { title: 'Architecture Overview', desc: 'The core pod layout and control/data plane split' },
+    {
+      title: 'Why BGP?',
+      desc: 'Decentralized, graduated trust, fully dynamic — minimal adoption cost',
+    },
+    {
+      title: 'Related: Ziti + Zenoh Stack',
+      desc: 'Overlay-first vs proxy-first — how they differ and intermix',
+    },
     {
       title: 'BGP-Inspired Routing',
       desc: 'How the orchestrator discovers and propagates services',
@@ -353,10 +385,9 @@ function buildAgenda(pres: PptxGenJS) {
       title: 'Authentication & Authorization',
       desc: 'ES384 JWTs, Cedar policies, and scoped clients',
     },
-    { title: 'Auth Gap: mTLS Roadmap', desc: 'Current state and where certificate binding fits' },
     { title: 'Envoy as Transport', desc: 'xDS control plane and listener/cluster model' },
     { title: 'Demo Architecture', desc: '3-stack Docker Compose with 8 isolated networks' },
-    { title: 'Multi-Hop Walkthrough', desc: 'End-to-end request from Stack C through B to A' },
+    { title: 'Summary & Roadmap', desc: 'What we built, what comes next, and the mTLS gap' },
   ]
 
   sections.forEach((sec, i) => {
@@ -398,7 +429,103 @@ function buildAgenda(pres: PptxGenJS) {
   })
 }
 
-// 3. Architecture Overview
+// 3. Why BGP?
+function buildWhyBGP(pres: PptxGenJS) {
+  const s = pres.addSlide({ masterName: 'CONTENT' })
+  heading(s, 'Why BGP?')
+  subheading(s, 'The internet solved multi-party routing decades ago — we adapt the same model')
+
+  // Three pillars across the top
+  const pillars = [
+    {
+      title: 'Decentralized',
+      desc: 'No central authority decides who can route. Each node owns its own route table and peers autonomously.',
+      accent: T.BLUE,
+    },
+    {
+      title: 'Graduated Trust',
+      desc: 'Trust ranges from two strangers peering in the wild to tightly-coupled nodes inside one org — no mandate required.',
+      accent: T.ORANGE,
+    },
+    {
+      title: 'Fully Dynamic',
+      desc: 'Services appear, move, and disappear. Routes propagate in real time. No config files, no restarts.',
+      accent: T.GREEN,
+    },
+  ]
+
+  pillars.forEach((p, i) => {
+    const px = 0.6 + i * 3.1
+    const pw = 2.8
+    s.addShape('rect' as unknown as PptxGenJS.ShapeType, {
+      x: px,
+      y: 1.45,
+      w: pw,
+      h: 1.55,
+      fill: { color: T.BG_BOX },
+      line: { color: p.accent, width: 1.5 },
+      rectRadius: 0.08,
+    })
+    s.addText(p.title, {
+      x: px + 0.15,
+      y: 1.52,
+      w: pw - 0.3,
+      h: 0.32,
+      fontSize: 15,
+      fontFace: T.FONT,
+      color: p.accent,
+      bold: true,
+    })
+    s.addText(p.desc, {
+      x: px + 0.15,
+      y: 1.85,
+      w: pw - 0.3,
+      h: 1.0,
+      fontSize: 11,
+      fontFace: T.FONT,
+      color: T.TEXT,
+      valign: 'top',
+      lineSpacingMultiple: 1.3,
+    })
+  })
+
+  // Core thesis
+  s.addText('The Goal', {
+    x: 0.6,
+    y: 3.2,
+    w: 3,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+  bullets(
+    s,
+    [
+      'Bridge trust domains without forcing organizational alignment',
+      'Accessible to any team — minimal technology changes to adopt',
+      'Works between two companies or within a single cluster',
+      'No VPN, no service mesh sidecar, no infrastructure buy-in',
+    ],
+    0.6,
+    3.5,
+    9.0,
+    { fontSize: 11 }
+  )
+
+  callout(
+    s,
+    'BGP powers the internet because it assumes nothing about who is on the other side. We apply the same principle to service discovery.',
+    0.6,
+    5.05,
+    8.8,
+    0.42,
+    T.BLUE
+  )
+}
+
+// 4. Architecture Overview
 function buildArchitecture(pres: PptxGenJS) {
   const s = pres.addSlide({ masterName: 'CONTENT' })
   heading(s, 'Architecture Overview')
@@ -420,7 +547,7 @@ function buildArchitecture(pres: PptxGenJS) {
     y: 1.7,
     w: 5.5,
     h: 2.0,
-    fill: { color: '1E2233' },
+    fill: { color: T.BG_BOX },
     line: { color: T.BORDER, width: 1, dashType: 'dash' },
     rectRadius: 0.1,
   })
@@ -1002,7 +1129,170 @@ function buildAuthGap(pres: PptxGenJS) {
   )
 }
 
-// 10. Envoy xDS Control Plane
+// 10. Why Envoy?
+function buildWhyEnvoy(pres: PptxGenJS) {
+  const s = pres.addSlide({ masterName: 'CONTENT' })
+  heading(s, 'Why Envoy?')
+  subheading(s, 'CNCF graduated — 3rd project ever after Kubernetes and Prometheus')
+
+  // Protocol support row
+  s.addText('Protocol Coverage', {
+    x: 0.6,
+    y: 1.35,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+
+  const protocols = [
+    { label: 'TCP/UDP', desc: 'Raw L4' },
+    { label: 'HTTP/1.1', desc: 'Full proxy' },
+    { label: 'HTTP/2', desc: 'Multiplexed' },
+    { label: 'HTTP/3', desc: 'QUIC' },
+    { label: 'gRPC', desc: 'First-class' },
+    { label: 'GraphQL', desc: 'Via extension' },
+  ]
+
+  protocols.forEach((p, i) => {
+    const px = 0.6 + i * 1.55
+    s.addText(p.label, {
+      x: px,
+      y: 1.7,
+      w: 1.4,
+      h: 0.3,
+      fontSize: 11,
+      fontFace: T.FONT,
+      color: T.WHITE,
+      bold: true,
+      align: 'center',
+      valign: 'middle',
+      shape: 'roundRect' as unknown as PptxGenJS.ShapeType,
+      rectRadius: 0.06,
+      fill: { color: T.PURPLE },
+    })
+    s.addText(p.desc, {
+      x: px,
+      y: 2.02,
+      w: 1.4,
+      h: 0.2,
+      fontSize: 9,
+      fontFace: T.FONT,
+      color: T.MUTED,
+      align: 'center',
+    })
+  })
+
+  // Two columns: Load Balancing + Circuit Breaking
+  s.addText('Load Balancing', {
+    x: 0.6,
+    y: 2.4,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+  themedTable(
+    s,
+    ['Algorithm', 'Use Case'],
+    [
+      ['Round Robin', 'Default — weighted by endpoint health'],
+      ['Least Request (P2C)', 'Latency-sensitive — picks least-loaded of 2'],
+      ['Ring Hash / Maglev', 'Consistent hashing — sticky sessions, caching'],
+      ['Random', 'Stateless — outperforms RR without health checks'],
+    ],
+    0.6,
+    2.7,
+    4.3,
+    { accent: T.PURPLE, fontSize: 9 }
+  )
+
+  s.addText('Circuit Breaking', {
+    x: 5.2,
+    y: 2.4,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+  themedTable(
+    s,
+    ['Threshold', 'Default'],
+    [
+      ['Max Connections', '1,024 per cluster'],
+      ['Max Pending Requests', '1,024 queued'],
+      ['Max Concurrent Requests', '1,024 outstanding'],
+      ['Max Active Retries', '3 (budgets recommended)'],
+    ],
+    5.2,
+    2.7,
+    4.4,
+    { accent: T.ORANGE, fontSize: 9 }
+  )
+
+  // Industry adoption
+  s.addText('Industry Adoption', {
+    x: 0.6,
+    y: 4.15,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+
+  const adopters = [
+    'Lyft (creator)',
+    'Google',
+    'Apple',
+    'Microsoft',
+    'Netflix',
+    'Airbnb',
+    'Salesforce',
+    'Stripe',
+  ]
+  s.addText(adopters.join('  \u2022  '), {
+    x: 0.6,
+    y: 4.45,
+    w: 9.0,
+    h: 0.3,
+    fontSize: 10,
+    fontFace: T.FONT,
+    color: T.TEXT,
+  })
+
+  const platforms =
+    'Istio  \u2022  AWS App Mesh  \u2022  All major cloud providers use Envoy in production'
+  s.addText(platforms, {
+    x: 0.6,
+    y: 4.75,
+    w: 9.0,
+    h: 0.25,
+    fontSize: 10,
+    fontFace: T.FONT,
+    color: T.MUTED,
+    italic: true,
+  })
+
+  callout(
+    s,
+    '27K+ GitHub stars  \u2022  1,700+ contributors  \u2022  176 contributing orgs  \u2022  155+ production end-users  \u2022  Written in modern C++',
+    0.6,
+    5.05,
+    8.8,
+    0.42,
+    T.PURPLE
+  )
+}
+
+// 11. Envoy xDS Control Plane
 function buildEnvoyXDS(pres: PptxGenJS) {
   const s = pres.addSlide({ masterName: 'CONTENT' })
   heading(s, 'Envoy: xDS Control Plane')
@@ -1150,7 +1440,7 @@ function buildDemoTopology(pres: PptxGenJS) {
       y: 1.4,
       w: stackW,
       h: stackH,
-      fill: { color: '1E2233' },
+      fill: { color: T.BG_BOX },
       line: { color: accent, width: 1.5, dashType: 'dash' },
       rectRadius: 0.1,
     })
@@ -1302,54 +1592,59 @@ function buildDemoSteps(pres: PptxGenJS) {
   heading(s, 'Demo Walkthrough')
   subheading(s, 'From cold start to cross-node GraphQL query in 8 steps')
 
+  // 3 phases: Bootstrap (Navy) → Configure (Space) → Verify (Pacific)
+  const PHASE_BOOTSTRAP = T.BORDER // Navy #2D4BA9
+  const PHASE_CONFIGURE = T.BLUE // Space #0183CA
+  const PHASE_VERIFY = T.GREEN // Pacific #6DCFF6
+
   const steps = [
     {
       num: '1',
       title: 'Start Auth Services',
       desc: 'Each stack mints its own system admin token',
-      accent: T.ORANGE,
+      accent: PHASE_BOOTSTRAP,
     },
     {
       num: '2',
       title: 'Extract System Tokens',
       desc: 'Parse tokens from container logs for CLI use',
-      accent: T.ORANGE,
+      accent: PHASE_BOOTSTRAP,
     },
     {
       num: '3',
       title: 'Start Full Stacks',
       desc: '15 containers across 8 networks come up',
-      accent: T.BLUE,
+      accent: PHASE_BOOTSTRAP,
     },
     {
       num: '4',
       title: 'Register Routes',
       desc: 'books-a on Stack A, books-b on Stack B',
-      accent: T.TEAL,
+      accent: PHASE_CONFIGURE,
     },
     {
       num: '5',
       title: 'Mint Peer Tokens',
       desc: 'Cross-auth token exchange for A<->B, B<->C',
-      accent: T.ORANGE,
+      accent: PHASE_CONFIGURE,
     },
     {
       num: '6',
       title: 'Create Peer Connections',
       desc: 'iBGP sessions establish, full table sync',
-      accent: T.BLUE,
+      accent: PHASE_CONFIGURE,
     },
     {
       num: '7',
       title: 'Verify Route Propagation',
       desc: 'Stack C learns both books-a and books-b via transit B',
-      accent: T.GREEN,
+      accent: PHASE_VERIFY,
     },
     {
       num: '8',
       title: 'End-to-End Traffic Test',
       desc: 'curl from Stack C queries books-a on Stack A (2-hop)',
-      accent: T.GREEN,
+      accent: PHASE_VERIFY,
     },
   ]
 
@@ -1472,10 +1767,141 @@ function buildMultiHop(pres: PptxGenJS) {
   )
 }
 
-// 16. Summary
+// 17. Related: OpenZiti + Zenoh + Zitadel
+function buildRelatedProject(pres: PptxGenJS) {
+  const s = pres.addSlide({ masterName: 'CONTENT' })
+  heading(s, 'Related: Ziti + Zenoh + Zitadel Stack')
+  subheading(s, 'A parallel project exploring overlay-network-first architecture')
+
+  // Two-column comparison
+  const colL = 0.6
+  const colR = 5.2
+  const colW = 4.4
+
+  // Left: Related stack
+  s.addText('Overlay Stack', {
+    x: colL,
+    y: 1.4,
+    w: colW,
+    h: 0.3,
+    fontSize: 15,
+    fontFace: T.FONT,
+    color: T.PURPLE,
+    bold: true,
+  })
+
+  const overlayItems = [
+    { label: 'OpenZiti', role: 'Transport / mesh network', accent: T.PURPLE },
+    { label: 'Zenoh', role: 'Data plane (pub/sub + query)', accent: T.TEAL },
+    { label: 'Zitadel', role: 'Auth provider (OIDC/SAML)', accent: T.ORANGE },
+  ]
+
+  overlayItems.forEach((item, i) => {
+    const iy = 1.85 + i * 0.55
+    box(s, item.label, colL, iy, 1.5, 0.42, item.accent)
+    s.addText(item.role, {
+      x: colL + 1.65,
+      y: iy,
+      w: 2.7,
+      h: 0.42,
+      fontSize: 12,
+      fontFace: T.FONT,
+      color: T.TEXT,
+      valign: 'middle',
+    })
+  })
+
+  // Right: Catalyst Router
+  s.addText('Catalyst Router', {
+    x: colR,
+    y: 1.4,
+    w: colW,
+    h: 0.3,
+    fontSize: 15,
+    fontFace: T.FONT,
+    color: T.BLUE,
+    bold: true,
+  })
+
+  const catalystItems = [
+    { label: 'Unopinionated', role: 'Transport-agnostic (any proxy)', accent: T.BLUE },
+    { label: 'Envoy', role: 'Routing layer 4–7', accent: T.BLUE },
+    { label: 'JWT + Cedar', role: 'JWT + Cedar + mTLS (coming soon)', accent: T.ORANGE },
+  ]
+
+  catalystItems.forEach((item, i) => {
+    const iy = 1.85 + i * 0.55
+    box(s, item.label, colR, iy, 1.5, 0.42, item.accent)
+    s.addText(item.role, {
+      x: colR + 1.65,
+      y: iy,
+      w: 2.7,
+      h: 0.42,
+      fontSize: 12,
+      fontFace: T.FONT,
+      color: T.TEXT,
+      valign: 'middle',
+    })
+  })
+
+  // Divider
+  line(s, 5.0, 1.4, 5.0, 3.5, { color: T.BORDER, dashed: true })
+
+  // Key distinctions
+  s.addText('Can Intermix — but Distinctly Different', {
+    x: 0.6,
+    y: 3.65,
+    w: 8.8,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+
+  themedTable(
+    s,
+    ['Dimension', 'Overlay Stack', 'Catalyst Router'],
+    [
+      ['Network layer', 'Chooses a network (Ziti overlay)', 'Unopinionated — any proxy layer'],
+      ['Trust model', 'Org-managed identity provider', 'Works between 2 strangers in the wild'],
+      [
+        'Adoption cost',
+        'SDK integration + overlay infra',
+        'Zero app changes — proxy sits alongside',
+      ],
+      ['Bureaucracy', 'Requires organizational mandate', 'No mandate — peer whenever ready'],
+    ],
+    0.6,
+    4.0,
+    8.8,
+    { fontSize: 10 }
+  )
+
+  callout(
+    s,
+    'Catalyst Routers bridge trust domains at the lowest friction point: two parties agree to peer, and traffic flows. No overlay, no SDK, no org-wide rollout.',
+    0.6,
+    5.0,
+    8.8,
+    0.45,
+    T.BLUE
+  )
+}
+
+// 18. Summary
 function buildSummary(pres: PptxGenJS) {
   const s = pres.addSlide({ masterName: 'CONTENT' })
   heading(s, "Summary & What's Next")
+
+  // Orbital decoration — subtle ring in lower-right
+  s.addShape('ellipse' as unknown as PptxGenJS.ShapeType, {
+    x: 7.5,
+    y: 3.0,
+    w: 4.0,
+    h: 4.0,
+    line: { color: T.BORDER, width: 0.6, dashType: 'dash' },
+  })
 
   // Divider line between columns
   line(s, 5.0, 1.3, 5.0, 4.6, { color: T.BORDER, dashed: true })
@@ -1560,13 +1986,16 @@ async function main() {
   const pres = new PptxGenJS()
   pres.layout = 'LAYOUT_16x9'
   pres.title = 'Catalyst Router'
-  pres.author = 'Catalyst Team'
+  pres.author = 'Orbis'
   pres.subject = 'Architecture & Demo Walkthrough'
 
   defineMasters(pres)
 
   buildTitle(pres)
   buildAgenda(pres)
+  buildWhyBGP(pres)
+  buildWhyEnvoy(pres)
+  buildRelatedProject(pres)
   buildArchitecture(pres)
   buildBGPConcepts(pres)
   buildBGPProtocol(pres)
