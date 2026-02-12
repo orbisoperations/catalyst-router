@@ -15,7 +15,7 @@ export class MockConnectionPool extends ConnectionPool {
   }
 
   override get(endpoint: string) {
-    // Map ws://node-a to node-a.somebiz.local.io etc
+    // Map ws://node-a to node-a.test.example etc
     const targetNode = Array.from(this.nodes.values()).find((bus) => {
       const nodeInfo = (bus as unknown as { config: { node: { name: string } } }).config.node
       return endpoint.includes(nodeInfo.name.split('.')[0]) || endpoint.includes(nodeInfo.name)

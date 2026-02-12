@@ -7,9 +7,9 @@ Centralized configuration management for the Catalyst Router system.
 | Variable                            | Config Path                              | Description                                  | Default        |
 | ----------------------------------- | ---------------------------------------- | -------------------------------------------- | -------------- |
 | `PORT`                              | `port`                                   | The port the service will listen on          | `3000`         |
-| `CATALYST_NODE_ID`                  | `node.name`                              | **Required.** FQDN of the node               | -              |
+| `CATALYST_NODE_ID`                  | `node.name`                              | **Required.** Short node identifier          | -              |
 | `CATALYST_PEERING_ENDPOINT`         | `node.endpoint`                          | **Required.** Reachable endpoint for peering | -              |
-| `CATALYST_DOMAINS`                  | `node.domains`                           | Comma-separated list of managed domains      | `[]`           |
+| `CATALYST_ORG_DOMAIN`               | `node.domain`                            | Organization domain for FQDN construction    | `''`           |
 | `CATALYST_PEERING_SECRET`           | `orchestrator.ibgp.secret`               | Secret for iBGP peering                      | `valid-secret` |
 | `CATALYST_GQL_GATEWAY_ENDPOINT`     | `orchestrator.gqlGatewayConfig.endpoint` | GraphQL Gateway endpoint                     | -              |
 | `CATALYST_AUTH_KEYS_DB`             | `auth.keysDb`                            | SQLite DB for keys                           | `keys.db`      |

@@ -4,9 +4,9 @@ import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestr
 import type { RpcStub } from 'capnweb'
 
 const MOCK_NODE: PeerInfo = {
-  name: 'node-a.somebiz.local.io',
+  name: 'node-a.test.example',
   endpoint: 'http://node-a:3000',
-  domains: ['somebiz.local.io'],
+  domain: 'test.example',
 }
 
 const ENVOY_ENDPOINT = 'http://envoy:18000'
@@ -120,9 +120,9 @@ describe('CatalystNodeBus > Envoy Integration', () => {
   it('allocates egress port on internal route update from peer', async () => {
     // First set up a connected peer
     const peerInfo: PeerInfo = {
-      name: 'node-b.somebiz.local.io',
+      name: 'node-b.test.example',
       endpoint: 'http://node-b:3000',
-      domains: ['somebiz.local.io'],
+      domain: 'test.example',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
@@ -150,7 +150,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
                 protocol: 'http' as const,
                 endpoint: 'http://movies:8080',
               },
-              nodePath: ['node-b.somebiz.local.io'],
+              nodePath: ['node-b.test.example'],
             },
           ],
         },
@@ -169,9 +169,9 @@ describe('CatalystNodeBus > Envoy Integration', () => {
   it('releases egress ports on InternalProtocolClose', async () => {
     // Set up peer and receive route
     const peerInfo: PeerInfo = {
-      name: 'node-b.somebiz.local.io',
+      name: 'node-b.test.example',
       endpoint: 'http://node-b:3000',
-      domains: ['somebiz.local.io'],
+      domain: 'test.example',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
@@ -196,7 +196,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
                 protocol: 'http' as const,
                 endpoint: 'http://movies:8080',
               },
-              nodePath: ['node-b.somebiz.local.io'],
+              nodePath: ['node-b.test.example'],
             },
           ],
         },
@@ -310,9 +310,9 @@ describe('CatalystNodeBus > Envoy Integration', () => {
   it('envoyPort is populated before BGP broadcast (ordering)', async () => {
     // Set up a connected peer so BGP broadcast happens
     const peerInfo: PeerInfo = {
-      name: 'node-b.somebiz.local.io',
+      name: 'node-b.test.example',
       endpoint: 'http://node-b:3000',
-      domains: ['somebiz.local.io'],
+      domain: 'test.example',
     }
 
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })

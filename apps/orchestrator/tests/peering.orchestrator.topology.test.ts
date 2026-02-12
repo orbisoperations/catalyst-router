@@ -9,14 +9,14 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
   let nodeB: CatalystNodeBus
 
   const infoA: PeerInfo = {
-    name: 'node-a.somebiz.local.io',
+    name: 'node-a.test.example',
     endpoint: 'ws://node-a',
-    domains: ['somebiz.local.io'],
+    domain: 'test.example',
   }
   const infoB: PeerInfo = {
-    name: 'node-b.somebiz.local.io',
+    name: 'node-b.test.example',
     endpoint: 'ws://node-b',
-    domains: ['somebiz.local.io'],
+    domain: 'test.example',
   }
 
   beforeEach(() => {
@@ -96,6 +96,6 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
     const learnedRoute = stateB_After.internal.routes.find((r) => r.name === 'service-a')
 
     expect(learnedRoute).toBeDefined()
-    expect(learnedRoute?.nodePath).toEqual(['node-a.somebiz.local.io'])
+    expect(learnedRoute?.nodePath).toEqual(['node-a.test.example'])
   })
 })

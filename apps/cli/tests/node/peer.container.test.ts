@@ -7,7 +7,6 @@ import {
   type StartedNetwork,
 } from 'testcontainers'
 import path from 'path'
-import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '@catalyst/orchestrator'
 
@@ -57,7 +56,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
     if (authBuild.exitCode !== 0) {
       throw new Error('Failed to build auth image')
     }
-  }
+  })
 
   beforeAll(async () => {
     buildImages()
@@ -73,9 +72,9 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
       .withNetworkAliases('auth')
       .withExposedPorts(5000)
       .withEnvironment({
-        CATALYST_NODE_ID: 'test-auth-node.somebiz.local.io',
+        CATALYST_NODE_ID: 'test-auth-node.test.example',
         CATALYST_PEERING_ENDPOINT: 'ws://auth:5000/rpc',
-        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_ORG_DOMAIN: 'test.example',
         CATALYST_AUTH_ISSUER: 'catalyst',
         CATALYST_AUTH_KEYS_DB: ':memory:',
         CATALYST_AUTH_TOKENS_DB: ':memory:',
@@ -114,9 +113,9 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
       .withExposedPorts(3000)
       .withEnvironment({
         PORT: '3000',
-        CATALYST_NODE_ID: 'test-node.somebiz.local.io',
+        CATALYST_NODE_ID: 'test-node.test.example',
         CATALYST_PEERING_ENDPOINT: 'ws://orchestrator:3000/rpc',
-        CATALYST_DOMAINS: 'somebiz.local.io',
+        CATALYST_ORG_DOMAIN: 'test.example',
         CATALYST_AUTH_ENDPOINT: `ws://auth:5000/rpc`,
         CATALYST_SYSTEM_TOKEN: systemToken,
       })
@@ -157,9 +156,9 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
 
       // Create peer
       const createResult = await netClient.addPeer({
-        name: 'test-peer.somebiz.local.io',
+        name: 'test-peer.test.example',
         endpoint: 'ws://test-peer:3000/rpc',
-        domains: ['example.com'],
+        domain: 'example.com',
         connectionStatus: 'disconnected',
       })
       expect(createResult.success).toBe(true)
@@ -167,18 +166,18 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
       // List peers (should have new peer)
       const afterCreate = await netClient.listPeers()
       expect(afterCreate.length).toBe(initialCount + 1)
-      const createdPeer = afterCreate.find((p) => p.name === 'test-peer.somebiz.local.io')
+      const createdPeer = afterCreate.find((p) => p.name === 'test-peer.test.example')
       expect(createdPeer).toBeDefined()
       expect(createdPeer?.endpoint).toBe('ws://test-peer:3000/rpc')
 
       // Delete peer
-      const deleteResult = await netClient.removePeer({ name: 'test-peer.somebiz.local.io' })
+      const deleteResult = await netClient.removePeer({ name: 'test-peer.test.example' })
       expect(deleteResult.success).toBe(true)
 
       // List peers (should be back to initial count)
       const afterDelete = await netClient.listPeers()
       expect(afterDelete.length).toBe(initialCount)
-      const deletedPeer = afterDelete.find((p) => p.name === 'test-peer.somebiz.local.io')
+      const deletedPeer = afterDelete.find((p) => p.name === 'test-peer.test.example')
       expect(deletedPeer).toBeUndefined()
     },
     TIMEOUT

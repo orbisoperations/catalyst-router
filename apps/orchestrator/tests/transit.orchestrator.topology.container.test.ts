@@ -85,7 +85,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
             PORT: '3000',
             CATALYST_NODE_ID: name,
             CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-            CATALYST_DOMAINS: 'somebiz.local.io',
+            CATALYST_ORG_DOMAIN: 'test.example',
             CATALYST_AUTH_ENDPOINT: auth.endpoint,
             CATALYST_SYSTEM_TOKEN: auth.systemToken,
           })
@@ -108,9 +108,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         return container
       }
 
-      nodeA = await startNode('node-a.somebiz.local.io', 'node-a')
-      nodeB = await startNode('node-b.somebiz.local.io', 'node-b')
-      nodeC = await startNode('node-c.somebiz.local.io', 'node-c')
+      nodeA = await startNode('node-a.test.example', 'node-a')
+      nodeB = await startNode('node-b.test.example', 'node-b')
+      nodeC = await startNode('node-c.test.example', 'node-c')
 
       console.log('All nodes started.')
     }, TIMEOUT)
@@ -182,20 +182,20 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
 
         // Setup B to accept A first, then A connects to B (Ensures A->B capability)
         await netB.addPeer({
-          name: 'node-a.somebiz.local.io',
+          name: 'node-a.test.example',
           endpoint: 'ws://node-a:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
         await netA.addPeer({
-          name: 'node-b.somebiz.local.io',
+          name: 'node-b.test.example',
           endpoint: 'ws://node-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
 
         // Wait for handshake
         console.log('Waiting for peering A <-> B to resolve...')
-        await waitForConnected(clientA, auth.systemToken, 'node-b.somebiz.local.io')
-        await waitForConnected(clientB, auth.systemToken, 'node-a.somebiz.local.io')
+        await waitForConnected(clientA, auth.systemToken, 'node-b.test.example')
+        await waitForConnected(clientB, auth.systemToken, 'node-a.test.example')
 
         // 2. A adds a local route
         console.log('Node A adding local route')
@@ -225,14 +225,14 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         console.log('Establishing peering B <-> C')
         // Setup C to accept B first, then B connects to C (Ensures B->C capability)
         await netC.addPeer({
-          name: 'node-b.somebiz.local.io',
+          name: 'node-b.test.example',
           endpoint: 'ws://node-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
         await netB.addPeer({
-          name: 'node-c.somebiz.local.io',
+          name: 'node-c.test.example',
           endpoint: 'ws://node-c:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
 
         // Wait for B-C handshake and sync
@@ -248,7 +248,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           if (routeA) {
             learnedOnC = true
             // Verify nodePath: [B, A]
-            expect(routeA.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])
+            expect(routeA.nodePath).toEqual(['node-b.test.example', 'node-a.test.example'])
             break
           }
           await new Promise((r) => setTimeout(r, 500))
@@ -297,7 +297,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         // Wait for it to reach C
         await new Promise((r) => setTimeout(r, 2000))
 
-        await netA.removePeer({ name: 'node-b.somebiz.local.io' })
+        await netA.removePeer({ name: 'node-b.test.example' })
 
         let disconnectedWithdrawalOnC = false
         for (let i = 0; i < 10; i++) {
@@ -349,7 +349,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
             PORT: '3000',
             CATALYST_NODE_ID: name,
             CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-            CATALYST_DOMAINS: 'somebiz.local.io',
+            CATALYST_ORG_DOMAIN: 'test.example',
             CATALYST_AUTH_ENDPOINT: authEndpoint,
             CATALYST_SYSTEM_TOKEN: systemToken,
           })
@@ -372,24 +372,9 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         return container
       }
 
-      nodeA = await startNode(
-        'node-a.somebiz.local.io',
-        'node-a',
-        authA.endpoint,
-        authA.systemToken
-      )
-      nodeB = await startNode(
-        'node-b.somebiz.local.io',
-        'node-b',
-        authB.endpoint,
-        authB.systemToken
-      )
-      nodeC = await startNode(
-        'node-c.somebiz.local.io',
-        'node-c',
-        authC.endpoint,
-        authC.systemToken
-      )
+      nodeA = await startNode('node-a.test.example', 'node-a', authA.endpoint, authA.systemToken)
+      nodeB = await startNode('node-b.test.example', 'node-b', authB.endpoint, authB.systemToken)
+      nodeC = await startNode('node-c.test.example', 'node-c', authC.endpoint, authC.systemToken)
 
       console.log('All nodes started with separate auth servers.')
     }, TIMEOUT)
@@ -449,14 +434,14 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         const peerTokenBtoA = await mintPeerToken(
           `ws://127.0.0.1:${authAPort}/rpc`,
           authA.systemToken,
-          'node-b.somebiz.local.io',
-          ['somebiz.local.io']
+          'node-b.test.example',
+          'test.example'
         )
         const peerTokenAtoB = await mintPeerToken(
           `ws://127.0.0.1:${authBPort}/rpc`,
           authB.systemToken,
-          'node-a.somebiz.local.io',
-          ['somebiz.local.io']
+          'node-a.test.example',
+          'test.example'
         )
 
         // Establish A <-> B peering
@@ -465,15 +450,15 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         const netC = (netCResult as { success: true; client: NetworkClient }).client
 
         await netB.addPeer({
-          name: 'node-a.somebiz.local.io',
+          name: 'node-a.test.example',
           endpoint: 'ws://node-a:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenBtoA,
         })
         await netA.addPeer({
-          name: 'node-b.somebiz.local.io',
+          name: 'node-b.test.example',
           endpoint: 'ws://node-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenAtoB,
         })
 
@@ -494,27 +479,27 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         const peerTokenCtoB = await mintPeerToken(
           `ws://127.0.0.1:${authBPort}/rpc`,
           authB.systemToken,
-          'node-c.somebiz.local.io',
-          ['somebiz.local.io']
+          'node-c.test.example',
+          'test.example'
         )
         const peerTokenBtoC = await mintPeerToken(
           `ws://127.0.0.1:${authCPort}/rpc`,
           authC.systemToken,
-          'node-b.somebiz.local.io',
-          ['somebiz.local.io']
+          'node-b.test.example',
+          'test.example'
         )
 
         // Establish B <-> C peering
         await netC.addPeer({
-          name: 'node-b.somebiz.local.io',
+          name: 'node-b.test.example',
           endpoint: 'ws://node-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenCtoB,
         })
         await netB.addPeer({
-          name: 'node-c.somebiz.local.io',
+          name: 'node-c.test.example',
           endpoint: 'ws://node-c:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenBtoC,
         })
 
@@ -530,7 +515,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           const routeA = routes.internal.find((r) => r.name === 'service-a')
           if (routeA) {
             learnedOnC = true
-            expect(routeA.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])
+            expect(routeA.nodePath).toEqual(['node-b.test.example', 'node-a.test.example'])
             break
           }
           await new Promise((r) => setTimeout(r, 500))

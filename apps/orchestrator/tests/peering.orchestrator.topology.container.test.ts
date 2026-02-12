@@ -84,7 +84,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
             PORT: '3000',
             CATALYST_NODE_ID: name,
             CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-            CATALYST_DOMAINS: 'somebiz.local.io',
+            CATALYST_ORG_DOMAIN: 'test.example',
             CATALYST_AUTH_ENDPOINT: auth.endpoint,
             CATALYST_SYSTEM_TOKEN: auth.systemToken,
           })
@@ -107,8 +107,8 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         return container
       }
 
-      nodeA = await startNode('node-a.somebiz.local.io', 'node-a')
-      nodeB = await startNode('node-b.somebiz.local.io', 'node-b')
+      nodeA = await startNode('node-a.test.example', 'node-a')
+      nodeB = await startNode('node-b.test.example', 'node-b')
 
       console.log('All nodes started.')
     }, TIMEOUT)
@@ -196,20 +196,20 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
 
         // Setup B to accept A first, then A connects to B
         await netB.addPeer({
-          name: 'node-a.somebiz.local.io',
+          name: 'node-a.test.example',
           endpoint: 'ws://node-a:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
         await netA.addPeer({
-          name: 'node-b.somebiz.local.io',
+          name: 'node-b.test.example',
           endpoint: 'ws://node-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
         })
 
         // Wait for handshake
         console.log('Waiting for peering A <-> B to resolve...')
-        await waitForConnected(clientA, auth.systemToken, 'node-b.somebiz.local.io')
-        await waitForConnected(clientB, auth.systemToken, 'node-a.somebiz.local.io')
+        await waitForConnected(clientA, auth.systemToken, 'node-b.test.example')
+        await waitForConnected(clientB, auth.systemToken, 'node-a.test.example')
 
         // 2. A adds a local route
         console.log('Node A adding local route')
@@ -291,7 +291,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
             PORT: '3000',
             CATALYST_NODE_ID: name,
             CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-            CATALYST_DOMAINS: 'somebiz.local.io',
+            CATALYST_ORG_DOMAIN: 'test.example',
             CATALYST_AUTH_ENDPOINT: authEndpoint,
             CATALYST_SYSTEM_TOKEN: systemToken,
           })
@@ -314,18 +314,8 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         return container
       }
 
-      nodeA = await startNode(
-        'node-a.somebiz.local.io',
-        'node-a',
-        authA.endpoint,
-        authA.systemToken
-      )
-      nodeB = await startNode(
-        'node-b.somebiz.local.io',
-        'node-b',
-        authB.endpoint,
-        authB.systemToken
-      )
+      nodeA = await startNode('node-a.test.example', 'node-a', authA.endpoint, authA.systemToken)
+      nodeB = await startNode('node-b.test.example', 'node-b', authB.endpoint, authB.systemToken)
 
       console.log('All nodes started with separate auth servers.')
     }, TIMEOUT)
@@ -404,14 +394,14 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         const peerTokenBtoA = await mintPeerToken(
           `ws://127.0.0.1:${authAPort}/rpc`,
           authA.systemToken,
-          'node-b.somebiz.local.io',
-          ['somebiz.local.io']
+          'node-b.test.example',
+          'test.example'
         )
         const peerTokenAtoB = await mintPeerToken(
           `ws://127.0.0.1:${authBPort}/rpc`,
           authB.systemToken,
-          'node-a.somebiz.local.io',
-          ['somebiz.local.io']
+          'node-a.test.example',
+          'test.example'
         )
 
         const netAResult = await clientA.getNetworkClient(authA.systemToken)
@@ -427,16 +417,16 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         // Setup peering with peer tokens
         // B→A uses token minted by Auth-A
         await netB.addPeer({
-          name: 'node-a.somebiz.local.io',
+          name: 'node-a.test.example',
           endpoint: 'ws://node-a:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenBtoA,
         })
         // A→B uses token minted by Auth-B
         await netA.addPeer({
-          name: 'node-b.somebiz.local.io',
+          name: 'node-b.test.example',
           endpoint: 'ws://node-b:3000/rpc',
-          domains: ['somebiz.local.io'],
+          domain: 'test.example',
           peerToken: peerTokenAtoB,
         })
 
@@ -457,8 +447,8 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
           throw new Error(`Peer ${peerName} failed to connect`)
         }
 
-        await waitForConnected(clientA, authA.systemToken, 'node-b.somebiz.local.io')
-        await waitForConnected(clientB, authB.systemToken, 'node-a.somebiz.local.io')
+        await waitForConnected(clientA, authA.systemToken, 'node-b.test.example')
+        await waitForConnected(clientB, authB.systemToken, 'node-a.test.example')
         console.log('Cross-node peering established successfully with separate auth servers')
 
         // Verify route propagation with separate auth

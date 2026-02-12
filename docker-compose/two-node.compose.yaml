@@ -82,9 +82,9 @@ services:
       - '3001:3000'
     environment:
       - PORT=3000
-      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_NODE_ID=node-a
       - CATALYST_PEERING_ENDPOINT=ws://node-a:3000/rpc
-      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_ORG_DOMAIN=example.local
       - CATALYST_PEERING_SECRET=valid-secret
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-a:4000/api
       - OTEL_SERVICE_NAME=orchestrator-node-a
@@ -149,9 +149,9 @@ services:
       - '3002:3000'
     environment:
       - PORT=3000
-      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - CATALYST_NODE_ID=node-b
       - CATALYST_PEERING_ENDPOINT=ws://node-b:3000/rpc
-      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_ORG_DOMAIN=example.local
       - CATALYST_PEERING_SECRET=valid-secret
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-b:4000/api
       - OTEL_SERVICE_NAME=orchestrator-node-b

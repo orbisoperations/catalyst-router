@@ -7,7 +7,6 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 
-
 import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
@@ -111,7 +110,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
           PORT: '3000',
           CATALYST_NODE_ID: name,
           CATALYST_PEERING_ENDPOINT: `ws://${alias}:3000/rpc`,
-          CATALYST_DOMAINS: 'somebiz.local.io',
+          CATALYST_ORG_DOMAIN: 'test.example',
           CATALYST_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
           CATALYST_SYSTEM_TOKEN: systemToken,
         })
@@ -122,9 +121,9 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
         .start()
     }
 
-    nodeA = await startNode('node-a.somebiz.local.io', 'node-a')
-    nodeB = await startNode('node-b.somebiz.local.io', 'node-b')
-    nodeC = await startNode('node-c.somebiz.local.io', 'node-c')
+    nodeA = await startNode('node-a.test.example', 'node-a')
+    nodeB = await startNode('node-b.test.example', 'node-b')
+    nodeC = await startNode('node-c.test.example', 'node-c')
 
     console.log('Nodes started')
   }, TIMEOUT)
@@ -167,14 +166,14 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
 
       // Setup B to accept A first, then A connects to B
       await netB.addPeer({
-        name: 'node-a.somebiz.local.io',
+        name: 'node-a.test.example',
         endpoint: 'ws://node-a:3000/rpc',
-        domains: ['somebiz.local.io'],
+        domain: 'test.example',
       })
       await netA.addPeer({
-        name: 'node-b.somebiz.local.io',
+        name: 'node-b.test.example',
         endpoint: 'ws://node-b:3000/rpc',
-        domains: ['somebiz.local.io'],
+        domain: 'test.example',
       })
 
       // Give it a moment for the handshake
@@ -225,14 +224,14 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
 
       // Setup C to accept B first, then B connects to C
       await netC.addPeer({
-        name: 'node-b.somebiz.local.io',
+        name: 'node-b.test.example',
         endpoint: 'ws://node-b:3000/rpc',
-        domains: ['somebiz.local.io'],
+        domain: 'test.example',
       })
       await netB.addPeer({
-        name: 'node-c.somebiz.local.io',
+        name: 'node-c.test.example',
         endpoint: 'ws://node-c:3000/rpc',
-        domains: ['somebiz.local.io'],
+        domain: 'test.example',
       })
 
       // Give it a moment for the handshake
@@ -247,7 +246,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
         const routeA = routes.internal.find((r) => r.name === 'service-a')
         if (routeA) {
           learnedOnC = true
-          expect(routeA.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])
+          expect(routeA.nodePath).toEqual(['node-b.test.example', 'node-a.test.example'])
           break
         }
         await new Promise((r) => setTimeout(r, 500))
@@ -259,9 +258,9 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
 })
 
 const MOCK_NODE: PeerInfo = {
-  name: 'node-a.somebiz.local.io',
+  name: 'node-a.test.example',
   endpoint: 'http://node-a:3000',
-  domains: ['somebiz.local.io'],
+  domain: 'test.example',
 }
 
 const GATEWAY_ENDPOINT = 'http://gateway:4000'
@@ -365,9 +364,9 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
 
     // 2. Add internal route (from peer)
     const peerInfo: PeerInfo = {
-      name: 'peer-b.somebiz.local.io',
+      name: 'peer-b.test.example',
       endpoint: 'http://pb',
-      domains: [],
+      domain: '',
     }
     await bus.dispatch({
       action: Actions.InternalProtocolUpdate,
@@ -378,7 +377,7 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
             {
               action: 'add',
               route: { name: 'remote-movies', protocol: 'http:gql', endpoint: 'http://rm:8080' },
-              nodePath: ['peer-b.somebiz.local.io'],
+              nodePath: ['peer-b.test.example'],
             },
           ],
         },
