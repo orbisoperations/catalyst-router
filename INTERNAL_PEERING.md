@@ -4,7 +4,7 @@ This document describes the implementation of Internal Peering (iBGP) for the Ca
 
 ## Overview: BGP in Catalyst
 
-As detailed in [BGP_PROTOCOL.md](./BGP_PROTOCOL.md), we adapted the Border Gateway Protocol (BGP) for service discovery. Nodes exchange "routes" which map logical service domains (e.g., `*.services.internal`) to specific node endpoints.
+As detailed in [BGP_PROTOCOL.md](./BGP_PROTOCOL.md), we adapted the Border Gateway Protocol (BGP) for service discovery. Nodes exchange "routes" which map service FQDNs (e.g., `books.node-a.example.local`) to specific node endpoints. Service FQDNs follow the format `{channel}.{nodeId}.{orgDomain}`.
 
 **Internal Peering (iBGP)** ensures that all nodes within a cluster or network share a consistent view of available services. When a new node joins, it synchronizes with existing peers to download the current routing table and subsequently receives real-time updates about service availability.
 
@@ -83,7 +83,7 @@ sequenceDiagram
 
 When a service is registered or deregistered on a node, it must propagate this change to its peers.
 
-**Scenario:** A new service `api.internal` starts on **Node A**.
+**Scenario:** A new service `api.node-a.example.local` starts on **Node A**.
 
 ```mermaid
 sequenceDiagram
@@ -91,14 +91,14 @@ sequenceDiagram
     participant A as Node A
     participant B as Node B
 
-    Svc->>A: Register "api.internal"
+    Svc->>A: Register "api.node-a.example.local"
 
     Note over A: Update Local Route Table
 
     A->>B: CALL B_AuthorizedStub.updateRoute(UpdateMsg)
-    Note right of A: UpdateMsg = { advertise: ["api.internal"], nextHop: A }
+    Note right of A: UpdateMsg = { advertise: ["api.node-a.example.local"], nextHop: A }
 
-    B->>B: Install Route "api.internal" -> A
+    B->>B: Install Route "api.node-a.example.local" -> A
 ```
 
 ---

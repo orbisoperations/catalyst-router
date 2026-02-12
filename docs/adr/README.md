@@ -25,6 +25,7 @@ An ADR is a document that captures an important architectural decision made alon
 | [0008](./0008-permission-policy-schema.md)            | Permission Policy Schema                     | Proposed | 2026-01-30 |
 | [0009](./0009-relational-database-style-guide.md)     | Relational Database Style Guide              | Accepted |            |
 | [0010](./0010-catalyst-service-base-class.md)         | Unified Service Base Class (CatalystService) | Accepted | 2026-02-09 |
+| [0011](./0011-fqdn-domain-model.md)                   | Structured FQDN Domain Model                 | Proposed | 2026-02-12 |
 
 ## Statuses
 

@@ -19,11 +19,28 @@ Centralized configuration management for the Catalyst Router system.
 | `CATALYST_BOOTSTRAP_TOKEN`          | `auth.bootstrap.token`                   | Pre-defined bootstrap token                  | -              |
 | `CATALYST_BOOTSTRAP_TTL`            | `auth.bootstrap.ttl`                     | TTL for bootstrap token in ms                | `86400000`     |
 
+## FQDN Construction
+
+When `CATALYST_ORG_DOMAIN` is set, `loadDefaultConfig()` constructs the node's fully-qualified domain name as `{CATALYST_NODE_ID}.{CATALYST_ORG_DOMAIN}` and stores it in `config.node.name`. Data channel FQDNs follow the pattern `{channel}.{nodeId}.{orgDomain}`.
+
+```
+CATALYST_NODE_ID=node-a  +  CATALYST_ORG_DOMAIN=example.local
+                         |
+                         v
+              config.node.name = "node-a.example.local"
+
+Data channel "books" -> "books.node-a.example.local"
+```
+
+If `CATALYST_ORG_DOMAIN` is not set, `config.node.name` equals `CATALYST_NODE_ID` as-is.
+
 ## Usage
 
 ```typescript
 import { loadDefaultConfig } from '@catalyst/config'
 
 const config = loadDefaultConfig()
+// config.node.name is the full FQDN (e.g., "node-a.example.local")
+// config.node.domain is the org domain (e.g., "example.local")
 console.log(`Starting node ${config.node.name} on port ${config.port}`)
 ```

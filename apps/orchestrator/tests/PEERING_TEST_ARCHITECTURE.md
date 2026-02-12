@@ -5,15 +5,15 @@
 ```mermaid
 graph TB
     subgraph "Shared Auth Topology"
-        Auth[Auth Server<br/>auth.somebiz.local.io]
+        Auth[Auth Server<br/>auth.example.local]
 
         subgraph "Node A"
-            OrcA[Orchestrator A<br/>node-a.somebiz.local.io]
+            OrcA[Orchestrator A<br/>node-a.example.local]
             TokenA[Node Token A<br/>minted by Auth]
         end
 
         subgraph "Node B"
-            OrcB[Orchestrator B<br/>node-b.somebiz.local.io]
+            OrcB[Orchestrator B<br/>node-b.example.local]
             TokenB[Node Token B<br/>minted by Auth]
         end
     end
@@ -44,7 +44,7 @@ graph TB
 │         Shared Auth Scenario                │
 │                                             │
 │  ┌──────────┐                               │
-│  │  Auth    │ (auth.somebiz.local.io)       │
+│  │  Auth    │ (auth.example.local)       │
 │  │ Server   │                               │
 │  └─────┬────┘                               │
 │        │                                    │
@@ -74,16 +74,16 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Org A - somebiz.local.io"
-        AuthA[Auth Server A<br/>auth-a.somebiz.local.io]
-        OrcA[Orchestrator A<br/>node-a.somebiz.local.io]
+    subgraph "Org A - example.local"
+        AuthA[Auth Server A<br/>auth-a.example.local]
+        OrcA[Orchestrator A<br/>node-a.example.local]
         NodeTokenA[Node Token A<br/>signed by Auth-A]
         PeerTokenB2A[Peer Token for B→A<br/>signed by Auth-A]
     end
 
-    subgraph "Org B - somebiz.local.io"
-        AuthB[Auth Server B<br/>auth-b.somebiz.local.io]
-        OrcB[Orchestrator B<br/>node-b.somebiz.local.io]
+    subgraph "Org B - example.local"
+        AuthB[Auth Server B<br/>auth-b.example.local]
+        OrcB[Orchestrator B<br/>node-b.example.local]
         NodeTokenB[Node Token B<br/>signed by Auth-B]
         PeerTokenA2B[Peer Token for A→B<br/>signed by Auth-B]
     end
@@ -186,9 +186,9 @@ graph TB
 
 ```typescript
 interface PeerInfo {
-  name: string
+  name: string // Peer's FQDN (e.g., "node-b.example.local")
   endpoint: string
-  domains: string[]
+  domain: string // Peer's org domain (e.g., "example.local")
   peerToken?: string // Token to use when connecting to this peer
 }
 ```

@@ -7,7 +7,7 @@ This document outlines the adaptation of the Border Gateway Protocol (BGP) for s
 In this system, an **Autonomous System (AS)** represents a logical domain of services (e.g., a company, a datacenter, or a specific cloud environment). We use BGP-style messaging to exchange "routes" which are actually pointers to service endpoints.
 
 - **Standard BGP**: Routes `10.0.0.0/24` -> Next Hop IP.
-- **Catalyst BGP**: Routes `*.mydatacenter.mycompany` -> Envoy Node ID / Service Endpoint.
+- **Catalyst BGP**: Routes `*.node-a.example.local` -> Envoy Node ID / Service Endpoint.
 
 Traffic is routed via Envoy proxies, not at the IP layer. The "Next Hop" is a catalyst router that can forward the request or terminate it at a local service.
 
@@ -63,7 +63,7 @@ The core message for advertising and withdrawing routes.
   - `LOCAL_PREF`: (iBGP only) Preferred exit point.
   - `COMMUNITIES`: Tags for policy control (e.g., "production", "latency-sensitive").
   - `ORIGIN_SIGNATURE`: Cryptographic signature of the route payload using the Origin Node's private key.
-- **Network Layer Reachability Information (NLRI)**: The service prefixes being advertised (e.g., `users.dc01.orbis`).
+- **Network Layer Reachability Information (NLRI)**: The service prefixes being advertised (e.g., `users.node-a.example.local`).
 
 ### 4. NOTIFICATION
 
@@ -128,18 +128,18 @@ sequenceDiagram
     participant B as Node B
 
     Note over Svc, A: New Service Registered
-    Svc->>A: Register "api.hq.corp"
+    Svc->>A: Register "api.node-a.example.local"
 
     Note over A, B: Announcement
-    A->>B: UPDATE (NLRI=["api.hq.corp"], NextHop=A)
-    B->>B: Install Route "api.hq.corp" -> A
+    A->>B: UPDATE (NLRI=["api.node-a.example.local"], NextHop=A)
+    B->>B: Install Route "api.node-a.example.local" -> A
 
     Note over Svc, A: Service Stops
-    Svc->>A: Deregister "api.hq.corp"
+    Svc->>A: Deregister "api.node-a.example.local"
 
     Note over A, B: Withdrawal
-    A->>B: UPDATE (Withdrawn=["api.hq.corp"])
-    B->>B: Remove Route "api.hq.corp"
+    A->>B: UPDATE (Withdrawn=["api.node-a.example.local"])
+    B->>B: Remove Route "api.node-a.example.local"
 ```
 
 ### 4. Error Handling (NOTIFICATION)
@@ -168,9 +168,9 @@ sequenceDiagram
 
 ```typescript
 interface ServiceRoute {
-  prefix: string // e.g., "users.dc01.orbis"
+  prefix: string // e.g., "users.node-a.example.local" ({channel}.{nodeId}.{orgDomain})
   path: number[] // AS_PATH: [100, 200]
-  nextHop: string // Node ID of the peer
+  nextHop: string // Node FQDN of the peer (e.g., "node-a.example.local")
   attributes: Record<string, any>
   signature: string // Cryptographic signature by the origin
   timestamp: number // Unix timestamp of route creation (Replay Protection)

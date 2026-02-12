@@ -231,8 +231,8 @@ The `envoyPort` field is:
 // packages/config/src/index.ts
 
 export const NodeConfigSchema = z.object({
-  name: z.string(),
-  domains: z.array(z.string()),
+  name: z.string(), // Full FQDN: {nodeId}.{orgDomain} (e.g., "node-a.example.local")
+  domain: z.string(), // Organization domain (e.g., "example.local")
   endpoint: z.string().optional(),
   labels: z.record(z.string(), z.string()).optional(),
   peerToken: z.string().optional(),

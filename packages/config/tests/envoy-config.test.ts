@@ -5,6 +5,11 @@ import {
   CatalystConfigSchema,
   NodeConfigSchema,
   OrchestratorConfigSchema,
+  NodeIdSchema,
+  OrgDomainSchema,
+  FqdnSchema,
+  nodeFqdn,
+  channelFqdn,
   loadDefaultConfig,
 } from '../src/index.js'
 
@@ -483,5 +488,142 @@ describe('loadDefaultConfig with envoy env vars', () => {
     } finally {
       clearEnv()
     }
+  })
+})
+
+describe('NodeIdSchema', () => {
+  it('accepts a simple alphanumeric label', () => {
+    expect(NodeIdSchema.safeParse('router-east').success).toBe(true)
+  })
+
+  it('accepts a single character', () => {
+    expect(NodeIdSchema.safeParse('a').success).toBe(true)
+  })
+
+  it('accepts max 63 character label', () => {
+    const label = 'a'.repeat(63)
+    expect(NodeIdSchema.safeParse(label).success).toBe(true)
+  })
+
+  it('rejects labels longer than 63 characters', () => {
+    const label = 'a'.repeat(64)
+    expect(NodeIdSchema.safeParse(label).success).toBe(false)
+  })
+
+  it('rejects empty string', () => {
+    expect(NodeIdSchema.safeParse('').success).toBe(false)
+  })
+
+  it('rejects leading hyphen', () => {
+    expect(NodeIdSchema.safeParse('-router').success).toBe(false)
+  })
+
+  it('rejects trailing hyphen', () => {
+    expect(NodeIdSchema.safeParse('router-').success).toBe(false)
+  })
+
+  it('accepts hyphens in the middle', () => {
+    expect(NodeIdSchema.safeParse('us-east-1').success).toBe(true)
+  })
+
+  it('rejects dots (not a DNS label)', () => {
+    expect(NodeIdSchema.safeParse('router.east').success).toBe(false)
+  })
+
+  it('rejects underscores', () => {
+    expect(NodeIdSchema.safeParse('router_east').success).toBe(false)
+  })
+
+  it('is case-insensitive', () => {
+    expect(NodeIdSchema.safeParse('Router-East').success).toBe(true)
+  })
+})
+
+describe('OrgDomainSchema', () => {
+  it('accepts a standard two-label domain', () => {
+    expect(OrgDomainSchema.safeParse('example.com').success).toBe(true)
+  })
+
+  it('accepts a three-label domain', () => {
+    expect(OrgDomainSchema.safeParse('sub.example.com').success).toBe(true)
+  })
+
+  it('rejects a single-label string', () => {
+    expect(OrgDomainSchema.safeParse('localhost').success).toBe(false)
+  })
+
+  it('rejects empty string', () => {
+    expect(OrgDomainSchema.safeParse('').success).toBe(false)
+  })
+
+  it('rejects domain with leading hyphen in a label', () => {
+    expect(OrgDomainSchema.safeParse('-bad.com').success).toBe(false)
+  })
+
+  it('rejects domain with trailing hyphen in a label', () => {
+    expect(OrgDomainSchema.safeParse('bad-.com').success).toBe(false)
+  })
+
+  it('rejects domain exceeding 253 characters', () => {
+    // Build a domain > 253 chars: 60 + 1 + 60 + 1 + 60 + 1 + 60 + 1 + 3 = 247... need more
+    const labels = Array(5).fill('a'.repeat(51))
+    const long = labels.join('.') // 51*5 + 4 = 259 chars
+    expect(OrgDomainSchema.safeParse(long).success).toBe(false)
+  })
+
+  it('accepts domain with numeric labels', () => {
+    expect(OrgDomainSchema.safeParse('123.456').success).toBe(true)
+  })
+})
+
+describe('FqdnSchema', () => {
+  it('accepts a valid FQDN', () => {
+    expect(FqdnSchema.safeParse('node-a.example.com').success).toBe(true)
+  })
+
+  it('accepts a two-label FQDN', () => {
+    expect(FqdnSchema.safeParse('router.local').success).toBe(true)
+  })
+
+  it('accepts a deeply nested FQDN', () => {
+    expect(FqdnSchema.safeParse('a.b.c.d.example.com').success).toBe(true)
+  })
+
+  it('rejects a single label', () => {
+    expect(FqdnSchema.safeParse('localhost').success).toBe(false)
+  })
+
+  it('rejects empty string', () => {
+    expect(FqdnSchema.safeParse('').success).toBe(false)
+  })
+
+  it('rejects FQDN with invalid label', () => {
+    expect(FqdnSchema.safeParse('node_a.example.com').success).toBe(false)
+  })
+
+  it('rejects FQDN exceeding 253 characters', () => {
+    const labels = Array(5).fill('a'.repeat(51))
+    const long = labels.join('.') // 259 chars
+    expect(FqdnSchema.safeParse(long).success).toBe(false)
+  })
+})
+
+describe('nodeFqdn', () => {
+  it('constructs FQDN from nodeId and orgDomain', () => {
+    expect(nodeFqdn('router-east', 'acme.io')).toBe('router-east.acme.io')
+  })
+
+  it('works with multi-level orgDomain', () => {
+    expect(nodeFqdn('node-a', 'sub.example.com')).toBe('node-a.sub.example.com')
+  })
+})
+
+describe('channelFqdn', () => {
+  it('constructs channel FQDN from channel, nodeId, and orgDomain', () => {
+    expect(channelFqdn('metrics', 'router-east', 'acme.io')).toBe('metrics.router-east.acme.io')
+  })
+
+  it('works with multi-level orgDomain', () => {
+    expect(channelFqdn('logs', 'node-a', 'sub.example.com')).toBe('logs.node-a.sub.example.com')
   })
 })
