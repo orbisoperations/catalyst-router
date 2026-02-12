@@ -1129,7 +1129,170 @@ function buildAuthGap(pres: PptxGenJS) {
   )
 }
 
-// 10. Envoy xDS Control Plane
+// 10. Why Envoy?
+function buildWhyEnvoy(pres: PptxGenJS) {
+  const s = pres.addSlide({ masterName: 'CONTENT' })
+  heading(s, 'Why Envoy?')
+  subheading(s, 'CNCF graduated — 3rd project ever after Kubernetes and Prometheus')
+
+  // Protocol support row
+  s.addText('Protocol Coverage', {
+    x: 0.6,
+    y: 1.35,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+
+  const protocols = [
+    { label: 'TCP/UDP', desc: 'Raw L4' },
+    { label: 'HTTP/1.1', desc: 'Full proxy' },
+    { label: 'HTTP/2', desc: 'Multiplexed' },
+    { label: 'HTTP/3', desc: 'QUIC' },
+    { label: 'gRPC', desc: 'First-class' },
+    { label: 'GraphQL', desc: 'Via extension' },
+  ]
+
+  protocols.forEach((p, i) => {
+    const px = 0.6 + i * 1.55
+    s.addText(p.label, {
+      x: px,
+      y: 1.7,
+      w: 1.4,
+      h: 0.3,
+      fontSize: 11,
+      fontFace: T.FONT,
+      color: T.WHITE,
+      bold: true,
+      align: 'center',
+      valign: 'middle',
+      shape: 'roundRect' as unknown as PptxGenJS.ShapeType,
+      rectRadius: 0.06,
+      fill: { color: T.PURPLE },
+    })
+    s.addText(p.desc, {
+      x: px,
+      y: 2.02,
+      w: 1.4,
+      h: 0.2,
+      fontSize: 9,
+      fontFace: T.FONT,
+      color: T.MUTED,
+      align: 'center',
+    })
+  })
+
+  // Two columns: Load Balancing + Circuit Breaking
+  s.addText('Load Balancing', {
+    x: 0.6,
+    y: 2.4,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+  themedTable(
+    s,
+    ['Algorithm', 'Use Case'],
+    [
+      ['Round Robin', 'Default — weighted by endpoint health'],
+      ['Least Request (P2C)', 'Latency-sensitive — picks least-loaded of 2'],
+      ['Ring Hash / Maglev', 'Consistent hashing — sticky sessions, caching'],
+      ['Random', 'Stateless — outperforms RR without health checks'],
+    ],
+    0.6,
+    2.7,
+    4.3,
+    { accent: T.PURPLE, fontSize: 9 }
+  )
+
+  s.addText('Circuit Breaking', {
+    x: 5.2,
+    y: 2.4,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+  themedTable(
+    s,
+    ['Threshold', 'Default'],
+    [
+      ['Max Connections', '1,024 per cluster'],
+      ['Max Pending Requests', '1,024 queued'],
+      ['Max Concurrent Requests', '1,024 outstanding'],
+      ['Max Active Retries', '3 (budgets recommended)'],
+    ],
+    5.2,
+    2.7,
+    4.4,
+    { accent: T.ORANGE, fontSize: 9 }
+  )
+
+  // Industry adoption
+  s.addText('Industry Adoption', {
+    x: 0.6,
+    y: 4.15,
+    w: 4,
+    h: 0.3,
+    fontSize: 14,
+    fontFace: T.FONT,
+    color: T.WHITE,
+    bold: true,
+  })
+
+  const adopters = [
+    'Lyft (creator)',
+    'Google',
+    'Apple',
+    'Microsoft',
+    'Netflix',
+    'Airbnb',
+    'Salesforce',
+    'Stripe',
+  ]
+  s.addText(adopters.join('  \u2022  '), {
+    x: 0.6,
+    y: 4.45,
+    w: 9.0,
+    h: 0.3,
+    fontSize: 10,
+    fontFace: T.FONT,
+    color: T.TEXT,
+  })
+
+  const platforms =
+    'Istio  \u2022  AWS App Mesh  \u2022  All major cloud providers use Envoy in production'
+  s.addText(platforms, {
+    x: 0.6,
+    y: 4.75,
+    w: 9.0,
+    h: 0.25,
+    fontSize: 10,
+    fontFace: T.FONT,
+    color: T.MUTED,
+    italic: true,
+  })
+
+  callout(
+    s,
+    '27K+ GitHub stars  \u2022  1,700+ contributors  \u2022  176 contributing orgs  \u2022  155+ production end-users  \u2022  Written in modern C++',
+    0.6,
+    5.05,
+    8.8,
+    0.42,
+    T.PURPLE
+  )
+}
+
+// 11. Envoy xDS Control Plane
 function buildEnvoyXDS(pres: PptxGenJS) {
   const s = pres.addSlide({ masterName: 'CONTENT' })
   heading(s, 'Envoy: xDS Control Plane')
@@ -1831,6 +1994,7 @@ async function main() {
   buildTitle(pres)
   buildAgenda(pres)
   buildWhyBGP(pres)
+  buildWhyEnvoy(pres)
   buildRelatedProject(pres)
   buildArchitecture(pres)
   buildBGPConcepts(pres)
