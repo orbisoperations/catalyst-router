@@ -13,12 +13,18 @@ import type { OrchestratorConfig } from './types.js'
 import type { PortAllocator } from '@catalyst/envoy-service'
 import type { Propagation } from './peer-transport.js'
 
+export interface PortOperation {
+  type: 'allocate' | 'release'
+  key: string
+}
+
 export interface Plan {
   success: true
   action: Action
   prevState: RouteTable
   newState: RouteTable
   propagations: Propagation[]
+  portOperations: PortOperation[]
   routeMetadata: Map<string, LocRibEntry>
 }
 
@@ -34,6 +40,7 @@ export interface CommitResult {
   prevState: RouteTable
   newState: RouteTable
   propagations: Propagation[]
+  portOperations: PortOperation[]
   routesChanged: boolean
 }
 
@@ -76,6 +83,9 @@ export class RoutingInformationBase {
 
     const newState = stateResult.state
 
+    // Compute declarative port operations (pure — no allocator mutation)
+    const portOperations = this.computePortOps(action, newState, prevState)
+
     // Allocate/release ports before computing propagations so that
     // portAllocator.getPort() returns correct values for multi-hop rewrite.
     this.allocatePorts(action, newState, prevState)
@@ -90,6 +100,7 @@ export class RoutingInformationBase {
       prevState,
       newState,
       propagations,
+      portOperations,
       routeMetadata,
     }
   }
@@ -135,13 +146,75 @@ export class RoutingInformationBase {
       prevState: plan.prevState,
       newState,
       propagations: plan.propagations,
+      portOperations: plan.portOperations,
       routesChanged,
     }
   }
 
   /**
+   * Compute which port operations are needed for this state transition.
+   * Pure — does not mutate the allocator, only reads existing allocations.
+   */
+  private computePortOps(
+    action: Action,
+    newState: RouteTable,
+    prevState: RouteTable
+  ): PortOperation[] {
+    if (!this.portAllocator) return []
+
+    const routeActions = [
+      Actions.LocalRouteCreate,
+      Actions.LocalRouteDelete,
+      Actions.InternalProtocolUpdate,
+      Actions.InternalProtocolClose,
+      Actions.InternalProtocolOpen,
+      Actions.InternalProtocolConnected,
+    ]
+    if (!routeActions.includes(action.action)) return []
+
+    const ops: PortOperation[] = []
+
+    // Allocate for local routes without ports
+    for (const route of newState.local.routes) {
+      if (!route.envoyPort) {
+        ops.push({ type: 'allocate', key: route.name })
+      }
+    }
+
+    // Release deleted local routes
+    if (action.action === Actions.LocalRouteDelete) {
+      const deletedRoute = prevState.local.routes.find(
+        (r) => !newState.local.routes.some((lr) => lr.name === r.name)
+      )
+      if (deletedRoute) {
+        ops.push({ type: 'release', key: deletedRoute.name })
+      }
+    }
+
+    // Allocate egress ports for internal routes that don't have one yet
+    for (const route of newState.internal.routes) {
+      const egressKey = `egress_${route.name}_via_${route.peerName}`
+      if (!this.portAllocator.getPort(egressKey)) {
+        ops.push({ type: 'allocate', key: egressKey })
+      }
+    }
+
+    // Release egress ports for closed peer connections
+    if (action.action === Actions.InternalProtocolClose) {
+      const closedPeer = action.data.peerInfo.name
+      const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === closedPeer)
+      for (const route of removedRoutes) {
+        ops.push({ type: 'release', key: `egress_${route.name}_via_${route.peerName}` })
+      }
+    }
+
+    return ops
+  }
+
+  /**
    * Allocate and release envoy ports for the state transition.
    * Must run before computePropagations so getPort() returns correct values.
+   * @deprecated Will be replaced by executePortOps() + stampPortsOnState() in next PR.
    */
   private allocatePorts(action: Action, newState: RouteTable, prevState: RouteTable): void {
     if (!this.portAllocator) return
