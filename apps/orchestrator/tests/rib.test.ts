@@ -444,13 +444,11 @@ describe('RoutingInformationBase', () => {
   describe('propagation computation', () => {
     it('LocalPeerCreate produces open propagation', () => {
       const rib = createRib()
-      const plan = rib.plan({ action: Actions.LocalPeerCreate, data: PEER_B })
-      expect(plan.success).toBe(true)
+      const result = planCommit(rib, { action: Actions.LocalPeerCreate, data: PEER_B })
 
-      const p = plan as Plan
-      expect(p.propagations).toHaveLength(1)
-      expect(p.propagations[0].type).toBe('open')
-      expect(p.propagations[0].peer.name).toBe(PEER_B.name)
+      expect(result.propagations).toHaveLength(1)
+      expect(result.propagations[0].type).toBe('open')
+      expect(result.propagations[0].peer.name).toBe(PEER_B.name)
     })
 
     it('LocalRouteCreate broadcasts to connected peers only', () => {
@@ -459,16 +457,15 @@ describe('RoutingInformationBase', () => {
       connectPeer(rib, PEER_B)
       planCommit(rib, { action: Actions.LocalPeerCreate, data: PEER_C })
 
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.LocalRouteCreate,
         data: { name: 'svc-a', protocol: 'http' as const, endpoint: 'http://a:8080' },
       })
 
-      const p = plan as Plan
       // Only B is connected, C is initializing
-      expect(p.propagations).toHaveLength(1)
-      expect(p.propagations[0].peer.name).toBe(PEER_B.name)
-      expect(p.propagations[0].type).toBe('update')
+      expect(result.propagations).toHaveLength(1)
+      expect(result.propagations[0].peer.name).toBe(PEER_B.name)
+      expect(result.propagations[0].type).toBe('update')
     })
 
     it('LocalRouteDelete sends remove to connected peers', () => {
@@ -479,14 +476,13 @@ describe('RoutingInformationBase', () => {
         data: { name: 'svc-a', protocol: 'http' as const, endpoint: 'http://a:8080' },
       })
 
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.LocalRouteDelete,
         data: { name: 'svc-a', protocol: 'http' as const, endpoint: 'http://a:8080' },
       })
 
-      const p = plan as Plan
-      expect(p.propagations).toHaveLength(1)
-      expect(p.propagations[0].type).toBe('update')
+      expect(result.propagations).toHaveLength(1)
+      expect(result.propagations[0].type).toBe('update')
     })
 
     it('LocalPeerDelete produces close + withdrawal propagations', () => {
@@ -511,15 +507,14 @@ describe('RoutingInformationBase', () => {
         },
       })
 
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.LocalPeerDelete,
         data: { name: PEER_B.name },
       })
 
-      const p = plan as Plan
       // close to B + withdrawal update to C
-      const closeProps = p.propagations.filter((p) => p.type === 'close')
-      const updateProps = p.propagations.filter((p) => p.type === 'update')
+      const closeProps = result.propagations.filter((p) => p.type === 'close')
+      const updateProps = result.propagations.filter((p) => p.type === 'update')
       expect(closeProps).toHaveLength(1)
       expect(closeProps[0].peer.name).toBe(PEER_B.name)
       expect(updateProps).toHaveLength(1)
@@ -531,7 +526,7 @@ describe('RoutingInformationBase', () => {
       connectPeer(rib, PEER_B)
       connectPeer(rib, PEER_C)
 
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.InternalProtocolUpdate,
         data: {
           peerInfo: PEER_B,
@@ -547,10 +542,9 @@ describe('RoutingInformationBase', () => {
         },
       })
 
-      const p = plan as Plan
       // Should only propagate to C, not back to B
-      expect(p.propagations).toHaveLength(1)
-      expect(p.propagations[0].peer.name).toBe(PEER_C.name)
+      expect(result.propagations).toHaveLength(1)
+      expect(result.propagations[0].peer.name).toBe(PEER_C.name)
     })
 
     it('InternalProtocolUpdate filters out loops in re-advertisement', () => {
@@ -559,7 +553,7 @@ describe('RoutingInformationBase', () => {
       connectPeer(rib, PEER_C)
 
       // B sends a route with C already in the nodePath
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.InternalProtocolUpdate,
         data: {
           peerInfo: PEER_B,
@@ -575,9 +569,8 @@ describe('RoutingInformationBase', () => {
         },
       })
 
-      const p = plan as Plan
       // Should NOT propagate to C (C is in nodePath) or back to B (source peer)
-      expect(p.propagations).toHaveLength(0)
+      expect(result.propagations).toHaveLength(0)
     })
 
     it('InternalProtocolUpdate prepends this node to nodePath', () => {
@@ -585,7 +578,7 @@ describe('RoutingInformationBase', () => {
       connectPeer(rib, PEER_B)
       connectPeer(rib, PEER_C)
 
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.InternalProtocolUpdate,
         data: {
           peerInfo: PEER_B,
@@ -601,10 +594,12 @@ describe('RoutingInformationBase', () => {
         },
       })
 
-      const p = plan as Plan
-      expect(p.propagations).toHaveLength(1)
+      expect(result.propagations).toHaveLength(1)
       const update = (
-        p.propagations[0] as { type: 'update'; update: { updates: Array<{ nodePath?: string[] }> } }
+        result.propagations[0] as {
+          type: 'update'
+          update: { updates: Array<{ nodePath?: string[] }> }
+        }
       ).update
       expect(update.updates[0].nodePath).toEqual([NODE.name, PEER_B.name])
     })
@@ -631,16 +626,15 @@ describe('RoutingInformationBase', () => {
         },
       })
 
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.InternalProtocolClose,
         data: { peerInfo: PEER_B, code: 1000 },
       })
 
-      const p = plan as Plan
       // Should send withdrawal to C
-      expect(p.propagations).toHaveLength(1)
-      expect(p.propagations[0].type).toBe('update')
-      expect(p.propagations[0].peer.name).toBe(PEER_C.name)
+      expect(result.propagations).toHaveLength(1)
+      expect(result.propagations[0].type).toBe('update')
+      expect(result.propagations[0].peer.name).toBe(PEER_C.name)
     })
   })
 
@@ -675,17 +669,16 @@ describe('RoutingInformationBase', () => {
       // Now connect peer C
       planCommit(rib, { action: Actions.LocalPeerCreate, data: PEER_C })
 
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.InternalProtocolOpen,
         data: { peerInfo: PEER_C },
       })
 
-      const p = plan as Plan
-      expect(p.propagations).toHaveLength(1)
-      expect(p.propagations[0].type).toBe('update')
+      expect(result.propagations).toHaveLength(1)
+      expect(result.propagations[0].type).toBe('update')
 
       const update = (
-        p.propagations[0] as {
+        result.propagations[0] as {
           type: 'update'
           update: {
             updates: Array<{ action: string; route: { name: string }; nodePath: string[] }>
@@ -731,15 +724,14 @@ describe('RoutingInformationBase', () => {
       })
 
       // Simulate re-open from C — full sync should NOT include svc-c back to C
-      const plan = rib.plan({
+      const result = planCommit(rib, {
         action: Actions.InternalProtocolOpen,
         data: { peerInfo: PEER_C },
       })
 
-      const p = plan as Plan
-      if (p.propagations.length > 0) {
+      if (result.propagations.length > 0) {
         const update = (
-          p.propagations[0] as {
+          result.propagations[0] as {
             type: 'update'
             update: { updates: Array<{ route: { name: string } }> }
           }
@@ -891,6 +883,62 @@ describe('RoutingInformationBase', () => {
       expect(plan.success).toBe(true)
       const result = rib.commit(plan as Plan)
       expect(result.portOperations).toContainEqual({ type: 'allocate', key: 'books-api' })
+    })
+
+    it('plan() does NOT mutate the port allocator', () => {
+      const { rib, allocator } = createRibWithPorts()
+      const availableBefore = allocator.availableCount()
+
+      rib.plan({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://a:8080' },
+      })
+
+      // Allocator should be untouched — no ports consumed
+      expect(allocator.availableCount()).toBe(availableBefore)
+      expect(allocator.getPort('books-api')).toBeUndefined()
+    })
+
+    it('commit() executes port operations and stamps envoyPort on routes', () => {
+      const { rib, allocator } = createRibWithPorts()
+      const plan = rib.plan({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://a:8080' },
+      })
+
+      expect(allocator.getPort('books-api')).toBeUndefined()
+
+      const result = rib.commit(plan as Plan)
+
+      // After commit, port should be allocated
+      expect(allocator.getPort('books-api')).toBeDefined()
+      // And route should have envoyPort stamped
+      expect(result.newState.local.routes[0].envoyPort).toBe(allocator.getPort('books-api'))
+    })
+
+    it('commit() stamps egress ports on internal routes', () => {
+      const { rib } = createRibWithPorts()
+      connectPeer(rib, PEER_B)
+
+      const result = planCommitWithPorts(rib, {
+        action: Actions.InternalProtocolUpdate,
+        data: {
+          peerInfo: PEER_B,
+          update: {
+            updates: [
+              {
+                action: 'add',
+                route: { name: 'svc-b', protocol: 'http' as const, endpoint: 'http://b:8080' },
+                nodePath: [PEER_B.name],
+              },
+            ],
+          },
+        },
+      })
+
+      // Internal route should have an egress port
+      expect(result.newState.internal.routes[0].envoyPort).toBeDefined()
+      expect(result.newState.internal.routes[0].envoyPort).toBeGreaterThanOrEqual(10000)
     })
   })
 })
