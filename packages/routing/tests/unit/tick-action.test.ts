@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
-import { TickMessageSchema } from '../src/system/actions.js'
-import { ActionSchema } from '../src/schema.js'
-import { Actions } from '../src/action-types.js'
+import { TickMessageSchema } from '../../src/system/actions.js'
+import { ActionSchema } from '../../src/schema.js'
+import { Actions } from '../../src/action-types.js'
 
 describe('TickMessageSchema', () => {
   it('parses a valid tick action', () => {
