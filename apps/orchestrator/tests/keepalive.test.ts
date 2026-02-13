@@ -65,7 +65,8 @@ function setPeerTimingFields(
     action: { action: Actions.Tick, data: { now: 0 } },
     prevState: state,
     newState,
-    propagations: [],
+    portOperations: [],
+    routeMetadata: new Map(),
   })
 }
 
@@ -178,8 +179,9 @@ describe('Keepalive Tick Mechanism', () => {
       expect(plan.success).toBe(true)
 
       const p = plan as Plan
+      const result = rib.commit(p)
       // Should propagate withdrawal to C
-      const updateProps = p.propagations.filter((pr) => pr.type === 'update')
+      const updateProps = result.propagations.filter((pr) => pr.type === 'update')
       expect(updateProps).toHaveLength(1)
       expect(updateProps[0].peer.name).toBe(PEER_C.name)
     })
@@ -202,7 +204,8 @@ describe('Keepalive Tick Mechanism', () => {
       expect(plan.success).toBe(true)
 
       const p = plan as Plan
-      const keepalives = p.propagations.filter((pr) => pr.type === 'keepalive')
+      const result = rib.commit(p)
+      const keepalives = result.propagations.filter((pr) => pr.type === 'keepalive')
       expect(keepalives).toHaveLength(1)
       expect(keepalives[0].peer.name).toBe(PEER_B.name)
     })
@@ -223,7 +226,8 @@ describe('Keepalive Tick Mechanism', () => {
       expect(plan.success).toBe(true)
 
       const p = plan as Plan
-      const keepalives = p.propagations.filter((pr) => pr.type === 'keepalive')
+      const result = rib.commit(p)
+      const keepalives = result.propagations.filter((pr) => pr.type === 'keepalive')
       expect(keepalives).toHaveLength(0)
     })
   })
@@ -239,7 +243,8 @@ describe('Keepalive Tick Mechanism', () => {
 
       const p = plan as Plan
       expect(p.newState.internal.peers).toHaveLength(1)
-      expect(p.propagations).toHaveLength(0)
+      const result = rib.commit(p)
+      expect(result.propagations).toHaveLength(0)
     })
 
     it('tick is no-op with empty peer list', () => {
@@ -249,7 +254,8 @@ describe('Keepalive Tick Mechanism', () => {
       expect(plan.success).toBe(true)
 
       const p = plan as Plan
-      expect(p.propagations).toHaveLength(0)
+      const result = rib.commit(p)
+      expect(result.propagations).toHaveLength(0)
     })
   })
 
@@ -281,8 +287,9 @@ describe('Keepalive Tick Mechanism', () => {
       // B should be expired (removed from state)
       expect(p.newState.internal.peers.find((pr) => pr.name === PEER_B.name)).toBeUndefined()
 
+      const result = rib.commit(p)
       // No keepalive to B (it's dead)
-      const keepalives = p.propagations.filter((pr) => pr.type === 'keepalive')
+      const keepalives = result.propagations.filter((pr) => pr.type === 'keepalive')
       for (const ka of keepalives) {
         expect(ka.peer.name).not.toBe(PEER_B.name)
       }
