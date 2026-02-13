@@ -4,7 +4,7 @@ import { ActionSchema } from '../../src/schema.js'
 import { Actions } from '../../src/action-types.js'
 
 describe('TickMessageSchema', () => {
-  it('parses a valid tick action', () => {
+  it('accepts valid tick action with numeric now timestamp', () => {
     const result = TickMessageSchema.safeParse({
       action: 'system:tick',
       data: { now: Date.now() },
@@ -32,14 +32,14 @@ describe('TickMessageSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects tick with missing data', () => {
+  it('rejects tick with missing data payload', () => {
     const result = TickMessageSchema.safeParse({
       action: 'system:tick',
     })
     expect(result.success).toBe(false)
   })
 
-  it('rejects tick with wrong action type', () => {
+  it('rejects non-tick action type', () => {
     const result = TickMessageSchema.safeParse({
       action: 'system:wrong',
       data: { now: Date.now() },
@@ -48,8 +48,8 @@ describe('TickMessageSchema', () => {
   })
 })
 
-describe('ActionSchema includes Tick', () => {
-  it('parses tick through the unified ActionSchema', () => {
+describe('ActionSchema', () => {
+  it('accepts system:tick via unified ActionSchema', () => {
     const result = ActionSchema.safeParse({
       action: 'system:tick',
       data: { now: 1707745200000 },
@@ -60,7 +60,7 @@ describe('ActionSchema includes Tick', () => {
     }
   })
 
-  it('Actions.Tick has the correct value', () => {
+  it('Actions.Tick equals "system:tick"', () => {
     expect(Actions.Tick).toBe('system:tick')
   })
 })

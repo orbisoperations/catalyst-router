@@ -2,8 +2,8 @@ import { describe, it, expect } from 'bun:test'
 import { DataChannelDefinitionSchema } from '../../src/datachannel.js'
 
 describe('DataChannelDefinitionSchema', () => {
-  describe('existing fields (backward compatibility)', () => {
-    it('parses a minimal definition with name and protocol', () => {
+  describe('core fields', () => {
+    it('accepts minimal definition with required name and protocol', () => {
       const result = DataChannelDefinitionSchema.safeParse({
         name: 'test-service',
         protocol: 'http',
@@ -15,7 +15,7 @@ describe('DataChannelDefinitionSchema', () => {
       }
     })
 
-    it('parses with all existing optional fields', () => {
+    it('accepts all optional fields (endpoint, region, tags)', () => {
       const result = DataChannelDefinitionSchema.safeParse({
         name: 'graphql-service',
         protocol: 'http:graphql',
@@ -31,7 +31,7 @@ describe('DataChannelDefinitionSchema', () => {
       }
     })
 
-    it('parses all valid protocol types', () => {
+    it('accepts all valid protocol types (http, http:graphql, http:gql, http:grpc, tcp)', () => {
       for (const protocol of ['http', 'http:graphql', 'http:gql', 'http:grpc', 'tcp']) {
         const result = DataChannelDefinitionSchema.safeParse({
           name: 'test',
@@ -41,7 +41,7 @@ describe('DataChannelDefinitionSchema', () => {
       }
     })
 
-    it('rejects invalid protocol', () => {
+    it('rejects unsupported protocol type', () => {
       const result = DataChannelDefinitionSchema.safeParse({
         name: 'test',
         protocol: 'ftp',
@@ -60,7 +60,7 @@ describe('DataChannelDefinitionSchema', () => {
   })
 
   describe('envoyPort field', () => {
-    it('parses without envoyPort (backward compatible)', () => {
+    it('defaults envoyPort to undefined when omitted', () => {
       const result = DataChannelDefinitionSchema.safeParse({
         name: 'test-service',
         protocol: 'http',
@@ -71,7 +71,7 @@ describe('DataChannelDefinitionSchema', () => {
       }
     })
 
-    it('parses with valid envoyPort', () => {
+    it('accepts valid integer envoyPort', () => {
       const result = DataChannelDefinitionSchema.safeParse({
         name: 'test-service',
         protocol: 'http',
@@ -92,7 +92,7 @@ describe('DataChannelDefinitionSchema', () => {
       expect(result.success).toBe(false)
     })
 
-    it('accepts envoyPort at boundary values', () => {
+    it('accepts envoyPort at port boundaries (1 and 65535)', () => {
       expect(
         DataChannelDefinitionSchema.safeParse({
           name: 'test',
@@ -110,7 +110,7 @@ describe('DataChannelDefinitionSchema', () => {
       ).toBe(true)
     })
 
-    it('coexists with all other fields', () => {
+    it('accepts envoyPort alongside all other fields', () => {
       const result = DataChannelDefinitionSchema.safeParse({
         name: 'full-service',
         protocol: 'http:grpc',
