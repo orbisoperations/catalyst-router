@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { RoutingInformationBase, type Plan } from '../src/rib.js'
 import type { OrchestratorConfig } from '../src/types.js'
@@ -14,7 +14,7 @@ import type { OrchestratorConfig } from '../src/types.js'
  * routes survive peer disconnection or deletion.
  */
 
-const NODE: PeerInfo = {
+const NODE: OrchestratorConfig['node'] = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
@@ -132,10 +132,10 @@ describe('Zombie Routes / State Corruption', () => {
     // Only C's route remains
     expect(state.internal.routes).toHaveLength(1)
     expect(state.internal.routes[0].name).toBe('svc-c')
-    expect(state.internal.routes[0].peerName).toBe(PEER_C.name)
+    expect(state.internal.routes[0].peer.name).toBe(PEER_C.name)
 
-    // No route with B's peerName
-    expect(state.internal.routes.filter((r) => r.peerName === PEER_B.name)).toHaveLength(0)
+    // No route with B's peer.name
+    expect(state.internal.routes.filter((r) => r.peer.name === PEER_B.name)).toHaveLength(0)
   })
 
   it('plan on current state after mutations reflects latest state', () => {

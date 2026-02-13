@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { RoutingInformationBase } from '../src/rib.js'
 import type { OrchestratorConfig } from '../src/types.js'
 
-const NODE: PeerInfo = {
+const NODE: OrchestratorConfig['node'] = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
@@ -75,7 +75,7 @@ describe('Route Metadata', () => {
     const entry = metadata.get('svc-x')!
     expect(entry).toBeDefined()
     expect(entry.bestPath.name).toBe('svc-x')
-    expect(entry.bestPath.peerName).toBe(PEER_B.name)
+    expect(entry.bestPath.peer.name).toBe(PEER_B.name)
     expect(entry.alternatives).toHaveLength(0)
     expect(entry.selectionReason).toBe('only candidate')
   })
@@ -101,11 +101,11 @@ describe('Route Metadata', () => {
     expect(entry).toBeDefined()
 
     // B's path is shorter (1 hop vs 2 hops)
-    expect(entry.bestPath.peerName).toBe(PEER_B.name)
+    expect(entry.bestPath.peer.name).toBe(PEER_B.name)
     expect(entry.bestPath.nodePath).toEqual([PEER_B.name])
     expect(entry.selectionReason).toBe('shortest nodePath')
     expect(entry.alternatives).toHaveLength(1)
-    expect(entry.alternatives[0].peerName).toBe(PEER_C.name)
+    expect(entry.alternatives[0].peer.name).toBe(PEER_C.name)
   })
 
   it('withdrawal removes route from metadata', () => {
@@ -144,7 +144,7 @@ describe('Route Metadata', () => {
     const entry = metadata.get('svc-x')!
     expect(entry).toBeDefined()
     // C's route is now the only candidate
-    expect(entry.bestPath.peerName).toBe(PEER_C.name)
+    expect(entry.bestPath.peer.name).toBe(PEER_C.name)
     expect(entry.alternatives).toHaveLength(0)
     expect(entry.selectionReason).toBe('only candidate')
   })

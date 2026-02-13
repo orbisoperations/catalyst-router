@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { RoutingInformationBase } from '../src/rib.js'
 import { createPortAllocator } from '@catalyst/envoy-service'
@@ -13,7 +13,7 @@ import type { OrchestratorConfig } from '../src/types.js'
  * work correctly at the RIB level.
  */
 
-const NODE: PeerInfo = {
+const NODE: OrchestratorConfig['node'] = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
@@ -123,7 +123,7 @@ describe('Port Allocation + Envoy (RIB-level)', () => {
     if (toC && toC.type === 'update') {
       const addUpdate = toC.update.updates.find((u) => u.action === 'add')
       expect(addUpdate).toBeDefined()
-      expect(addUpdate!.route.envoyPort).toBeNumber()
+      expect(typeof addUpdate!.route.envoyPort).toBe('number')
       expect(addUpdate!.route.envoyPort).toBeGreaterThanOrEqual(10000)
       expect(addUpdate!.route.envoyPort).not.toBe(5000)
     }

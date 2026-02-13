@@ -39,14 +39,10 @@ export class ConnectionPool {
   }
 
   getEnvoy(endpoint: string): RpcStub<EnvoyApi> {
-    return this.type === 'ws'
-      ? newWebSocketRpcSession<EnvoyApi>(endpoint)
-      : newHttpBatchRpcSession<EnvoyApi>(endpoint)
+    return this.get(endpoint) as unknown as RpcStub<EnvoyApi>
   }
 
   getGateway(endpoint: string): RpcStub<GatewayApi> {
-    return this.type === 'ws'
-      ? newWebSocketRpcSession<GatewayApi>(endpoint)
-      : newHttpBatchRpcSession<GatewayApi>(endpoint)
+    return this.get(endpoint) as unknown as RpcStub<GatewayApi>
   }
 }

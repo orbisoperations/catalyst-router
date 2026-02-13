@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { RoutingInformationBase } from '../src/rib.js'
 import type { OrchestratorConfig } from '../src/types.js'
@@ -14,7 +14,7 @@ import type { OrchestratorConfig } from '../src/types.js'
  * before connection, and reconnection after close.
  */
 
-const NODE: PeerInfo = {
+const NODE: OrchestratorConfig['node'] = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],

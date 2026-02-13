@@ -1,8 +1,7 @@
 import type { PeerInfo, PeerRecord } from '@catalyst/routing'
 import { getLogger } from '@catalyst/telemetry'
 import type { ConnectionPool } from './connection-pool.js'
-export type UpdateMessage = z.infer<typeof UpdateMessageSchema>
-
+import type { Propagation, UpdateMessage } from './api-types.js'
 export type { Propagation, UpdateMessage } from './api-types.js'
 
 export class PeerTransport {

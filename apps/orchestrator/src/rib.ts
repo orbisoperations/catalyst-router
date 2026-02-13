@@ -184,7 +184,7 @@ export class RoutingInformationBase {
       internal: {
         ...state.internal,
         routes: state.internal.routes.map((r) => {
-          const key = `egress_${r.name}_via_${r.peerName}`
+          const key = `egress_${r.name}_via_${r.peer.name}`
           const port = this.portAllocator!.getPort(key)
           return port && !r.envoyPort ? { ...r, envoyPort: port } : r
         }),
@@ -203,7 +203,7 @@ export class RoutingInformationBase {
   ): PortOperation[] {
     if (!this.portAllocator) return []
 
-    const routeActions = [
+    const routeActions: string[] = [
       Actions.LocalRouteCreate,
       Actions.LocalRouteDelete,
       Actions.InternalProtocolUpdate,
@@ -236,7 +236,7 @@ export class RoutingInformationBase {
     // Note: route.envoyPort here is the *remote* peer's port — we check the allocator
     // for whether a *local* egress port has been assigned for this route.
     for (const route of newState.internal.routes) {
-      const egressKey = `egress_${route.name}_via_${route.peerName}`
+      const egressKey = `egress_${route.name}_via_${route.peer.name}`
       if (!this.portAllocator.getPort(egressKey)) {
         ops.push({ type: 'allocate', key: egressKey })
       }
@@ -245,9 +245,9 @@ export class RoutingInformationBase {
     // Release egress ports for closed peer connections
     if (action.action === Actions.InternalProtocolClose) {
       const closedPeer = action.data.peerInfo.name
-      const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === closedPeer)
+      const removedRoutes = prevState.internal.routes.filter((r) => r.peer.name === closedPeer)
       for (const route of removedRoutes) {
-        ops.push({ type: 'release', key: `egress_${route.name}_via_${route.peerName}` })
+        ops.push({ type: 'release', key: `egress_${route.name}_via_${route.peer.name}` })
       }
     }
 
@@ -484,7 +484,7 @@ export class RoutingInformationBase {
             internal: {
               ...state.internal,
               peers: state.internal.peers.filter((p) => !expiredPeerNames.includes(p.name)),
-              routes: state.internal.routes.filter((r) => !expiredPeerNames.includes(r.peerName)),
+              routes: state.internal.routes.filter((r) => !expiredPeerNames.includes(r.peer.name)),
             },
           }
         }

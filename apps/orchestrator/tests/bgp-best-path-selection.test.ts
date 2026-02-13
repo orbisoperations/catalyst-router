@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { RoutingInformationBase } from '../src/rib.js'
 import type { OrchestratorConfig } from '../src/types.js'
@@ -15,7 +15,7 @@ import type { OrchestratorConfig } from '../src/types.js'
  * withdrawal, and correct alternatives ordering.
  */
 
-const NODE: PeerInfo = {
+const NODE: OrchestratorConfig['node'] = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
@@ -98,7 +98,7 @@ describe('Best-Path Selection', () => {
 
     // Both paths have length 1 — sort is stable, first in sort wins
     // The winner should be deterministic (not random)
-    const winner = entry.bestPath.peerName
+    const winner = entry.bestPath.peer.name
     expect([PEER_B.name, PEER_C.name]).toContain(winner)
   })
 
@@ -117,7 +117,7 @@ describe('Best-Path Selection', () => {
     ])
 
     let metadata = rib.getRouteMetadata()
-    expect(metadata.get('svc-x')!.bestPath.peerName).toBe(PEER_B.name)
+    expect(metadata.get('svc-x')!.bestPath.peer.name).toBe(PEER_B.name)
     expect(metadata.get('svc-x')!.alternatives).toHaveLength(1)
 
     // Withdraw B's route
@@ -140,7 +140,7 @@ describe('Best-Path Selection', () => {
     metadata = rib.getRouteMetadata()
     const entry = metadata.get('svc-x')!
     expect(entry).toBeDefined()
-    expect(entry.bestPath.peerName).toBe(PEER_C.name)
+    expect(entry.bestPath.peer.name).toBe(PEER_C.name)
     expect(entry.alternatives).toHaveLength(0)
     expect(entry.selectionReason).toBe('only candidate')
   })
@@ -159,7 +159,7 @@ describe('Best-Path Selection', () => {
       'node-other.somebiz.local.io',
     ])
 
-    expect(rib.getRouteMetadata().get('svc-x')!.bestPath.peerName).toBe(PEER_B.name)
+    expect(rib.getRouteMetadata().get('svc-x')!.bestPath.peer.name).toBe(PEER_B.name)
 
     // Withdraw B
     planCommit(rib, {
@@ -176,7 +176,7 @@ describe('Best-Path Selection', () => {
         },
       },
     })
-    expect(rib.getRouteMetadata().get('svc-x')!.bestPath.peerName).toBe(PEER_C.name)
+    expect(rib.getRouteMetadata().get('svc-x')!.bestPath.peer.name).toBe(PEER_C.name)
 
     // Re-add B with 1-hop
     injectRoute(rib, PEER_B, { name: 'svc-x', protocol: 'http', endpoint: 'http://x:8080' }, [
@@ -184,7 +184,7 @@ describe('Best-Path Selection', () => {
     ])
 
     // B should be best again
-    expect(rib.getRouteMetadata().get('svc-x')!.bestPath.peerName).toBe(PEER_B.name)
+    expect(rib.getRouteMetadata().get('svc-x')!.bestPath.peer.name).toBe(PEER_B.name)
   })
 
   it('three-way path comparison: shortest wins, alternatives in order', () => {
@@ -216,7 +216,7 @@ describe('Best-Path Selection', () => {
     expect(entry).toBeDefined()
 
     // Best path: B (1-hop)
-    expect(entry.bestPath.peerName).toBe(PEER_B.name)
+    expect(entry.bestPath.peer.name).toBe(PEER_B.name)
     expect(entry.bestPath.nodePath).toHaveLength(1)
 
     // Alternatives sorted by path length: C (2-hop), D (3-hop)
