@@ -208,6 +208,41 @@ describe('Port Allocation + Envoy (RIB-level)', () => {
     }
   })
 
+  it('stampPortsOnState preserves pre-existing envoyPort', () => {
+    const { rib } = createRibWithEnvoy()
+    connectPeer(rib, PEER_B)
+
+    // B sends a route that already has envoyPort=5000 (B's local port)
+    planCommit(rib, {
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: PEER_B,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: {
+                name: 'books-api',
+                protocol: 'http' as const,
+                endpoint: 'http://books:8080',
+                envoyPort: 5000,
+              },
+              nodePath: [PEER_B.name],
+            },
+          ],
+        },
+      },
+    })
+
+    // The internal route in state should still have the egress port stamped
+    // by the allocator (not the original 5000), because stampPortsOnState
+    // checks !r.envoyPort. Since the route arrives WITH envoyPort=5000,
+    // the stamp is skipped and the route keeps 5000.
+    const route = rib.getState().internal.routes.find((r) => r.name === 'books-api')
+    expect(route).toBeDefined()
+    expect(route!.envoyPort).toBe(5000)
+  })
+
   it('InternalProtocolClose releases egress ports', () => {
     const { rib, allocator } = createRibWithEnvoy()
     connectPeer(rib, PEER_B)
