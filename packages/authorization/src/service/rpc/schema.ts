@@ -1,4 +1,5 @@
 import type { TokenRecord } from '../../jwt/index.js'
+import type { CaBundleResponse, PkiStatusResponse, DenyListEntry } from '@catalyst/pki'
 import { Principal } from '../../policy/src/definitions/models.js'
 import { z } from 'zod'
 
@@ -267,4 +268,124 @@ export type AuthorizeActionResult = z.infer<typeof AuthorizeActionResultSchema>
 export interface PermissionsHandlers {
   /** Authorize an action based on token and node context */
   authorizeAction(request: AuthorizeActionRequest): Promise<AuthorizeActionResult>
+}
+
+/**
+ * PKI Request/Response schemas
+ */
+export const PkiSignCsrRequestSchema = z.object({
+  csrPem: z.string().min(1),
+  serviceType: z.enum(['orchestrator', 'auth', 'node', 'gateway', 'envoy/app', 'envoy/transport']),
+  instanceId: z.string().min(1),
+  ttlSeconds: z.number().positive().optional(),
+})
+
+export type PkiSignCsrRequest = z.infer<typeof PkiSignCsrRequestSchema>
+
+export const PkiDenyIdentityRequestSchema = z.object({
+  spiffeId: z.string().startsWith('spiffe://'),
+  reason: z.string().min(1),
+})
+
+export type PkiDenyIdentityRequest = z.infer<typeof PkiDenyIdentityRequestSchema>
+
+export const PkiAllowIdentityRequestSchema = z.object({
+  spiffeId: z.string().startsWith('spiffe://'),
+})
+
+export type PkiAllowIdentityRequest = z.infer<typeof PkiAllowIdentityRequestSchema>
+
+export const PkiInitializeResultSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    rootFingerprint: z.string(),
+    servicesCaFingerprint: z.string(),
+    transportCaFingerprint: z.string(),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+])
+
+export type PkiInitializeResult = z.infer<typeof PkiInitializeResultSchema>
+
+export const PkiSignCsrResultSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    certificatePem: z.string(),
+    chain: z.array(z.string()),
+    expiresAt: z.string(),
+    renewAfter: z.string(),
+    fingerprint: z.string(),
+    serial: z.string(),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+])
+
+export type PkiSignCsrResult = z.infer<typeof PkiSignCsrResultSchema>
+
+export const PkiDenyIdentityResultSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    expiringCerts: z.array(
+      z.object({
+        serial: z.string(),
+        expiresAt: z.string(),
+      })
+    ),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+])
+
+export type PkiDenyIdentityResult = z.infer<typeof PkiDenyIdentityResultSchema>
+
+/**
+ * PKI sub-API handlers returned by AuthRpcServer.pki(token).
+ *
+ * Pattern: Matches TokenHandlers, CertHandlers, ValidationHandlers, PermissionsHandlers.
+ * Each method returns a Promise of a typed result. The outer pki(token) call
+ * handles JWT auth + Cedar policy; the inner methods are pre-authorized.
+ */
+export interface PkiHandlers {
+  /** Initialize the CA hierarchy (first-time setup, idempotent) */
+  initialize(): Promise<PkiInitializeResult>
+
+  /** Sign a CSR and return a certificate + chain */
+  signCsr(request: PkiSignCsrRequest): Promise<PkiSignCsrResult>
+
+  /** Get the CA trust bundle for distribution */
+  getCaBundle(): Promise<CaBundleResponse>
+
+  /** Get PKI system status */
+  getStatus(): Promise<PkiStatusResponse>
+
+  /** Deny a SPIFFE identity (passive revocation) */
+  denyIdentity(request: PkiDenyIdentityRequest): Promise<PkiDenyIdentityResult>
+
+  /** Re-enable a denied identity */
+  allowIdentity(request: PkiAllowIdentityRequest): Promise<{ success: boolean }>
+
+  /** List all denied identities */
+  listDenied(): Promise<DenyListEntry[]>
+
+  /** List all active end-entity certificates */
+  listCertificates(): Promise<
+    {
+      serial: string
+      spiffeId: string
+      fingerprint: string
+      expiresAt: string
+      status: string
+    }[]
+  >
+
+  /** Purge expired certificates (keeps 24h grace period) */
+  purgeExpired(): Promise<{ purgedCount: number }>
 }
