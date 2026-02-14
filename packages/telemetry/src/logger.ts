@@ -3,7 +3,8 @@ import type { LogLevel, LogRecord, Sink } from '@logtape/logtape'
 import { trace, context } from '@opentelemetry/api'
 import { SeverityNumber, logs } from '@opentelemetry/api-logs'
 import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-grpc'
+import type { ChannelCredentials } from '@grpc/grpc-js'
 import { buildResource } from './resource.js'
 import {
   DEFAULT_SERVICE_NAME,
@@ -19,6 +20,7 @@ export interface LoggerConfig {
   serviceVersion?: string
   otlpEndpoint?: string
   serviceInstanceId?: string
+  credentials?: ChannelCredentials
 }
 
 let configPromise: Promise<void> | null = null
@@ -144,13 +146,15 @@ function createOtlpSink(
   serviceName: string,
   serviceVersion?: string,
   environment?: string,
-  serviceInstanceId?: string
+  serviceInstanceId?: string,
+  credentials?: ChannelCredentials
 ): Sink {
   const resource = buildResource({ serviceName, serviceVersion, environment, serviceInstanceId })
 
   const exporter = new OTLPLogExporter({
-    url: `${endpoint}/v1/logs`,
+    url: endpoint,
     timeoutMillis: EXPORT_TIMEOUT_MS,
+    ...(credentials ? { credentials } : {}),
   })
   loggerProvider = new LoggerProvider({ resource })
   loggerProvider.addLogRecordProcessor(
@@ -232,7 +236,8 @@ async function doConfigureLogger(config?: LoggerConfig): Promise<void> {
       serviceName,
       serviceVersion,
       environment,
-      serviceInstanceId
+      serviceInstanceId,
+      config?.credentials
     )
     sinkNames.push('otlp')
   }

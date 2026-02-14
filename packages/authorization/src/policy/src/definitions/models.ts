@@ -40,6 +40,7 @@ export enum Role {
   NODE_CUSTODIAN = 'NODE_CUSTODIAN',
   DATA_CUSTODIAN = 'DATA_CUSTODIAN',
   USER = 'USER',
+  TELEMETRY_EXPORTER = 'TELEMETRY_EXPORTER',
 }
 
 /**
@@ -53,6 +54,7 @@ export enum Principal {
   NODE_CUSTODIAN = 'CATALYST::NODE_CUSTODIAN',
   DATA_CUSTODIAN = 'CATALYST::DATA_CUSTODIAN',
   USER = 'CATALYST::USER',
+  TELEMETRY_EXPORTER = 'CATALYST::TELEMETRY_EXPORTER',
 }
 
 /**
@@ -64,6 +66,7 @@ export const ROLE_TO_PRINCIPAL: Record<Role, Principal> = {
   [Role.NODE_CUSTODIAN]: Principal.NODE_CUSTODIAN,
   [Role.DATA_CUSTODIAN]: Principal.DATA_CUSTODIAN,
   [Role.USER]: Principal.USER,
+  [Role.TELEMETRY_EXPORTER]: Principal.TELEMETRY_EXPORTER,
 }
 
 /**
@@ -83,6 +86,7 @@ export enum Action {
   TOKEN_CREATE = 'TOKEN_CREATE',
   TOKEN_REVOKE = 'TOKEN_REVOKE',
   TOKEN_LIST = 'TOKEN_LIST',
+  TELEMETRY_EXPORT = 'TELEMETRY_EXPORT',
 }
 
 /**
@@ -102,4 +106,5 @@ export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
   ],
   [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE],
   [Role.USER]: [Action.LOGIN],
+  [Role.TELEMETRY_EXPORTER]: [Action.TELEMETRY_EXPORT],
 }

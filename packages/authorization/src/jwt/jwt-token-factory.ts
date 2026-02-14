@@ -23,6 +23,8 @@ export interface LocalPersistenceConfig {
   nodeId?: string
   /** Grace period in milliseconds for key rotation. Default: 24 hours (86400000) */
   gracePeriodMs?: number
+  /** JWT issuer claim (iss). Injected into every signed token when set. */
+  issuer?: string
 }
 
 /**
@@ -81,6 +83,7 @@ export class JWTTokenFactory {
 
     this.keyManager = new PersistentLocalKeyManager(keyStore, {
       gracePeriodMs: local.gracePeriodMs,
+      issuer: local.issuer,
     })
     this.tokenManager = new LocalTokenManager(this.keyManager, tokenStore, local.nodeId)
   }
