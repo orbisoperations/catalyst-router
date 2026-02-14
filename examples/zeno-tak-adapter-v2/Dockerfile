@@ -52,7 +52,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 COPY --from=builder /app/dist /app/dist
 
-COPY build/zenoh-bridge-config.json5 build/zenoh-test-config.json5 ./
+COPY build/zenoh-bridge-config.json5 ./
 COPY scripts/docker-entrypoint.sh ./scripts/
 
 RUN chmod +x ./scripts/docker-entrypoint.sh
