@@ -231,6 +231,45 @@ describe('Zombie Routes / State Corruption', () => {
     }
   })
 
+  it('LocalPeerDelete removes peer but leaves routes as zombies', () => {
+    const rib = createRib()
+    connectPeer(rib, PEER_B)
+
+    // Add routes from B
+    planCommit(rib, {
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: PEER_B,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: { name: 'svc-1', protocol: 'http' as const, endpoint: 'http://1:8080' },
+              nodePath: [PEER_B.name],
+            },
+            {
+              action: 'add',
+              route: { name: 'svc-2', protocol: 'http' as const, endpoint: 'http://2:8080' },
+              nodePath: [PEER_B.name],
+            },
+          ],
+        },
+      },
+    })
+    expect(rib.getState().internal.routes).toHaveLength(2)
+
+    // Delete the peer (not close — delete skips route cleanup)
+    planCommit(rib, { action: Actions.LocalPeerDelete, data: { name: PEER_B.name } })
+
+    // Peer is gone
+    expect(rib.getState().internal.peers).toHaveLength(0)
+
+    // Routes are NOT cleaned up — they become zombies.
+    // (Unlike InternalProtocolClose which removes routes from the closed peer.)
+    // This documents actual behavior: LocalPeerDelete only removes the peer record.
+    expect(rib.getState().internal.routes).toHaveLength(2)
+  })
+
   it('route removal propagates withdrawal to other connected peers', () => {
     const rib = createRib()
     connectPeer(rib, PEER_B)
