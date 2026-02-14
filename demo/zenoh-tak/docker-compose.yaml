@@ -15,7 +15,7 @@
 # Usage:
 #   docker compose -f demo/zenoh-tak/docker-compose.yaml up --build
 #   # Then run the init script to bootstrap auth, peer nodes, and create routes:
-#   bun run demo/zenoh-tak/init.ts
+#   bash demo/zenoh-tak/init.sh
 
 services:
   # ============================================================
@@ -33,7 +33,6 @@ services:
       - CATALYST_NODE_ID=node-a.somebiz.local.io
       - 'CATALYST_AUTH_KEYS_DB=:memory:'
       - 'CATALYST_AUTH_TOKENS_DB=:memory:'
-      - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
       interval: 5s
@@ -153,6 +152,8 @@ services:
       - PRODUCER_ENABLED=true
       - PRODUCER_TOPIC=tak/cot
       - LOG_LEVEL=info
+      - TAK_HEARTBEAT_CALLSIGN=redweek-tak-publisher
+      - TAK_HEARTBEAT_CALLSIGN_UID=redweek-zeno-publisher-callsign-1234
       - EMULATOR_PUBLISHERS=[{"emulator":"wiesbaden","topic":"tak/cot","intervalMs":1000},{"emulator":"virginia","topic":"tak/cot","intervalMs":500}]
     labels:
       catalyst.stack: a
@@ -177,7 +178,6 @@ services:
       - CATALYST_NODE_ID=node-b.somebiz.local.io
       - 'CATALYST_AUTH_KEYS_DB=:memory:'
       - 'CATALYST_AUTH_TOKENS_DB=:memory:'
-      - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
       interval: 5s
@@ -282,7 +282,6 @@ services:
       - CATALYST_NODE_ID=node-c.somebiz.local.io
       - 'CATALYST_AUTH_KEYS_DB=:memory:'
       - 'CATALYST_AUTH_TOKENS_DB=:memory:'
-      - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
       interval: 5s
