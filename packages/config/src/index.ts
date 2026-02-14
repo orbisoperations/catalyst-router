@@ -88,6 +88,14 @@ export const AuthConfigSchema = z.object({
         .optional(), // 24 hours
     })
     .default({}),
+  pki: z
+    .object({
+      certsDb: z.string().default('certs.db'),
+      trustDomain: z.string().default('catalyst.example.com'),
+      svidTtlSeconds: z.number().int().min(60).max(86400).default(3600),
+      autoRenew: z.boolean().default(true),
+    })
+    .optional(),
 })
 
 export type AuthConfig = z.infer<typeof AuthConfigSchema>
@@ -206,6 +214,14 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
         ttl: process.env.CATALYST_BOOTSTRAP_TTL
           ? Number(process.env.CATALYST_BOOTSTRAP_TTL)
           : undefined,
+      },
+      pki: {
+        certsDb: process.env.CATALYST_PKI_CERTS_DB,
+        trustDomain: process.env.CATALYST_PKI_TRUST_DOMAIN,
+        svidTtlSeconds: process.env.CATALYST_PKI_SVID_TTL
+          ? Number(process.env.CATALYST_PKI_SVID_TTL)
+          : undefined,
+        autoRenew: process.env.CATALYST_PKI_AUTO_RENEW !== 'false',
       },
     },
   })

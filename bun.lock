@@ -228,6 +228,7 @@
       "name": "@catalyst/authorization",
       "version": "0.0.0",
       "dependencies": {
+        "@catalyst/pki": "catalog:",
         "@catalyst/service": "catalog:",
         "@catalyst/telemetry": "catalog:",
         "@catalyst/types": "workspace:*",
@@ -239,6 +240,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@peculiar/x509": "^1.14.3",
         "@types/bun": "catalog:dev",
         "@types/node": "catalog:dev",
         "typescript": "catalog:dev",
