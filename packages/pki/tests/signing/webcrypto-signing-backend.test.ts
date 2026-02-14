@@ -143,17 +143,17 @@ describe('WebCryptoSigningBackend', () => {
 
     test('does NOT have AuthorityKeyIdentifier (self-signed)', () => {
       const aki = rootCert.getExtension(x509.AuthorityKeyIdentifierExtension)
-      expect(aki).toBeUndefined()
+      expect(aki).toBeNull()
     })
 
     test('does NOT have Extended Key Usage (CAs should not have EKU)', () => {
       const eku = rootCert.getExtension(x509.ExtendedKeyUsageExtension)
-      expect(eku).toBeUndefined()
+      expect(eku).toBeNull()
     })
 
     test('does NOT have Subject Alternative Names', () => {
       const san = rootCert.getExtension(x509.SubjectAlternativeNameExtension)
-      expect(san).toBeUndefined()
+      expect(san).toBeNull()
     })
 
     test('validity period matches parameters', () => {
@@ -276,7 +276,10 @@ describe('WebCryptoSigningBackend', () => {
     })
 
     test('signature is valid (signed by root)', async () => {
-      const isValid = await servicesCert.verify({ publicKey: rootKeyPair.publicKey })
+      const isValid = await servicesCert.verify({
+        signatureOnly: true,
+        publicKey: rootKeyPair.publicKey,
+      })
       expect(isValid).toBe(true)
     })
   })
@@ -474,13 +477,16 @@ describe('WebCryptoSigningBackend', () => {
     })
 
     test('signature is valid (signed by Services CA)', async () => {
-      const isValid = await leafCert.verify({ publicKey: servicesKeyPair.publicKey })
+      const isValid = await leafCert.verify({
+        signatureOnly: true,
+        publicKey: servicesKeyPair.publicKey,
+      })
       expect(isValid).toBe(true)
     })
 
     test('does NOT have Name Constraints (end-entity)', () => {
-      const nc = leafCert.getExtension(x509.NameConstraintsExtension)
-      expect(nc).toBeUndefined()
+      const nc = leafCert.getExtension(NAME_CONSTRAINTS_OID)
+      expect(nc).toBeNull()
     })
   })
 

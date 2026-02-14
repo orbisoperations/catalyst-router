@@ -31,3 +31,6 @@ export { parseSpiffeId, buildSpiffeId, isValidSpiffeId, type SpiffeId } from './
 
 // Implementations
 export { BunSqliteCertificateStore } from './store/sqlite-certificate-store.js'
+export { WebCryptoSigningBackend } from './signing/webcrypto-signing-backend.js'
+export { CertificateManager } from './certificate-manager.js'
+export type { CertificateManagerConfig } from './certificate-manager.js'
