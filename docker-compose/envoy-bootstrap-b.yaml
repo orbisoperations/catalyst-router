@@ -1,5 +1,9 @@
-# Envoy proxy bootstrap for Stack B.
-# Points ADS xDS at envoy-svc-b:18000 via STRICT_DNS.
+# Envoy proxy bootstrap for Node B.
+#
+# Points the ADS xDS cluster at envoy-svc-b using STRICT_DNS.
+# HTTP/2 is required for the gRPC ADS connection.
+#
+# Usage: mounted as /etc/envoy/envoy.yaml in the envoy-proxy-b container.
 
 admin:
   address:
