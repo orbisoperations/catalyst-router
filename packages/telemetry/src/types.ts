@@ -72,6 +72,12 @@ export interface TracingBuilderOpts {
   samplingRatio?: number
 }
 
+/** Options for `.withAuth()`. */
+export interface AuthBuilderOpts {
+  /** Getter for current bearer token. Called on every gRPC export. */
+  tokenFn: () => string
+}
+
 /** Options for `.withRpcInstrumentation()`. */
 export interface RpcBuilderOpts {
   /** Default span kind for RPC instrumentation. Defaults to 'SERVER'. */
