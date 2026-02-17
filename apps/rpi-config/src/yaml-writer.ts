@@ -48,6 +48,7 @@ const INLINE_COMMENTS: Record<string, Record<string, string | ((val: string) => 
     app: 'Catalyst Node composite server',
     container: 'Docker CE engine (built-in layer)',
     wifi: 'WiFi (wpa_supplicant + systemd-networkd)',
+    console: 'Console autologin + journal stream',
     tunnel: 'Cloudflare Tunnel for remote SSH',
   },
   wifi: {

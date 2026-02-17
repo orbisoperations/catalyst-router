@@ -62,6 +62,8 @@ program
   .addOption(new Option('--cloudflared-token <token>', 'Cloudflare Tunnel token'))
   .addOption(new Option('--no-cloudflared', 'Skip cloudflared'))
 
+  .addOption(new Option('--no-autologin', 'Skip console autologin + journal stream'))
+
   .addOption(new Option('--image-name <name>', 'Output image name').default(DEFAULTS.imageName))
   .addOption(
     new Option('--boot-part-size <size>', 'Boot partition size').default(DEFAULTS.bootPartSize)

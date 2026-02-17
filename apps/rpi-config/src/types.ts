@@ -23,6 +23,7 @@ export interface ResolvedOptions {
   otelVersion: string
   cloudflaredToken?: string
   cloudflared?: boolean
+  autologin?: boolean
   imageName: string
   bootPartSize: string
   rootPartSize: string

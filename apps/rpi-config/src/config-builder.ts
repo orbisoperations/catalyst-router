@@ -61,6 +61,11 @@ export function buildConfig(opts: ResolvedOptions): RpiImageGenConfig {
     }
   }
 
+  // --- Console autologin + journal stream (optional) ---
+  if (opts.autologin !== false) {
+    config.layer.console = 'catalyst-console'
+  }
+
   // --- Catalyst node config ---
   config.catalyst = {
     ...(opts.mode === 'docker' && opts.registry
