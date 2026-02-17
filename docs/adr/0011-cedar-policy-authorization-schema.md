@@ -110,7 +110,7 @@ Update the Cedar schema with new actions, align Cedar policies with actual syste
    - Add `Gateway` resource type
 
 2. **Cedar Policies** (`.cedar` files):
-   - `node-custodian.cedar`: Add `PEER_LIST`
+   - `node-custodian.cedar`: Add `PEER_LIST`, `IBGP_LIST`
    - `data-custodian.cedar`: Add `ROUTE_LIST`
    - `node.cedar`: Add `IBGP_LIST`, `GATEWAY_CONFIG_UPDATE`
    - `admin.cedar`: No change (wildcard `action` already covers new actions)
