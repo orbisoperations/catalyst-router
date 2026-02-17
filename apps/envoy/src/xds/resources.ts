@@ -2,6 +2,90 @@ import type { DataChannelDefinition, DataChannelProtocol } from '@catalyst/routi
 import type { XdsSnapshot } from './snapshot-cache.js'
 
 // ---------------------------------------------------------------------------
+// TLS configuration
+// ---------------------------------------------------------------------------
+
+export interface XdsTlsConfig {
+  certChain: string
+  privateKey: string
+  caBundle: string
+  requireClientCert?: boolean
+  ecdhCurves?: string[]
+}
+
+const DEFAULT_ECDH_CURVES = ['X25519MLKEM768', 'X25519', 'P-256']
+
+export interface XdsTlsTransportSocket {
+  name: 'envoy.transport_sockets.tls'
+  typed_config: {
+    '@type': string
+    common_tls_context: {
+      tls_params: {
+        tls_minimum_protocol_version: string
+        ecdh_curves: string[]
+      }
+      tls_certificates: Array<{
+        certificate_chain: { inline_string: string }
+        private_key: { inline_string: string }
+      }>
+      validation_context?: {
+        trusted_ca: { inline_string: string }
+      }
+    }
+    require_client_certificate?: boolean
+  }
+}
+
+function buildDownstreamTlsTransportSocket(tls: XdsTlsConfig): XdsTlsTransportSocket {
+  return {
+    name: 'envoy.transport_sockets.tls',
+    typed_config: {
+      '@type': 'type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext',
+      common_tls_context: {
+        tls_params: {
+          tls_minimum_protocol_version: 'TLSv1_3',
+          ecdh_curves: tls.ecdhCurves ?? DEFAULT_ECDH_CURVES,
+        },
+        tls_certificates: [
+          {
+            certificate_chain: { inline_string: tls.certChain },
+            private_key: { inline_string: tls.privateKey },
+          },
+        ],
+        validation_context: {
+          trusted_ca: { inline_string: tls.caBundle },
+        },
+      },
+      require_client_certificate: tls.requireClientCert ?? true,
+    },
+  }
+}
+
+function buildUpstreamTlsTransportSocket(tls: XdsTlsConfig): XdsTlsTransportSocket {
+  return {
+    name: 'envoy.transport_sockets.tls',
+    typed_config: {
+      '@type': 'type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext',
+      common_tls_context: {
+        tls_params: {
+          tls_minimum_protocol_version: 'TLSv1_3',
+          ecdh_curves: tls.ecdhCurves ?? DEFAULT_ECDH_CURVES,
+        },
+        tls_certificates: [
+          {
+            certificate_chain: { inline_string: tls.certChain },
+            private_key: { inline_string: tls.privateKey },
+          },
+        ],
+        validation_context: {
+          trusted_ca: { inline_string: tls.caBundle },
+        },
+      },
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
 // xDS JSON structure types (matching Envoy's JSON config format)
 // ---------------------------------------------------------------------------
 
@@ -21,6 +105,8 @@ export interface XdsListener {
         stat_prefix: string
         codec_type?: 'AUTO' | 'HTTP1' | 'HTTP2'
         upgrade_configs?: Array<{ upgrade_type: string }>
+        forward_client_cert_details?: string
+        set_current_client_cert_details?: { uri: boolean; subject: boolean; dns: boolean }
         route_config: {
           virtual_hosts: Array<{
             name: string
@@ -33,6 +119,7 @@ export interface XdsListener {
         }
       }
     }>
+    transport_socket?: XdsTlsTransportSocket
   }>
 }
 
@@ -66,6 +153,8 @@ export interface XdsCluster {
   dns_lookup_family?: number
   /** Enable HTTP/2 upstream (required for gRPC). */
   upstream_http2?: boolean
+  /** TLS transport socket for upstream mTLS. */
+  transport_socket?: XdsTlsTransportSocket
   load_assignment: {
     cluster_name: string
     endpoints: Array<{
@@ -126,6 +215,10 @@ interface ListenerProtocolOptions {
   disableRouteTimeout?: boolean
   /** Set codec_type to restrict accepted HTTP versions (e.g. HTTP2 for gRPC). */
   codecType?: 'AUTO' | 'HTTP1' | 'HTTP2'
+  /** XFCC forwarding mode (set by TLS-enabled ingress listeners). */
+  forwardClientCertDetails?: string
+  /** Which XFCC fields to include. */
+  setCurrentClientCertDetails?: { uri: boolean; subject: boolean; dns: boolean }
 }
 
 /** Derive listener options from a data channel protocol. */
@@ -158,6 +251,12 @@ function buildHttpConnectionManager(
     ...(options?.enableWebSocket && {
       upgrade_configs: [{ upgrade_type: 'websocket' }],
     }),
+    ...(options?.forwardClientCertDetails && {
+      forward_client_cert_details: options.forwardClientCertDetails,
+    }),
+    ...(options?.setCurrentClientCertDetails && {
+      set_current_client_cert_details: options.setCurrentClientCertDetails,
+    }),
     route_config: {
       virtual_hosts: [
         {
@@ -180,10 +279,30 @@ export function buildIngressListener(opts: {
   port: number
   bindAddress: string
   protocol?: DataChannelProtocol
+  tls?: XdsTlsConfig
 }): XdsListener {
   const name = `ingress_${opts.channelName}`
   const clusterName = `local_${opts.channelName}`
-  const protocolOpts = getListenerOptions(opts.protocol)
+  const protocolOpts: ListenerProtocolOptions = {
+    ...getListenerOptions(opts.protocol),
+    ...(opts.tls && {
+      forwardClientCertDetails: 'SANITIZE_SET',
+      setCurrentClientCertDetails: { uri: true, subject: true, dns: true },
+    }),
+  }
+
+  const filterChain: XdsListener['filter_chains'][0] = {
+    filters: [
+      {
+        name: 'envoy.filters.network.http_connection_manager',
+        typed_config: buildHttpConnectionManager(name, clusterName, protocolOpts),
+      },
+    ],
+  }
+
+  if (opts.tls) {
+    filterChain.transport_socket = buildDownstreamTlsTransportSocket(opts.tls)
+  }
 
   return {
     name,
@@ -193,16 +312,7 @@ export function buildIngressListener(opts: {
         port_value: opts.port,
       },
     },
-    filter_chains: [
-      {
-        filters: [
-          {
-            name: 'envoy.filters.network.http_connection_manager',
-            typed_config: buildHttpConnectionManager(name, clusterName, protocolOpts),
-          },
-        ],
-      },
-    ],
+    filter_chains: [filterChain],
   }
 }
 
@@ -372,6 +482,7 @@ export function buildRemoteCluster(opts: {
   peerAddress: string
   peerPort: number
   protocol?: DataChannelProtocol
+  tls?: XdsTlsConfig
 }): XdsCluster {
   const name = `remote_${opts.channelName}_via_${opts.peerName}`
   const clusterType = isIpAddress(opts.peerAddress) ? 'STATIC' : 'STRICT_DNS'
@@ -383,6 +494,7 @@ export function buildRemoteCluster(opts: {
     lb_policy: 'ROUND_ROBIN',
     ...(clusterType === 'STRICT_DNS' && { dns_lookup_family: DnsLookupFamily.V4_ONLY }),
     ...(requiresHttp2(opts.protocol) && { upstream_http2: true }),
+    ...(opts.tls && { transport_socket: buildUpstreamTlsTransportSocket(opts.tls) }),
     load_assignment: {
       cluster_name: name,
       endpoints: [
@@ -425,6 +537,7 @@ export interface BuildXdsSnapshotInput {
   portAllocations: Record<string, number>
   bindAddress: string
   version: string
+  tls?: XdsTlsConfig
 }
 
 /**
@@ -467,6 +580,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
           port: allocatedPort,
           bindAddress: input.bindAddress,
           protocol: route.protocol,
+          tls: input.tls,
         })
       )
     }
@@ -519,6 +633,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
         peerAddress,
         peerPort: route.envoyPort,
         protocol: route.protocol,
+        tls: input.tls,
       })
     )
   }

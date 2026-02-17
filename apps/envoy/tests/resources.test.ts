@@ -1227,3 +1227,201 @@ describe('buildXdsSnapshot with TCP protocol', () => {
     expect(isTcpProxyListener(httpListener)).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// TLS configuration
+// ---------------------------------------------------------------------------
+
+import type { XdsTlsConfig } from '../src/xds/resources.js'
+
+const testTlsConfig: XdsTlsConfig = {
+  certChain: '-----BEGIN CERTIFICATE-----\ntest-cert\n-----END CERTIFICATE-----',
+  privateKey: '-----BEGIN PRIVATE KEY-----\ntest-key\n-----END PRIVATE KEY-----',
+  caBundle: '-----BEGIN CERTIFICATE-----\ntest-ca\n-----END CERTIFICATE-----',
+}
+
+describe('buildIngressListener with TLS', () => {
+  it('adds transport_socket to filter chain when TLS is provided', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      tls: testTlsConfig,
+    })
+
+    const fc = listener.filter_chains[0]
+    expect(fc.transport_socket).toBeDefined()
+    expect(fc.transport_socket!.name).toBe('envoy.transport_sockets.tls')
+    expect(fc.transport_socket!.typed_config['@type']).toContain('DownstreamTlsContext')
+  })
+
+  it('includes XFCC config in HCM when TLS is provided', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      tls: testTlsConfig,
+    })
+
+    const hcm = listener.filter_chains[0].filters[0].typed_config
+    expect(hcm.forward_client_cert_details).toBe('SANITIZE_SET')
+    expect(hcm.set_current_client_cert_details).toEqual({
+      uri: true,
+      subject: true,
+      dns: true,
+    })
+  })
+
+  it('does not add transport_socket when TLS is absent', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+    })
+
+    expect(listener.filter_chains[0].transport_socket).toBeUndefined()
+  })
+
+  it('does not add XFCC config when TLS is absent', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+    })
+
+    const hcm = listener.filter_chains[0].filters[0].typed_config
+    expect(hcm.forward_client_cert_details).toBeUndefined()
+    expect(hcm.set_current_client_cert_details).toBeUndefined()
+  })
+
+  it('sets TLS 1.3 minimum and PQ ecdh_curves', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      tls: testTlsConfig,
+    })
+
+    const ts = listener.filter_chains[0].transport_socket!
+    const common = ts.typed_config.common_tls_context
+    expect(common.tls_params.tls_minimum_protocol_version).toBe('TLSv1_3')
+    expect(common.tls_params.ecdh_curves).toEqual(['X25519MLKEM768', 'X25519', 'P-256'])
+  })
+
+  it('requires client certificate by default (mTLS)', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      tls: testTlsConfig,
+    })
+
+    const ts = listener.filter_chains[0].transport_socket!
+    expect(ts.typed_config.require_client_certificate).toBe(true)
+  })
+
+  it('respects custom ecdhCurves', () => {
+    const listener = buildIngressListener({
+      channelName: 'books-api',
+      port: 8001,
+      bindAddress: '0.0.0.0',
+      tls: { ...testTlsConfig, ecdhCurves: ['X25519', 'P-256'] },
+    })
+
+    const ts = listener.filter_chains[0].transport_socket!
+    expect(ts.typed_config.common_tls_context.tls_params.ecdh_curves).toEqual(['X25519', 'P-256'])
+  })
+})
+
+describe('buildRemoteCluster with TLS', () => {
+  it('adds transport_socket when TLS is provided', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-b',
+      peerAddress: 'envoy-proxy-b',
+      peerPort: 10000,
+      tls: testTlsConfig,
+    })
+
+    expect(cluster.transport_socket).toBeDefined()
+    expect(cluster.transport_socket!.name).toBe('envoy.transport_sockets.tls')
+    expect(cluster.transport_socket!.typed_config['@type']).toContain('UpstreamTlsContext')
+  })
+
+  it('does not add transport_socket when TLS is absent', () => {
+    const cluster = buildRemoteCluster({
+      channelName: 'books-api',
+      peerName: 'node-b',
+      peerAddress: 'envoy-proxy-b',
+      peerPort: 10000,
+    })
+
+    expect(cluster.transport_socket).toBeUndefined()
+  })
+})
+
+describe('buildEgressListener with TLS (should NOT have TLS)', () => {
+  it('egress listeners never have transport_socket', () => {
+    const listener = buildEgressListener({
+      channelName: 'books-api',
+      peerName: 'node-b',
+      port: 10001,
+    })
+
+    expect(listener.filter_chains[0].transport_socket).toBeUndefined()
+  })
+})
+
+describe('buildXdsSnapshot with TLS', () => {
+  it('passes TLS config to ingress listeners and remote clusters', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [{ name: 'books', endpoint: 'http://books:8080', protocol: 'http' }],
+      internal: [
+        {
+          name: 'movies',
+          protocol: 'http',
+          envoyPort: 10100,
+          peer: { name: 'node-b', envoyAddress: 'envoy-proxy-b' },
+          peerName: 'node-b',
+          nodePath: ['node-b'],
+        },
+      ],
+      portAllocations: { books: 10000, 'egress_movies_via_node-b': 10001 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+      tls: testTlsConfig,
+    })
+
+    // Ingress listener has DownstreamTlsContext
+    const ingressListener = snapshot.listeners.find((l) => l.name === 'ingress_books')
+    expect(ingressListener).toBeDefined()
+    if (ingressListener && 'filter_chains' in ingressListener) {
+      expect(ingressListener.filter_chains[0].transport_socket).toBeDefined()
+    }
+
+    // Remote cluster has UpstreamTlsContext
+    const remoteCluster = snapshot.clusters.find((c) => c.name.startsWith('remote_'))
+    expect(remoteCluster).toBeDefined()
+    expect(remoteCluster!.transport_socket).toBeDefined()
+
+    // Local cluster does NOT have TLS
+    const localCluster = snapshot.clusters.find((c) => c.name.startsWith('local_'))
+    expect(localCluster).toBeDefined()
+    expect(localCluster!.transport_socket).toBeUndefined()
+  })
+
+  it('produces snapshot without TLS when not configured', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [{ name: 'books', endpoint: 'http://books:8080', protocol: 'http' }],
+      internal: [],
+      portAllocations: { books: 10000 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    const listener = snapshot.listeners[0]
+    if ('filter_chains' in listener) {
+      expect(listener.filter_chains[0].transport_socket).toBeUndefined()
+    }
+  })
+})

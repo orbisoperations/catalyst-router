@@ -1,5 +1,10 @@
 import protobuf from 'protobufjs'
-import type { XdsListener, XdsTcpProxyListener, XdsCluster } from './resources.js'
+import type {
+  XdsListener,
+  XdsTcpProxyListener,
+  XdsCluster,
+  XdsTlsTransportSocket,
+} from './resources.js'
 
 // ---------------------------------------------------------------------------
 // Type URLs used for google.protobuf.Any wrapping
@@ -14,12 +19,34 @@ export const TCP_PROXY_TYPE_URL =
   'type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy'
 const HTTP_PROTOCOL_OPTIONS_TYPE_URL =
   'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions'
+const DOWNSTREAM_TLS_CONTEXT_TYPE_URL =
+  'type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext'
+const UPSTREAM_TLS_CONTEXT_TYPE_URL =
+  'type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext'
 
 // ---------------------------------------------------------------------------
 // Enum constants
 // ---------------------------------------------------------------------------
 
 const CLUSTER_TYPE = { STATIC: 0, STRICT_DNS: 1 } as const
+
+/** envoy.extensions.transport_sockets.tls.v3.TlsParameters.TlsProtocol enum */
+const TLS_PROTOCOL: Record<string, number> = {
+  TLS_AUTO: 0,
+  TLSv1_0: 1,
+  TLSv1_1: 2,
+  TLSv1_2: 3,
+  TLSv1_3: 4,
+} as const
+
+/** envoy.extensions.filters.network.http_connection_manager.v3.ForwardClientCertDetails enum */
+const FORWARD_CLIENT_CERT_DETAILS: Record<string, number> = {
+  SANITIZE: 0,
+  FORWARD_ONLY: 1,
+  APPEND_FORWARD: 2,
+  SANITIZE_SET: 3,
+  ALWAYS_FORWARD_ONLY: 4,
+} as const
 
 /** envoy.config.cluster.v3.Cluster.LbPolicy enum values */
 const LB_POLICY: Record<string, number> = {
@@ -230,6 +257,14 @@ function buildProtoRoot(): protobuf.Root {
           'repeated'
         )
       )
+      .add(new protobuf.Field('forward_client_cert_details', 10, 'int32'))
+      .add(
+        new protobuf.Field(
+          'set_current_client_cert_details',
+          11,
+          'envoy.extensions.filters.network.http_connection_manager.v3.SetCurrentClientCertDetails'
+        )
+      )
       .add(
         new protobuf.Field(
           'upgrade_configs',
@@ -262,9 +297,9 @@ function buildProtoRoot(): protobuf.Root {
   root
     .define('envoy.config.listener.v3')
     .add(
-      new protobuf.Type('FilterChain').add(
-        new protobuf.Field('filters', 3, 'envoy.config.listener.v3.Filter', 'repeated')
-      )
+      new protobuf.Type('FilterChain')
+        .add(new protobuf.Field('filters', 3, 'envoy.config.listener.v3.Filter', 'repeated'))
+        .add(new protobuf.Field('transport_socket', 4, 'envoy.config.core.v3.TransportSocket'))
     )
 
   // envoy.config.listener.v3.Listener
@@ -302,6 +337,110 @@ function buildProtoRoot(): protobuf.Root {
       )
     )
 
+  // envoy.config.core.v3.DataSource
+  root
+    .define('envoy.config.core.v3')
+    .add(new protobuf.Type('DataSource').add(new protobuf.Field('inline_string', 5, 'string')))
+
+  // envoy.config.core.v3.TransportSocket
+  root
+    .define('envoy.config.core.v3')
+    .add(
+      new protobuf.Type('TransportSocket')
+        .add(new protobuf.Field('name', 1, 'string'))
+        .add(new protobuf.Field('typed_config', 3, 'google.protobuf.Any'))
+    )
+
+  // envoy.extensions.transport_sockets.tls.v3.TlsCertificate
+  root
+    .define('envoy.extensions.transport_sockets.tls.v3')
+    .add(
+      new protobuf.Type('TlsCertificate')
+        .add(new protobuf.Field('certificate_chain', 1, 'envoy.config.core.v3.DataSource'))
+        .add(new protobuf.Field('private_key', 2, 'envoy.config.core.v3.DataSource'))
+    )
+
+  // envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext
+  root
+    .define('envoy.extensions.transport_sockets.tls.v3')
+    .add(
+      new protobuf.Type('CertificateValidationContext').add(
+        new protobuf.Field('trusted_ca', 1, 'envoy.config.core.v3.DataSource')
+      )
+    )
+
+  // envoy.extensions.transport_sockets.tls.v3.TlsParameters
+  root
+    .define('envoy.extensions.transport_sockets.tls.v3')
+    .add(
+      new protobuf.Type('TlsParameters')
+        .add(new protobuf.Field('tls_minimum_protocol_version', 1, 'int32'))
+        .add(new protobuf.Field('ecdh_curves', 4, 'string', 'repeated'))
+    )
+
+  // envoy.extensions.transport_sockets.tls.v3.CommonTlsContext
+  root.define('envoy.extensions.transport_sockets.tls.v3').add(
+    new protobuf.Type('CommonTlsContext')
+      .add(
+        new protobuf.Field(
+          'tls_params',
+          1,
+          'envoy.extensions.transport_sockets.tls.v3.TlsParameters'
+        )
+      )
+      .add(
+        new protobuf.Field(
+          'tls_certificates',
+          2,
+          'envoy.extensions.transport_sockets.tls.v3.TlsCertificate',
+          'repeated'
+        )
+      )
+      .add(
+        new protobuf.Field(
+          'validation_context',
+          3,
+          'envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext'
+        )
+      )
+  )
+
+  // envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+  root
+    .define('envoy.extensions.transport_sockets.tls.v3')
+    .add(
+      new protobuf.Type('DownstreamTlsContext')
+        .add(
+          new protobuf.Field(
+            'common_tls_context',
+            1,
+            'envoy.extensions.transport_sockets.tls.v3.CommonTlsContext'
+          )
+        )
+        .add(new protobuf.Field('require_client_certificate', 2, 'bool'))
+    )
+
+  // envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+  root
+    .define('envoy.extensions.transport_sockets.tls.v3')
+    .add(
+      new protobuf.Type('UpstreamTlsContext').add(
+        new protobuf.Field(
+          'common_tls_context',
+          1,
+          'envoy.extensions.transport_sockets.tls.v3.CommonTlsContext'
+        )
+      )
+    )
+
+  // envoy.extensions.filters.network.http_connection_manager.v3.SetCurrentClientCertDetails
+  root.define('envoy.extensions.filters.network.http_connection_manager.v3').add(
+    new protobuf.Type('SetCurrentClientCertDetails')
+      .add(new protobuf.Field('uri', 2, 'bool'))
+      .add(new protobuf.Field('dns', 4, 'bool'))
+      .add(new protobuf.Field('subject', 1, 'bool'))
+  )
+
   // envoy.config.cluster.v3.Cluster
   root.define('envoy.config.cluster.v3').add(
     new protobuf.Type('Cluster')
@@ -310,6 +449,7 @@ function buildProtoRoot(): protobuf.Root {
       .add(new protobuf.Field('connect_timeout', 4, 'google.protobuf.Duration'))
       .add(new protobuf.Field('lb_policy', 6, 'int32'))
       .add(new protobuf.Field('dns_lookup_family', 17, 'int32'))
+      .add(new protobuf.Field('transport_socket', 24, 'envoy.config.core.v3.TransportSocket'))
       .add(
         new protobuf.Field('load_assignment', 33, 'envoy.config.endpoint.v3.ClusterLoadAssignment')
       )
@@ -362,6 +502,45 @@ function encodeAsAny(
   return { type_url: typeUrl, value }
 }
 
+/** Encode a TLS transport socket (Downstream or Upstream) into protobuf Any. */
+function encodeTransportSocket(
+  root: protobuf.Root,
+  ts: XdsTlsTransportSocket
+): { name: string; typed_config: { type_url: string; value: Uint8Array } } {
+  const isDownstream = ts.typed_config['@type'] === DOWNSTREAM_TLS_CONTEXT_TYPE_URL
+  const typeName = isDownstream
+    ? 'envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext'
+    : 'envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext'
+  const typeUrl = isDownstream ? DOWNSTREAM_TLS_CONTEXT_TYPE_URL : UPSTREAM_TLS_CONTEXT_TYPE_URL
+
+  const { '@type': _type, ...contextFields } = ts.typed_config
+  const common = contextFields.common_tls_context
+
+  const tlsProto: Record<string, unknown> = {
+    common_tls_context: {
+      tls_params: {
+        tls_minimum_protocol_version:
+          TLS_PROTOCOL[common.tls_params.tls_minimum_protocol_version] ?? 4,
+        ecdh_curves: common.tls_params.ecdh_curves,
+      },
+      tls_certificates: common.tls_certificates.map((cert) => ({
+        certificate_chain: { inline_string: cert.certificate_chain.inline_string },
+        private_key: { inline_string: cert.private_key.inline_string },
+      })),
+      validation_context: common.validation_context
+        ? { trusted_ca: { inline_string: common.validation_context.trusted_ca.inline_string } }
+        : undefined,
+    },
+  }
+
+  if (isDownstream && 'require_client_certificate' in contextFields) {
+    tlsProto.require_client_certificate = contextFields.require_client_certificate
+  }
+
+  const any = encodeAsAny(root, typeName, typeUrl, tlsProto)
+  return { name: ts.name, typed_config: any }
+}
+
 /**
  * Encode an XdsListener JSON structure into protobuf bytes suitable for
  * wrapping in a DiscoveryResponse.resources Any field.
@@ -387,34 +566,50 @@ export function encodeListener(listener: XdsListener): {
         port_value: listener.address.socket_address.port_value,
       },
     },
-    filter_chains: listener.filter_chains.map((fc) => ({
-      filters: fc.filters.map((f) => {
-        // The typed_config has an '@type' field — encode the inner HCM message
-        const { '@type': _typeUrl, ...hcmFields } = f.typed_config
-        const codecTypeMap: Record<string, number> = { AUTO: 0, HTTP1: 1, HTTP2: 2 }
-        const hcmProto: Record<string, unknown> = {
-          stat_prefix: hcmFields.stat_prefix,
-          route_config: hcmFields.route_config,
-          http_filters: [{ name: 'envoy.filters.http.router', typed_config: routerAny }],
-        }
-        if (hcmFields.codec_type) {
-          hcmProto.codec_type = codecTypeMap[hcmFields.codec_type] ?? 0
-        }
-        if (hcmFields.upgrade_configs) {
-          hcmProto.upgrade_configs = hcmFields.upgrade_configs
-        }
-        const hcmAny = encodeAsAny(
-          root,
-          'envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
-          HCM_TYPE_URL,
-          hcmProto
-        )
-        return {
-          name: f.name,
-          typed_config: hcmAny,
-        }
-      }),
-    })),
+    filter_chains: listener.filter_chains.map((fc) => {
+      const chain: Record<string, unknown> = {
+        filters: fc.filters.map((f) => {
+          // The typed_config has an '@type' field — encode the inner HCM message
+          const { '@type': _typeUrl, ...hcmFields } = f.typed_config
+          const codecTypeMap: Record<string, number> = { AUTO: 0, HTTP1: 1, HTTP2: 2 }
+          const hcmProto: Record<string, unknown> = {
+            stat_prefix: hcmFields.stat_prefix,
+            route_config: hcmFields.route_config,
+            http_filters: [{ name: 'envoy.filters.http.router', typed_config: routerAny }],
+          }
+          if (hcmFields.codec_type) {
+            hcmProto.codec_type = codecTypeMap[hcmFields.codec_type] ?? 0
+          }
+          if (hcmFields.upgrade_configs) {
+            hcmProto.upgrade_configs = hcmFields.upgrade_configs
+          }
+          if (hcmFields.forward_client_cert_details) {
+            hcmProto.forward_client_cert_details =
+              FORWARD_CLIENT_CERT_DETAILS[hcmFields.forward_client_cert_details] ?? 0
+          }
+          if (hcmFields.set_current_client_cert_details) {
+            hcmProto.set_current_client_cert_details = hcmFields.set_current_client_cert_details
+          }
+          const hcmAny = encodeAsAny(
+            root,
+            'envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
+            HCM_TYPE_URL,
+            hcmProto
+          )
+          return {
+            name: f.name,
+            typed_config: hcmAny,
+          }
+        }),
+      }
+
+      // Add transport_socket for TLS
+      if (fc.transport_socket) {
+        chain.transport_socket = encodeTransportSocket(root, fc.transport_socket)
+      }
+
+      return chain
+    }),
   }
 
   const ListenerType = root.lookupType('envoy.config.listener.v3.Listener')
@@ -499,6 +694,11 @@ export function encodeCluster(cluster: XdsCluster): {
     lb_policy: LB_POLICY[cluster.lb_policy] ?? 0,
     dns_lookup_family: cluster.dns_lookup_family ?? 0,
     load_assignment: cluster.load_assignment,
+  }
+
+  // TLS transport socket for upstream mTLS
+  if (cluster.transport_socket) {
+    protoCluster.transport_socket = encodeTransportSocket(root, cluster.transport_socket)
   }
 
   // HTTP/2 upstream: encode as typed_extension_protocol_options with HttpProtocolOptions

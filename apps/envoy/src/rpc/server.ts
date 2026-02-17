@@ -28,10 +28,19 @@ export const InternalRouteSchema = DataChannelDefinitionSchema.extend({
  *   This is needed for multi-hop: the local listener port (allocated by this node)
  *   may differ from route.envoyPort (the upstream peer's port, used for the remote cluster).
  */
+export const TlsConfigSchema = z.object({
+  certChain: z.string(),
+  privateKey: z.string(),
+  caBundle: z.string(),
+  requireClientCert: z.boolean().default(true),
+  ecdhCurves: z.array(z.string()).default(['X25519MLKEM768', 'X25519', 'P-256']),
+})
+
 export const RouteConfigSchema = z.object({
   local: z.array(DataChannelDefinitionSchema),
   internal: z.array(InternalRouteSchema),
   portAllocations: z.record(z.string(), z.number().int().min(1).max(65535)).optional(),
+  tls: TlsConfigSchema.optional(),
 })
 
 export type RouteConfig = z.infer<typeof RouteConfigSchema>
@@ -132,6 +141,7 @@ export class EnvoyRpcServer extends RpcTarget {
         portAllocations,
         bindAddress: this.bindAddress,
         version: String(++this.versionCounter),
+        tls: result.data.tls,
       })
 
       this.snapshotCache.setSnapshot(snapshot)
