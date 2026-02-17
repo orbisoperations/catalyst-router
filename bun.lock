@@ -153,6 +153,7 @@
         "@catalyst/service": "catalog:",
         "@catalyst/telemetry": "catalog:",
         "@hono/capnweb": "catalog:",
+        "@peculiar/x509": "^1.12.3",
         "capnweb": "catalog:",
         "hono": "catalog:",
         "zod": "catalog:",

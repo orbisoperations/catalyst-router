@@ -230,7 +230,10 @@ function getListenerOptions(protocol?: DataChannelProtocol): ListenerProtocolOpt
     case 'http:grpc':
       return { disableRouteTimeout: true, codecType: 'HTTP2' }
     default:
-      return {}
+      // Enable WebSocket upgrade by default — safe for non-WebSocket traffic
+      // (Envoy only upgrades when client sends Upgrade: websocket header).
+      // Required for services using WebSocket RPC (e.g., orchestrator-rpc).
+      return { enableWebSocket: true }
   }
 }
 

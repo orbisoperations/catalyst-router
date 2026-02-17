@@ -678,7 +678,7 @@ describe('protocol-specific listener config', () => {
     expect(hcm.upgrade_configs).toBeUndefined()
   })
 
-  it('does not add upgrade_configs or timeout for plain http', () => {
+  it('enables websocket upgrade but no timeout for plain http', () => {
     const listener = buildIngressListener({
       channelName: 'rest-api',
       port: 8001,
@@ -686,7 +686,9 @@ describe('protocol-specific listener config', () => {
       protocol: 'http',
     })
     const hcm = listener.filter_chains[0].filters[0].typed_config
-    expect(hcm.upgrade_configs).toBeUndefined()
+    // WebSocket upgrade enabled by default for all HTTP listeners
+    // (required for services using WebSocket RPC like orchestrator-rpc)
+    expect(hcm.upgrade_configs).toEqual([{ upgrade_type: 'websocket' }])
     const route = hcm.route_config.virtual_hosts[0].routes[0].route
     expect(route.timeout).toBeUndefined()
   })

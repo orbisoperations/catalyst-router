@@ -140,12 +140,28 @@ export class CatalystNodeBus extends RpcTarget {
   private portAllocator?: PortAllocator
   public lastNotificationPromise?: Promise<void>
 
+  /** TLS config for Envoy proxy. Set during init, updated on cert renewal. */
+  public tlsConfig?: {
+    certChain: string
+    privateKey: string
+    caBundle: string
+    requireClientCert?: boolean
+    ecdhCurves?: string[]
+  }
+
   constructor(opts: {
     state?: RouteTable
     connectionPool?: { type?: 'ws' | 'http'; pool?: ConnectionPool }
     config: OrchestratorConfig
     nodeToken?: string
     authEndpoint?: string
+    tlsConfig?: {
+      certChain: string
+      privateKey: string
+      caBundle: string
+      requireClientCert?: boolean
+      ecdhCurves?: string[]
+    }
   }) {
     super()
     this.state = opts.state ?? newRouteTable()
@@ -157,6 +173,7 @@ export class CatalystNodeBus extends RpcTarget {
     }
     this.config = opts.config
     this.nodeToken = opts.nodeToken
+    this.tlsConfig = opts.tlsConfig
     if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
     }
@@ -184,6 +201,40 @@ export class CatalystNodeBus extends RpcTarget {
         `Node name ${name} does not match any configured domains: ${domains.join(', ')}`
       )
     }
+  }
+
+  /**
+   * Resolve the best endpoint for reaching a peer.
+   *
+   * If the peer has a `publicAddress` and we have an `orchestrator-rpc`
+   * internal route from them (with an allocated local egress port), route
+   * through the local Envoy egress listener with PQ mTLS.
+   *
+   * Otherwise, fall back to the peer's direct endpoint (current behavior).
+   */
+  private resolveEndpointForPeer(peerName: string, directEndpoint: string): string {
+    if (!this.portAllocator) return directEndpoint
+
+    // Check if the peer has publicAddress (indicating remote-facing Envoy)
+    const peer = this.state.internal.peers.find((p) => p.name === peerName)
+    if (!peer?.publicAddress) return directEndpoint
+
+    // Check if we have an orchestrator-rpc internal route from this peer
+    const orchRoute = this.state.internal.routes.find(
+      (r) => r.name === 'orchestrator-rpc' && r.peerName === peerName
+    )
+    if (!orchRoute) return directEndpoint
+
+    // Check if we have a local egress port allocated for this route
+    const egressKey = `egress_orchestrator-rpc_via_${peerName}`
+    const egressPort = this.portAllocator.getPort(egressKey)
+    if (!egressPort) return directEndpoint
+
+    // Route through local Envoy egress listener
+    const envoyAddress = this.config.envoyConfig?.envoyAddress ?? 'localhost'
+    const resolved = `ws://${envoyAddress}:${egressPort}/rpc`
+    this.logger.info`Routing to ${peerName} via Envoy: ${resolved}`
+    return resolved
   }
 
   /**
@@ -296,6 +347,8 @@ export class CatalystNodeBus extends RpcTarget {
                 endpoint: action.data.endpoint,
                 domains: action.data.domains,
                 peerToken: action.data.peerToken,
+                envoyAddress: action.data.envoyAddress,
+                publicAddress: action.data.publicAddress,
                 connectionStatus: 'initializing' as const,
                 lastConnected: undefined,
               },
@@ -323,6 +376,8 @@ export class CatalystNodeBus extends RpcTarget {
                     endpoint: action.data.endpoint,
                     domains: action.data.domains,
                     peerToken: action.data.peerToken,
+                    envoyAddress: action.data.envoyAddress,
+                    publicAddress: action.data.publicAddress,
                     connectionStatus: 'initializing',
                     lastConnected: undefined,
                   }
@@ -375,12 +430,22 @@ export class CatalystNodeBus extends RpcTarget {
         }
 
         if (peer.connectionStatus !== 'connected') {
+          // Merge remote peer's PeerInfo fields (publicAddress, envoyAddress)
+          // that weren't available when the peer was initially added locally.
+          const remotePeer = action.data.peerInfo
           state = {
             ...state,
             internal: {
               ...state.internal,
               peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
+                p.name === action.data.peerInfo.name
+                  ? {
+                      ...p,
+                      connectionStatus: 'connected',
+                      publicAddress: remotePeer.publicAddress ?? p.publicAddress,
+                      envoyAddress: remotePeer.envoyAddress ?? p.envoyAddress,
+                    }
+                  : p
               ),
             },
           }
@@ -391,12 +456,20 @@ export class CatalystNodeBus extends RpcTarget {
         const peerList = state.internal.peers
         const peer = peerList.find((p) => p.name === action.data.peerInfo.name)
         if (peer) {
+          const remotePeerConnected = action.data.peerInfo
           state = {
             ...state,
             internal: {
               ...state.internal,
               peers: state.internal.peers.map((p) =>
-                p.name === action.data.peerInfo.name ? { ...p, connectionStatus: 'connected' } : p
+                p.name === action.data.peerInfo.name
+                  ? {
+                      ...p,
+                      connectionStatus: 'connected',
+                      publicAddress: remotePeerConnected.publicAddress ?? p.publicAddress,
+                      envoyAddress: remotePeerConnected.envoyAddress ?? p.envoyAddress,
+                    }
+                  : p
               ),
             },
           }
@@ -586,7 +659,11 @@ export class CatalystNodeBus extends RpcTarget {
 
         if (allRoutes.length > 0) {
           try {
-            const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
+            const endpoint = this.resolveEndpointForPeer(
+              action.data.peerInfo.name,
+              action.data.peerInfo.endpoint
+            )
+            const stub = this.connectionPool.get(endpoint)
             if (stub) {
               // Use the LOCAL peer record's peerToken (minted by the remote auth
               // service for us) rather than action.data.peerInfo.peerToken which
@@ -642,7 +719,11 @@ export class CatalystNodeBus extends RpcTarget {
 
         if (allRoutes.length > 0) {
           try {
-            const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
+            const endpoint = this.resolveEndpointForPeer(
+              action.data.peerInfo.name,
+              action.data.peerInfo.endpoint
+            )
+            const stub = this.connectionPool.get(endpoint)
             if (stub) {
               if (!action.data.peerInfo.peerToken) {
                 this.logger
@@ -670,7 +751,8 @@ export class CatalystNodeBus extends RpcTarget {
             this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping close`
           } else {
             try {
-              const stub = this.connectionPool.get(peer.endpoint)
+              const peerEndpoint = this.resolveEndpointForPeer(peer.name, peer.endpoint)
+              const stub = this.connectionPool.get(peerEndpoint)
               if (stub) {
                 const connectionResult = await stub.getIBGPClient(peer.peerToken)
                 if (connectionResult.success) {
@@ -700,7 +782,8 @@ export class CatalystNodeBus extends RpcTarget {
             continue
           }
           try {
-            const stub = this.connectionPool.get(peer.endpoint)
+            const peerEndpoint = this.resolveEndpointForPeer(peer.name, peer.endpoint)
+            const stub = this.connectionPool.get(peerEndpoint)
             if (stub) {
               this.logger.debug`Pushing local route ${action.data.name} to ${peer.name}`
               const connectionResult = await stub.getIBGPClient(peer.peerToken)
@@ -727,7 +810,8 @@ export class CatalystNodeBus extends RpcTarget {
             continue
           }
           try {
-            const stub = this.connectionPool.get(peer.endpoint)
+            const peerEndpoint = this.resolveEndpointForPeer(peer.name, peer.endpoint)
+            const stub = this.connectionPool.get(peerEndpoint)
             if (stub) {
               const connectionResult = await stub.getIBGPClient(peer.peerToken)
               if (connectionResult.success) {
@@ -765,7 +849,8 @@ export class CatalystNodeBus extends RpcTarget {
 
             if (safeUpdates.length === 0) continue
 
-            const stub = this.connectionPool.get(peer.endpoint)
+            const peerEndpoint = this.resolveEndpointForPeer(peer.name, peer.endpoint)
+            const stub = this.connectionPool.get(peerEndpoint)
             if (stub) {
               const connectionResult = await stub.getIBGPClient(peer.peerToken)
               if (connectionResult.success) {
@@ -887,6 +972,7 @@ export class CatalystNodeBus extends RpcTarget {
           local: this.state.local.routes,
           internal: this.state.internal.routes,
           portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
+          ...(this.tlsConfig && { tls: this.tlsConfig }),
         })
         if (!result.success) {
           this.logger.error`Envoy config sync failed: ${result.error}`
@@ -894,6 +980,35 @@ export class CatalystNodeBus extends RpcTarget {
       }
     } catch (e) {
       this.logger.error`Error syncing to Envoy service: ${e}`
+    }
+  }
+
+  /**
+   * Force-push current route config + TLS to Envoy.
+   *
+   * Called by OrchestratorService after SVID cert renewal to immediately
+   * deliver updated TLS material without waiting for a route change.
+   */
+  async pushEnvoyConfig(): Promise<void> {
+    const envoyEndpoint = this.config.envoyConfig?.endpoint
+    if (!envoyEndpoint || !this.portAllocator) return
+
+    try {
+      const stub = this.connectionPool.get(envoyEndpoint)
+      if (stub) {
+        // @ts-expect-error - Envoy RPC stub typed separately
+        const result = await stub.updateRoutes({
+          local: this.state.local.routes,
+          internal: this.state.internal.routes,
+          portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
+          ...(this.tlsConfig && { tls: this.tlsConfig }),
+        })
+        if (!result.success) {
+          this.logger.error`Envoy TLS config push failed: ${result.error}`
+        }
+      }
+    } catch (e) {
+      this.logger.error`Error pushing TLS config to Envoy: ${e}`
     }
   }
 
@@ -924,7 +1039,8 @@ export class CatalystNodeBus extends RpcTarget {
         continue
       }
       try {
-        const stub = this.connectionPool.get(peer.endpoint)
+        const peerEndpoint = this.resolveEndpointForPeer(peer.name, peer.endpoint)
+        const stub = this.connectionPool.get(peerEndpoint)
         if (stub) {
           const connectionResult = await stub.getIBGPClient(peer.peerToken)
 
