@@ -1,0 +1,279 @@
+# METABEGIN
+# X-Env-Layer-Name: catalyst-docker-stack
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: Catalyst Node multi-container stack via Docker Compose.
+#  Installs compose file, OTEL config, env template, first-boot provisioning,
+#  and a systemd service that pulls and starts the stack on boot.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rpi-user-credentials,ca-certificates
+# X-Env-Layer-RequiresProvider: docker
+#
+# X-Env-VarPrefix: catalyst
+#
+# X-Env-Var-registry: ghcr.io/your-org
+# X-Env-Var-registry-Desc: Container registry for catalyst images
+# X-Env-Var-registry-Required: y
+# X-Env-Var-registry-Valid: string
+# X-Env-Var-registry-Set: y
+#
+# X-Env-Var-tag: latest
+# X-Env-Var-tag-Desc: Container image tag to deploy
+# X-Env-Var-tag-Required: n
+# X-Env-Var-tag-Valid: string
+# X-Env-Var-tag-Set: y
+#
+# X-Env-Var-node_id:
+# X-Env-Var-node_id-Desc: Unique node identifier (e.g. edge-node-001)
+# X-Env-Var-node_id-Required: n
+# X-Env-Var-node_id-Valid: string-or-empty
+# X-Env-Var-node_id-Set: y
+#
+# X-Env-Var-peering_secret:
+# X-Env-Var-peering_secret-Desc: iBGP peering shared secret
+# X-Env-Var-peering_secret-Required: n
+# X-Env-Var-peering_secret-Valid: string-or-empty
+# X-Env-Var-peering_secret-Set: y
+#
+# X-Env-Var-domains:
+# X-Env-Var-domains-Desc: Comma-separated list of trusted domains
+# X-Env-Var-domains-Required: n
+# X-Env-Var-domains-Valid: string-or-empty
+# X-Env-Var-domains-Set: y
+#
+# X-Env-Var-bootstrap_token:
+# X-Env-Var-bootstrap_token-Desc: Initial auth bootstrap token
+# X-Env-Var-bootstrap_token-Required: n
+# X-Env-Var-bootstrap_token-Valid: string-or-empty
+# X-Env-Var-bootstrap_token-Set: y
+#
+# X-Env-Var-log_level: info
+# X-Env-Var-log_level-Desc: Log level (debug, info, warn, error)
+# X-Env-Var-log_level-Required: n
+# X-Env-Var-log_level-Valid: keywords:debug,info,warn,error
+# X-Env-Var-log_level-Set: y
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    # Create application directory
+    - mkdir -p "$1/opt/catalyst-node"
+    # --- Docker Compose file ---
+    - |-
+      cat > "$1/opt/catalyst-node/docker-compose.yaml" <<'COMPEOF'
+      services:
+        otel-collector:
+          image: otel/opentelemetry-collector-contrib:0.145.0
+          container_name: catalyst-otel-collector
+          command: ['--config', '/etc/otel-collector-config.yaml']
+          volumes:
+            - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+          ports:
+            - '4317:4317'
+            - '4318:4318'
+          restart: unless-stopped
+          healthcheck:
+            test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:13133']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+        auth:
+          image: ${CATALYST_REGISTRY}/catalyst-auth:${CATALYST_TAG:-latest}
+          container_name: catalyst-auth
+          ports:
+            - '5000:5000'
+          environment:
+            - PORT=5000
+            - CATALYST_BOOTSTRAP_TOKEN=${CATALYST_BOOTSTRAP_TOKEN:-}
+            - CATALYST_AUTH_KEYS_DB=/data/keys.db
+            - CATALYST_AUTH_TOKENS_DB=/data/tokens.db
+            - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+            - OTEL_SERVICE_NAME=catalyst-auth
+          volumes:
+            - auth-data:/data
+          restart: unless-stopped
+          healthcheck:
+            test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:5000/health']
+            interval: 5s
+            timeout: 3s
+            retries: 10
+          depends_on:
+            otel-collector:
+              condition: service_healthy
+
+        gateway:
+          image: ${CATALYST_REGISTRY}/catalyst-gateway:${CATALYST_TAG:-latest}
+          container_name: catalyst-gateway
+          ports:
+            - '4000:4000'
+          environment:
+            - PORT=4000
+            - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+            - OTEL_SERVICE_NAME=catalyst-gateway
+          restart: unless-stopped
+          healthcheck:
+            test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+          depends_on:
+            otel-collector:
+              condition: service_healthy
+
+        orchestrator:
+          image: ${CATALYST_REGISTRY}/catalyst-orchestrator:${CATALYST_TAG:-latest}
+          container_name: catalyst-orchestrator
+          ports:
+            - '3000:3000'
+          environment:
+            - PORT=3000
+            - CATALYST_NODE_ID=${CATALYST_NODE_ID}
+            - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway:4000/api
+            - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
+            - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN:-}
+            - CATALYST_PEERING_SECRET=${CATALYST_PEERING_SECRET:-}
+            - CATALYST_DOMAINS=${CATALYST_DOMAINS:-}
+            - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+            - OTEL_SERVICE_NAME=catalyst-orchestrator
+          restart: unless-stopped
+          healthcheck:
+            test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+          depends_on:
+            auth:
+              condition: service_healthy
+            gateway:
+              condition: service_healthy
+
+      volumes:
+        auth-data:
+      COMPEOF
+    # --- OTEL Collector config ---
+    - |-
+      cat > "$1/opt/catalyst-node/otel-collector-config.yaml" <<'OTELEOF'
+      extensions:
+        health_check:
+          endpoint: 0.0.0.0:13133
+
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+
+      processors:
+        batch:
+          send_batch_size: 512
+          timeout: 5s
+        memory_limiter:
+          check_interval: 5s
+          limit_mib: 256
+
+      exporters:
+        debug:
+          verbosity: detailed
+
+      service:
+        extensions: [health_check]
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [debug]
+          metrics:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [debug]
+          logs:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [debug]
+      OTELEOF
+    # --- Environment file ---
+    - |-
+      cat > "$1/opt/catalyst-node/.env" <<ENVEOF
+      # Container registry
+      CATALYST_REGISTRY=$IGconf_catalyst_registry
+      CATALYST_TAG=$IGconf_catalyst_tag
+
+      # Node identity
+      CATALYST_NODE_ID=$IGconf_catalyst_node_id
+      CATALYST_PEERING_SECRET=$IGconf_catalyst_peering_secret
+      CATALYST_DOMAINS=$IGconf_catalyst_domains
+
+      # Auth
+      CATALYST_BOOTSTRAP_TOKEN=$IGconf_catalyst_bootstrap_token
+      CATALYST_SYSTEM_TOKEN=
+      ENVEOF
+      chmod 600 "$1/opt/catalyst-node/.env"
+    # --- First-boot provisioning script ---
+    - |-
+      cat > "$1/usr/local/bin/catalyst-firstboot" <<'FBEOF'
+      #!/bin/bash
+      set -euo pipefail
+
+      ENV_FILE="/opt/catalyst-node/.env"
+
+      # Source existing env
+      set -a; source "$ENV_FILE"; set +a
+
+      # Generate unique node ID if not set at build time
+      if [ -z "${CATALYST_NODE_ID:-}" ]; then
+        NODE_ID="edge-$(hostname)-$(cat /proc/sys/kernel/random/boot_id | cut -c1-8)"
+        sed -i "s/^CATALYST_NODE_ID=.*/CATALYST_NODE_ID=${NODE_ID}/" "$ENV_FILE"
+        echo "Generated node ID: ${NODE_ID}"
+      fi
+
+      # Ensure the auth data volume mount point is writable
+      docker volume create --label com.catalyst=auth auth-data 2>/dev/null || true
+
+      echo "First boot setup complete"
+      FBEOF
+      chmod 755 "$1/usr/local/bin/catalyst-firstboot"
+    # --- First-boot systemd service (runs once) ---
+    - |-
+      cat > "$1/etc/systemd/system/catalyst-stack-firstboot.service" <<'SVCEOF'
+      [Unit]
+      Description=Catalyst Stack First Boot Setup
+      After=docker.service network-online.target
+      Requires=docker.service
+      ConditionPathExists=!/opt/catalyst-node/.firstboot-done
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/catalyst-firstboot
+      ExecStartPost=/usr/bin/touch /opt/catalyst-node/.firstboot-done
+      RemainAfterExit=no
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" catalyst-stack-firstboot
+    # --- Main Docker Compose systemd service ---
+    - |-
+      cat > "$1/etc/systemd/system/catalyst-stack.service" <<'SVCEOF'
+      [Unit]
+      Description=Catalyst Node Stack (Docker Compose)
+      After=docker.service network-online.target catalyst-stack-firstboot.service
+      Requires=docker.service catalyst-stack-firstboot.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/catalyst-node
+      ExecStartPre=/usr/bin/docker compose pull --quiet
+      ExecStart=/usr/bin/docker compose up -d --remove-orphans
+      ExecStop=/usr/bin/docker compose down
+      TimeoutStartSec=600
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" catalyst-stack
+    # Ensure files are owned by root
+    - chroot "$1" chown -R root:root /opt/catalyst-node
