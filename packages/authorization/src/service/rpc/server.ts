@@ -7,11 +7,13 @@ import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
 import { jwtToEntity } from '../../jwt/index.js'
 import { Principal, type CatalystPolicyEngine } from '../../policy/src/index.js'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
+import type { CertificateManager } from '@catalyst/pki'
 import {
   type AuthorizeActionRequest,
   type AuthorizeActionResult,
   type CertHandlers,
   type PermissionsHandlers,
+  type PkiHandlers,
   type TokenHandlers,
   type ValidationHandlers,
 } from './schema.js'
@@ -51,7 +53,8 @@ export class AuthRpcServer extends RpcTarget {
     private telemetry: ServiceTelemetry,
     private policyService?: CatalystPolicyEngine,
     private nodeId: string = 'unknown',
-    private domainId: string = ''
+    private domainId: string = '',
+    private certificateManager?: CertificateManager
   ) {
     super()
   }
@@ -282,6 +285,105 @@ export class AuthRpcServer extends RpcTarget {
           success: true,
           allowed: true,
         }
+      },
+    }
+  }
+
+  /**
+   * PKI certificate management sub-api.
+   * Requires ADMIN principal (CATALYST::Action::MANAGE).
+   */
+  async pki(token: string): Promise<PkiHandlers | { error: string }> {
+    const logger = this.telemetry.logger
+    const auth = await this.tokenFactory.verify(token)
+    if (!auth.valid) {
+      return { error: 'Invalid token' }
+    }
+
+    if (!this.certificateManager) {
+      return { error: 'PKI not configured' }
+    }
+
+    // Cedar policy check for ADMIN (same pattern as tokens() method)
+    const principal = jwtToEntity(auth.payload as Record<string, unknown>)
+    const builder = this.policyService?.entityBuilderFactory.createEntityBuilder()
+    if (!builder) {
+      return { error: 'Policy service not configured' }
+    }
+    builder.entity(principal.uid.type, principal.uid.id).setAttributes(principal.attrs)
+    builder
+      .entity('CATALYST::AdminPanel', 'admin-panel')
+      .setAttributes({ nodeId: this.nodeId, domainId: this.domainId })
+    const entities = builder.build()
+    const authorizedResult = this.policyService?.isAuthorized({
+      principal: principal.uid,
+      action: 'CATALYST::Action::MANAGE',
+      resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
+      entities: entities.getAll(),
+      context: {},
+    })
+
+    if (authorizedResult?.type === 'failure') {
+      void logger.error`Policy service error: ${authorizedResult.errors}`
+      return { error: 'Error authorizing request' }
+    }
+
+    if (authorizedResult?.type === 'evaluated' && !authorizedResult.allowed) {
+      void logger.warn`Permission denied for PKI: decision=${authorizedResult.decision}, reasons=${authorizedResult.reasons}`
+      return { error: 'Permission denied: ADMIN principal required' }
+    }
+
+    const cm = this.certificateManager
+
+    return {
+      initialize: async () => {
+        try {
+          const result = await cm.initialize()
+          return { success: true, ...result }
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      },
+      signCsr: async (request) => {
+        try {
+          const result = await cm.signCSR(request)
+          return { success: true, ...result }
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      },
+      getCaBundle: () => cm.getCaBundle(),
+      getStatus: () => cm.getStatus(),
+      denyIdentity: async (request) => {
+        try {
+          const result = await cm.denyIdentity(request.spiffeId, request.reason)
+          return { success: true, ...result }
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      },
+      allowIdentity: async (request) => {
+        try {
+          await cm.allowIdentity(request.spiffeId)
+          return { success: true }
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      },
+      listDenied: () => cm.listDeniedIdentities(),
+      listCertificates: async () => {
+        const certs = await cm.getStore().listActiveCertificates()
+        return certs.map((c) => ({
+          serial: c.serial,
+          spiffeId: c.spiffeId ?? '',
+          fingerprint: c.fingerprint,
+          expiresAt: new Date(c.notAfter).toISOString(),
+          status: c.status,
+        }))
+      },
+      purgeExpired: async () => {
+        const count = await cm.purgeExpired()
+        return { purgedCount: count }
       },
     }
   }

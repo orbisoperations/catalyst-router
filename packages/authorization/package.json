@@ -9,6 +9,7 @@
   },
   "private": true,
   "dependencies": {
+    "@catalyst/pki": "catalog:",
     "@catalyst/service": "catalog:",
     "@catalyst/telemetry": "catalog:",
     "@catalyst/types": "workspace:*",
