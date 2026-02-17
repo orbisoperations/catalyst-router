@@ -66,6 +66,56 @@ export const OrchestratorConfigSchema = z.object({
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
 
 /**
+ * PKI provider configuration — discriminated union by `type`.
+ *
+ * - `local`: WebCrypto signing with optional SQLite persistence (default)
+ * - `gcloud-kms`: Google Cloud KMS signing (Phase 2)
+ * - `aws-kms`: AWS KMS signing (Phase 2)
+ */
+export const LocalPkiConfigSchema = z.object({
+  type: z.literal('local'),
+  persistent: z.boolean().default(true),
+  certsDb: z.string().default('certs.db'),
+})
+
+export const GCloudKmsPkiConfigSchema = z.object({
+  type: z.literal('gcloud-kms'),
+  projectId: z.string(),
+  locationId: z.string().default('global'),
+  keyRingId: z.string(),
+  rootKeyId: z.string(),
+  servicesCaKeyId: z.string(),
+  transportCaKeyId: z.string(),
+  certsDb: z.string().default('certs.db'),
+})
+
+export const AwsKmsPkiConfigSchema = z.object({
+  type: z.literal('aws-kms'),
+  region: z.string(),
+  rootKeyArn: z.string(),
+  servicesCaKeyArn: z.string(),
+  transportCaKeyArn: z.string(),
+  certsDb: z.string().default('certs.db'),
+})
+
+export const PkiProviderConfigSchema = z.discriminatedUnion('type', [
+  LocalPkiConfigSchema,
+  GCloudKmsPkiConfigSchema,
+  AwsKmsPkiConfigSchema,
+])
+
+export const PkiConfigSchema = z.object({
+  provider: PkiProviderConfigSchema.default({ type: 'local', persistent: true }),
+  trustDomain: z.string().default('catalyst.example.com'),
+  svidTtlSeconds: z.number().int().min(60).max(86400).default(3600),
+  maxSvidTtlSeconds: z.number().int().min(60).max(86400).default(86400),
+  autoRenew: z.boolean().default(true),
+})
+
+export type PkiConfig = z.infer<typeof PkiConfigSchema>
+export type PkiProviderConfig = z.infer<typeof PkiProviderConfigSchema>
+
+/**
  * Auth Specific Configuration
  */
 export const AuthConfigSchema = z.object({
@@ -88,14 +138,7 @@ export const AuthConfigSchema = z.object({
         .optional(), // 24 hours
     })
     .default({}),
-  pki: z
-    .object({
-      certsDb: z.string().default('certs.db'),
-      trustDomain: z.string().default('catalyst.example.com'),
-      svidTtlSeconds: z.number().int().min(60).max(86400).default(3600),
-      autoRenew: z.boolean().default(true),
-    })
-    .optional(),
+  pki: PkiConfigSchema.optional(),
 })
 
 export type AuthConfig = z.infer<typeof AuthConfigSchema>
@@ -216,10 +259,18 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
           : undefined,
       },
       pki: {
-        certsDb: process.env.CATALYST_PKI_CERTS_DB,
+        provider: {
+          type:
+            (process.env.CATALYST_PKI_PROVIDER as 'local' | 'gcloud-kms' | 'aws-kms') || 'local',
+          persistent: process.env.CATALYST_PKI_PERSISTENT !== 'false',
+          certsDb: process.env.CATALYST_PKI_CERTS_DB,
+        },
         trustDomain: process.env.CATALYST_PKI_TRUST_DOMAIN,
         svidTtlSeconds: process.env.CATALYST_PKI_SVID_TTL
           ? Number(process.env.CATALYST_PKI_SVID_TTL)
+          : undefined,
+        maxSvidTtlSeconds: process.env.CATALYST_PKI_MAX_SVID_TTL
+          ? Number(process.env.CATALYST_PKI_MAX_SVID_TTL)
           : undefined,
         autoRenew: process.env.CATALYST_PKI_AUTO_RENEW !== 'false',
       },

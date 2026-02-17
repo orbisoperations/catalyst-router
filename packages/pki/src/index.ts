@@ -29,6 +29,16 @@ export {
 // SPIFFE utilities
 export { parseSpiffeId, buildSpiffeId, isValidSpiffeId, type SpiffeId } from './spiffe.js'
 
+// Config re-exports (from @catalyst/config, re-exported for convenience)
+export {
+  PkiConfigSchema,
+  PkiProviderConfigSchema,
+  LocalPkiConfigSchema,
+  GCloudKmsPkiConfigSchema,
+  AwsKmsPkiConfigSchema,
+} from '@catalyst/config'
+export type { PkiConfig, PkiProviderConfig } from '@catalyst/config'
+
 // Implementations
 export { BunSqliteCertificateStore } from './store/sqlite-certificate-store.js'
 export { WebCryptoSigningBackend } from './signing/webcrypto-signing-backend.js'
