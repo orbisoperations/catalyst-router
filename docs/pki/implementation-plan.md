@@ -259,8 +259,8 @@ export interface SignCertificateParams {
   sanDns?: string[]
   /** The signing CA's private key (ignored by KMS backends) */
   signingKey: CryptoKey
-  /** The signing CA's certificate (for AKI extension) */
-  signingCert: string
+  /** The signing CA's certificate (for AKI extension); undefined for self-signed */
+  signingCert?: string
   /** The subject's public key */
   subjectPublicKey: CryptoKey
   /** Not-before date */
@@ -786,10 +786,14 @@ Tests:
 - generateKeyPair returns P-384 key pair with sign/verify usages
 - signCertificate creates valid self-signed root CA cert
   - Verify: subject CN, basicConstraints CA:TRUE, keyUsage keyCertSign+crlSign, pathlen:1
+  - Verify: SKI extension present (SubjectKeyIdentifier)
+  - Verify: AKI extension absent (self-signed)
 - signCertificate creates valid intermediate CA cert signed by root
   - Verify: chain validates, pathlen:0, name constraints present
+  - Verify: SKI extension present, AKI extension matches root's SKI
 - signCertificate creates valid end-entity cert with SPIFFE URI SAN
   - Verify: URI SAN is spiffe://..., DNS SANs present, CA:FALSE, serverAuth+clientAuth EKU
+  - Verify: SKI extension present, AKI extension matches issuing CA's SKI
 - exportPrivateKeyPem + importPrivateKeyPem round-trip
   - Import the key back and sign data — verify with original public key
 - exportPublicKeyPem outputs valid SPKI PEM
@@ -919,7 +923,7 @@ export class CertificateManager {
     const rootCertPem = await this.backend.signCertificate({
       subjectCN: 'Catalyst Root CA',
       signingKey: rootKeyPair.privateKey,
-      signingCert: '', // self-signed: no issuer cert
+      signingCert: undefined, // self-signed: no issuer cert
       subjectPublicKey: rootKeyPair.publicKey,
       notBefore: new Date(),
       notAfter: new Date(Date.now() + 10 * 365.25 * 24 * 60 * 60 * 1000), // 10 years
