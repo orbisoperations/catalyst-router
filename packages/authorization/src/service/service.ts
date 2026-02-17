@@ -1,10 +1,5 @@
 import { JWTTokenFactory } from '../jwt/jwt-token-factory.js'
-import {
-  CertificateManager,
-  BunSqliteCertificateStore,
-  WebCryptoSigningBackend,
-  SignCSRRequestSchema,
-} from '@catalyst/pki'
+import { CertificateManager, SignCSRRequestSchema } from '@catalyst/pki'
 import {
   ALL_POLICIES,
   AuthorizationEngine,
@@ -60,15 +55,11 @@ export class AuthService extends CatalystService {
 
     void logger.info`JWTTokenFactory initialized`
 
-    // Initialize PKI Certificate Manager
+    // Initialize PKI Certificate Manager via config-driven factory
     const pkiConfig = this.config.auth?.pki
-    const certsDbFile = pkiConfig?.certsDb ?? 'certs.db'
-    const store = new BunSqliteCertificateStore(certsDbFile)
-    const backend = new WebCryptoSigningBackend()
-    this._certificateManager = new CertificateManager(store, backend, {
-      trustDomain: pkiConfig?.trustDomain,
-      svidTtlSeconds: pkiConfig?.svidTtlSeconds,
-    })
+    this._certificateManager = pkiConfig
+      ? CertificateManager.fromConfig(pkiConfig)
+      : CertificateManager.ephemeral()
     const pkiResult = await this._certificateManager.initialize()
     void logger.info`PKI initialized — root: ${pkiResult.rootFingerprint}, services: ${pkiResult.servicesCaFingerprint}, transport: ${pkiResult.transportCaFingerprint}`
 

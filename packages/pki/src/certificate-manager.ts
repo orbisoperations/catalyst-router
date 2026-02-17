@@ -11,6 +11,7 @@ import type {
   DenyListEntry,
   ExtKeyUsage,
 } from './types.js'
+import type { PkiConfig, PkiProviderConfig } from '@catalyst/config'
 import { BunSqliteCertificateStore } from './store/sqlite-certificate-store.js'
 import { WebCryptoSigningBackend } from './signing/webcrypto-signing-backend.js'
 import { buildSpiffeId } from './spiffe.js'
@@ -101,6 +102,59 @@ export class CertificateManager {
       new WebCryptoSigningBackend(),
       config
     )
+  }
+
+  /**
+   * Create a CertificateManager from a validated PkiConfig.
+   *
+   * Supports:
+   * - `local`: WebCrypto signing with SQLite persistence (file or in-memory)
+   * - `gcloud-kms` / `aws-kms`: Throws until Phase 2 backends are implemented
+   *
+   * @example
+   * ```typescript
+   * const config = CatalystConfigSchema.parse(rawConfig)
+   * const manager = CertificateManager.fromConfig(config.auth!.pki!)
+   * await manager.initialize()
+   * ```
+   */
+  static fromConfig(config: PkiConfig): CertificateManager {
+    const store = CertificateManager.createStore(config.provider)
+    const backend = CertificateManager.createBackend(config.provider)
+
+    return new CertificateManager(store, backend, {
+      trustDomain: config.trustDomain,
+      svidTtlSeconds: config.svidTtlSeconds,
+      maxSvidTtlSeconds: config.maxSvidTtlSeconds,
+    })
+  }
+
+  private static createStore(provider: PkiProviderConfig): ICertificateStore {
+    switch (provider.type) {
+      case 'local': {
+        const dbPath = provider.persistent ? provider.certsDb : ':memory:'
+        return new BunSqliteCertificateStore(dbPath)
+      }
+      case 'gcloud-kms':
+        throw new Error(
+          `PKI provider 'gcloud-kms' is not yet implemented. Use 'local' for Phase 1.`
+        )
+      case 'aws-kms':
+        throw new Error(`PKI provider 'aws-kms' is not yet implemented. Use 'local' for Phase 1.`)
+    }
+  }
+
+  private static createBackend(provider: PkiProviderConfig): ISigningBackend {
+    switch (provider.type) {
+      case 'local':
+        return new WebCryptoSigningBackend()
+      case 'gcloud-kms':
+        throw new Error(
+          `PKI provider 'gcloud-kms' is not yet implemented. Use 'local' for Phase 1.`
+        )
+      case 'aws-kms':
+        throw new Error(`PKI provider 'aws-kms' is not yet implemented. Use 'local' for Phase 1.`)
+    }
   }
 
   /** Whether the CA hierarchy has been initialized */
