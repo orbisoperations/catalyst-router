@@ -9,9 +9,13 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "bun test apps/ packages/ examples/",
-    "test:unit": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -vE 'integration|container')",
-    "test:integration": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -E 'integration|container')"
+    "compile:node:exec": "bun build --compile --target=bun-linux-arm64 --outfile dist/node/catalyst-node apps/node/src/index.ts",
+    "compile:rpi-config:exec": "bun build --compile --target=bun-linux-arm64 --outfile dist/rpi-config/catalyst-rpi-config apps/rpi-config/src/index.ts",
+    "compile:auth:docker": "docker build -f apps/auth/Dockerfile -t catalyst-auth .",
+    "compile:gateway:docker": "docker build -f apps/gateway/Dockerfile -t catalyst-gateway .",
+    "compile:orchestrator:docker": "docker build -f apps/orchestrator/Dockerfile -t catalyst-orchestrator .",
+    "compile:all:docker": "bun run compile:auth:docker && bun run compile:gateway:docker && bun run compile:orchestrator:docker",
+    "rpi:config": "bun run apps/rpi-config/src/index.ts"
   },
   "workspaces": {
     "packages": [

@@ -1,28 +1,23 @@
-import { resolve, dirname } from 'node:path'
+import { resolve, join } from 'node:path'
 import type { Writable } from 'node:stream'
 import type { ResolvedOptions } from './types.js'
 
 export function printInstructions(
-  configPath: string,
+  outputDir: string,
   opts: ResolvedOptions,
   stream: Writable = process.stdout
 ): void {
-  const absConfig = resolve(configPath)
-  const srcDir = resolve(dirname(absConfig), '..')
-  const rpiImageGen = opts.rpiImageGen || '../rpi-image-gen'
+  const absDir = resolve(outputDir)
+  const configPath = join(absDir, 'config.yaml')
 
   const prerequisite =
     opts.mode === 'native'
       ? `
   Prerequisites:
 
-    1. Ensure the pre-built binary exists:
-       ls ${srcDir}/bin/catalyst-node
-
-       If not, build it from the catalyst-node repo:
+    1. Compile the catalyst-node binary into the output directory:
        bun build --compile --target=bun-linux-arm64 \\
-         --outfile bin/catalyst-node apps/node/src/index.ts
-       cp bin/catalyst-node ${srcDir}/bin/catalyst-node
+         --outfile ${absDir}/bin/catalyst-node apps/node/src/index.ts
 `
       : `
   Prerequisites:
@@ -35,14 +30,11 @@ export function printInstructions(
 `
 
   stream.write(`
-\x1b[32m\u2713\x1b[0m Config ${opts.dryRun ? 'generated' : `written to ${absConfig}`}
+\x1b[32m\u2713\x1b[0m Config ${opts.dryRun ? 'generated' : `written to ${absDir}/`}
 ${prerequisite}
   To build the image:
 
-    cd ${rpiImageGen}
-    ./rpi-image-gen build \\
-      -S ${srcDir} \\
-      -c ${absConfig}
+    ./builds/rpi/build.sh --source-dir ${absDir} ${configPath}
 
   To flash the image:
 
