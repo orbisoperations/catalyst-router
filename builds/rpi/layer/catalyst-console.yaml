@@ -12,6 +12,8 @@
 # METAEND
 ---
 mmdebstrap:
+  packages:
+    - conspy
   customize-hooks:
     # Enable autologin on tty1 for the configured user
     - |-
@@ -34,4 +36,9 @@ mmdebstrap:
         journalctl -f --no-hostname -o short-precise
       fi
       BPEOF
-      chown -R 1000:1000 "$HOME_DIR/.bash_profile"
+      chroot "$1" chown -R $IGconf_device_user1:$IGconf_device_user1 "/home/$IGconf_device_user1/.bash_profile"
+    # Allow the configured user to run conspy without a password
+    - |-
+      echo "$IGconf_device_user1 ALL=(ALL) NOPASSWD: /usr/bin/conspy" \
+        > "$1/etc/sudoers.d/conspy"
+      chmod 440 "$1/etc/sudoers.d/conspy"

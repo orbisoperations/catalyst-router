@@ -78,7 +78,9 @@ export async function promptMissing(opts: Record<string, unknown>): Promise<Reso
     const wantWifi = await confirm({ message: 'Configure WiFi?', default: true })
     if (wantWifi) {
       resolved.wifiSsid = await input({ message: 'WiFi SSID:' })
-      resolved.wifiPassword = await password({ message: 'WiFi password:', mask: '*' })
+      resolved.wifiPassword = await input({
+        message: 'WiFi password (leave empty for open network):',
+      })
       if (!resolved.wifiCountry || resolved.wifiCountry === DEFAULTS.wifiCountry) {
         resolved.wifiCountry = await input({
           message: 'WiFi country code:',

@@ -20,9 +20,9 @@ const CATALYST_WIFI_YAML = `# METABEGIN
 # X-Env-Var-ssid-Set: y
 #
 # X-Env-Var-password:
-# X-Env-Var-password-Desc: WiFi network password (WPA2-PSK)
-# X-Env-Var-password-Required: y
-# X-Env-Var-password-Valid: string
+# X-Env-Var-password-Desc: WiFi network password (WPA2-PSK, leave empty for open network)
+# X-Env-Var-password-Required: n
+# X-Env-Var-password-Valid: string-or-empty
 # X-Env-Var-password-Set: y
 #
 # X-Env-Var-country: US
@@ -37,8 +37,11 @@ mmdebstrap:
     - wpasupplicant
     - wireless-tools
     - iw
+    - firmware-brcm80211
+    - wireless-regdb
+    - w3m
   customize-hooks:
-    # wpa_supplicant config with hashed PSK for the specified network
+    # wpa_supplicant config — WPA2-PSK when password is set, open network otherwise
     - |-
       mkdir -p "$1/etc/wpa_supplicant"
       {
@@ -46,8 +49,15 @@ mmdebstrap:
         echo "update_config=1"
         echo "country=$IGconf_wifi_country"
         echo ""
-        chroot "$1" wpa_passphrase "$IGconf_wifi_ssid" "$IGconf_wifi_password" \\
-          | grep -v '#psk='
+        if [ -n "$IGconf_wifi_password" ]; then
+          chroot "$1" wpa_passphrase "$IGconf_wifi_ssid" "$IGconf_wifi_password" \\
+            | grep -v '#psk='
+        else
+          echo "network={"
+          echo "    ssid=\\"$IGconf_wifi_ssid\\""
+          echo "    key_mgmt=NONE"
+          echo "}"
+        fi
       } > "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
       chmod 600 "$1/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
     # systemd-networkd config for wlan0 (DHCP)
@@ -62,8 +72,23 @@ mmdebstrap:
       [DHCPv4]
       RouteMetric=600
       NETEOF
-    # Ensure WiFi radio is not soft-blocked (common on minimal images)
-    - chroot "$1" rfkill unblock wifi 2>/dev/null || true
+    # Ensure WiFi radio is not soft-blocked at boot (rfkill needs real hardware)
+    - |-
+      cat > "$1/etc/systemd/system/wifi-rfkill-unblock.service" <<'RFKEOF'
+      [Unit]
+      Description=Unblock WiFi radio
+      Before=wpa_supplicant@wlan0.service
+      ConditionPathExists=/dev/rfkill
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/sbin/rfkill unblock wifi
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+      RFKEOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" wifi-rfkill-unblock
     # Ensure resolv.conf points to systemd-resolved stub (safety net)
     - ln -sf /run/systemd/resolve/stub-resolv.conf "$1/etc/resolv.conf"
     # Ensure network-online.target waits for an interface to get an address
@@ -98,7 +123,9 @@ mmdebstrap:
       OTEL_VERSION="$IGconf_otel_version"
       OTEL_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v\${OTEL_VERSION}/otelcol-contrib_\${OTEL_VERSION}_linux_arm64.tar.gz"
       echo "Downloading otelcol-contrib v\${OTEL_VERSION}..."
+      curl -fsSL "\${OTEL_URL}.sha256" -o /tmp/otelcol.sha256
       curl -fsSL "$OTEL_URL" -o /tmp/otelcol.tar.gz
+      cd /tmp && sha256sum -c otelcol.sha256
       tar -xzf /tmp/otelcol.tar.gz -C /tmp otelcol-contrib
       install -m 755 /tmp/otelcol-contrib "$1/usr/local/bin/otelcol-contrib"
       rm -f /tmp/otelcol.tar.gz /tmp/otelcol-contrib
@@ -163,6 +190,8 @@ mmdebstrap:
       ExecStart=/usr/local/bin/otelcol-contrib --config /etc/catalyst-node/otel-config.yaml
       Restart=on-failure
       RestartSec=5
+      StartLimitBurst=5
+      StartLimitIntervalSec=120
       MemoryMax=300M
       LimitNOFILE=65536
 
@@ -220,6 +249,8 @@ const CATALYST_NODE_YAML = `# METABEGIN
 # METAEND
 ---
 mmdebstrap:
+  packages:
+    - avahi-daemon
   customize-hooks:
     # Install the pre-built catalyst-node binary from source directory
     - install -m 755 "$SRCROOT/bin/catalyst-node" "$1/usr/local/bin/catalyst-node"
@@ -239,6 +270,7 @@ mmdebstrap:
       CATALYST_BOOTSTRAP_TOKEN=$IGconf_catalyst_bootstrap_token
       CATALYST_AUTH_KEYS_DB=/var/lib/catalyst-node/keys.db
       CATALYST_AUTH_TOKENS_DB=/var/lib/catalyst-node/tokens.db
+      CATALYST_LOG_LEVEL=$IGconf_catalyst_log_level
       OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
       OTEL_SERVICE_NAME=catalyst-node
       ENVEOF
@@ -264,6 +296,7 @@ mmdebstrap:
       # Ensure data directory exists with correct permissions
       mkdir -p /var/lib/catalyst-node
       chmod 750 /var/lib/catalyst-node
+      chown -R catalyst:catalyst /var/lib/catalyst-node
 
       echo "First boot setup complete"
       FBEOF
@@ -281,7 +314,7 @@ mmdebstrap:
       Type=oneshot
       ExecStart=/usr/local/bin/catalyst-firstboot
       ExecStartPost=/usr/bin/touch /var/lib/catalyst-node/.firstboot-done
-      RemainAfterExit=no
+      RemainAfterExit=yes
 
       [Install]
       WantedBy=multi-user.target
@@ -294,15 +327,23 @@ mmdebstrap:
       Description=Catalyst Node
       After=otelcol.service network-online.target catalyst-node-firstboot.service
       Wants=otelcol.service network-online.target
-      Requires=catalyst-node-firstboot.service
 
       [Service]
       Type=simple
+      User=catalyst
       EnvironmentFile=/etc/catalyst-node/catalyst-node.env
       ExecStart=/usr/local/bin/catalyst-node
       WorkingDirectory=/var/lib/catalyst-node
       Restart=on-failure
       RestartSec=5
+      StartLimitBurst=5
+      StartLimitIntervalSec=120
+      ProtectSystem=strict
+      ProtectHome=yes
+      NoNewPrivileges=yes
+      ReadWritePaths=/var/lib/catalyst-node
+      MemoryMax=512M
+      LimitNOFILE=65536
 
       [Install]
       WantedBy=multi-user.target
@@ -366,6 +407,8 @@ const CATALYST_DOCKER_STACK_YAML = `# METABEGIN
 # METAEND
 ---
 mmdebstrap:
+  packages:
+    - avahi-daemon
   customize-hooks:
     # Create application directory
     - mkdir -p "$1/opt/catalyst-node"
@@ -559,7 +602,7 @@ mmdebstrap:
       Type=oneshot
       ExecStart=/usr/local/bin/catalyst-firstboot
       ExecStartPost=/usr/bin/touch /opt/catalyst-node/.firstboot-done
-      RemainAfterExit=no
+      RemainAfterExit=yes
 
       [Install]
       WantedBy=multi-user.target
@@ -571,14 +614,14 @@ mmdebstrap:
       [Unit]
       Description=Catalyst Node Stack (Docker Compose)
       After=docker.service network-online.target catalyst-stack-firstboot.service
-      Requires=docker.service catalyst-stack-firstboot.service
+      Requires=docker.service
       Wants=network-online.target
 
       [Service]
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=/opt/catalyst-node
-      ExecStartPre=/usr/bin/docker compose pull --quiet
+      ExecStartPre=-/usr/bin/docker compose pull --quiet
       ExecStart=/usr/bin/docker compose up -d --remove-orphans
       ExecStop=/usr/bin/docker compose down
       TimeoutStartSec=600
@@ -605,6 +648,8 @@ const CATALYST_CONSOLE_YAML = `# METABEGIN
 # METAEND
 ---
 mmdebstrap:
+  packages:
+    - conspy
   customize-hooks:
     # Enable autologin on tty1 for the configured user
     - |-
@@ -627,7 +672,12 @@ mmdebstrap:
         journalctl -f --no-hostname -o short-precise
       fi
       BPEOF
-      chown -R 1000:1000 "$HOME_DIR/.bash_profile"
+      chroot "$1" chown -R $IGconf_device_user1:$IGconf_device_user1 "/home/$IGconf_device_user1/.bash_profile"
+    # Allow the configured user to run conspy without a password
+    - |-
+      echo "$IGconf_device_user1 ALL=(ALL) NOPASSWD: /usr/bin/conspy" \\
+        > "$1/etc/sudoers.d/conspy"
+      chmod 440 "$1/etc/sudoers.d/conspy"
 `
 
 const CATALYST_CLOUDFLARED_YAML = `# METABEGIN
@@ -679,7 +729,7 @@ mmdebstrap:
       cat > "$1/etc/systemd/system/cloudflared-tunnel.service" <<SVCEOF
       [Unit]
       Description=Cloudflare Tunnel
-      After=network-online.target wpa_supplicant@wlan0.service
+      After=network-online.target
       Wants=network-online.target
 
       [Service]
@@ -687,6 +737,8 @@ mmdebstrap:
       ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run --token $IGconf_cloudflared_tunnel_token
       Restart=on-failure
       RestartSec=5
+      StartLimitBurst=5
+      StartLimitIntervalSec=120
       AmbientCapabilities=CAP_NET_RAW
       CapabilityBoundingSet=CAP_NET_RAW
 
