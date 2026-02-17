@@ -324,6 +324,7 @@ export class RoutingInformationBase {
           internal: {
             ...state.internal,
             peers: peerList.filter((p) => p.name !== action.data.name),
+            routes: state.internal.routes.filter((r) => r.peerName !== action.data.name),
           },
         }
         break
