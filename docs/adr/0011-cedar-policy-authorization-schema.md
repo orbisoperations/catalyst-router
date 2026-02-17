@@ -131,7 +131,8 @@ Update the Cedar schema with new actions, align Cedar policies with actual syste
 - Refactor from client-factory gate to per-operation Cedar checks:
   - `addPeer` -> `PEER_CREATE`, `updatePeer` -> `PEER_UPDATE`, `removePeer` -> `PEER_DELETE`, `listPeers` -> `PEER_LIST`
   - `addRoute` -> `ROUTE_CREATE`, `removeRoute` -> `ROUTE_DELETE`, `listRoutes` -> `ROUTE_LIST`
-  - `open` -> `IBGP_CONNECT`, `close` -> `IBGP_DISCONNECT`, `update` -> `IBGP_UPDATE`
+  - `open` -> `IBGP_CONNECT`, `close` -> `IBGP_DISCONNECT`, `update` -> `IBGP_UPDATE`, `listConnections` -> `IBGP_LIST`
+
 - Protect or remove `dispatch()` from the public API
 - Use specific resource types (`Peer`, `Route`, `IBGP`) instead of only `AdminPanel`
 
