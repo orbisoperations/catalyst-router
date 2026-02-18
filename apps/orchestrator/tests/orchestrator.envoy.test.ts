@@ -723,4 +723,443 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     // Remove actions should not have envoyPort rewritten or added
     expect(removeUpdate!.route.envoyPort).toBeUndefined()
   })
+
+  describe('TLS config passthrough', () => {
+    const TLS_CONFIG = {
+      certChain: '-----BEGIN CERTIFICATE-----\ntest-cert\n-----END CERTIFICATE-----',
+      privateKey: '-----BEGIN PRIVATE KEY-----\ntest-key\n-----END PRIVATE KEY-----',
+      caBundle: '-----BEGIN CERTIFICATE-----\ntest-ca\n-----END CERTIFICATE-----',
+      requireClientCert: true,
+    }
+
+    it('includes TLS config in updateRoutes when tlsConfig is set', async () => {
+      const tlsPool = new MockConnectionPool('http')
+      const tlsBus = new CatalystNodeBus({
+        config: {
+          node: MOCK_NODE,
+          ibgp: { secret: 'secret' },
+          envoyConfig: {
+            endpoint: ENVOY_ENDPOINT,
+            portRange: [[10000, 10100]],
+          },
+        },
+        connectionPool: { pool: tlsPool },
+        tlsConfig: TLS_CONFIG,
+      })
+
+      await tlsBus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://books:8080' },
+      })
+      await tlsBus.lastNotificationPromise
+
+      expect(tlsPool.envoyCalls.length).toBe(1)
+      const payload = tlsPool.envoyCalls[0].payload as EnvoyUpdateRoutesPayload & {
+        tls?: typeof TLS_CONFIG
+      }
+      expect(payload.tls).toBeDefined()
+      expect(payload.tls!.certChain).toBe(TLS_CONFIG.certChain)
+      expect(payload.tls!.privateKey).toBe(TLS_CONFIG.privateKey)
+      expect(payload.tls!.caBundle).toBe(TLS_CONFIG.caBundle)
+      expect(payload.tls!.requireClientCert).toBe(true)
+    })
+
+    it('omits TLS config when tlsConfig is not set', async () => {
+      await bus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://books:8080' },
+      })
+      await bus.lastNotificationPromise
+
+      const payload = pool.envoyCalls[0].payload as EnvoyUpdateRoutesPayload & {
+        tls?: unknown
+      }
+      expect(payload.tls).toBeUndefined()
+    })
+
+    it('pushEnvoyConfig sends current TLS config immediately', async () => {
+      const tlsPool = new MockConnectionPool('http')
+      const tlsBus = new CatalystNodeBus({
+        config: {
+          node: MOCK_NODE,
+          ibgp: { secret: 'secret' },
+          envoyConfig: {
+            endpoint: ENVOY_ENDPOINT,
+            portRange: [[10000, 10100]],
+          },
+        },
+        connectionPool: { pool: tlsPool },
+        tlsConfig: TLS_CONFIG,
+      })
+
+      await tlsBus.pushEnvoyConfig()
+
+      expect(tlsPool.envoyCalls.length).toBe(1)
+      const payload = tlsPool.envoyCalls[0].payload as EnvoyUpdateRoutesPayload & {
+        tls?: typeof TLS_CONFIG
+      }
+      expect(payload.tls).toBeDefined()
+      expect(payload.tls!.certChain).toBe(TLS_CONFIG.certChain)
+    })
+
+    it('pushEnvoyConfig uses updated TLS config after mutation', async () => {
+      const tlsPool = new MockConnectionPool('http')
+      const tlsBus = new CatalystNodeBus({
+        config: {
+          node: MOCK_NODE,
+          ibgp: { secret: 'secret' },
+          envoyConfig: {
+            endpoint: ENVOY_ENDPOINT,
+            portRange: [[10000, 10100]],
+          },
+        },
+        connectionPool: { pool: tlsPool },
+        tlsConfig: TLS_CONFIG,
+      })
+
+      // Update TLS config (simulating cert renewal)
+      const renewedConfig = {
+        ...TLS_CONFIG,
+        certChain: '-----BEGIN CERTIFICATE-----\nrenewed-cert\n-----END CERTIFICATE-----',
+      }
+      tlsBus.tlsConfig = renewedConfig
+      await tlsBus.pushEnvoyConfig()
+
+      expect(tlsPool.envoyCalls.length).toBe(1)
+      const payload = tlsPool.envoyCalls[0].payload as EnvoyUpdateRoutesPayload & {
+        tls?: typeof TLS_CONFIG
+      }
+      expect(payload.tls!.certChain).toBe(renewedConfig.certChain)
+    })
+
+    it('pushEnvoyConfig is a no-op without envoyConfig', async () => {
+      const plainPool = new MockConnectionPool('http')
+      const plainBus = new CatalystNodeBus({
+        config: {
+          node: MOCK_NODE,
+          ibgp: { secret: 'secret' },
+        },
+        connectionPool: { pool: plainPool },
+        tlsConfig: TLS_CONFIG,
+      })
+
+      await plainBus.pushEnvoyConfig()
+      expect(plainPool.envoyCalls.length).toBe(0)
+    })
+  })
+
+  describe('resolveEndpointForPeer (Envoy-routed peering)', () => {
+    it('routes through Envoy when peer has publicAddress and orchestrator-rpc route', async () => {
+      const peerB: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        publicAddress: 'node-b.example.com',
+        peerToken: 'token-for-b',
+      }
+
+      // 1. Add and connect peer (publicAddress stored from LocalPeerCreate)
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+      await bus.lastNotificationPromise
+      await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+      await bus.lastNotificationPromise
+
+      // 2. Receive orchestrator-rpc route from peer B
+      await bus.dispatch({
+        action: Actions.InternalProtocolUpdate,
+        data: {
+          peerInfo: peerB,
+          update: {
+            updates: [
+              {
+                action: 'add',
+                route: {
+                  name: 'orchestrator-rpc',
+                  protocol: 'http' as const,
+                  endpoint: 'http://node-b:3000/rpc',
+                  envoyPort: 10050,
+                },
+                nodePath: ['node-b.somebiz.local.io'],
+              },
+            ],
+          },
+        },
+      })
+      await bus.lastNotificationPromise
+
+      pool.envoyCalls.length = 0
+      pool.bgpCalls.length = 0
+
+      // 3. Now add a new peer C that triggers full route sync to C
+      //    The route sync to peer B will use resolveEndpointForPeer
+      const peerC: PeerInfo = {
+        name: 'node-c.somebiz.local.io',
+        endpoint: 'http://node-c:3000',
+        domains: ['somebiz.local.io'],
+        peerToken: 'token-for-c',
+      }
+
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
+      await bus.lastNotificationPromise
+
+      // 4. Now receive a local route that triggers notification to all peers
+      await bus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://books:8080' },
+      })
+      await bus.lastNotificationPromise
+
+      // The BGP call to peer B should be via Envoy (ws://localhost:<egressPort>/rpc)
+      // not the direct endpoint (http://node-b:3000)
+      const bgpToB = pool.bgpCalls.find((c) => c.endpoint.includes('localhost'))
+      expect(bgpToB).toBeDefined()
+      expect(bgpToB!.endpoint).toMatch(/^ws:\/\/localhost:\d+\/rpc$/)
+    })
+
+    it('falls back to direct endpoint when peer has no publicAddress', async () => {
+      const peerB: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        // no publicAddress
+        peerToken: 'token-for-b',
+      }
+
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+      await bus.lastNotificationPromise
+      await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+      await bus.lastNotificationPromise
+
+      pool.bgpCalls.length = 0
+
+      await bus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://books:8080' },
+      })
+      await bus.lastNotificationPromise
+
+      // Should use direct endpoint since peer has no publicAddress
+      const bgpToB = pool.bgpCalls.find((c) => c.endpoint === 'http://node-b:3000')
+      expect(bgpToB).toBeDefined()
+    })
+
+    it('falls back to direct endpoint when no orchestrator-rpc route from peer', async () => {
+      const peerB: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        publicAddress: 'node-b.example.com',
+        peerToken: 'token-for-b',
+      }
+
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+      await bus.lastNotificationPromise
+      await bus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+      await bus.lastNotificationPromise
+
+      // Receive a non-orchestrator route from peer B
+      await bus.dispatch({
+        action: Actions.InternalProtocolUpdate,
+        data: {
+          peerInfo: peerB,
+          update: {
+            updates: [
+              {
+                action: 'add',
+                route: {
+                  name: 'books-api',
+                  protocol: 'http' as const,
+                  endpoint: 'http://books:8080',
+                  envoyPort: 10050,
+                },
+                nodePath: ['node-b.somebiz.local.io'],
+              },
+            ],
+          },
+        },
+      })
+      await bus.lastNotificationPromise
+
+      pool.bgpCalls.length = 0
+
+      await bus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'movies-api', protocol: 'http' as const, endpoint: 'http://movies:8080' },
+      })
+      await bus.lastNotificationPromise
+
+      // Should use direct endpoint since no orchestrator-rpc route from this peer
+      const bgpToB = pool.bgpCalls.find((c) => c.endpoint === 'http://node-b:3000')
+      expect(bgpToB).toBeDefined()
+    })
+  })
+
+  describe('publicAddress propagation', () => {
+    it('stores publicAddress from LocalPeerCreate', async () => {
+      const peerB: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        publicAddress: 'node-b.example.com',
+        peerToken: 'token-for-b',
+      }
+
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+
+      const peer = bus.state.internal.peers.find((p) => p.name === peerB.name)
+      expect(peer).toBeDefined()
+      expect(peer!.publicAddress).toBe('node-b.example.com')
+    })
+
+    it('merges publicAddress from remote peer on InternalProtocolOpen', async () => {
+      // Add peer locally without publicAddress
+      const localPeerInfo: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        peerToken: 'token-for-b',
+      }
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: localPeerInfo })
+
+      // Remote peer connects and advertises publicAddress
+      const remotePeerInfo: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        publicAddress: 'node-b.example.com',
+        envoyAddress: 'envoy-proxy-b',
+      }
+      await bus.dispatch({
+        action: Actions.InternalProtocolOpen,
+        data: { peerInfo: remotePeerInfo },
+      })
+
+      const peer = bus.state.internal.peers.find((p) => p.name === localPeerInfo.name)
+      expect(peer).toBeDefined()
+      expect(peer!.publicAddress).toBe('node-b.example.com')
+      expect(peer!.envoyAddress).toBe('envoy-proxy-b')
+      expect(peer!.connectionStatus).toBe('connected')
+    })
+
+    it('merges publicAddress from remote peer on InternalProtocolConnected', async () => {
+      const localPeerInfo: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        peerToken: 'token-for-b',
+      }
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: localPeerInfo })
+
+      const remotePeerInfo: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        publicAddress: 'node-b.external.io',
+      }
+      await bus.dispatch({
+        action: Actions.InternalProtocolConnected,
+        data: { peerInfo: remotePeerInfo },
+      })
+
+      const peer = bus.state.internal.peers.find((p) => p.name === localPeerInfo.name)
+      expect(peer).toBeDefined()
+      expect(peer!.publicAddress).toBe('node-b.external.io')
+      expect(peer!.connectionStatus).toBe('connected')
+    })
+
+    it('preserves existing publicAddress when remote does not provide one', async () => {
+      // Add peer with publicAddress
+      const localPeerInfo: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        publicAddress: 'node-b.example.com',
+        peerToken: 'token-for-b',
+      }
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: localPeerInfo })
+
+      // Remote peer connects without publicAddress
+      await bus.dispatch({
+        action: Actions.InternalProtocolOpen,
+        data: {
+          peerInfo: {
+            name: 'node-b.somebiz.local.io',
+            endpoint: 'http://node-b:3000',
+            domains: ['somebiz.local.io'],
+          },
+        },
+      })
+
+      const peer = bus.state.internal.peers.find((p) => p.name === localPeerInfo.name)
+      expect(peer!.publicAddress).toBe('node-b.example.com')
+    })
+
+    it('updates publicAddress on LocalPeerUpdate', async () => {
+      const peerB: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        peerToken: 'token-for-b',
+      }
+
+      await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+
+      // Update peer with publicAddress
+      await bus.dispatch({
+        action: Actions.LocalPeerUpdate,
+        data: {
+          ...peerB,
+          publicAddress: 'node-b.newdomain.com',
+        },
+      })
+
+      const peer = bus.state.internal.peers.find((p) => p.name === peerB.name)
+      expect(peer!.publicAddress).toBe('node-b.newdomain.com')
+    })
+
+    it('propagates this node publicAddress to peers via PeerInfo in BGP', async () => {
+      const envoyPool = new MockConnectionPool('http')
+      const envoyBus = new CatalystNodeBus({
+        config: {
+          node: {
+            ...MOCK_NODE,
+            publicAddress: 'node-a.external.io',
+          },
+          ibgp: { secret: 'secret' },
+          envoyConfig: {
+            endpoint: ENVOY_ENDPOINT,
+            portRange: [[10000, 10100]],
+          },
+        },
+        connectionPool: { pool: envoyPool },
+      })
+
+      const peerB: PeerInfo = {
+        name: 'node-b.somebiz.local.io',
+        endpoint: 'http://node-b:3000',
+        domains: ['somebiz.local.io'],
+        peerToken: 'token-for-b',
+      }
+
+      await envoyBus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+      await envoyBus.lastNotificationPromise
+      await envoyBus.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peerB } })
+      await envoyBus.lastNotificationPromise
+
+      envoyPool.bgpCalls.length = 0
+
+      await envoyBus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://books:8080' },
+      })
+      await envoyBus.lastNotificationPromise
+
+      const bgpToB = envoyPool.bgpCalls.find((c) => c.endpoint === peerB.endpoint)
+      expect(bgpToB).toBeDefined()
+
+      const peerInfoArg = bgpToB!.args[0] as { name: string; publicAddress?: string }
+      expect(peerInfoArg.name).toBe('node-a.somebiz.local.io')
+      expect(peerInfoArg.publicAddress).toBe('node-a.external.io')
+    })
+  })
 })
