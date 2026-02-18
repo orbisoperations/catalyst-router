@@ -83,6 +83,10 @@ export enum Action {
   TOKEN_CREATE = 'TOKEN_CREATE',
   TOKEN_REVOKE = 'TOKEN_REVOKE',
   TOKEN_LIST = 'TOKEN_LIST',
+  PEER_LIST = 'PEER_LIST',
+  ROUTE_LIST = 'ROUTE_LIST',
+  IBGP_LIST = 'IBGP_LIST',
+  GATEWAY_CONFIG_UPDATE = 'GATEWAY_CONFIG_UPDATE',
 }
 
 /**
@@ -91,7 +95,13 @@ export enum Action {
  */
 export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
   [Role.ADMIN]: Object.values(Action),
-  [Role.NODE]: [Action.IBGP_CONNECT, Action.IBGP_DISCONNECT, Action.IBGP_UPDATE],
+  [Role.NODE]: [
+    Action.IBGP_CONNECT,
+    Action.IBGP_DISCONNECT,
+    Action.IBGP_UPDATE,
+    Action.IBGP_LIST,
+    Action.GATEWAY_CONFIG_UPDATE,
+  ],
   [Role.NODE_CUSTODIAN]: [
     Action.PEER_CREATE,
     Action.PEER_UPDATE,
@@ -99,7 +109,9 @@ export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     Action.IBGP_CONNECT,
     Action.IBGP_DISCONNECT,
     Action.IBGP_UPDATE,
+    Action.PEER_LIST,
+    Action.IBGP_LIST,
   ],
-  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE],
-  [Role.USER]: [Action.LOGIN],
+  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE, Action.ROUTE_LIST],
+  [Role.USER]: [Action.LOGIN, Action.PEER_LIST, Action.ROUTE_LIST],
 }

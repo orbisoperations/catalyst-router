@@ -46,6 +46,7 @@ export type CatalystPolicyDomain = [
       Route: RouteEntity
       Token: Record<string, unknown>
       AdminPanel: Record<string, unknown>
+      Gateway: Record<string, unknown>
     }
   },
 ]
