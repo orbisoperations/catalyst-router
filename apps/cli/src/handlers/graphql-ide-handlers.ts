@@ -85,8 +85,10 @@ async function openBrowser(url: string): Promise<void> {
         ? ['cmd', '/c', 'start', url]
         : ['xdg-open', url]
 
-  const proc = Bun.spawn(command, { stdout: 'ignore', stderr: 'ignore' })
-  await proc.exited
+  const { execFile } = await import('node:child_process')
+  await new Promise<void>((resolve) => {
+    execFile(command[0], command.slice(1), { stdio: 'ignore' }, () => resolve())
+  })
 }
 
 /**
