@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "dependencies": {
     "zod": "catalog:"

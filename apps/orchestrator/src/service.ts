@@ -5,14 +5,12 @@ import { Actions } from '@catalyst/routing'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
-import { upgradeWebSocket, websocket } from 'hono/bun'
+import { upgradeWebSocket } from '@catalyst/service'
 import { CatalystNodeBus } from './orchestrator.js'
 import * as x509 from '@peculiar/x509'
 
 // Ensure @peculiar/x509 uses Bun's crypto
 x509.cryptoProvider.set(crypto)
-
-export { websocket }
 
 /**
  * PKI RPC handlers returned by AuthRpcApi.pki(token).

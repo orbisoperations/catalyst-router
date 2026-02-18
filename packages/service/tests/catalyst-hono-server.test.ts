@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import type { Server } from 'node:http'
 import { Hono } from 'hono'
 import { CatalystHonoServer, catalystHonoServer } from '../src/catalyst-hono-server.js'
 
@@ -73,19 +74,31 @@ describe('CatalystHonoServer', () => {
     expect(() => server.start()).toThrow(/already running/)
   })
 
-  it('throws if the requested port is already in use', async () => {
+  it('emits an error when the requested port is already in use', async () => {
     const port = getPort()
 
-    // Occupy the port with a raw Bun server
-    const blocker = Bun.serve({ fetch: () => new Response('busy'), port })
+    // Occupy the port with a raw Node.js server
+    const { createServer } = await import('node:net')
+    const blocker = createServer()
+    await new Promise<void>((resolve) => blocker.listen(port, resolve))
 
     try {
       const handler = new Hono()
       const server = new CatalystHonoServer(handler, { port })
+      server.start()
 
-      expect(() => server.start()).toThrow(/port.*in use|already in use/i)
+      // Node.js emits EADDRINUSE asynchronously. Catch the error on the
+      // underlying server to prevent an uncaught exception.
+      const httpServer = (server as unknown as { _server: Server })._server
+      const error = await new Promise<Error>((resolve) => {
+        httpServer.on('error', (err: Error) => resolve(err))
+      })
+
+      expect(error.message).toContain('EADDRINUSE')
+
+      await server.stop()
     } finally {
-      blocker.stop()
+      blocker.close()
     }
   })
 

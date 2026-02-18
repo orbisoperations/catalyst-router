@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import { spawnSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import path from 'path'
 import {
   GenericContainer,
@@ -14,8 +14,8 @@ import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    execSync('docker info', { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -33,32 +33,14 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
   const repoRoot = path.resolve(__dirname, '../../../')
 
   const buildImages = async () => {
-    const checkImage = (imageName: string) =>
-      spawnSync('docker', ['image', 'inspect', imageName]).status === 0
-
-    if (!checkImage(orchestratorImage)) {
-      console.log('Building Orchestrator image for Topology tests...')
-      const orchestratorBuild = spawnSync(
-        'docker',
-        ['build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-        { cwd: repoRoot, stdio: 'inherit' }
-      )
-      if (orchestratorBuild.status !== 0) throw new Error('Docker build orchestrator failed')
-    } else {
-      console.log(`Using existing image: ${orchestratorImage}`)
-    }
-
-    if (!checkImage(authImage)) {
-      console.log('Building Auth image for Topology tests...')
-      const authBuild = spawnSync(
-        'docker',
-        ['build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-        { cwd: repoRoot, stdio: 'inherit' }
-      )
-      if (authBuild.status !== 0) throw new Error('Docker build auth failed')
-    } else {
-      console.log(`Using existing image: ${authImage}`)
-    }
+    console.log('Building images for topology tests...')
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/orchestrator/Dockerfile').build(
+      orchestratorImage,
+      { deleteOnExit: false }
+    )
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/auth/Dockerfile').build(authImage, {
+      deleteOnExit: false,
+    })
   }
 
   describe('Shared Auth: 2 nodes, 1 auth server', () => {

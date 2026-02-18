@@ -1,8 +1,9 @@
 /**
  * mTLS integration test — proves PKI-generated certificates work for real TLS connections.
  *
- * Uses Bun.serve() as a TLS server and fetch() as a TLS client to exercise actual
- * TLS handshakes with certificates built by our WebCryptoSigningBackend.
+ * Uses node:https as a TLS server and a custom tlsFetch helper as a TLS client
+ * to exercise actual TLS handshakes with certificates built by our
+ * WebCryptoSigningBackend.
  *
  * The test builds its own CA hierarchy using the signing backend directly (not
  * CertificateManager) because CertificateManager's intermediate CAs carry URI-only
@@ -17,24 +18,66 @@
  * - Mutual TLS: server requires and validates client cert presence
  * - No-client-cert rejection
  * - Cross-CA isolation at the X.509 chain-builder level
- *
- * NOTE on Bun mTLS: Bun 1.3.x `rejectUnauthorized: true` on the server enforces
- * that a client cert is *present* but does not validate the client cert's issuing CA
- * against the server's `ca` bundle. Cross-CA rejection is therefore tested at the
- * X.509 chain-builder level, which matches what a production SPIFFE verifier does.
- *
- * NOTE on Bun TLS session cache: Bun caches TLS sessions per hostname. When multiple
- * tests connect to `localhost` with different TLS configurations (one-way vs mTLS),
- * the cached session from an earlier test can poison later connections. The workaround
- * is to pass `serverName: 'localhost'` in the fetch `tls` options, which forces Bun
- * to establish a fresh TLS session rather than reusing a cached one.
  */
 import { describe, test, expect, beforeAll, afterEach } from 'vitest'
+import * as https from 'node:https'
+import type { AddressInfo } from 'node:net'
 import * as x509 from '@peculiar/x509'
 import { WebCryptoSigningBackend } from '../../src/signing/webcrypto-signing-backend.js'
 import { CertificateManager } from '../../src/certificate-manager.js'
 
 x509.cryptoProvider.set(crypto)
+
+// ---------------------------------------------------------------------------
+// TLS test helpers
+// ---------------------------------------------------------------------------
+
+interface TlsTestServer {
+  port: number
+  stop(): void
+}
+
+/**
+ * Make an HTTPS request with custom TLS options.
+ * Replaces Bun's `fetch(url, { tls: {...} })` with node:https.
+ */
+async function tlsFetch(
+  url: string,
+  options?: {
+    ca?: string
+    cert?: string
+    key?: string
+    rejectUnauthorized?: boolean
+    servername?: string
+  }
+): Promise<{ status: number; text(): Promise<string> }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url)
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        port: u.port,
+        path: u.pathname + u.search,
+        method: 'GET',
+        ...options,
+      },
+      (res) => {
+        let body = ''
+        res.on('data', (chunk: string) => {
+          body += chunk
+        })
+        res.on('end', () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            text: async () => body,
+          })
+        })
+      }
+    )
+    req.on('error', reject)
+    req.end()
+  })
+}
 
 /** Export a CryptoKey private key to PEM format. */
 async function exportKeyPem(key: CryptoKey): Promise<string> {
@@ -60,7 +103,7 @@ describe('mTLS integration', () => {
   let clientKeyPem: string
 
   // Each test creates its own server; stopped in afterEach to prevent interference
-  let activeServer: ReturnType<typeof Bun.serve> | null = null
+  let activeServer: TlsTestServer | null = null
 
   beforeAll(async () => {
     const now = new Date()
@@ -138,44 +181,64 @@ describe('mTLS integration', () => {
   })
 
   /** Start a one-way TLS server (no client cert required). */
-  function startOneWayServer(handler: (req: Request) => Response): ReturnType<typeof Bun.serve> {
+  async function startOneWayServer(handler: (req: Request) => Response): Promise<TlsTestServer> {
     const fullServerChain = [serverCertPem, intermediateCaPem].join('\n')
 
-    activeServer = Bun.serve({
-      port: 0,
-      tls: { cert: fullServerChain, key: serverKeyPem },
-      fetch: handler,
+    const server = https.createServer(
+      { cert: fullServerChain, key: serverKeyPem },
+      async (_req, res) => {
+        const response = handler(new Request('https://localhost/'))
+        res.writeHead(response.status)
+        res.end(await response.text())
+      }
+    )
+
+    return new Promise<TlsTestServer>((resolve) => {
+      server.listen(0, () => {
+        const port = (server.address() as AddressInfo).port
+        activeServer = { port, stop: () => server.close() }
+        resolve(activeServer)
+      })
     })
-    return activeServer
   }
 
   /** Start a mutual TLS server (requires client cert). */
-  function startMtlsServer(handler: (req: Request) => Response): ReturnType<typeof Bun.serve> {
+  async function startMtlsServer(handler: (req: Request) => Response): Promise<TlsTestServer> {
     const fullServerChain = [serverCertPem, intermediateCaPem].join('\n')
     const serverCaBundle = [rootCaPem, intermediateCaPem].join('\n')
 
-    activeServer = Bun.serve({
-      port: 0,
-      tls: {
+    const server = https.createServer(
+      {
         cert: fullServerChain,
         key: serverKeyPem,
         ca: serverCaBundle,
         requestCert: true,
         rejectUnauthorized: true,
       },
-      fetch: handler,
+      async (_req, res) => {
+        const response = handler(new Request('https://localhost/'))
+        res.writeHead(response.status)
+        res.end(await response.text())
+      }
+    )
+
+    return new Promise<TlsTestServer>((resolve) => {
+      server.listen(0, () => {
+        const port = (server.address() as AddressInfo).port
+        activeServer = { port, stop: () => server.close() }
+        resolve(activeServer)
+      })
     })
-    return activeServer
   }
 
   // ===== One-way TLS (server authentication only) =====
 
   describe('server authentication (one-way TLS)', () => {
     test('client trusting our CA can connect to a PKI-signed server', async () => {
-      const server = startOneWayServer(() => new Response('hello-tls'))
+      const server = await startOneWayServer(() => new Response('hello-tls'))
 
-      const resp = await fetch(`https://localhost:${server.port}/`, {
-        tls: { ca: rootCaPem },
+      const resp = await tlsFetch(`https://localhost:${server.port}/`, {
+        ca: rootCaPem,
       })
 
       expect(resp.status).toBe(200)
@@ -187,18 +250,13 @@ describe('mTLS integration', () => {
 
   describe('mutual TLS (client cert required)', () => {
     test('mTLS succeeds with valid client cert', async () => {
-      const server = startMtlsServer(() => new Response('mtls-ok'))
+      const server = await startMtlsServer(() => new Response('mtls-ok'))
 
-      // Use serverName to force a fresh TLS session (bypasses Bun's
-      // per-hostname session cache that can carry stale state from
-      // previous tests).
-      const resp = await fetch(`https://localhost:${server.port}/`, {
-        tls: {
-          cert: clientCertPem,
-          key: clientKeyPem,
-          ca: rootCaPem,
-          serverName: 'localhost',
-        },
+      const resp = await tlsFetch(`https://localhost:${server.port}/`, {
+        cert: clientCertPem,
+        key: clientKeyPem,
+        ca: rootCaPem,
+        servername: 'localhost',
       })
 
       expect(resp.status).toBe(200)
@@ -210,11 +268,11 @@ describe('mTLS integration', () => {
 
   describe('TLS rejection scenarios', () => {
     test('client NOT trusting our CA gets a TLS error', async () => {
-      const server = startOneWayServer(() => new Response('should-not-reach'))
+      const server = await startOneWayServer(() => new Response('should-not-reach'))
 
       try {
-        const resp = await fetch(`https://localhost:${server.port}/`, {
-          tls: { rejectUnauthorized: true },
+        const resp = await tlsFetch(`https://localhost:${server.port}/`, {
+          rejectUnauthorized: true,
         })
         expect(resp.status).not.toBe(200)
       } catch (e) {
@@ -224,11 +282,11 @@ describe('mTLS integration', () => {
     })
 
     test('connection is rejected when no client cert is presented', async () => {
-      const server = startMtlsServer(() => new Response('should-not-reach'))
+      const server = await startMtlsServer(() => new Response('should-not-reach'))
 
       try {
-        await fetch(`https://localhost:${server.port}/`, {
-          tls: { ca: rootCaPem },
+        await tlsFetch(`https://localhost:${server.port}/`, {
+          ca: rootCaPem,
         })
         expect.unreachable('Expected TLS rejection without client cert')
       } catch (e) {

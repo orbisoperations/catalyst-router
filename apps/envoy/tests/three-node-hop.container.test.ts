@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { execSync } from 'node:child_process'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { Readable } from 'node:stream'
 import path from 'path'
@@ -19,7 +20,6 @@ import {
 // Configuration
 // ---------------------------------------------------------------------------
 
-const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 const repoRoot = path.resolve(__dirname, '../../..')
 
 /** Fixed Envoy listener port — one route per test, one port per node. */
@@ -47,7 +47,8 @@ const BOOKS_IMAGE = 'books-service:three-node-e2e'
 
 const isDockerRunning = (): boolean => {
   try {
-    return Bun.spawnSync(['docker', 'info']).exitCode === 0
+    execSync('docker info', { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -63,19 +64,10 @@ if (skipTests) {
 // ---------------------------------------------------------------------------
 
 async function buildImageIfNeeded(imageName: string, dockerfile: string): Promise<void> {
-  const check = Bun.spawnSync([CONTAINER_RUNTIME, 'image', 'inspect', imageName])
-  if (check.exitCode === 0) {
-    console.log(`Using existing image: ${imageName}`)
-    return
-  }
   console.log(`Building image: ${imageName}...`)
-  const build = Bun.spawn([CONTAINER_RUNTIME, 'build', '-f', dockerfile, '-t', imageName, '.'], {
-    cwd: repoRoot,
-    stdout: 'ignore',
-    stderr: 'inherit',
+  await GenericContainer.fromDockerfile(repoRoot, dockerfile).build(imageName, {
+    deleteOnExit: false,
   })
-  const exitCode = await build.exited
-  if (exitCode !== 0) throw new Error(`Failed to build ${imageName}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -551,27 +543,20 @@ describe.skipIf(skipTests)('HTTP Three-Node Multi-Hop', () => {
     async () => {
       // curl from inside Envoy C container to hit the egress port
       // Path: curl (inside Envoy C) -> egress :10000 -> envoy-proxy-b:10000 -> envoy-proxy-a:10000 -> books:8080
-      const proc = Bun.spawn(
-        [
-          CONTAINER_RUNTIME,
-          'exec',
-          cluster.envoyProxyC.getId(),
-          'curl',
-          '-s',
-          '-X',
-          'POST',
-          '-H',
-          'Content-Type: application/json',
-          '-d',
-          '{"query":"{ books { title author } }"}',
-          `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
-        ],
-        { stdout: 'pipe', stderr: 'pipe' }
-      )
-      const exitCode = await proc.exited
-      const stdout = await new Response(proc.stdout).text()
+      const result = await cluster.envoyProxyC.exec([
+        'curl',
+        '-s',
+        '-X',
+        'POST',
+        '-H',
+        'Content-Type: application/json',
+        '-d',
+        '{"query":"{ books { title author } }"}',
+        `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
+      ])
+      const stdout = result.output
 
-      expect(exitCode).toBe(0)
+      expect(result.exitCode).toBe(0)
 
       const json = JSON.parse(stdout.trim()) as {
         data?: { books?: Array<{ title: string; author: string }> }
@@ -662,27 +647,20 @@ describe.skipIf(skipTests)('TCP Three-Node Multi-Hop', () => {
     async () => {
       // Same curl command as HTTP — tcp_proxy does L4 passthrough of raw HTTP bytes
       // Path: curl (inside Envoy C) -> tcp egress :10000 -> envoy-proxy-b:10000 -> envoy-proxy-a:10000 -> books:8080
-      const proc = Bun.spawn(
-        [
-          CONTAINER_RUNTIME,
-          'exec',
-          cluster.envoyProxyC.getId(),
-          'curl',
-          '-s',
-          '-X',
-          'POST',
-          '-H',
-          'Content-Type: application/json',
-          '-d',
-          '{"query":"{ books { title author } }"}',
-          `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
-        ],
-        { stdout: 'pipe', stderr: 'pipe' }
-      )
-      const exitCode = await proc.exited
-      const stdout = await new Response(proc.stdout).text()
+      const result = await cluster.envoyProxyC.exec([
+        'curl',
+        '-s',
+        '-X',
+        'POST',
+        '-H',
+        'Content-Type: application/json',
+        '-d',
+        '{"query":"{ books { title author } }"}',
+        `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
+      ])
+      const stdout = result.output
 
-      expect(exitCode).toBe(0)
+      expect(result.exitCode).toBe(0)
 
       const json = JSON.parse(stdout.trim()) as {
         data?: { books?: Array<{ title: string; author: string }> }

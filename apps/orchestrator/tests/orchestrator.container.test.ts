@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { execSync } from 'node:child_process'
 import {
   GenericContainer,
   Network,
@@ -13,14 +14,12 @@ import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { PublicApi, PeerInfo } from '../src/orchestrator'
 import { Actions } from '@catalyst/routing'
 
-import path from 'path'
-import type { PeerInfo, PublicApi } from '../src/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    execSync('docker info', { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -47,17 +46,14 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   beforeAll(async () => {
     const repoRoot = path.resolve(__dirname, '../../../')
 
-    const buildImage = async (dockerfilePath: string, imageName: string) => {
-      console.log(`Building ${imageName} image for Container tests...`)
-      const buildResult = Bun.spawnSync(
-        ['docker', 'build', '-f', dockerfilePath, '-t', imageName, '.'],
-        { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
-      )
-      if (buildResult.exitCode !== 0) throw new Error(`Docker build ${imageName} failed`)
-    }
-
-    await buildImage('apps/orchestrator/Dockerfile', orchestratorImage)
-    await buildImage('apps/auth/Dockerfile', authImage)
+    console.log('Building images for container tests...')
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/orchestrator/Dockerfile').build(
+      orchestratorImage,
+      { deleteOnExit: false }
+    )
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/auth/Dockerfile').build(authImage, {
+      deleteOnExit: false,
+    })
 
     network = await new Network().start()
 

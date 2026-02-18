@@ -1,6 +1,18 @@
 import { defineConfig } from 'vitest/config'
+import { readFileSync } from 'node:fs'
 
 export default defineConfig({
+  plugins: [
+    {
+      name: 'cedar-loader',
+      load(id) {
+        if (id.endsWith('.cedar')) {
+          const content = readFileSync(id, 'utf-8')
+          return `export default ${JSON.stringify(content)}`
+        }
+      },
+    },
+  ],
   test: {
     environment: 'node',
     include: [

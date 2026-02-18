@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Hono } from 'hono'
-import { websocket } from 'hono/bun'
 import { newWebSocketRpcSession } from 'capnweb'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
+import { createTestWebSocketServer, createTestServer, type TestServerInfo } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
 import { OrchestratorService } from '../../orchestrator/src/service.js'
 import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
@@ -16,7 +16,7 @@ import type { EnvoyRpcServer } from '../src/rpc/server.js'
 /**
  * End-to-end integration test: Auth -> Orchestrator -> Envoy -> Books API
  *
- * Starts 4 real Bun servers in-process:
+ * Starts 4 real servers in-process (via @catalyst/service test utilities):
  * 1. Auth service (in-memory DBs, mints system admin token)
  * 2. Books API (GraphQL service)
  * 3. Envoy service (receives xDS config via RPC)
@@ -26,10 +26,10 @@ import type { EnvoyRpcServer } from '../src/rpc/server.js'
  */
 describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
   // Servers
-  let authServer: ReturnType<typeof Bun.serve>
-  let booksServer: ReturnType<typeof Bun.serve>
-  let envoyServer: ReturnType<typeof Bun.serve>
-  let orchServer: ReturnType<typeof Bun.serve>
+  let authServer: TestServerInfo
+  let booksServer: TestServerInfo
+  let envoyServer: TestServerInfo
+  let orchServer: TestServerInfo
 
   // Services (for shutdown)
   let authService: AuthService
@@ -43,24 +43,25 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
 
   beforeAll(async () => {
     // ── 1. Start Auth Service ──────────────────────────────────────
+    // Service MUST be created inside the factory so its WebSocket routes
+    // capture the correct upgradeWebSocket binding from @hono/node-ws.
     const authConfig = CatalystConfigSchema.parse({
       node: { name: 'auth-node', domains: ['somebiz.local.io'] },
       auth: { keysDb: ':memory:', tokensDb: ':memory:' },
       port: 0,
     })
-    authService = await AuthService.create({ config: authConfig })
-    systemToken = authService.systemToken
 
-    const authApp = new Hono()
-    authApp.route('/', authService.handler)
-    authServer = Bun.serve({ fetch: authApp.fetch, port: 0, websocket })
+    authServer = await createTestWebSocketServer(async () => {
+      authService = await AuthService.create({ config: authConfig })
+      systemToken = authService.systemToken
+      const app = new Hono()
+      app.route('/', authService.handler)
+      return app
+    })
 
     // ── 2. Start Books API ─────────────────────────────────────────
     const booksModule = await import('../../../examples/books-api/src/index.js')
-    booksServer = Bun.serve({
-      fetch: booksModule.default.fetch,
-      port: 0,
-    })
+    booksServer = await createTestServer(booksModule.default)
 
     // ── 3. Start Envoy Service ─────────────────────────────────────
     const envoyConfig = CatalystConfigSchema.parse({
@@ -68,42 +69,48 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
       envoy: { adminPort: 9901, xdsPort: 18000, bindAddress: '0.0.0.0' },
       port: 0,
     })
-    envoyService = await EnvoyService.create({ config: envoyConfig })
 
-    const envoyApp = new Hono()
-    envoyApp.route('/', envoyService.handler)
-    envoyServer = Bun.serve({ fetch: envoyApp.fetch, port: 0, websocket })
+    envoyServer = await createTestWebSocketServer(async () => {
+      envoyService = await EnvoyService.create({ config: envoyConfig })
+      const app = new Hono()
+      app.route('/', envoyService.handler)
+      return app
+    })
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
     // Pre-allocate a port for the orchestrator so we can set node.endpoint
-    const tempServer = Bun.serve({ fetch: () => new Response(''), port: 0 })
+    const tempServer = await createTestServer({ fetch: () => new Response('') })
     const orchPort = tempServer.port
     tempServer.stop()
 
-    const orchConfig = CatalystConfigSchema.parse({
-      node: {
-        name: 'node-a.somebiz.local.io', // Must end with domain suffix
-        domains: ['somebiz.local.io'],
-        endpoint: `ws://localhost:${orchPort}/rpc`,
+    orchServer = await createTestWebSocketServer(
+      async () => {
+        const orchConfig = CatalystConfigSchema.parse({
+          node: {
+            name: 'node-a.somebiz.local.io', // Must end with domain suffix
+            domains: ['somebiz.local.io'],
+            endpoint: `ws://localhost:${orchPort}/rpc`,
+          },
+          orchestrator: {
+            ibgp: { secret: 'test-secret' },
+            auth: {
+              endpoint: `ws://localhost:${authServer.port}/rpc`,
+              systemToken,
+            },
+            envoyConfig: {
+              endpoint: `ws://localhost:${envoyServer.port}/api`,
+              portRange: [[10000, 10100]],
+            },
+          },
+          port: orchPort,
+        })
+        orchService = await OrchestratorService.create({ config: orchConfig })
+        const app = new Hono()
+        app.route('/', orchService.handler)
+        return app
       },
-      orchestrator: {
-        ibgp: { secret: 'test-secret' },
-        auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
-          systemToken,
-        },
-        envoyConfig: {
-          endpoint: `ws://localhost:${envoyServer.port}/api`,
-          portRange: [[10000, 10100]],
-        },
-      },
-      port: orchPort,
-    })
-    orchService = await OrchestratorService.create({ config: orchConfig })
-
-    const orchApp = new Hono()
-    orchApp.route('/', orchService.handler)
-    orchServer = Bun.serve({ fetch: orchApp.fetch, port: orchPort, websocket })
+      { port: orchPort }
+    )
 
     ports = {
       auth: authServer.port,

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { execSync } from 'node:child_process'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { Readable } from 'node:stream'
 import path from 'path'
@@ -19,7 +20,6 @@ import {
 // Configuration
 // ---------------------------------------------------------------------------
 
-const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 const repoRoot = path.resolve(__dirname, '../../..')
 
 /** Fixed Envoy listener port — used for both ingress (Node A) and egress (Node B). */
@@ -47,7 +47,8 @@ const BOOKS_IMAGE = 'books-service:cross-node-e2e'
 
 const isDockerRunning = (): boolean => {
   try {
-    return Bun.spawnSync(['docker', 'info']).exitCode === 0
+    execSync('docker info', { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -59,23 +60,14 @@ if (skipTests) {
 }
 
 // ---------------------------------------------------------------------------
-// Image builder with caching
+// Image builder using testcontainers native build
 // ---------------------------------------------------------------------------
 
 async function buildImageIfNeeded(imageName: string, dockerfile: string): Promise<void> {
-  const check = Bun.spawnSync([CONTAINER_RUNTIME, 'image', 'inspect', imageName])
-  if (check.exitCode === 0) {
-    console.log(`Using existing image: ${imageName}`)
-    return
-  }
   console.log(`Building image: ${imageName}...`)
-  const build = Bun.spawn([CONTAINER_RUNTIME, 'build', '-f', dockerfile, '-t', imageName, '.'], {
-    cwd: repoRoot,
-    stdout: 'ignore',
-    stderr: 'inherit',
+  await GenericContainer.fromDockerfile(repoRoot, dockerfile).build(imageName, {
+    deleteOnExit: false,
   })
-  const exitCode = await build.exited
-  if (exitCode !== 0) throw new Error(`Failed to build ${imageName}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -524,31 +516,24 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
     'routes traffic from Node B through Envoy to books-api on Node A',
     async () => {
       // The egress listener binds to 127.0.0.1 inside the container (by design
-      // — egress is for local-node consumption). We use `docker exec` to run
+      // — egress is for local-node consumption). We use container.exec() to run
       // curl from inside the Envoy B container to hit the egress port.
       //
       // Path: curl (inside Envoy B) → egress :10000 → envoy-proxy-a:10000 (ingress) → books:8080
-      const proc = Bun.spawn(
-        [
-          CONTAINER_RUNTIME,
-          'exec',
-          envoyProxyB.getId(),
-          'curl',
-          '-s',
-          '-X',
-          'POST',
-          '-H',
-          'Content-Type: application/json',
-          '-d',
-          '{"query":"{ books { title author } }"}',
-          `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
-        ],
-        { stdout: 'pipe', stderr: 'pipe' }
-      )
-      const exitCode = await proc.exited
-      const stdout = await new Response(proc.stdout).text()
+      const result = await envoyProxyB.exec([
+        'curl',
+        '-s',
+        '-X',
+        'POST',
+        '-H',
+        'Content-Type: application/json',
+        '-d',
+        '{"query":"{ books { title author } }"}',
+        `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
+      ])
+      const stdout = result.output
 
-      expect(exitCode).toBe(0)
+      expect(result.exitCode).toBe(0)
 
       const json = JSON.parse(stdout.trim()) as {
         data?: { books?: Array<{ title: string; author: string }> }

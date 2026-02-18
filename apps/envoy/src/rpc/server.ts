@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { Hono } from 'hono'
-import { upgradeWebSocket } from 'hono/bun'
+import { upgradeWebSocket } from '@catalyst/service'
 import { RpcTarget } from 'capnweb'
 import { newRpcResponse } from '@hono/capnweb'
 import { TelemetryBuilder } from '@catalyst/telemetry'
