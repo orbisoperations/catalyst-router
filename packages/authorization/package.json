@@ -13,6 +13,7 @@
     "@catalyst/service": "catalog:",
     "@catalyst/telemetry": "catalog:",
     "@catalyst/types": "workspace:*",
+    "better-sqlite3": "catalog:",
     "@cedar-policy/cedar-wasm": "catalog:",
     "@hono/capnweb": "catalog:",
     "capnweb": "catalog:",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@peculiar/x509": "^1.14.3",
+    "@types/better-sqlite3": "catalog:dev",
     "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "typescript": "catalog:dev",

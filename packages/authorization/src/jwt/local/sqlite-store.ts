@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite'
+import Database from 'better-sqlite3'
 import type { TokenStore, TokenRecord, EntityType } from '../index.js'
 
 interface TokenRow {
@@ -13,7 +13,7 @@ interface TokenRow {
 }
 
 export class BunSqliteTokenStore implements TokenStore {
-  private db: Database
+  private db: Database.Database
 
   constructor(path: string = ':memory:') {
     this.db = new Database(path)
@@ -21,7 +21,7 @@ export class BunSqliteTokenStore implements TokenStore {
   }
 
   private initialize() {
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS token (
         jti TEXT PRIMARY KEY,
         expires_at INTEGER NOT NULL,
@@ -33,32 +33,36 @@ export class BunSqliteTokenStore implements TokenStore {
         is_revoked INTEGER NOT NULL DEFAULT 0 -- 0=false, 1=true
       )
     `)
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_token_expires_at ON token(expires_at)`)
-    this.db.run(
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_token_expires_at ON token(expires_at)`)
+    this.db.exec(
       `CREATE INDEX IF NOT EXISTS idx_token_certificate_fingerprint ON token(certificate_fingerprint)`
     )
   }
 
   async recordToken(record: TokenRecord): Promise<void> {
-    const stmt = this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO token (jti, expires_at, certificate_fingerprint, subject_alternative_names, entity_id, entity_name, entity_type, is_revoked)
       VALUES ($jti, $expires_at, $certificate_fingerprint, $subject_alternative_names, $entity_id, $entity_name, $entity_type, $is_revoked)
-    `)
-    stmt.run({
-      $jti: record.jti,
-      $expires_at: record.expiry,
-      $certificate_fingerprint: record.cfn ?? null,
-      $subject_alternative_names: JSON.stringify(record.sans),
-      $entity_id: record.entityId,
-      $entity_name: record.entityName,
-      $entity_type: record.entityType,
-      $is_revoked: record.revoked ? 1 : 0,
-    })
+    `
+      )
+      .run({
+        jti: record.jti,
+        expires_at: record.expiry,
+        certificate_fingerprint: record.cfn ?? null,
+        subject_alternative_names: JSON.stringify(record.sans),
+        entity_id: record.entityId,
+        entity_name: record.entityName,
+        entity_type: record.entityType,
+        is_revoked: record.revoked ? 1 : 0,
+      })
   }
 
   async findToken(jti: string): Promise<TokenRecord | null> {
-    const stmt = this.db.prepare('SELECT * FROM token WHERE jti = $jti')
-    const result = stmt.get({ $jti: jti }) as TokenRow | null
+    const result = this.db.prepare('SELECT * FROM token WHERE jti = $jti').get({ jti }) as
+      | TokenRow
+      | undefined
     if (!result) return null
 
     return {
@@ -74,14 +78,14 @@ export class BunSqliteTokenStore implements TokenStore {
   }
 
   async revokeToken(jti: string): Promise<void> {
-    this.db.run('UPDATE token SET is_revoked = 1 WHERE jti = ?', [jti])
+    this.db.prepare('UPDATE token SET is_revoked = 1 WHERE jti = ?').run(jti)
   }
 
   async revokeBySan(san: string): Promise<void> {
     // Simple LIKE search for JSON array string
-    this.db.run('UPDATE token SET is_revoked = 1 WHERE subject_alternative_names LIKE ?', [
-      `%${san}%`,
-    ])
+    this.db
+      .prepare('UPDATE token SET is_revoked = 1 WHERE subject_alternative_names LIKE ?')
+      .run(`%${san}%`)
   }
 
   /**
@@ -93,15 +97,16 @@ export class BunSqliteTokenStore implements TokenStore {
    * - Single round-trip to SQLite
    */
   async isRevoked(jti: string): Promise<boolean> {
-    const stmt = this.db.prepare('SELECT is_revoked FROM token WHERE jti = $jti')
-    const row = stmt.get({ $jti: jti }) as { is_revoked: number } | null
+    const row = this.db.prepare('SELECT is_revoked FROM token WHERE jti = $jti').get({ jti }) as
+      | { is_revoked: number }
+      | undefined
     return row ? row.is_revoked === 1 : false
   }
 
   async getRevocationList(): Promise<string[]> {
     const now = Math.floor(Date.now() / 1000)
     const rows = this.db
-      .query('SELECT jti FROM token WHERE is_revoked = 1 AND expires_at > ?')
+      .prepare('SELECT jti FROM token WHERE is_revoked = 1 AND expires_at > ?')
       .all(now) as { jti: string }[]
     return rows.map((r) => r.jti)
   }
@@ -115,16 +120,15 @@ export class BunSqliteTokenStore implements TokenStore {
 
     if (filter?.certificateFingerprint) {
       query += ' AND certificate_fingerprint = $cfn'
-      params.$cfn = filter.certificateFingerprint
+      params.cfn = filter.certificateFingerprint
     }
 
     if (filter?.san) {
       query += ' AND subject_alternative_names LIKE $san'
-      params.$san = `%${filter.san}%`
+      params.san = `%${filter.san}%`
     }
 
-    const stmt = this.db.prepare(query)
-    const rows = stmt.all(params) as TokenRow[]
+    const rows = this.db.prepare(query).all(params) as TokenRow[]
     return rows.map((row) => ({
       jti: row.jti,
       expiry: row.expires_at,

@@ -12,6 +12,7 @@
     "@catalyst/config": "catalog:",
     "@catalyst/telemetry": "catalog:",
     "@peculiar/x509": "^1.12.3",
+    "better-sqlite3": "catalog:",
     "zod": "catalog:"
   },
   "scripts": {
@@ -20,6 +21,7 @@
     "test:integration": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -E 'integration|container')"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "catalog:dev",
     "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "typescript": "catalog:dev",
