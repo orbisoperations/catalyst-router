@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { execSync } from 'node:child_process'
 import {
   GenericContainer,
   Wait,
@@ -11,8 +12,8 @@ import { createOrchestratorClient } from '../../src/clients/orchestrator-client.
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    execSync('docker info', { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -38,23 +39,13 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
 
   beforeAll(async () => {
     console.log('Building images...')
-    // Build orchestrator image
-    const orchestratorBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-      { cwd: repoRoot }
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/orchestrator/Dockerfile').build(
+      orchestratorImage,
+      { deleteOnExit: false }
     )
-    if (orchestratorBuild.exitCode !== 0) {
-      throw new Error('Failed to build orchestrator image')
-    }
-
-    // Build auth image
-    const authBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-      { cwd: repoRoot }
-    )
-    if (authBuild.exitCode !== 0) {
-      throw new Error('Failed to build auth image')
-    }
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/auth/Dockerfile').build(authImage, {
+      deleteOnExit: false,
+    })
 
     // Create network
     network = await new Network().start()

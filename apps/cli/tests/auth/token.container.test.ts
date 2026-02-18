@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { execSync } from 'node:child_process'
 import path from 'path'
 import {
   GenericContainer,
@@ -11,8 +12,8 @@ import { createAuthClient } from '../../src/clients/auth-client.js'
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    execSync('docker info', { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -36,20 +37,17 @@ describe.skipIf(skipTests)('Token Commands Container Tests', () => {
 
   beforeAll(async () => {
     console.log('Building auth image...')
-    const authBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-      { cwd: repoRoot }
-    )
-    if (authBuild.exitCode !== 0) {
-      throw new Error('Failed to build auth image')
-    }
+    const authContainer = await GenericContainer.fromDockerfile(
+      repoRoot,
+      'apps/auth/Dockerfile'
+    ).build(authImage, { deleteOnExit: false })
 
     // Create network
     network = await new Network().start()
 
     // Start auth service
     console.log('Starting auth service...')
-    auth = await new GenericContainer(authImage)
+    auth = await authContainer
       .withNetwork(network)
       .withNetworkAliases('auth')
       .withExposedPorts(5000)

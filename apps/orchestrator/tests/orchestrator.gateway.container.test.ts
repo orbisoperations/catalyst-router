@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { execSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { Readable } from 'node:stream'
 import path from 'path'
@@ -14,8 +15,8 @@ import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    execSync('docker info', { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -35,41 +36,21 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
   const repoRoot = path.resolve(__dirname, '../../../')
 
   const buildImages = async () => {
-    console.log('Building Gateway image...')
-    const gatewayBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/gateway/Dockerfile', '-t', gatewayImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    console.log('Building images for gateway container tests...')
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/gateway/Dockerfile').build(gatewayImage, {
+      deleteOnExit: false,
+    })
+    await GenericContainer.fromDockerfile(repoRoot, 'examples/books-api/Dockerfile').build(
+      booksImage,
+      { deleteOnExit: false }
     )
-    if (gatewayBuild.exitCode !== 0) {
-      throw new Error(`docker build gateway failed: ${gatewayBuild.exitCode}`)
-    }
-
-    console.log('Building Books service image...')
-    const booksBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'examples/books-api/Dockerfile', '-t', booksImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/orchestrator/Dockerfile').build(
+      orchestratorImage,
+      { deleteOnExit: false }
     )
-    if (booksBuild.exitCode !== 0) {
-      throw new Error(`docker build books failed: ${booksBuild.exitCode}`)
-    }
-
-    console.log('Building Orchestrator image...')
-    const orchestratorBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
-    )
-    if (orchestratorBuild.exitCode !== 0) {
-      throw new Error(`docker build orchestrator failed: ${orchestratorBuild.exitCode}`)
-    }
-
-    console.log('Building Auth image...')
-    const authBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
-    )
-    if (authBuild.exitCode !== 0) {
-      throw new Error(`docker build auth failed: ${authBuild.exitCode}`)
-    }
+    await GenericContainer.fromDockerfile(repoRoot, 'apps/auth/Dockerfile').build(authImage, {
+      deleteOnExit: false,
+    })
   }
 
   describe('Shared Auth', () => {
