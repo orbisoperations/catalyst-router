@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GenericContainer,
   Network,
@@ -285,15 +285,15 @@ class MockConnectionPool extends ConnectionPool {
   get(endpoint: string) {
     if (!this.mockStubs.has(endpoint)) {
       const stub = {
-        updateConfig: mock(async (config: GatewayConfig) => {
+        updateConfig: vi.fn(async (config: GatewayConfig) => {
           this.calls.push({ endpoint, config })
           return { success: true }
         }),
-        getIBGPClient: mock(async () => ({
+        getIBGPClient: vi.fn(async () => ({
           success: true,
           client: {
-            update: mock(async () => ({ success: true })),
-            open: mock(async () => ({ success: true })),
+            update: vi.fn(async () => ({ success: true })),
+            open: vi.fn(async () => ({ success: true })),
           },
         })),
       }

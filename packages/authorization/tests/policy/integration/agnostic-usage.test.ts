@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { EntityBuilder } from '../../../src/policy/src/entity-builder.js'
 import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodModel.js'

@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",
-    "testcontainers": "catalog:testing"
+    "testcontainers": "catalog:testing",
+    "vitest": "catalog:testing"
   }
 }

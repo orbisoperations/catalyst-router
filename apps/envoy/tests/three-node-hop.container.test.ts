@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { Readable } from 'node:stream'
 import path from 'path'

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { websocket } from 'hono/bun'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { GatewayUpdateResult } from '../src/rpc/server.js'
@@ -12,7 +12,7 @@ describe('RPC Integration', () => {
   let rpcClient: any
 
   // Mock callback
-  const updateCallback = mock(async (_config: unknown): Promise<GatewayUpdateResult> => {
+  const updateCallback = vi.fn(async (_config: unknown): Promise<GatewayUpdateResult> => {
     return { success: true }
   })
 

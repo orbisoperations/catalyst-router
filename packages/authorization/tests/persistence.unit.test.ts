@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { BunSqliteTokenStore, BunSqliteKeyStore, PersistentLocalKeyManager } from '../src/index.js'
 
 describe('Authorization Persistence', () => {

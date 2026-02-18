@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'bun:test'
+import { describe, it, expect, beforeAll } from 'vitest'
 import * as x509 from '@peculiar/x509'
 import { AuthRpcServer } from '../../src/service/rpc/server.js'
 import type { PkiHandlers } from '../../src/service/rpc/schema.js'
@@ -141,10 +141,10 @@ describe('PKI Progressive API', () => {
       const result = await handlers.initialize()
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.rootFingerprint).toBeString()
+        expect(result.rootFingerprint).toBeTypeOf('string')
         expect(result.rootFingerprint.length).toBeGreaterThan(0)
-        expect(result.servicesCaFingerprint).toBeString()
-        expect(result.transportCaFingerprint).toBeString()
+        expect(result.servicesCaFingerprint).toBeTypeOf('string')
+        expect(result.transportCaFingerprint).toBeTypeOf('string')
       }
     })
   })
@@ -166,12 +166,12 @@ describe('PKI Progressive API', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.certificatePem).toContain('BEGIN CERTIFICATE')
-        expect(result.chain).toBeArray()
+        expect(result.chain).toSatisfy(Array.isArray)
         expect(result.chain.length).toBe(2) // intermediate + root
-        expect(result.expiresAt).toBeString()
-        expect(result.renewAfter).toBeString()
-        expect(result.fingerprint).toBeString()
-        expect(result.serial).toBeString()
+        expect(result.expiresAt).toBeTypeOf('string')
+        expect(result.renewAfter).toBeTypeOf('string')
+        expect(result.fingerprint).toBeTypeOf('string')
+        expect(result.serial).toBeTypeOf('string')
       }
     })
   })
@@ -182,12 +182,12 @@ describe('PKI Progressive API', () => {
       const bundle = await handlers.getCaBundle()
 
       expect(bundle.trustDomain).toBe('test.example.com')
-      expect(bundle.servicesBundle).toBeArray()
+      expect(bundle.servicesBundle).toSatisfy(Array.isArray)
       expect(bundle.servicesBundle.length).toBeGreaterThan(0)
-      expect(bundle.transportBundle).toBeArray()
+      expect(bundle.transportBundle).toSatisfy(Array.isArray)
       expect(bundle.transportBundle.length).toBeGreaterThan(0)
-      expect(bundle.version).toBeString()
-      expect(bundle.expiresAt).toBeString()
+      expect(bundle.version).toBeTypeOf('string')
+      expect(bundle.expiresAt).toBeTypeOf('string')
     })
   })
 
@@ -201,9 +201,9 @@ describe('PKI Progressive API', () => {
       expect(status.rootCa).not.toBeNull()
       expect(status.servicesCa).not.toBeNull()
       expect(status.transportCa).not.toBeNull()
-      expect(status.activeCertCount).toBeNumber()
-      expect(status.deniedIdentityCount).toBeNumber()
-      expect(status.warnings).toBeArray()
+      expect(status.activeCertCount).toBeTypeOf('number')
+      expect(status.deniedIdentityCount).toBeTypeOf('number')
+      expect(status.warnings).toSatisfy(Array.isArray)
     })
   })
 
@@ -247,14 +247,14 @@ describe('PKI Progressive API', () => {
       const handlers = (await rpcServer.pki(adminToken)) as PkiHandlers
       const certs = await handlers.listCertificates()
 
-      expect(certs).toBeArray()
+      expect(certs).toSatisfy(Array.isArray)
       // We signed at least one cert earlier in signCsr test
       // Each entry should have the expected shape
       for (const cert of certs) {
-        expect(cert.serial).toBeString()
-        expect(cert.fingerprint).toBeString()
-        expect(cert.expiresAt).toBeString()
-        expect(cert.status).toBeString()
+        expect(cert.serial).toBeTypeOf('string')
+        expect(cert.fingerprint).toBeTypeOf('string')
+        expect(cert.expiresAt).toBeTypeOf('string')
+        expect(cert.status).toBeTypeOf('string')
       }
     })
   })
@@ -265,7 +265,7 @@ describe('PKI Progressive API', () => {
       const result = await handlers.purgeExpired()
 
       expect(result).toHaveProperty('purgedCount')
-      expect(result.purgedCount).toBeNumber()
+      expect(result.purgedCount).toBeTypeOf('number')
       expect(result.purgedCount).toBeGreaterThanOrEqual(0)
     })
   })

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import * as grpc from '@grpc/grpc-js'
 import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
 import { XdsControlPlane } from '../src/xds/control-plane.js'

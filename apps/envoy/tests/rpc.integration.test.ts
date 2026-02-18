@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { websocket } from 'hono/bun'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { UpdateResult } from '../src/rpc/server.js'

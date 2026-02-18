@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:dev",
-    "typescript": "catalog:dev"
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
   }
 }
