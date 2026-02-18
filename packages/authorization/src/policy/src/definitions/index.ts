@@ -1,11 +1,18 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { AuthorizationEngine } from '../authorization-engine.js'
-import adminPolicy from './admin.cedar' with { type: 'text' }
-import dataCustodianPolicy from './data-custodian.cedar' with { type: 'text' }
 import type { Action, IBGPEntity, PeerEntity, Role, RouteEntity } from './models.js'
-import nodeCustodianPolicy from './node-custodian.cedar' with { type: 'text' }
-import nodePolicy from './node.cedar' with { type: 'text' }
-import CATALYST_SCHEMA from './schema.cedar' with { type: 'text' }
-import userPolicy from './user.cedar' with { type: 'text' }
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const cedar = (name: string): string => readFileSync(join(__dirname, name), 'utf-8')
+
+const adminPolicy = cedar('admin.cedar')
+const dataCustodianPolicy = cedar('data-custodian.cedar')
+const nodeCustodianPolicy = cedar('node-custodian.cedar')
+const nodePolicy = cedar('node.cedar')
+const CATALYST_SCHEMA = cedar('schema.cedar')
+const userPolicy = cedar('user.cedar')
 
 export {
   adminPolicy,

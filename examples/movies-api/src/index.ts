@@ -1,3 +1,4 @@
+import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { createYoga } from 'graphql-yoga'
 import { makeExecutableSchema } from '@graphql-tools/schema'
@@ -56,7 +57,9 @@ app.get('/health', (c) => c.json({ status: 'ok' }))
 const port = Number(process.env.PORT) || 8080
 console.log(`Movies service starting on port ${port}...`)
 
-export default {
+serve({
   fetch: app.fetch,
   port,
-}
+})
+
+console.log(`Movies service started on port ${port}`)

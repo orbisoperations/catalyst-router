@@ -1,5 +1,8 @@
 # Build from repo root: docker build -f apps/orchestrator/Dockerfile -t catalyst-orchestrator .
-FROM oven/bun:1.3.6-alpine AS deps
+FROM node:22-alpine AS deps
+
+# Bun for workspace-aware package management; build tools for native addons
+RUN apk add --no-cache python3 make g++ && npm install -g bun
 
 WORKDIR /app
 
@@ -19,17 +22,19 @@ COPY packages/routing/package.json packages/routing/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/telemetry/package.json packages/telemetry/package.json
 COPY packages/types/package.json packages/types/package.json
+COPY packages/pki/package.json packages/pki/package.json
 COPY packages/service/package.json packages/service/package.json
 COPY examples/books-api/package.json examples/books-api/package.json
 COPY examples/movies-api/package.json examples/movies-api/package.json
 COPY examples/orders-api/package.json examples/orders-api/package.json
 COPY examples/product-api/package.json examples/product-api/package.json
 
-# Install production dependencies
-RUN bun install --omit=dev --ignore-scripts
+# Install production dependencies (native addons compile for Node.js ABI)
+# Stub husky (devDep, not installed with --omit=dev) so prepare script succeeds
+RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/husky && chmod +x /usr/local/bin/husky && bun install --omit=dev
 
-# Runtime stage
-FROM oven/bun:1.3.6-alpine
+# Build stage
+FROM oven/bun:1.3.6-alpine AS build
 
 WORKDIR /app
 
@@ -52,6 +57,7 @@ COPY packages/routing/package.json packages/routing/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/telemetry/package.json packages/telemetry/package.json
 COPY packages/types/package.json packages/types/package.json
+COPY packages/pki/package.json packages/pki/package.json
 COPY packages/service/package.json packages/service/package.json
 COPY examples/books-api/package.json examples/books-api/package.json
 COPY examples/movies-api/package.json examples/movies-api/package.json
@@ -64,6 +70,7 @@ COPY apps/auth apps/auth
 COPY apps/envoy apps/envoy
 COPY packages/authorization packages/authorization
 COPY packages/config packages/config
+COPY packages/pki packages/pki
 COPY packages/routing packages/routing
 COPY packages/types packages/types
 COPY packages/service packages/service
@@ -71,6 +78,14 @@ COPY packages/telemetry packages/telemetry
 
 # Recreate workspace symlinks (fast — external deps already cached)
 RUN bun install --omit=dev --ignore-scripts
+
+# Runtime stage — Node.js
+FROM node:22-alpine
+
+RUN npm install -g tsx
+
+WORKDIR /app
+COPY --from=build /app ./
 
 WORKDIR /app/apps/orchestrator
 
@@ -80,4 +95,4 @@ EXPOSE 3000
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-CMD ["bun", "run", "src/server.ts"]
+CMD ["tsx", "src/server.ts"]
