@@ -26,6 +26,8 @@ An ADR is a document that captures an important architectural decision made alon
 | [0009](./0009-relational-database-style-guide.md)        | Relational Database Style Guide                          | Accepted |            |
 | [0010](./0010-catalyst-service-base-class.md)            | Unified Service Base Class (CatalystService)             | Accepted | 2026-02-09 |
 | [0011](./0011-pki-hierarchy-and-certificate-profiles.md) | PKI Hierarchy, Certificate Profiles, and SPIFFE Identity | Proposed | 2026-02-13 |
+| [0012](./0012-envoy-tls-termination-pq-readiness.md)     | Envoy TLS Termination and Post-Quantum Readiness         | Proposed | 2026-02-17 |
+| [0013](./0013-javascript-runtime-selection.md)           | JavaScript Runtime Selection (Bun → Node.js)             | Proposed | 2026-02-18 |
 
 ## Statuses
 
