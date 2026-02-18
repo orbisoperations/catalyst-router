@@ -25,8 +25,8 @@ export async function startServer() {
   }
 }
 
-// Auto-start if this file is the entry point (Bun.main → import.meta.url for Node.js)
-if (typeof Bun !== 'undefined' && import.meta.path === Bun.main) {
+// Auto-start if this file is the entry point
+if (process.argv[1] && import.meta.url === new URL(process.argv[1], 'file://').href) {
   startServer()
     .then((result) => {
       catalystHonoServer(result.app, {

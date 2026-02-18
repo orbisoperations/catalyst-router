@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
-    "cli": "bun apps/cli/src/index.ts",
+    "cli": "tsx apps/cli/src/index.ts",
     "prepare": "husky",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -64,7 +64,6 @@
       "dev": {
         "typescript": "^5.9.3",
         "@types/node": "^25.0.3",
-        "@types/bun": "^1.3.6",
         "tsup": "^8.5.1",
         "tsx": "^4.7.1",
         "@types/inquirer": "^9.0.7",

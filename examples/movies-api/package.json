@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts",
-    "test": "bun test"
+    "start": "tsx src/index.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@graphql-tools/schema": "catalog:",
@@ -15,7 +15,7 @@
     "hono": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
+    "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing"
   }
 }

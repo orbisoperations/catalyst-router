@@ -7,7 +7,7 @@
     "skipLibCheck": true,
     "outDir": "./dist",
     "rootDir": ".",
-    "types": ["bun"],
+    "types": ["node"],
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
