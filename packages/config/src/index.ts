@@ -35,6 +35,7 @@ export const NodeConfigSchema = z.object({
   labels: z.record(z.string(), z.string()).optional(),
   peerToken: z.string().optional(), // Token to use when connecting to this peer
   envoyAddress: z.string().optional(), // Reachable address of this node's Envoy proxy
+  publicAddress: z.string().optional(), // Externally reachable Envoy hostname/IP for PQ mTLS
 })
 
 export type NodeConfig = z.infer<typeof NodeConfigSchema>
@@ -228,6 +229,7 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       endpoint: peeringEndpoint,
       domains: domains,
       envoyAddress: process.env.CATALYST_ENVOY_ADDRESS || undefined,
+      publicAddress: process.env.CATALYST_PUBLIC_ADDRESS || undefined,
     },
     envoy,
     orchestrator: {
