@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers'
 import * as grpc from '@grpc/grpc-js'
 import path from 'path'

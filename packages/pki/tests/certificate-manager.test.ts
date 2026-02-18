@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'vitest'
 import * as x509 from '@peculiar/x509'
 import { CertificateManager } from '../src/certificate-manager.js'
 
@@ -52,11 +52,11 @@ describe('CertificateManager', () => {
 
     it('should return fingerprints for all 3 CAs on initialize', async () => {
       const result = await manager.initialize()
-      expect(result.rootFingerprint).toBeString()
+      expect(result.rootFingerprint).toBeTypeOf('string')
       expect(result.rootFingerprint.length).toBeGreaterThan(0)
-      expect(result.servicesCaFingerprint).toBeString()
+      expect(result.servicesCaFingerprint).toBeTypeOf('string')
       expect(result.servicesCaFingerprint.length).toBeGreaterThan(0)
-      expect(result.transportCaFingerprint).toBeString()
+      expect(result.transportCaFingerprint).toBeTypeOf('string')
       expect(result.transportCaFingerprint.length).toBeGreaterThan(0)
     })
 
@@ -142,10 +142,10 @@ describe('CertificateManager', () => {
 
       expect(result.certificatePem).toContain('BEGIN CERTIFICATE')
       expect(result.chain).toHaveLength(2) // services CA + root CA
-      expect(result.serial).toBeString()
-      expect(result.fingerprint).toBeString()
-      expect(result.expiresAt).toBeString()
-      expect(result.renewAfter).toBeString()
+      expect(result.serial).toBeTypeOf('string')
+      expect(result.fingerprint).toBeTypeOf('string')
+      expect(result.expiresAt).toBeTypeOf('string')
+      expect(result.renewAfter).toBeTypeOf('string')
 
       // Verify the cert itself
       const cert = new x509.X509Certificate(result.certificatePem)
@@ -336,8 +336,8 @@ describe('CertificateManager', () => {
       expect(bundle.servicesBundle[1]).toBe(bundle.transportBundle[1])
 
       // Version is derived from root fingerprint
-      expect(bundle.version).toStartWith('v')
-      expect(bundle.expiresAt).toBeString()
+      expect(bundle.version).toMatch(/^v/)
+      expect(bundle.expiresAt).toBeTypeOf('string')
     })
 
     it('should throw if CA not initialized', async () => {
@@ -366,8 +366,8 @@ describe('CertificateManager', () => {
       // Deny the identity
       const result = await manager.denyIdentity(spiffeId, 'compromised key')
       expect(result.expiringCerts).toHaveLength(1)
-      expect(result.expiringCerts[0].serial).toBeString()
-      expect(result.expiringCerts[0].expiresAt).toBeString()
+      expect(result.expiringCerts[0].serial).toBeTypeOf('string')
+      expect(result.expiringCerts[0].expiresAt).toBeTypeOf('string')
     })
 
     it('should allow re-enabling a denied identity', async () => {

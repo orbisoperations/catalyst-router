@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll } from 'bun:test'
+import { describe, test, expect, beforeAll } from 'vitest'
 import * as x509 from '@peculiar/x509'
 import { WebCryptoSigningBackend } from '../../src/signing/webcrypto-signing-backend.js'
 

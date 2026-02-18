@@ -29,7 +29,7 @@
  * is to pass `serverName: 'localhost'` in the fetch `tls` options, which forces Bun
  * to establish a fresh TLS session rather than reusing a cached one.
  */
-import { describe, test, expect, beforeAll, afterEach } from 'bun:test'
+import { describe, test, expect, beforeAll, afterEach } from 'vitest'
 import * as x509 from '@peculiar/x509'
 import { WebCryptoSigningBackend } from '../../src/signing/webcrypto-signing-backend.js'
 import { CertificateManager } from '../../src/certificate-manager.js'

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { parseXfcc, validateCertBinding, type XfccIdentity } from '../../src/middleware/xfcc.js'
 
 describe('parseXfcc', () => {

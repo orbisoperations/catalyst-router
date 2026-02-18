@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { BunSqliteCertificateStore } from '../../src/store/sqlite-certificate-store.js'
 import type { CertificateRecord } from '../../src/types.js'
 

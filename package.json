@@ -9,9 +9,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "bun test apps/ packages/ examples/",
-    "test:unit": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -vE 'integration|container')",
-    "test:integration": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -E 'integration|container')"
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/e2e/**' --exclude '**/*.integration.*' --exclude '**/*.container.*'",
+    "test:integration": "vitest run -t 'integration|container'"
   },
   "workspaces": {
     "packages": [
@@ -90,7 +90,8 @@
     "lint-staged": "^16.2.7",
     "pptxgenjs": "^4.0.1",
     "prettier": "^3.7.4",
-    "typescript-eslint": "^8.52.0"
+    "typescript-eslint": "^8.52.0",
+    "vitest": "catalog:testing"
   },
   "dependencies": {
     "@logtape/logtape": "^2.0.2"

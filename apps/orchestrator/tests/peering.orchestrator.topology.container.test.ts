@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import { spawnSync } from 'node:child_process'
 import path from 'path'

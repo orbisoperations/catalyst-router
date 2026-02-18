@@ -31,6 +31,7 @@
     "@types/bun": "catalog:dev",
     "testcontainers": "catalog:testing",
     "tsx": "catalog:dev",
-    "typescript": "catalog:dev"
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
   }
 }

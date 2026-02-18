@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { CertificateManager } from '../src/certificate-manager.js'
 import {
   PkiConfigSchema,
@@ -67,9 +67,9 @@ describe('CertificateManager.fromConfig()', () => {
       const manager = CertificateManager.fromConfig(config)
       const result = await manager.initialize()
 
-      expect(result.rootFingerprint).toBeString()
-      expect(result.servicesCaFingerprint).toBeString()
-      expect(result.transportCaFingerprint).toBeString()
+      expect(result.rootFingerprint).toBeTypeOf('string')
+      expect(result.servicesCaFingerprint).toBeTypeOf('string')
+      expect(result.transportCaFingerprint).toBeTypeOf('string')
       expect(manager.isInitialized()).toBe(true)
     })
 

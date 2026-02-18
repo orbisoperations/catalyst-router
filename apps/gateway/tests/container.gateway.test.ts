@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type { StartedTestContainer, StartedNetwork } from 'testcontainers'
 import { GenericContainer, Wait, Network } from 'testcontainers'
 import path from 'path'

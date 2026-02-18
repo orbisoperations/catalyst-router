@@ -27,6 +27,6 @@
     "jose": "catalog:",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
-    "vitest": "^1.2.1"
+    "vitest": "catalog:testing"
   }
 }

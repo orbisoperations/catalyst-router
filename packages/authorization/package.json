@@ -29,6 +29,7 @@
     "@peculiar/x509": "^1.14.3",
     "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
-    "typescript": "catalog:dev"
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
   }
 }

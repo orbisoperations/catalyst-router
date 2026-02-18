@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import * as jose from 'jose'
 import { type TokenStore } from '../../src/jwt/index.js'
 import { LocalTokenManager } from '../../src/jwt/local/index.js'

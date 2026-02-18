@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { BunSqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
 import { PersistentLocalKeyManager } from '../../src/key-manager/persistent.js'
 import { BunSqliteKeyStore } from '../../src/key-manager/sqlite-key-store.js'

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { newWebSocketRpcSession } from 'capnweb'
@@ -185,7 +185,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
 
     // envoyPort should be allocated in the 10000-10100 range
     if (booksRoute && 'envoyPort' in booksRoute) {
-      expect(booksRoute.envoyPort).toBeNumber()
+      expect(booksRoute.envoyPort).toBeTypeOf('number')
       expect(booksRoute.envoyPort).toBeGreaterThanOrEqual(10000)
       expect(booksRoute.envoyPort).toBeLessThanOrEqual(10100)
     }
@@ -213,7 +213,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
 
     // envoyPort should be set by the orchestrator's port allocator
     if (booksRoute && 'envoyPort' in booksRoute) {
-      expect(booksRoute.envoyPort).toBeNumber()
+      expect(booksRoute.envoyPort).toBeTypeOf('number')
       expect(booksRoute.envoyPort).toBeGreaterThanOrEqual(10000)
     }
 

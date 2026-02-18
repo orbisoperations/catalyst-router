@@ -6,9 +6,7 @@
  * Safe for parallel execution.
  */
 
-/* eslint-disable @typescript-eslint/no-unused-expressions -- LogTape tagged template literals */
-
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { TelemetryBuilder } from '../src/builder.js'
 
 // ---------------------------------------------------------------------------

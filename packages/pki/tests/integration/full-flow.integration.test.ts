@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, test, expect } from 'vitest'
 import { CertificateManager } from '../../src/certificate-manager.js'
 import * as x509 from '@peculiar/x509'
 
