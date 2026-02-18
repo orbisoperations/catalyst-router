@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'bun:test'
+import { beforeAll, describe, expect, it } from 'bun:test'
 import * as jose from 'jose'
 
 describe('Telemetry Token', () => {
@@ -51,12 +51,11 @@ describe('Telemetry Token', () => {
       expect(decoded.iss).toBe('http://auth:4020')
       expect(decoded.sub).toBe('telemetry-exporter')
       expect(decoded.aud).toBe('otel-collector')
-      expect(decoded.roles).toEqual(['TELEMETRY_EXPORTER'])
+      expect(decoded.principal).toBe('CATALYST::TELEMETRY_EXPORTER')
       expect(decoded.entity).toMatchObject({
         id: 'telemetry-exporter',
         name: 'Telemetry Exporter',
         type: 'service',
-        role: 'TELEMETRY_EXPORTER',
       })
     })
 

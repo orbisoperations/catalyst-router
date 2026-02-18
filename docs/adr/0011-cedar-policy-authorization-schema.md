@@ -36,7 +36,7 @@ Authorization is evaluated in the auth service via the `permissions().authorizeA
 
 1. **No authorization**: No JWT validation, no Cedar checks on any endpoint.
 2. **Unprotected `updateConfig` RPC**: Any WebSocket client can reconfigure subgraphs.
-3. **No gateway-specific actions in Cedar**: Missing actions like `GATEWAY_CONFIG_UPDATE`.
+3. **No gateway-specific actions in Cedar**: Missing actions like `GATEWAY_UPDATE`.
 
 #### Auth Service (`apps/auth` + `packages/authorization`)
 
@@ -104,7 +104,7 @@ Update the Cedar schema with new actions, align Cedar policies with actual syste
 ### Phase 1: Schema, Policies, and Models
 
 1. **Cedar Schema** (`schema.schemacedar`):
-   - Add actions: `PEER_LIST`, `ROUTE_LIST`, `IBGP_LIST`, `GATEWAY_CONFIG_UPDATE`
+   - Add actions: `PEER_LIST`, `ROUTE_LIST`, `IBGP_LIST`, `GATEWAY_UPDATE`
    - Remove `CHECK_PERMISSIONS` (implementation detail, not a business action)
    - Normalize `TELEMETRY_EXPORTER` attributes to match other principals
    - Add `Gateway` resource type
@@ -112,12 +112,12 @@ Update the Cedar schema with new actions, align Cedar policies with actual syste
 2. **Cedar Policies** (`.cedar` files):
    - `node-custodian.cedar`: Add `PEER_LIST`, `IBGP_LIST`
    - `data-custodian.cedar`: Add `ROUTE_LIST`
-   - `node.cedar`: Add `IBGP_LIST`, `GATEWAY_CONFIG_UPDATE`
+   - `node.cedar`: Add `IBGP_LIST`, `GATEWAY_UPDATE`
    - `admin.cedar`: No change (wildcard `action` already covers new actions)
    - `user.cedar`: Add `PEER_LIST`, `ROUTE_LIST` for read-only dashboard access
 
 3. **TypeScript Models** (`models.ts`):
-   - Add `PEER_LIST`, `ROUTE_LIST`, `IBGP_LIST`, `GATEWAY_CONFIG_UPDATE` to `Action` enum
+   - Add `PEER_LIST`, `ROUTE_LIST`, `IBGP_LIST`, `GATEWAY_UPDATE` to `Action` enum
    - Update `ROLE_PERMISSIONS` mapping
 
 ### Phase 2: Auth Service Hardening
@@ -138,7 +138,7 @@ Update the Cedar schema with new actions, align Cedar policies with actual syste
 
 ### Phase 4: Gateway and CLI
 
-- **Gateway**: Add JWT validation middleware for `updateConfig` RPC; check `GATEWAY_CONFIG_UPDATE` via auth service
+- **Gateway**: Add JWT validation middleware for `updateConfig` RPC; check `GATEWAY_UPDATE` via auth service
 - **CLI**: Propagate `--token` to orchestrator RPC calls; align client with orchestrator `PublicApi`
 
 ### Architecture
@@ -180,7 +180,7 @@ flowchart TB
 Authorization enforcement follows a **progressive API** pattern across all RPC servers (`AuthRpcServer`, `GatewayRpcServer`, and the orchestrator's `PublicApi`). Rather than performing a single coarse-grained authorization gate at connection time, each server exposes scoped sub-API entry points that return handler objects. Authorization is enforced at two levels:
 
 1. **Entry-point validation** -- The caller invokes a sub-API method (e.g., `tokens(token)`, `getNetworkClient(token)`, `getConfigClient(token)`) with their JWT. The server verifies the token is valid and, optionally, performs a broad capability check to fail fast before returning the handler set.
-2. **Per-operation Cedar checks** -- Each handler within the returned object individually evaluates its specific Cedar action (e.g., `TOKEN_CREATE`, `PEER_UPDATE`, `GATEWAY_CONFIG_UPDATE`) against the caller's principal. This ensures least-privilege even after the initial entry-point succeeds.
+2. **Per-operation Cedar checks** -- Each handler within the returned object individually evaluates its specific Cedar action (e.g., `TOKEN_CREATE`, `PEER_UPDATE`, `GATEWAY_UPDATE`) against the caller's principal. This ensures least-privilege even after the initial entry-point succeeds.
 
 This two-level pattern is enabled by [capnweb](https://www.npmjs.com/package/capnweb)'s `RpcTarget`, which supports returning nested handler objects over WebSocket connections. The progressive disclosure of capabilities means a principal that can list peers cannot silently escalate to deleting them -- each operation is independently authorized.
 
@@ -188,7 +188,7 @@ This two-level pattern is enabled by [capnweb](https://www.npmjs.com/package/cap
 | ------------ | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Auth Service | `AuthRpcServer`    | `tokens(token)`, `certs(token)`, `validation(token)`, `permissions(token)`       | `TOKEN_CREATE`, `TOKEN_REVOKE`, `TOKEN_LIST`, `MANAGE`                                              |
 | Orchestrator | `PublicApi`        | `getNetworkClient(token)`, `getDataChannelClient(token)`, `getIBGPClient(token)` | `PEER_CREATE/UPDATE/DELETE/LIST`, `ROUTE_CREATE/DELETE/LIST`, `IBGP_CONNECT/DISCONNECT/UPDATE/LIST` |
-| Gateway      | `GatewayRpcServer` | `getConfigClient(token)`                                                         | `GATEWAY_CONFIG_UPDATE`                                                                             |
+| Gateway      | `GatewayPublicApi` | `getConfigClient(token)`                                                         | `GATEWAY_UPDATE`                                                                                    |
 
 ```mermaid
 sequenceDiagram
@@ -212,26 +212,26 @@ sequenceDiagram
 
 ### Action-to-Principal Authorization Matrix
 
-| Action                | ADMIN | NODE | NODE_CUSTODIAN | DATA_CUSTODIAN | USER | TELEMETRY_EXPORTER |
-| --------------------- | ----- | ---- | -------------- | -------------- | ---- | ------------------ |
-| LOGIN                 | x     |      |                |                | x    |                    |
-| MANAGE                | x     |      |                |                |      |                    |
-| IBGP_CONNECT          | x     | x    | x              |                |      |                    |
-| IBGP_DISCONNECT       | x     | x    | x              |                |      |                    |
-| IBGP_UPDATE           | x     | x    | x              |                |      |                    |
-| IBGP_LIST             | x     | x    | x              |                |      |                    |
-| PEER_CREATE           | x     |      | x              |                |      |                    |
-| PEER_UPDATE           | x     |      | x              |                |      |                    |
-| PEER_DELETE           | x     |      | x              |                |      |                    |
-| PEER_LIST             | x     |      | x              |                | x    |                    |
-| ROUTE_CREATE          | x     |      |                | x              |      |                    |
-| ROUTE_DELETE          | x     |      |                | x              |      |                    |
-| ROUTE_LIST            | x     |      |                | x              | x    |                    |
-| TOKEN_CREATE          | x     |      |                |                |      |                    |
-| TOKEN_REVOKE          | x     |      |                |                |      |                    |
-| TOKEN_LIST            | x     |      |                |                |      |                    |
-| TELEMETRY_EXPORT      | x     |      |                |                |      | x                  |
-| GATEWAY_CONFIG_UPDATE | x     | x    |                |                |      |                    |
+| Action           | ADMIN | NODE | NODE_CUSTODIAN | DATA_CUSTODIAN | USER | TELEMETRY_EXPORTER |
+| ---------------- | ----- | ---- | -------------- | -------------- | ---- | ------------------ |
+| LOGIN            | x     |      |                |                | x    |                    |
+| MANAGE           | x     |      |                |                |      |                    |
+| IBGP_CONNECT     | x     | x    | x              |                |      |                    |
+| IBGP_DISCONNECT  | x     | x    | x              |                |      |                    |
+| IBGP_UPDATE      | x     | x    | x              |                |      |                    |
+| IBGP_LIST        | x     | x    | x              |                |      |                    |
+| PEER_CREATE      | x     |      | x              |                |      |                    |
+| PEER_UPDATE      | x     |      | x              |                |      |                    |
+| PEER_DELETE      | x     |      | x              |                |      |                    |
+| PEER_LIST        | x     |      | x              |                | x    |                    |
+| ROUTE_CREATE     | x     |      |                | x              |      |                    |
+| ROUTE_DELETE     | x     |      |                | x              |      |                    |
+| ROUTE_LIST       | x     |      |                | x              | x    |                    |
+| TOKEN_CREATE     | x     |      |                |                |      |                    |
+| TOKEN_REVOKE     | x     |      |                |                |      |                    |
+| TOKEN_LIST       | x     |      |                |                |      |                    |
+| TELEMETRY_EXPORT | x     |      |                |                |      | x                  |
+| GATEWAY_UPDATE   | x     | x    |                |                |      |                    |
 
 ## Risks and Mitigations
 

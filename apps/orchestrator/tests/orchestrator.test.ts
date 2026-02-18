@@ -7,15 +7,12 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 
-
-import path from 'path'
-import type { Readable } from 'node:stream'
-import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import type { PublicApi, PeerInfo } from '../src/orchestrator'
 import { Actions } from '@catalyst/routing'
-
+import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
+import type { Readable } from 'node:stream'
 import path from 'path'
 import type { PeerInfo, PublicApi } from '../src/orchestrator'
+
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
 
 const isDockerRunning = () => {
@@ -143,16 +140,32 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
     }
   }, TIMEOUT)
 
-  const getClient = (node: StartedTestContainer) => {
+  const getClient = async (node: StartedTestContainer, retries = 5) => {
     const port = node.getMappedPort(3000)
-    return newWebSocketRpcSession<PublicApi>(`ws://127.0.0.1:${port}/rpc`)
+    const host = node.getHost()
+    const url = `ws://${host}:${port}/rpc`
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const ws = new WebSocket(url)
+        await new Promise<void>((resolve, reject) => {
+          ws.addEventListener('open', () => resolve())
+          ws.addEventListener('error', (e) => reject(e))
+        })
+        return newWebSocketRpcSession<PublicApi>(ws as unknown as WebSocket)
+      } catch {
+        if (attempt === retries - 1)
+          throw new Error(`WebSocket connection to ${url} failed after ${retries} attempts`)
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+    }
+    throw new Error('unreachable')
   }
 
   it(
     'A <-> B: peering and route sync',
     async () => {
-      const clientA = getClient(nodeA)
-      const clientB = getClient(nodeB)
+      const clientA = await getClient(nodeA)
+      const clientB = await getClient(nodeB)
 
       // Use system admin token for test operations
       const netAResult = await clientA.getNetworkClient(systemToken)
@@ -210,8 +223,8 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   it(
     'A <-> B <-> C: transit route propagation with nodePath',
     async () => {
-      const clientB = getClient(nodeB)
-      const clientC = getClient(nodeC)
+      const clientB = await getClient(nodeB)
+      const clientC = await getClient(nodeC)
 
       const netBResult = await clientB.getNetworkClient(systemToken)
       const netCResult = await clientC.getNetworkClient(systemToken)
@@ -282,10 +295,15 @@ class MockConnectionPool extends ConnectionPool {
   get(endpoint: string) {
     if (!this.mockStubs.has(endpoint)) {
       const stub = {
-        updateConfig: mock(async (config: GatewayConfig) => {
-          this.calls.push({ endpoint, config })
-          return { success: true }
-        }),
+        getConfigClient: mock(async () => ({
+          success: true,
+          client: {
+            updateConfig: mock(async (config: GatewayConfig) => {
+              this.calls.push({ endpoint, config })
+              return { success: true }
+            }),
+          },
+        })),
         getIBGPClient: mock(async () => ({
           success: true,
           client: {
@@ -308,7 +326,7 @@ describe('CatalystNodeBus > GraphQL Gateway Sync', () => {
     pool = new MockConnectionPool('http')
     bus = new CatalystNodeBus({
       config: {
-        node: MOCK_NODE,
+        node: { ...MOCK_NODE, endpoint: MOCK_NODE.endpoint || '' },
         gqlGatewayConfig: { endpoint: GATEWAY_ENDPOINT },
       },
       connectionPool: { pool },

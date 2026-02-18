@@ -1,4 +1,7 @@
+import { CatalystService, type CatalystServiceOptions } from '@catalyst/service'
+import { Hono } from 'hono'
 import { JWTTokenFactory } from '../jwt/jwt-token-factory.js'
+import { EntityBuilderFactory } from '../policy/src/entity-builder.js'
 import {
   Action,
   ALL_POLICIES,
@@ -6,11 +9,7 @@ import {
   CATALYST_SCHEMA,
   type CatalystPolicyDomain,
   Principal,
-  Role,
 } from '../policy/src/index.js'
-import { EntityBuilderFactory } from '../policy/src/entity-builder.js'
-import { CatalystService, type CatalystServiceOptions } from '@catalyst/service'
-import { Hono } from 'hono'
 import { AuthRpcServer, createAuthRpcHandler } from './rpc/server.js'
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -114,7 +113,6 @@ export class AuthService extends CatalystService {
         id: 'telemetry-exporter',
         name: 'Telemetry Exporter',
         type: 'service',
-        role: 'TELEMETRY_EXPORTER',
         trustedNodes: [],
         trustedDomains: this.config.node.domains,
       })
@@ -219,6 +217,13 @@ export class AuthService extends CatalystService {
       const verification = await this._tokenFactory.verify(bearerToken)
       if (!verification.valid) {
         return c.json({ error: 'Invalid or missing authorization token' }, 401)
+      }
+
+      // Verify caller is an ADMIN principal
+      const payload = verification.payload as Record<string, unknown>
+      const callerPrincipal = (payload.principal as string) || ''
+      if (callerPrincipal !== Principal.ADMIN) {
+        return c.json({ error: 'Permission denied: ADMIN principal required' }, 403)
       }
 
       // Re-evaluate Cedar policy on every request
