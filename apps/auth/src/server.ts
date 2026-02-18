@@ -1,7 +1,6 @@
 import { AuthService } from '@catalyst/authorization'
 import { loadDefaultConfig } from '@catalyst/config'
 import { catalystHonoServer } from '@catalyst/service'
-import { websocket } from 'hono/bun'
 
 /**
  * The system-wide administrative token minted at startup.
@@ -26,14 +25,13 @@ export async function startServer() {
   }
 }
 
-// Auto-start if this file is the entry point
-if (import.meta.path === Bun.main) {
+// Auto-start if this file is the entry point (Bun.main → import.meta.url for Node.js)
+if (typeof Bun !== 'undefined' && import.meta.path === Bun.main) {
   startServer()
     .then((result) => {
       catalystHonoServer(result.app, {
         services: [result.auth],
         port: result.port,
-        websocket,
       }).start()
     })
     .catch((err) => {

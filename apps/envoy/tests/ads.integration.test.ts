@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import type { AddressInfo } from 'node:net'
 import * as grpc from '@grpc/grpc-js'
 import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
 import { XdsControlPlane } from '../src/xds/control-plane.js'
@@ -102,9 +103,11 @@ describe('ADS gRPC Control Plane', () => {
 
   beforeAll(async () => {
     // Use a random available port
-    const tempServer = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    port = tempServer.port
-    tempServer.stop()
+    const { createServer } = await import('node:net')
+    const tmp = createServer()
+    await new Promise<void>((r) => tmp.listen(0, r))
+    port = (tmp.address() as AddressInfo).port
+    tmp.close()
 
     controlPlane = new XdsControlPlane({
       port,

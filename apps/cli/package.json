@@ -16,6 +16,7 @@
     "capnweb": "catalog:",
     "chalk": "catalog:",
     "commander": "catalog:",
+    "@hono/node-server": "catalog:",
     "hono": "catalog:",
     "inquirer": "catalog:",
     "ws": "catalog:",

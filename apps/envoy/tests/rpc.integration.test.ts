@@ -1,27 +1,23 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { websocket } from 'hono/bun'
 import { newWebSocketRpcSession } from 'capnweb'
+import { createTestWebSocketServer, type TestServerInfo } from '@catalyst/service'
 import type { UpdateResult } from '../src/rpc/server.js'
 import { EnvoyRpcServer, createRpcHandler } from '../src/rpc/server.js'
 
 describe('Envoy RPC Integration', () => {
-  let server: ReturnType<typeof Bun.serve>
+  let testServer: TestServerInfo
   let port: number
 
-  beforeAll(() => {
-    const rpcServer = new EnvoyRpcServer()
-    const app = createRpcHandler(rpcServer)
-
-    server = Bun.serve({
-      fetch: app.fetch,
-      websocket,
-      port: 0, // Random port
+  beforeAll(async () => {
+    testServer = await createTestWebSocketServer(() => {
+      const rpcServer = new EnvoyRpcServer()
+      return createRpcHandler(rpcServer)
     })
-    port = server.port!
+    port = testServer.port
   })
 
   afterAll(() => {
-    if (server) server.stop()
+    if (testServer) testServer.stop()
   })
 
   async function connectClient(): Promise<{
@@ -246,15 +242,12 @@ describe('Envoy RPC Integration', () => {
   describe('getRoutes', () => {
     it('returns empty config when no routes configured', async () => {
       // Fresh RPC server for this test
-      const freshRpc = new EnvoyRpcServer()
-      const freshApp = createRpcHandler(freshRpc)
-      const freshServer = Bun.serve({
-        fetch: freshApp.fetch,
-        websocket,
-        port: 0,
+      const freshTestServer = await createTestWebSocketServer(() => {
+        const freshRpc = new EnvoyRpcServer()
+        return createRpcHandler(freshRpc)
       })
 
-      const ws = new WebSocket(`ws://localhost:${freshServer.port}/`)
+      const ws = new WebSocket(`ws://localhost:${freshTestServer.port}/`)
       await new Promise<void>((resolve) => ws.addEventListener('open', () => resolve()))
       const rpc = newWebSocketRpcSession(ws as unknown as WebSocket)
 
@@ -263,7 +256,7 @@ describe('Envoy RPC Integration', () => {
       expect(routes).toEqual({ local: [], internal: [] })
 
       ws.close()
-      freshServer.stop()
+      freshTestServer.stop()
     })
   })
 })

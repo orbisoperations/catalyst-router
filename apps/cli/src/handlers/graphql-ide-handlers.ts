@@ -1,8 +1,10 @@
+import type { Server } from 'node:http'
+import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import type { GraphqlIdeInput } from '../types.js'
 
 export type GraphqlIdeResult =
-  | { success: true; data: { url: string; server: ReturnType<typeof Bun.serve> } }
+  | { success: true; data: { url: string; server: Server } }
   | { success: false; error: string }
 
 /**
@@ -102,7 +104,7 @@ export async function startGraphqlIdeHandler(input: GraphqlIdeInput): Promise<Gr
     // Health check
     app.get('/health', (c) => c.json({ status: 'ok' }))
 
-    const server = Bun.serve({
+    const server = serve({
       fetch: app.fetch,
       port: input.port,
       hostname: '0.0.0.0',

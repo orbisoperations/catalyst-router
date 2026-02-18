@@ -213,15 +213,18 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     // ── 3. Start in-process Catalyst services ──────────────────────
 
     // Auth (in-memory, random port)
+    // Service MUST be created inside the factory so its WebSocket routes
+    // capture the correct upgradeWebSocket binding from @hono/node-ws.
     const authConfig = CatalystConfigSchema.parse({
       node: { name: 'auth-node', domains: ['somebiz.local.io'] },
       auth: { keysDb: ':memory:', tokensDb: ':memory:' },
       port: 0,
     })
-    authService = await AuthService.create({ config: authConfig })
-    const systemToken = authService.systemToken
+    let systemToken: string
 
-    authServer = await createTestWebSocketServer(() => {
+    authServer = await createTestWebSocketServer(async () => {
+      authService = await AuthService.create({ config: authConfig })
+      systemToken = authService.systemToken
       const app = new Hono()
       app.route('/', authService.handler)
       return app
@@ -232,14 +235,13 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     const xdsPort = tempXds.port
     tempXds.stop()
 
-    const envoyConfig = CatalystConfigSchema.parse({
-      node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
-      envoy: { adminPort: 9901, xdsPort, bindAddress: '0.0.0.0' },
-      port: 0,
-    })
-    envoyService = await EnvoyService.create({ config: envoyConfig })
-
-    envoyServer = await createTestWebSocketServer(() => {
+    envoyServer = await createTestWebSocketServer(async () => {
+      const envoyConfig = CatalystConfigSchema.parse({
+        node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
+        envoy: { adminPort: 9901, xdsPort, bindAddress: '0.0.0.0' },
+        port: 0,
+      })
+      envoyService = await EnvoyService.create({ config: envoyConfig })
       const app = new Hono()
       app.route('/', envoyService.handler)
       return app
@@ -250,29 +252,28 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     const orchPort = tempOrch.port
     tempOrch.stop()
 
-    const orchConfig = CatalystConfigSchema.parse({
-      node: {
-        name: 'node-a.somebiz.local.io',
-        domains: ['somebiz.local.io'],
-        endpoint: `ws://localhost:${orchPort}/rpc`,
-      },
-      orchestrator: {
-        ibgp: { secret: 'test-secret' },
-        auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
-          systemToken,
-        },
-        envoyConfig: {
-          endpoint: `ws://localhost:${envoyServer.port}/api`,
-          portRange: [[ENVOY_LISTENER_PORT, ENVOY_LISTENER_PORT]],
-        },
-      },
-      port: orchPort,
-    })
-    orchService = await OrchestratorService.create({ config: orchConfig })
-
     orchServer = await createTestWebSocketServer(
-      () => {
+      async () => {
+        const orchConfig = CatalystConfigSchema.parse({
+          node: {
+            name: 'node-a.somebiz.local.io',
+            domains: ['somebiz.local.io'],
+            endpoint: `ws://localhost:${orchPort}/rpc`,
+          },
+          orchestrator: {
+            ibgp: { secret: 'test-secret' },
+            auth: {
+              endpoint: `ws://localhost:${authServer.port}/rpc`,
+              systemToken,
+            },
+            envoyConfig: {
+              endpoint: `ws://localhost:${envoyServer.port}/api`,
+              portRange: [[ENVOY_LISTENER_PORT, ENVOY_LISTENER_PORT]],
+            },
+          },
+          port: orchPort,
+        })
+        orchService = await OrchestratorService.create({ config: orchConfig })
         const app = new Hono()
         app.route('/', orchService.handler)
         return app

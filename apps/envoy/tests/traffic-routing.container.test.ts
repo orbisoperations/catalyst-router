@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Hono } from 'hono'
-import { websocket } from 'hono/bun'
 import * as grpc from '@grpc/grpc-js'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
+import { createTestWebSocketServer, createTestServer, type TestServerInfo } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
 import { OrchestratorService } from '../../orchestrator/src/service.js'
 import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
@@ -24,10 +24,10 @@ const ADS_SERVICE_PATH =
  * Snapshot Cache -> ADS gRPC -> protobuf DiscoveryResponse.
  */
 describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
-  let authServer: ReturnType<typeof Bun.serve>
-  let booksServer: ReturnType<typeof Bun.serve>
-  let envoyServer: ReturnType<typeof Bun.serve>
-  let orchServer: ReturnType<typeof Bun.serve>
+  let authServer: TestServerInfo
+  let booksServer: TestServerInfo
+  let envoyServer: TestServerInfo
+  let orchServer: TestServerInfo
 
   let authService: AuthService
   let envoyService: EnvoyService
@@ -40,71 +40,77 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
 
   beforeAll(async () => {
     // ── 1. Start Auth Service ──────────────────────────────────────
+    // Service MUST be created inside the factory so its WebSocket routes
+    // capture the correct upgradeWebSocket binding from @hono/node-ws.
     const authConfig = CatalystConfigSchema.parse({
       node: { name: 'auth-node', domains: ['somebiz.local.io'] },
       auth: { keysDb: ':memory:', tokensDb: ':memory:' },
       port: 0,
     })
-    authService = await AuthService.create({ config: authConfig })
-    systemToken = authService.systemToken
 
-    const authApp = new Hono()
-    authApp.route('/', authService.handler)
-    authServer = Bun.serve({ fetch: authApp.fetch, port: 0, websocket })
+    authServer = await createTestWebSocketServer(async () => {
+      authService = await AuthService.create({ config: authConfig })
+      systemToken = authService.systemToken
+      const app = new Hono()
+      app.route('/', authService.handler)
+      return app
+    })
 
     // ── 2. Start Books API ─────────────────────────────────────────
     const booksModule = await import('../../../examples/books-api/src/index.js')
-    booksServer = Bun.serve({
-      fetch: booksModule.default.fetch,
-      port: 0,
-    })
+    booksServer = await createTestServer(booksModule.default)
 
     // ── 3. Start Envoy Service (with ADS gRPC) ────────────────────
     // Pre-allocate the xDS port
-    const tempXds = Bun.serve({ fetch: () => new Response(''), port: 0 })
+    const tempXds = await createTestServer({ fetch: () => new Response('') })
     xdsPort = tempXds.port
     tempXds.stop()
 
-    const envoyConfig = CatalystConfigSchema.parse({
-      node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
-      envoy: { adminPort: 9901, xdsPort, bindAddress: '0.0.0.0' },
-      port: 0,
+    envoyServer = await createTestWebSocketServer(async () => {
+      const envoyConfig = CatalystConfigSchema.parse({
+        node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
+        envoy: { adminPort: 9901, xdsPort, bindAddress: '0.0.0.0' },
+        port: 0,
+      })
+      envoyService = await EnvoyService.create({ config: envoyConfig })
+      const app = new Hono()
+      app.route('/', envoyService.handler)
+      return app
     })
-    envoyService = await EnvoyService.create({ config: envoyConfig })
-
-    const envoyApp = new Hono()
-    envoyApp.route('/', envoyService.handler)
-    envoyServer = Bun.serve({ fetch: envoyApp.fetch, port: 0, websocket })
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
-    const tempOrch = Bun.serve({ fetch: () => new Response(''), port: 0 })
+    const tempOrch = await createTestServer({ fetch: () => new Response('') })
     const orchPort = tempOrch.port
     tempOrch.stop()
 
-    const orchConfig = CatalystConfigSchema.parse({
-      node: {
-        name: 'node-a.somebiz.local.io',
-        domains: ['somebiz.local.io'],
-        endpoint: `ws://localhost:${orchPort}/rpc`,
+    orchServer = await createTestWebSocketServer(
+      async () => {
+        const orchConfig = CatalystConfigSchema.parse({
+          node: {
+            name: 'node-a.somebiz.local.io',
+            domains: ['somebiz.local.io'],
+            endpoint: `ws://localhost:${orchPort}/rpc`,
+          },
+          orchestrator: {
+            ibgp: { secret: 'test-secret' },
+            auth: {
+              endpoint: `ws://localhost:${authServer.port}/rpc`,
+              systemToken,
+            },
+            envoyConfig: {
+              endpoint: `ws://localhost:${envoyServer.port}/api`,
+              portRange: [[10000, 10100]],
+            },
+          },
+          port: orchPort,
+        })
+        orchService = await OrchestratorService.create({ config: orchConfig })
+        const app = new Hono()
+        app.route('/', orchService.handler)
+        return app
       },
-      orchestrator: {
-        ibgp: { secret: 'test-secret' },
-        auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
-          systemToken,
-        },
-        envoyConfig: {
-          endpoint: `ws://localhost:${envoyServer.port}/api`,
-          portRange: [[10000, 10100]],
-        },
-      },
-      port: orchPort,
-    })
-    orchService = await OrchestratorService.create({ config: orchConfig })
-
-    const orchApp = new Hono()
-    orchApp.route('/', orchService.handler)
-    orchServer = Bun.serve({ fetch: orchApp.fetch, port: orchPort, websocket })
+      { port: orchPort }
+    )
 
     ports = {
       auth: authServer.port,
@@ -214,45 +220,52 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
 
       await waitForResponses(2)
 
-      // First response: CDS
+      // CDS response: find books-api cluster among all clusters
+      // (orchestrator may register additional service data channels)
       const cdsResponse = responses.find((r) => r.type_url === CLUSTER_TYPE_URL)
       expect(cdsResponse).toBeDefined()
-      expect(cdsResponse!.resources.length).toBe(1)
+      expect(cdsResponse!.resources.length).toBeGreaterThanOrEqual(1)
 
-      // Decode the cluster from the Any wrapper
-      const clusterAny = AnyType.toObject(AnyType.fromObject(cdsResponse!.resources[0]), {
-        defaults: true,
-      }) as { type_url: string; value: Uint8Array }
-      expect(clusterAny.type_url).toBe(CLUSTER_TYPE_URL)
+      // Decode all clusters and find books-api
+      const clusters = cdsResponse!.resources.map((res) => {
+        const any = AnyType.toObject(AnyType.fromObject(res), { defaults: true }) as {
+          type_url: string
+          value: Uint8Array
+        }
+        expect(any.type_url).toBe(CLUSTER_TYPE_URL)
+        return ClusterType.toObject(ClusterType.decode(any.value as Uint8Array), {
+          defaults: true,
+        }) as { name: string; load_assignment: { cluster_name: string } }
+      })
 
-      const cluster = ClusterType.toObject(ClusterType.decode(clusterAny.value as Uint8Array), {
-        defaults: true,
-      }) as { name: string; load_assignment: { cluster_name: string } }
-      expect(cluster.name).toBe('local_books-api')
-      expect(cluster.load_assignment.cluster_name).toBe('local_books-api')
+      const booksCluster = clusters.find((c) => c.name === 'local_books-api')
+      expect(booksCluster).toBeDefined()
+      expect(booksCluster!.load_assignment.cluster_name).toBe('local_books-api')
 
-      // Second response: LDS
+      // LDS response: find books-api listener among all listeners
       const ldsResponse = responses.find((r) => r.type_url === LISTENER_TYPE_URL)
       expect(ldsResponse).toBeDefined()
-      expect(ldsResponse!.resources.length).toBe(1)
+      expect(ldsResponse!.resources.length).toBeGreaterThanOrEqual(1)
 
-      // Decode the listener from the Any wrapper
-      const listenerAny = AnyType.toObject(AnyType.fromObject(ldsResponse!.resources[0]), {
-        defaults: true,
-      }) as { type_url: string; value: Uint8Array }
-      expect(listenerAny.type_url).toBe(LISTENER_TYPE_URL)
-
-      const listener = ListenerType.toObject(ListenerType.decode(listenerAny.value as Uint8Array), {
-        defaults: true,
-      }) as {
-        name: string
-        address: {
-          socket_address: { address: string; port_value: number }
+      // Decode all listeners and find books-api
+      const listeners = ldsResponse!.resources.map((res) => {
+        const any = AnyType.toObject(AnyType.fromObject(res), { defaults: true }) as {
+          type_url: string
+          value: Uint8Array
         }
-      }
-      expect(listener.name).toBe('ingress_books-api')
-      expect(listener.address.socket_address.port_value).toBeGreaterThanOrEqual(10000)
-      expect(listener.address.socket_address.port_value).toBeLessThanOrEqual(10100)
+        expect(any.type_url).toBe(LISTENER_TYPE_URL)
+        return ListenerType.toObject(ListenerType.decode(any.value as Uint8Array), {
+          defaults: true,
+        }) as {
+          name: string
+          address: { socket_address: { address: string; port_value: number } }
+        }
+      })
+
+      const booksListener = listeners.find((l) => l.name === 'ingress_books-api')
+      expect(booksListener).toBeDefined()
+      expect(booksListener!.address.socket_address.port_value).toBeGreaterThanOrEqual(10000)
+      expect(booksListener!.address.socket_address.port_value).toBeLessThanOrEqual(10100)
     } finally {
       stream.end()
       client.close()
