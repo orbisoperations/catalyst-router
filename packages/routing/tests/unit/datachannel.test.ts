@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { DataChannelDefinitionSchema } from '../src/datachannel.js'
+import { DataChannelDefinitionSchema } from '../../src/datachannel.js'
 
 describe('DataChannelDefinitionSchema', () => {
   describe('existing fields (backward compatibility)', () => {
