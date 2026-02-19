@@ -1,4 +1,3 @@
-import type { Action, RouteTable } from '@catalyst/routing'
 import { z } from 'zod'
 
 import { NodeConfigSchema, PortEntrySchema } from '@catalyst/config'
@@ -22,11 +21,3 @@ export const OrchestratorConfigSchema = z.object({
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
-
-export type StateResult =
-  | { success: true; state: RouteTable; action: Action; data?: unknown; nextActions?: Action[] }
-  | { success: false; error: string; state?: RouteTable }
-
-export type NotificationResult =
-  | { success: true; nextActions?: Action[] }
-  | { success: false; error: string; nextActions?: Action[] }

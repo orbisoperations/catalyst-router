@@ -52,11 +52,7 @@ class MockConnectionPool extends ConnectionPool {
   }
 
   getEnvoy(endpoint: string) {
-    return this.get(endpoint) as unknown as ReturnType<ConnectionPool['getEnvoy']>
-  }
-
-  getGateway(endpoint: string) {
-    return this.get(endpoint) as unknown as ReturnType<ConnectionPool['getGateway']>
+    return this.get(endpoint) as any
   }
 }
 
