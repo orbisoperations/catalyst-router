@@ -1,6 +1,14 @@
 import type { Action } from '@catalyst/routing'
 
-export type DispatchResult = { success: true } | { success: false; error: string }
+export interface PostCommitOutcome {
+  propagationResults: PromiseSettledResult<void>[]
+  envoySyncOk: boolean
+  graphqlSyncOk: boolean
+}
+
+export type DispatchResult =
+  | { success: true; postCommit?: Promise<PostCommitOutcome> }
+  | { success: false; error: string }
 
 export class ActionQueue {
   private queue: Array<{

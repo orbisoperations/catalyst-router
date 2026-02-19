@@ -5,7 +5,6 @@ import {
   type DataChannelDefinition,
   type InternalRoute,
   type PeerInfo,
-  type PeerRecord,
   type RouteTable,
   type UpdateMessageSchema,
 } from '@catalyst/routing'
@@ -21,16 +20,8 @@ import {
   RpcTarget,
 } from 'capnweb'
 import { PeerTransport } from './peer-transport.js'
-import type {
-  PublicApi,
-  NetworkClient,
-  DataChannel,
-  IBGPClient,
-  UpdateMessage,
-  EnvoyApi,
-  GatewayApi,
-} from './api-types.js'
-import { ActionQueue, type DispatchResult } from './action-queue.js'
+import type { PublicApi, UpdateMessage } from './api-types.js'
+import { ActionQueue, type DispatchResult, type PostCommitOutcome } from './action-queue.js'
 import { RoutingInformationBase, type CommitResult } from './rib.js'
 
 export type { PublicApi, NetworkClient, DataChannel, IBGPClient } from './api-types.js'
@@ -108,7 +99,7 @@ export class CatalystNodeBus extends RpcTarget {
   private portAllocator?: PortAllocator
   private rib: RoutingInformationBase
   private queue: ActionQueue
-  public lastNotificationPromise?: Promise<void>
+  public lastNotificationPromise?: Promise<PostCommitOutcome>
 
   constructor(opts: {
     state?: RouteTable
@@ -128,11 +119,13 @@ export class CatalystNodeBus extends RpcTarget {
     if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
     }
-    this.connectionPool =
-      opts.connectionPool?.pool ??
-      (opts.connectionPool?.type
-        ? new ConnectionPool(opts.connectionPool.type)
-        : new ConnectionPool())
+    if (opts.connectionPool?.pool) {
+      this.connectionPool = opts.connectionPool.pool
+    } else if (opts.connectionPool?.type) {
+      this.connectionPool = new ConnectionPool(opts.connectionPool.type)
+    } else {
+      this.connectionPool = new ConnectionPool()
+    }
 
     this.peerTransport = new PeerTransport(this.connectionPool, opts.nodeToken)
 
@@ -227,16 +220,24 @@ export class CatalystNodeBus extends RpcTarget {
     // 2. Commit: apply state atomically (synchronous)
     const commitResult = this.rib.commit(plan)
 
-    // 3. Post-commit side effects (fire-and-forget to avoid ActionQueue deadlock)
-    this.lastNotificationPromise = this.handlePostCommit(sentAction, commitResult).catch((e) => {
+    const postCommit = this.handlePostCommit(sentAction, commitResult).catch((e) => {
       this.logger.error`Error in post-commit for ${sentAction.action}: ${e}`
+      return {
+        propagationResults: [] as PromiseSettledResult<void>[],
+        envoySyncOk: false,
+        graphqlSyncOk: false,
+      } satisfies PostCommitOutcome
     })
 
-    return { success: true }
+    this.lastNotificationPromise = postCommit
+
+    return { success: true, postCommit }
   }
 
-  private async handlePostCommit(sentAction: Action, commitResult: CommitResult): Promise<void> {
-    // Execute propagations (peer transport)
+  private async handlePostCommit(
+    sentAction: Action,
+    commitResult: CommitResult
+  ): Promise<PostCommitOutcome> {
     const peerResults = await this.peerTransport.fanOut(commitResult.propagations)
 
     // LocalPeerCreate: if open succeeded, trigger InternalProtocolConnected
@@ -251,18 +252,15 @@ export class CatalystNodeBus extends RpcTarget {
       }
     }
 
-    // Infrastructure side effects (envoy + graphql)
-    await this.handleEnvoyPush(sentAction, commitResult.newState, commitResult.prevState)
-    await this.handleGraphqlConfiguration()
+    const envoySyncOk = await this.syncEnvoy(sentAction)
+    const graphqlSyncOk = await this.syncGraphql()
+
+    return { propagationResults: peerResults, envoySyncOk, graphqlSyncOk }
   }
 
-  private async handleEnvoyPush(
-    action: Action,
-    _state: RouteTable,
-    _prevState: RouteTable
-  ): Promise<void> {
+  private async syncEnvoy(action: Action): Promise<boolean> {
     const envoyEndpoint = this.config.envoyConfig?.endpoint
-    if (!envoyEndpoint || !this.portAllocator) return
+    if (!envoyEndpoint || !this.portAllocator) return true
 
     // Only react to route-affecting actions
     const routeActions = [
@@ -273,7 +271,7 @@ export class CatalystNodeBus extends RpcTarget {
       Actions.InternalProtocolOpen,
       Actions.InternalProtocolConnected,
     ]
-    if (!routeActions.includes(action.action)) return
+    if (!routeActions.includes(action.action)) return true
 
     // Push complete config to envoy service
     try {
@@ -285,15 +283,18 @@ export class CatalystNodeBus extends RpcTarget {
       })
       if (!result.success) {
         this.logger.error`Envoy config sync failed: ${result.error}`
+        return false
       }
+      return true
     } catch (e) {
       this.logger.error`Error syncing to Envoy service: ${e}`
+      return false
     }
   }
 
-  private async handleGraphqlConfiguration(): Promise<void> {
+  private async syncGraphql(): Promise<boolean> {
     const gatewayEndpoint = this.config.gqlGatewayConfig?.endpoint
-    if (!gatewayEndpoint) return
+    if (!gatewayEndpoint) return true
 
     const graphqlRoutes = [...this.state.local.routes, ...this.state.internal.routes].filter(
       (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
@@ -301,7 +302,7 @@ export class CatalystNodeBus extends RpcTarget {
 
     if (graphqlRoutes.length === 0) {
       this.logger.debug`No GraphQL routes to sync`
-      return
+      return true
     }
 
     this.logger.info`Syncing ${graphqlRoutes.length} GraphQL routes to gateway`
@@ -313,11 +314,13 @@ export class CatalystNodeBus extends RpcTarget {
       })
       if (!result.success) {
         this.logger.error`Gateway sync failed: ${result.error}`
-      } else {
-        this.logger.info`Gateway sync successful`
+        return false
       }
+      this.logger.info`Gateway sync successful`
+      return true
     } catch (e) {
       this.logger.error`Error syncing to gateway: ${e}`
+      return false
     }
   }
 
