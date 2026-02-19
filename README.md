@@ -57,7 +57,7 @@ We support a variety of protocols for service definitions. Currently, **GraphQL*
 
 ## Testing
 
-Catalyst Router employs a multi-tiered testing strategy to ensure reliability across its distributed components. We primarily use `bun:test` as our test runner for its speed and native TypeScript support.
+Catalyst Router employs a multi-tiered testing strategy to ensure reliability across its distributed components. We primarily use `vitest` as our test runner for its speed and native TypeScript support.
 
 ### Test Categories
 
@@ -67,7 +67,7 @@ Low-level tests for individual modules and logic. These are fast and have no ext
 
 ```bash
 # Run all unit tests in the repository
-bun test {apps,packages}/**/*.test.ts --ignore "*.container.*"
+pnpm run test:unit
 ```
 
 #### 2. Local Topology Tests
@@ -76,7 +76,7 @@ Simulate multi-node orchestration using mocks. These validate routing and synchr
 
 ```bash
 # Example: Run topology tests for the orchestrator
-bun test apps/orchestrator/src/next/*.topology.test.ts
+pnpm exec vitest apps/orchestrator/src/next/*.topology.test.ts
 ```
 
 #### 3. Container Integration Tests
@@ -85,7 +85,7 @@ End-to-end tests that spin up actual node containers using Docker and `testconta
 
 ```bash
 # Run container-based integration tests
-bun test {apps,packages}/**/*.container.test.ts
+pnpm run test:container
 ```
 
 ### Docker Environment Setup
@@ -104,6 +104,6 @@ export CATALYST_CONTAINER_TESTS_ENABLED=true
 Apps live in `apps/` and libraries in `packages/`. You can run tests individually:
 
 ```bash
-cd apps/auth && bun test
-cd apps/orchestrator && bun test
+cd apps/auth && pnpm test
+cd apps/orchestrator && pnpm test
 ```

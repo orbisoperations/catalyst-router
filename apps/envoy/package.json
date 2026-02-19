@@ -24,7 +24,6 @@
   },
   "devDependencies": {
     "@catalyst/authorization": "workspace:*",
-    "@catalyst/orchestrator-service": "workspace:*",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
     "vitest": "catalog:testing"

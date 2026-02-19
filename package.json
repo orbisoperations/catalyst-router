@@ -1,6 +1,7 @@
 {
   "name": "catalyst-router",
   "private": true,
+  "packageManager": "pnpm@9.12.1",
   "scripts": {
     "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
     "cli": "tsx apps/cli/src/index.ts",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",
+    "esbuild": "catalog:dev",
     "@commitlint/config-conventional": "^20.3.1",
     "@eslint/js": "^9.39.2",
     "eslint": "^9.39.2",
@@ -35,6 +37,7 @@
     "lint-staged": "^16.2.7",
     "pptxgenjs": "^4.0.1",
     "prettier": "^3.7.4",
+    "turbo": "^2.8.10",
     "typescript-eslint": "^8.52.0"
   },
   "dependencies": {

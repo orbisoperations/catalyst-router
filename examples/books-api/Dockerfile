@@ -1,27 +1,55 @@
 # Build from repo root: docker build -f examples/books-api/Dockerfile -t catalyst-example-books-api .
-FROM oven/bun:1 AS build
-
+FROM node:22-alpine AS build
 WORKDIR /app
 
-# Copy the entire monorepo (filtered by .dockerignore)
-COPY . .
+RUN corepack enable
 
-# Install workspace dependencies
-RUN bun install --ignore-scripts
+# Copy workspace manifests for dependency caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/auth/package.json apps/auth/
+COPY apps/cli/package.json apps/cli/
+COPY apps/envoy/package.json apps/envoy/
+COPY apps/gateway/package.json apps/gateway/
+COPY apps/node/package.json apps/node/
+COPY apps/orchestrator/package.json apps/orchestrator/
+COPY packages/authorization/package.json packages/authorization/
+COPY packages/config/package.json packages/config/
+COPY packages/routing/package.json packages/routing/
+COPY packages/sdk/package.json packages/sdk/
+COPY packages/telemetry/package.json packages/telemetry/
+COPY packages/types/package.json packages/types/
+COPY packages/service/package.json packages/service/
+COPY examples/books-api/package.json examples/books-api/
+COPY examples/movies-api/package.json examples/movies-api/
+COPY examples/orders-api/package.json examples/orders-api/
+COPY examples/product-api/package.json examples/product-api/
 
-# Compile to a standalone binary
-WORKDIR /app/examples/books-api
-RUN bun build src/index.ts --compile --minify --outfile /app/books-api
+# Install all dependencies
+RUN pnpm install --frozen-lockfile
 
-# Runtime — minimal image, no bun runtime needed
-FROM debian:bookworm-slim
+# Copy app source
+COPY examples/books-api examples/books-api
 
-COPY --from=build /app/books-api /books-api
+# Bundle with esbuild
+RUN pnpm exec esbuild examples/books-api/src/index.ts \
+  --bundle --platform=node --target=node22 \
+  --outfile=dist/index.mjs --format=esm \
+  --packages=external
+
+# Create production deployment with flat node_modules
+RUN pnpm deploy --filter=@catalyst-examples/books-api --prod /deploy
+
+# Runtime stage
+FROM node:22-alpine
+WORKDIR /app
+
+COPY --from=build /deploy/node_modules ./node_modules
+COPY --from=build /app/dist/index.mjs ./index.mjs
 
 ENV PORT=8080
 EXPOSE 8080
 
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-CMD ["/books-api"]
+CMD ["node", "index.mjs"]

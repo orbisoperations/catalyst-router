@@ -1,7 +1,8 @@
 # Multi-stage Dockerfile for the 3-stack integration test.
 #
-# Copies the entire monorepo, runs bun install once, then provides
-# per-service targets that only set WORKDIR, PORT, and CMD.
+# Copies the entire monorepo, runs pnpm install once, bundles each
+# service with esbuild, then provides per-service targets that only
+# copy the bundled output and production dependencies.
 #
 # Usage in docker-compose:
 #   build:
@@ -9,75 +10,124 @@
 #     dockerfile: docker-compose/Dockerfile.test
 #     target: auth
 
-FROM oven/bun:1.3.6-alpine AS base
-
+FROM node:22-alpine AS base
 WORKDIR /app
 
+RUN corepack enable
+# Build tools for native addons (better-sqlite3, argon2, etc.)
+RUN apk add --no-cache python3 make g++
+
 # Copy root workspace config + lockfile
-COPY package.json bun.lock ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Copy ALL workspace package.json files for complete resolution
-COPY apps/auth/package.json apps/auth/package.json
-COPY apps/cli/package.json apps/cli/package.json
-COPY apps/envoy/package.json apps/envoy/package.json
-COPY apps/gateway/package.json apps/gateway/package.json
-COPY apps/node/package.json apps/node/package.json
-COPY apps/orchestrator/package.json apps/orchestrator/package.json
-COPY packages/authorization/package.json packages/authorization/package.json
-COPY packages/config/package.json packages/config/package.json
-COPY packages/routing/package.json packages/routing/package.json
-COPY packages/sdk/package.json packages/sdk/package.json
-COPY packages/service/package.json packages/service/package.json
-COPY packages/telemetry/package.json packages/telemetry/package.json
-COPY packages/types/package.json packages/types/package.json
-COPY examples/books-api/package.json examples/books-api/package.json
-COPY examples/movies-api/package.json examples/movies-api/package.json
-COPY examples/orders-api/package.json examples/orders-api/package.json
-COPY examples/product-api/package.json examples/product-api/package.json
+COPY apps/auth/package.json apps/auth/
+COPY apps/cli/package.json apps/cli/
+COPY apps/envoy/package.json apps/envoy/
+COPY apps/gateway/package.json apps/gateway/
+COPY apps/node/package.json apps/node/
+COPY apps/orchestrator/package.json apps/orchestrator/
+COPY packages/authorization/package.json packages/authorization/
+COPY packages/config/package.json packages/config/
+COPY packages/routing/package.json packages/routing/
+COPY packages/sdk/package.json packages/sdk/
+COPY packages/service/package.json packages/service/
+COPY packages/telemetry/package.json packages/telemetry/
+COPY packages/types/package.json packages/types/
+COPY examples/books-api/package.json examples/books-api/
+COPY examples/movies-api/package.json examples/movies-api/
+COPY examples/orders-api/package.json examples/orders-api/
+COPY examples/product-api/package.json examples/product-api/
 
-# Single bun install for the entire monorepo
-RUN bun install --omit=dev --ignore-scripts
+# Single pnpm install for the entire monorepo
+RUN pnpm install --frozen-lockfile
 
 # Copy ALL source code
 COPY apps apps
 COPY packages packages
 COPY examples examples
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Bundle each service with esbuild
+RUN pnpm exec esbuild apps/auth/src/server.ts \
+  --bundle --platform=node --target=node22 \
+  --outfile=dist/auth.mjs --format=esm \
+  --packages=external --loader:.cedar=text
+
+RUN pnpm exec esbuild apps/orchestrator/src/server.ts \
+  --bundle --platform=node --target=node22 \
+  --outfile=dist/orchestrator.mjs --format=esm \
+  --packages=external --loader:.cedar=text
+
+RUN pnpm exec esbuild apps/envoy/src/index.ts \
+  --bundle --platform=node --target=node22 \
+  --outfile=dist/envoy.mjs --format=esm \
+  --packages=external
+
+RUN pnpm exec esbuild apps/gateway/src/index.ts \
+  --bundle --platform=node --target=node22 \
+  --outfile=dist/gateway.mjs --format=esm \
+  --packages=external
+
+RUN pnpm exec esbuild examples/books-api/src/index.ts \
+  --bundle --platform=node --target=node22 \
+  --outfile=dist/books-api.mjs --format=esm \
+  --packages=external
+
+# Deploy production dependencies for each service
+RUN pnpm deploy --filter=@catalyst/auth-service --prod /deploy/auth
+RUN pnpm deploy --filter=@catalyst/orchestrator-service --prod /deploy/orchestrator
+RUN pnpm deploy --filter=@catalyst/envoy-service --prod /deploy/envoy
+RUN pnpm deploy --filter=@catalyst/gateway-service --prod /deploy/gateway
+RUN pnpm deploy --filter=@catalyst-examples/books-api --prod /deploy/books-api
 
 # ── Service targets ──────────────────────────────────────────────────
 
-FROM base AS auth
-WORKDIR /app/apps/auth
+FROM node:22-alpine AS auth
+WORKDIR /app
+COPY --from=base /deploy/auth/node_modules ./node_modules
+COPY --from=base /app/dist/auth.mjs ./server.mjs
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV PORT=5000
 EXPOSE 5000
 USER appuser
-CMD ["bun", "run", "src/server.ts"]
+CMD ["node", "server.mjs"]
 
-FROM base AS orchestrator
-WORKDIR /app/apps/orchestrator
+FROM node:22-alpine AS orchestrator
+WORKDIR /app
+COPY --from=base /deploy/orchestrator/node_modules ./node_modules
+COPY --from=base /app/dist/orchestrator.mjs ./server.mjs
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV PORT=3000
 EXPOSE 3000
 USER appuser
-CMD ["bun", "run", "src/server.ts"]
+CMD ["node", "server.mjs"]
 
-FROM base AS envoy
-WORKDIR /app/apps/envoy
+FROM node:22-alpine AS envoy
+WORKDIR /app
+COPY --from=base /deploy/envoy/node_modules ./node_modules
+COPY --from=base /app/dist/envoy.mjs ./server.mjs
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV PORT=3000
 EXPOSE 3000 18000
 USER appuser
-CMD ["bun", "run", "src/index.ts"]
+CMD ["node", "server.mjs"]
 
-FROM base AS gateway
-WORKDIR /app/apps/gateway
+FROM node:22-alpine AS gateway
+WORKDIR /app
+COPY --from=base /deploy/gateway/node_modules ./node_modules
+COPY --from=base /app/dist/gateway.mjs ./server.mjs
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV PORT=4000
 EXPOSE 4000
 USER appuser
-CMD ["bun", "run", "src/index.ts"]
+CMD ["node", "server.mjs"]
 
-FROM base AS books-api
-WORKDIR /app/examples/books-api
+FROM node:22-alpine AS books-api
+WORKDIR /app
+COPY --from=base /deploy/books-api/node_modules ./node_modules
+COPY --from=base /app/dist/books-api.mjs ./index.mjs
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV PORT=8080
 EXPOSE 8080
 USER appuser
-CMD ["bun", "run", "src/index.ts"]
+CMD ["node", "index.mjs"]
