@@ -2,22 +2,65 @@ name: PR Review with Progress Tracking
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+    types: [opened, ready_for_review, reopened]
+    paths-ignore:
+      - '*.md'
+      - '.github/**'
+      - 'docs/**'
+  issue_comment:
+    types: [created]
 
 jobs:
   review-with-tracking:
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/claude-review') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
       id-token: write
     steps:
+      - name: Get PR info
+        id: pr-info
+        run: |
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            PR_NUMBER="${{ github.event.issue.number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          HEAD_REF=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if top of stack
+        id: stack-check
+        run: |
+          DEPENDENTS=$(gh pr list --base "${{ steps.pr-info.outputs.head_ref }}" --json number --jq 'length')
+          echo "is_top=$([ "$DEPENDENTS" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Checkout repository
+        if: |
+          steps.stack-check.outputs.is_top == 'true' ||
+          (github.event_name == 'pull_request' &&
+           (github.event.action == 'opened' || github.event.action == 'ready_for_review'))
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.pr-info.outputs.head_ref }}
 
       - name: PR Review with Progress Tracking
+        if: |
+          steps.stack-check.outputs.is_top == 'true' ||
+          (github.event_name == 'pull_request' &&
+           (github.event.action == 'opened' || github.event.action == 'ready_for_review'))
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -25,7 +68,7 @@ jobs:
           track_progress: true
 
           prompt: |
-            Provide a code review for pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Provide a code review for pull request #${{ steps.pr-info.outputs.pr_number }} in ${{ github.repository }}.
 
             You are channeling the combined review sensibilities of Linus Torvalds and John Carmack. Be direct, blunt, and technically uncompromising. If something is wrong, say so plainly — no hedging, no softening. Call out sloppy abstractions, unnecessary complexity, and cargo-cult patterns. If the code is clean and correct, say that too — briefly. Linus cares about correctness, simplicity, and not breaking things. Carmack cares about performance, clarity, and doing the simplest thing that works. Neither has patience for over-engineering, vague error handling, or code that tries to be clever instead of correct. Keep feedback sharp, specific, and actionable. No fluff.
 
