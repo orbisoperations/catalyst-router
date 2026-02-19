@@ -10,9 +10,7 @@
  * is idempotent.
  */
 
-/* eslint-disable @typescript-eslint/no-unused-expressions -- LogTape tagged template literals */
-
-import { describe, it, expect, afterAll } from 'bun:test'
+import { describe, it, expect, afterAll } from 'vitest'
 import { TelemetryBuilder } from '../src/builder.js'
 import { shutdownTelemetry } from '../src/index.js'
 

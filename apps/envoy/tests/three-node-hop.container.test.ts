@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { Readable } from 'node:stream'
 import path from 'path'
@@ -47,7 +48,7 @@ const BOOKS_IMAGE = 'books-service:three-node-e2e'
 
 const isDockerRunning = (): boolean => {
   try {
-    return Bun.spawnSync(['docker', 'info']).exitCode === 0
+    return spawnSync('docker', ['info']).status === 0
   } catch {
     return false
   }
@@ -63,19 +64,18 @@ if (skipTests) {
 // ---------------------------------------------------------------------------
 
 async function buildImageIfNeeded(imageName: string, dockerfile: string): Promise<void> {
-  const check = Bun.spawnSync([CONTAINER_RUNTIME, 'image', 'inspect', imageName])
-  if (check.exitCode === 0) {
+  const check = spawnSync(CONTAINER_RUNTIME, ['image', 'inspect', imageName])
+  if (check.status === 0) {
     console.log(`Using existing image: ${imageName}`)
     return
   }
   console.log(`Building image: ${imageName}...`)
-  const build = Bun.spawn([CONTAINER_RUNTIME, 'build', '-f', dockerfile, '-t', imageName, '.'], {
-    cwd: repoRoot,
-    stdout: 'ignore',
-    stderr: 'inherit',
-  })
-  const exitCode = await build.exited
-  if (exitCode !== 0) throw new Error(`Failed to build ${imageName}`)
+  const buildResult = spawnSync(
+    CONTAINER_RUNTIME,
+    ['build', '-f', dockerfile, '-t', imageName, '.'],
+    { cwd: repoRoot, stdio: 'inherit' }
+  )
+  if (buildResult.status !== 0) throw new Error(`Failed to build ${imageName}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -551,9 +551,9 @@ describe.skipIf(skipTests)('HTTP Three-Node Multi-Hop', () => {
     async () => {
       // curl from inside Envoy C container to hit the egress port
       // Path: curl (inside Envoy C) -> egress :10000 -> envoy-proxy-b:10000 -> envoy-proxy-a:10000 -> books:8080
-      const proc = Bun.spawn(
+      const proc = spawnSync(
+        CONTAINER_RUNTIME,
         [
-          CONTAINER_RUNTIME,
           'exec',
           cluster.envoyProxyC.getId(),
           'curl',
@@ -566,10 +566,10 @@ describe.skipIf(skipTests)('HTTP Three-Node Multi-Hop', () => {
           '{"query":"{ books { title author } }"}',
           `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
         ],
-        { stdout: 'pipe', stderr: 'pipe' }
+        { encoding: 'utf-8' }
       )
-      const exitCode = await proc.exited
-      const stdout = await new Response(proc.stdout).text()
+      const exitCode = proc.status ?? 1
+      const stdout = proc.stdout
 
       expect(exitCode).toBe(0)
 
@@ -662,9 +662,9 @@ describe.skipIf(skipTests)('TCP Three-Node Multi-Hop', () => {
     async () => {
       // Same curl command as HTTP — tcp_proxy does L4 passthrough of raw HTTP bytes
       // Path: curl (inside Envoy C) -> tcp egress :10000 -> envoy-proxy-b:10000 -> envoy-proxy-a:10000 -> books:8080
-      const proc = Bun.spawn(
+      const proc = spawnSync(
+        CONTAINER_RUNTIME,
         [
-          CONTAINER_RUNTIME,
           'exec',
           cluster.envoyProxyC.getId(),
           'curl',
@@ -677,10 +677,10 @@ describe.skipIf(skipTests)('TCP Three-Node Multi-Hop', () => {
           '{"query":"{ books { title author } }"}',
           `http://127.0.0.1:${ENVOY_LISTENER_PORT}/graphql`,
         ],
-        { stdout: 'pipe', stderr: 'pipe' }
+        { encoding: 'utf-8' }
       )
-      const exitCode = await proc.exited
-      const stdout = await new Response(proc.stdout).text()
+      const exitCode = proc.status ?? 1
+      const stdout = proc.stdout
 
       expect(exitCode).toBe(0)
 

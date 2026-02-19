@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test'
+import { describe, it, expect, vi } from 'vitest'
 import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
 import type { XdsSnapshot } from '../src/xds/snapshot-cache.js'
 import { buildIngressListener, buildLocalCluster } from '../src/xds/resources.js'
@@ -41,7 +41,7 @@ describe('SnapshotCache', () => {
 
     it('notifies watchers on set', () => {
       const cache = createSnapshotCache()
-      const callback = mock(() => {})
+      const callback = vi.fn(() => {})
       cache.watch(callback)
 
       const snapshot = makeSnapshot('1')
@@ -53,8 +53,8 @@ describe('SnapshotCache', () => {
 
     it('notifies multiple watchers', () => {
       const cache = createSnapshotCache()
-      const cb1 = mock(() => {})
-      const cb2 = mock(() => {})
+      const cb1 = vi.fn(() => {})
+      const cb2 = vi.fn(() => {})
       cache.watch(cb1)
       cache.watch(cb2)
 
@@ -69,12 +69,12 @@ describe('SnapshotCache', () => {
     it('returns an unsubscribe function', () => {
       const cache = createSnapshotCache()
       const unwatch = cache.watch(() => {})
-      expect(unwatch).toBeFunction()
+      expect(unwatch).toBeTypeOf('function')
     })
 
     it('stops notifying after unsubscribe', () => {
       const cache = createSnapshotCache()
-      const callback = mock(() => {})
+      const callback = vi.fn(() => {})
       const unwatch = cache.watch(callback)
 
       cache.setSnapshot(makeSnapshot('1'))
@@ -87,8 +87,8 @@ describe('SnapshotCache', () => {
 
     it('unsubscribing one watcher does not affect others', () => {
       const cache = createSnapshotCache()
-      const cb1 = mock(() => {})
-      const cb2 = mock(() => {})
+      const cb1 = vi.fn(() => {})
+      const cb2 = vi.fn(() => {})
       const unwatch1 = cache.watch(cb1)
       cache.watch(cb2)
 
@@ -101,7 +101,7 @@ describe('SnapshotCache', () => {
 
     it('double unsubscribe is a no-op', () => {
       const cache = createSnapshotCache()
-      const callback = mock(() => {})
+      const callback = vi.fn(() => {})
       const unwatch = cache.watch(callback)
 
       unwatch()

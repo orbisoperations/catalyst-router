@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "build": "tsc",
-    "test": "bun test"
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
+    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests"
   },
   "dependencies": {
     "@catalyst/config": "workspace:*",
@@ -24,6 +26,7 @@
     "@catalyst/authorization": "workspace:*",
     "@catalyst/orchestrator-service": "workspace:*",
     "testcontainers": "catalog:testing",
-    "typescript": "catalog:dev"
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
   }
 }

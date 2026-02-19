@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Hono } from 'hono'
-import { websocket } from 'hono/bun'
+import { createNodeWebSocket } from '@hono/node-ws'
+import { serve } from '@hono/node-server'
 import { newWebSocketRpcSession } from 'capnweb'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
@@ -26,10 +27,10 @@ import type { EnvoyRpcServer } from '../src/rpc/server.js'
  */
 describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
   // Servers
-  let authServer: ReturnType<typeof Bun.serve>
-  let booksServer: ReturnType<typeof Bun.serve>
-  let envoyServer: ReturnType<typeof Bun.serve>
-  let orchServer: ReturnType<typeof Bun.serve>
+  let authServer: ReturnType<typeof serve>
+  let booksServer: ReturnType<typeof serve>
+  let envoyServer: ReturnType<typeof serve>
+  let orchServer: ReturnType<typeof serve>
 
   // Services (for shutdown)
   let authService: AuthService
@@ -52,12 +53,14 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     systemToken = authService.systemToken
 
     const authApp = new Hono()
+    const { injectWebSocket: authInjectWs } = createNodeWebSocket({ app: authApp })
     authApp.route('/', authService.handler)
-    authServer = Bun.serve({ fetch: authApp.fetch, port: 0, websocket })
+    authServer = serve({ fetch: authApp.fetch, port: 0 })
+    authInjectWs(authServer)
 
     // ── 2. Start Books API ─────────────────────────────────────────
     const booksModule = await import('../../../examples/books-api/src/index.js')
-    booksServer = Bun.serve({
+    booksServer = serve({
       fetch: booksModule.default.fetch,
       port: 0,
     })
@@ -71,14 +74,19 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     envoyService = await EnvoyService.create({ config: envoyConfig })
 
     const envoyApp = new Hono()
+    const { injectWebSocket: envoyInjectWs } = createNodeWebSocket({ app: envoyApp })
     envoyApp.route('/', envoyService.handler)
-    envoyServer = Bun.serve({ fetch: envoyApp.fetch, port: 0, websocket })
+    envoyServer = serve({ fetch: envoyApp.fetch, port: 0 })
+    envoyInjectWs(envoyServer)
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
     // Pre-allocate a port for the orchestrator so we can set node.endpoint
-    const tempServer = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const orchPort = tempServer.port
-    tempServer.stop()
+    const tempServer = serve({ fetch: () => new Response(''), port: 0 })
+    const orchPort = (tempServer.address() as { port: number }).port
+    tempServer.close()
+
+    const authPort = (authServer.address() as { port: number }).port
+    const envoyPort = (envoyServer.address() as { port: number }).port
 
     const orchConfig = CatalystConfigSchema.parse({
       node: {
@@ -89,11 +97,11 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
       orchestrator: {
         ibgp: { secret: 'test-secret' },
         auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
+          endpoint: `ws://localhost:${authPort}/rpc`,
           systemToken,
         },
         envoyConfig: {
-          endpoint: `ws://localhost:${envoyServer.port}/api`,
+          endpoint: `ws://localhost:${envoyPort}/api`,
           portRange: [[10000, 10100]],
         },
       },
@@ -102,14 +110,16 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     orchService = await OrchestratorService.create({ config: orchConfig })
 
     const orchApp = new Hono()
+    const { injectWebSocket: orchInjectWs } = createNodeWebSocket({ app: orchApp })
     orchApp.route('/', orchService.handler)
-    orchServer = Bun.serve({ fetch: orchApp.fetch, port: orchPort, websocket })
+    orchServer = serve({ fetch: orchApp.fetch, port: orchPort })
+    orchInjectWs(orchServer)
 
     ports = {
-      auth: authServer.port,
-      books: booksServer.port,
-      envoy: envoyServer.port,
-      orchestrator: orchServer.port,
+      auth: authPort,
+      books: (booksServer.address() as { port: number }).port,
+      envoy: envoyPort,
+      orchestrator: orchPort,
     }
 
     // ── 5. Mint CLI token ──────────────────────────────────────────
@@ -130,10 +140,10 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
 
   afterAll(async () => {
     // Stop servers first, then services
-    orchServer?.stop()
-    envoyServer?.stop()
-    booksServer?.stop()
-    authServer?.stop()
+    orchServer?.close()
+    envoyServer?.close()
+    booksServer?.close()
+    authServer?.close()
 
     await orchService?.shutdown()
     await envoyService?.shutdown()
@@ -185,7 +195,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
 
     // envoyPort should be allocated in the 10000-10100 range
     if (booksRoute && 'envoyPort' in booksRoute) {
-      expect(booksRoute.envoyPort).toBeNumber()
+      expect(typeof booksRoute.envoyPort).toBe('number')
       expect(booksRoute.envoyPort).toBeGreaterThanOrEqual(10000)
       expect(booksRoute.envoyPort).toBeLessThanOrEqual(10100)
     }
@@ -213,7 +223,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
 
     // envoyPort should be set by the orchestrator's port allocator
     if (booksRoute && 'envoyPort' in booksRoute) {
-      expect(booksRoute.envoyPort).toBeNumber()
+      expect(typeof booksRoute.envoyPort).toBe('number')
       expect(booksRoute.envoyPort).toBeGreaterThanOrEqual(10000)
     }
 

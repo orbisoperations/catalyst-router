@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import { spawnSync } from 'node:child_process'
 import path from 'path'
@@ -14,8 +14,8 @@ import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    const result = spawnSync('docker', ['info'])
+    return result.status === 0
   } catch {
     return false
   }

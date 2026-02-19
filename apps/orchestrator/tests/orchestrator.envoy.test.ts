@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
@@ -25,23 +25,23 @@ class MockConnectionPool extends ConnectionPool {
   get(endpoint: string) {
     if (!this.mockStubs.has(endpoint)) {
       const stub = {
-        updateRoutes: mock(async (payload: EnvoyUpdateRoutesPayload) => {
+        updateRoutes: vi.fn(async (payload: EnvoyUpdateRoutesPayload) => {
           this.envoyCalls.push({ endpoint, payload })
           return { success: true }
         }),
-        updateConfig: mock(async () => ({ success: true })),
-        getIBGPClient: mock(async () => ({
+        updateConfig: vi.fn(async () => ({ success: true })),
+        getIBGPClient: vi.fn(async () => ({
           success: true,
           client: {
-            update: mock(async (...args: unknown[]) => {
+            update: vi.fn(async (...args: unknown[]) => {
               this.bgpCalls.push({ endpoint, method: 'update', args })
               return { success: true }
             }),
-            open: mock(async (...args: unknown[]) => {
+            open: vi.fn(async (...args: unknown[]) => {
               this.bgpCalls.push({ endpoint, method: 'open', args })
               return { success: true }
             }),
-            close: mock(async () => ({ success: true })),
+            close: vi.fn(async () => ({ success: true })),
           },
         })),
       }
@@ -90,7 +90,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     const pushed = pool.envoyCalls[0].payload
     expect(pushed.local).toHaveLength(1)
     expect(pushed.local[0].name).toBe('books-api')
-    expect(pushed.local[0].envoyPort).toBeNumber()
+    expect(pushed.local[0].envoyPort).toBeTypeOf('number')
     expect(pushed.local[0].envoyPort).toBeGreaterThanOrEqual(10000)
     expect(pushed.local[0].envoyPort).toBeLessThanOrEqual(10100)
   })
@@ -164,7 +164,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     const pushed = pool.envoyCalls[0].payload
     expect(pushed.internal).toHaveLength(1)
     expect(pushed.internal[0].name).toBe('movies-api')
-    expect(pushed.internal[0].envoyPort).toBeNumber()
+    expect(pushed.internal[0].envoyPort).toBeTypeOf('number')
     expect(pushed.internal[0].envoyPort).toBeGreaterThanOrEqual(10000)
   })
 
@@ -373,7 +373,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     expect(addUpdate).toBeDefined()
 
     // envoyPort should be this node's allocated egress port, NOT the original 5000
-    expect(addUpdate!.route.envoyPort).toBeNumber()
+    expect(addUpdate!.route.envoyPort).toBeTypeOf('number')
     expect(addUpdate!.route.envoyPort).toBeGreaterThanOrEqual(10000)
     expect(addUpdate!.route.envoyPort).toBeLessThanOrEqual(10100)
     expect(addUpdate!.route.envoyPort).not.toBe(5000)
@@ -517,7 +517,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     expect(booksUpdate).toBeDefined()
 
     // Should have the mutated egress port from handleEnvoyConfiguration, not 5000
-    expect(booksUpdate!.route.envoyPort).toBeNumber()
+    expect(booksUpdate!.route.envoyPort).toBeTypeOf('number')
     expect(booksUpdate!.route.envoyPort).toBeGreaterThanOrEqual(10000)
     expect(booksUpdate!.route.envoyPort).toBeLessThanOrEqual(10100)
     expect(booksUpdate!.route.envoyPort).not.toBe(5000)
@@ -555,7 +555,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
 
     // The envoy push should contain envoyPort on the local route
     const envoyPush = pool.envoyCalls[0].payload
-    expect(envoyPush.local[0].envoyPort).toBeNumber()
+    expect(envoyPush.local[0].envoyPort).toBeTypeOf('number')
 
     // handleEnvoyConfiguration runs before handleBGPNotify.
     // The routes in the state should have envoyPort set by the time BGP sees them.

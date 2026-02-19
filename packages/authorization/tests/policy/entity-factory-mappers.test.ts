@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { EntityBuilderFactory } from '../../src/policy/src/entity-builder.js'
 
 describe('EntityFactory Mappers', () => {

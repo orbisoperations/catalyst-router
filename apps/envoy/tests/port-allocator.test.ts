@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { expandPortRange, createPortAllocator } from '../src/port-allocator.js'
 
 describe('expandPortRange', () => {

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { serve } from '@hono/node-server'
 import * as grpc from '@grpc/grpc-js'
 import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
 import { XdsControlPlane } from '../src/xds/control-plane.js'
@@ -102,9 +103,9 @@ describe('ADS gRPC Control Plane', () => {
 
   beforeAll(async () => {
     // Use a random available port
-    const tempServer = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    port = tempServer.port
-    tempServer.stop()
+    const tempServer = serve({ fetch: () => new Response(''), port: 0 })
+    port = (tempServer.address() as { port: number }).port
+    tempServer.close()
 
     controlPlane = new XdsControlPlane({
       port,

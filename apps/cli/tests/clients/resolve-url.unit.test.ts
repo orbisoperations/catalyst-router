@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { resolveServiceUrl } from '../../src/clients/resolve-url.js'
 
 describe('resolveServiceUrl', () => {

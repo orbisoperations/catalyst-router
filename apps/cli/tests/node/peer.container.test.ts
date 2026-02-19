@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import {
   GenericContainer,
   Wait,
@@ -11,8 +12,8 @@ import { createOrchestratorClient } from '../../src/clients/orchestrator-client.
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    const result = spawnSync('docker', ['info'])
+    return result.status === 0
   } catch {
     return false
   }
@@ -39,20 +40,22 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
   beforeAll(async () => {
     console.log('Building images...')
     // Build orchestrator image
-    const orchestratorBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
+    const orchestratorBuild = spawnSync(
+      'docker',
+      ['build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
       { cwd: repoRoot }
     )
-    if (orchestratorBuild.exitCode !== 0) {
+    if (orchestratorBuild.status !== 0) {
       throw new Error('Failed to build orchestrator image')
     }
 
     // Build auth image
-    const authBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
+    const authBuild = spawnSync(
+      'docker',
+      ['build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
       { cwd: repoRoot }
     )
-    if (authBuild.exitCode !== 0) {
+    if (authBuild.status !== 0) {
       throw new Error('Failed to build auth image')
     }
 

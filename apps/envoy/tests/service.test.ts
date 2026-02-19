@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test'
+import { describe, it, expect, vi } from 'vitest'
 import { trace } from '@opentelemetry/api'
 import type { Logger } from '@logtape/logtape'
 import type { Meter } from '@opentelemetry/api'
@@ -14,34 +14,34 @@ const { EnvoyService } = await import('../src/service.js')
 
 function createNoopTelemetry(name = 'envoy'): ServiceTelemetry {
   const childLogger = {
-    debug: mock(() => {}),
-    info: mock(() => {}),
-    warn: mock(() => {}),
-    error: mock(() => {}),
-    fatal: mock(() => {}),
-    getChild: mock(() => childLogger),
+    debug: vi.fn(() => {}),
+    info: vi.fn(() => {}),
+    warn: vi.fn(() => {}),
+    error: vi.fn(() => {}),
+    fatal: vi.fn(() => {}),
+    getChild: vi.fn(() => childLogger),
   }
 
   const logger = {
-    debug: mock(() => {}),
-    info: mock(() => {}),
-    warn: mock(() => {}),
-    error: mock(() => {}),
-    fatal: mock(() => {}),
-    getChild: mock(() => childLogger),
+    debug: vi.fn(() => {}),
+    info: vi.fn(() => {}),
+    warn: vi.fn(() => {}),
+    error: vi.fn(() => {}),
+    fatal: vi.fn(() => {}),
+    getChild: vi.fn(() => childLogger),
   }
 
   return {
     serviceName: name,
     logger: logger as unknown as Logger,
     meter: {
-      createCounter: mock(() => ({ add: mock(() => {}) })),
-      createHistogram: mock(() => ({ record: mock(() => {}) })),
-      createUpDownCounter: mock(() => ({ add: mock(() => {}) })),
-      createObservableCounter: mock(() => ({})),
-      createObservableGauge: mock(() => ({})),
-      createObservableUpDownCounter: mock(() => ({})),
-      createGauge: mock(() => ({})),
+      createCounter: vi.fn(() => ({ add: vi.fn(() => {}) })),
+      createHistogram: vi.fn(() => ({ record: vi.fn(() => {}) })),
+      createUpDownCounter: vi.fn(() => ({ add: vi.fn(() => {}) })),
+      createObservableCounter: vi.fn(() => ({})),
+      createObservableGauge: vi.fn(() => ({})),
+      createObservableUpDownCounter: vi.fn(() => ({})),
+      createGauge: vi.fn(() => ({})),
     } as unknown as Meter,
     tracer: trace.getTracer('test-noop'),
     instrumentRpc: <T extends object>(t: T) => t,
@@ -116,7 +116,7 @@ describe('EnvoyService', () => {
       const service = await EnvoyService.create({ config, telemetry })
 
       expect(service.handler).toBeDefined()
-      expect(service.handler.fetch).toBeFunction()
+      expect(service.handler.fetch).toBeTypeOf('function')
     })
 
     it('responds to GET / with service banner', async () => {
