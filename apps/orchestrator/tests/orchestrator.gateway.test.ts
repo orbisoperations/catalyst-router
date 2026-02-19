@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
@@ -27,15 +27,15 @@ class MockConnectionPool extends ConnectionPool {
   get(endpoint: string) {
     if (!this.mockStubs.has(endpoint)) {
       const stub = {
-        updateConfig: mock(async (config: GatewayConfig) => {
+        updateConfig: vi.fn(async (config: GatewayConfig) => {
           this.calls.push({ endpoint, config })
           return { success: true }
         }),
-        getIBGPClient: mock(async () => ({
+        getIBGPClient: vi.fn(async () => ({
           success: true,
           client: {
-            update: mock(async () => ({ success: true })),
-            open: mock(async () => ({ success: true })),
+            update: vi.fn(async () => ({ success: true })),
+            open: vi.fn(async () => ({ success: true })),
           },
         })),
       }

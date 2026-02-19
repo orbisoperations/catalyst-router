@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as jose from 'jose'
 import { JWTTokenFactory } from '../../src/jwt/jwt-token-factory.js'
 import { Principal } from '../../src/policy/src/definitions/models.js'
@@ -52,7 +52,7 @@ describe('JWTTokenFactory', () => {
   describe('ephemeral()', () => {
     it('should create a working factory with in-memory stores', async () => {
       const token = await mintTestToken()
-      expect(token).toBeString()
+      expect(token).toBeTypeOf('string')
 
       const result = await factory.verify(token)
       expect(result.valid).toBe(true)
@@ -91,7 +91,7 @@ describe('JWTTokenFactory', () => {
   describe('mint', () => {
     it('should mint a valid JWT', async () => {
       const token = await mintTestToken()
-      expect(token).toBeString()
+      expect(token).toBeTypeOf('string')
       expect(token.split('.')).toHaveLength(3)
     })
 
@@ -239,8 +239,8 @@ describe('JWTTokenFactory', () => {
   describe('rotate', () => {
     it('should rotate to a new key and return rotation result', async () => {
       const result = await factory.rotate()
-      expect(result.previousKeyId).toBeString()
-      expect(result.newKeyId).toBeString()
+      expect(result.previousKeyId).toBeTypeOf('string')
+      expect(result.newKeyId).toBeTypeOf('string')
       expect(result.previousKeyId).not.toBe(result.newKeyId)
     })
 

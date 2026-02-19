@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { createOrchestratorClient } from '../../src/clients/orchestrator-client.js'
 
 describe('Orchestrator Client', () => {

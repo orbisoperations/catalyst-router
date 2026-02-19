@@ -4,14 +4,14 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "build": "bun build.mjs",
-    "start": "bun dist/index.js",
-    "dev": "bun build.mjs && bun dist/index.js",
-    "test": "bun test:unit && bun test:integration",
-    "test:unit": "bun test tests/unit",
-    "build:tests": "bun build-tests.mjs",
-    "test:integration": "bun build-tests.mjs && bun test dist-tests",
-    "test:all": "bun test:unit && bun test:integration"
+    "build": "node build.mjs",
+    "start": "node dist/index.js",
+    "dev": "node build.mjs && node dist/index.js",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
+    "build:tests": "node build-tests.mjs",
+    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests",
+    "test:all": "pnpm run test:unit && pnpm run test:integration"
   },
   "dependencies": {
     "@eclipse-zenoh/zenoh-ts": "^1.7.2",
@@ -24,7 +24,6 @@
   "devDependencies": {
     "@types/node": "^20.14.9",
     "@types/uuid": "^11.0.0",
-    "bun-types": "latest",
     "esbuild": "^0.27.3",
     "esbuild-plugin-wasm": "^1.1.0",
     "testcontainers": "^11.11.0",

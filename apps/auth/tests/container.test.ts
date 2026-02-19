@@ -19,21 +19,9 @@ describe('Auth Service Container', () => {
     // Build image
     console.log('Building Docker image from', repoRoot)
 
-    const proc = Bun.spawn(
-      ['docker', 'build', '-t', 'auth-service:test', '-f', 'apps/auth/Dockerfile', '.'],
-      {
-        cwd: repoRoot,
-        // stdout: 'inherit', // Uncomment for debugging build
-        stderr: 'inherit',
-      }
-    )
-    await proc.exited
+    const image = await GenericContainer.fromDockerfile(repoRoot, 'apps/auth/Dockerfile').build()
 
-    if (proc.exitCode !== 0) {
-      throw new Error(`Docker build failed with exit code ${proc.exitCode}`)
-    }
-
-    container = await new GenericContainer('auth-service:test')
+    container = await image
       .withExposedPorts(4020)
       .withEnvironment({
         CATALYST_AUTH_PORT: '4020',

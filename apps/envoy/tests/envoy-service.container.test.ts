@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers'
 import * as grpc from '@grpc/grpc-js'
 import path from 'path'
@@ -28,7 +29,7 @@ const TEST_TIMEOUT = 30_000 // 30 seconds
 
 const isDockerRunning = (): boolean => {
   try {
-    return Bun.spawnSync(['docker', 'info']).exitCode === 0
+    return spawnSync('docker', ['info']).status === 0
   } catch {
     return false
   }
@@ -58,12 +59,12 @@ describe.skipIf(skipTests)('Envoy Service Container: Dockerfile Validation', () 
   beforeAll(async () => {
     // Build the envoy service image
     console.log('[setup] Building envoy service image...')
-    const build = Bun.spawn(
-      [CONTAINER_RUNTIME, 'build', '-t', envoyServiceImage, '-f', 'apps/envoy/Dockerfile', '.'],
-      { cwd: repoRoot, stdout: 'ignore', stderr: 'inherit' }
+    const buildResult = spawnSync(
+      CONTAINER_RUNTIME,
+      ['build', '-t', envoyServiceImage, '-f', 'apps/envoy/Dockerfile', '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
     )
-    const buildExit = await build.exited
-    if (buildExit !== 0) throw new Error('Failed to build envoy service image')
+    if (buildResult.status !== 0) throw new Error('Failed to build envoy service image')
 
     // Start the container with both ports exposed
     console.log('[setup] Starting envoy service container...')

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type { Hono } from 'hono'
 import type { StartedTestContainer } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
@@ -6,7 +6,6 @@ import path from 'path'
 import type { GatewayGraphqlServer } from '../src/graphql/server.ts'
 import { createGatewayHandler } from '../src/graphql/server.ts'
 
-const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
 describe.skipIf(skipTests)('Gateway Integration', () => {
@@ -24,39 +23,23 @@ describe.skipIf(skipTests)('Gateway Integration', () => {
     // 1. Start Books Service
     {
       console.log('Starting Books Service')
-      const imageName = 'books-service:test'
       const dockerfile = 'examples/books-api/Dockerfile'
-      // Workaround for Bun tar-stream issue
-      const proc = Bun.spawn([CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', dockerfile, '.'], {
-        cwd: repoRoot,
-        stdout: 'inherit',
-        stderr: 'inherit',
-      })
-      await proc.exited
-
-      const container = new GenericContainer(imageName)
+      const image = await GenericContainer.fromDockerfile(repoRoot, dockerfile).build()
+      booksContainer = await image
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))
-      booksContainer = await container.start()
+        .start()
     }
 
     // 2. Start Movies Service
     {
       console.log('Starting Movies Service')
-      const imageName = 'movies-service:test'
       const dockerfile = 'examples/movies-api/Dockerfile'
-      // Workaround for Bun tar-stream issue
-      const proc = Bun.spawn([CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', dockerfile, '.'], {
-        cwd: repoRoot,
-        stdout: 'inherit',
-        stderr: 'inherit',
-      })
-      await proc.exited
-
-      const container = new GenericContainer(imageName)
+      const image = await GenericContainer.fromDockerfile(repoRoot, dockerfile).build()
+      moviesContainer = await image
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))
-      moviesContainer = await container.start()
+        .start()
     }
 
     // 3. Start Gateway (in-process)

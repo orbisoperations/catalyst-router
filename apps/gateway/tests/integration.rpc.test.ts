@@ -1,35 +1,37 @@
-import { describe, it, expect, mock, beforeAll, afterAll } from 'bun:test'
-import { websocket } from 'hono/bun'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
+import { createNodeWebSocket } from '@hono/node-ws'
+import { serve } from '@hono/node-server'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { GatewayUpdateResult } from '../src/rpc/server.js'
 import { createRpcHandler, GatewayRpcServer } from '../src/rpc/server.js'
 
 describe('RPC Integration', () => {
-  let server: ReturnType<typeof Bun.serve>
+  let server: ReturnType<typeof serve>
   let port: number
   let ws: WebSocket
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let rpcClient: any
 
   // Mock callback
-  const updateCallback = mock(async (_config: unknown): Promise<GatewayUpdateResult> => {
+  const updateCallback = vi.fn(async (_config: unknown): Promise<GatewayUpdateResult> => {
     return { success: true }
   })
 
   beforeAll(async () => {
     const rpcServer = new GatewayRpcServer(updateCallback)
     const app = createRpcHandler(rpcServer)
+    const { injectWebSocket } = createNodeWebSocket({ app })
 
-    server = Bun.serve({
+    server = serve({
       fetch: app.fetch,
-      websocket, // Use Hono's websocket definition which includes Bun's handlers
       port: 0, // Random port
     })
-    port = server.port!
+    injectWebSocket(server)
+    port = (server.address() as { port: number }).port
   })
 
   afterAll(() => {
-    if (server) server.stop()
+    if (server) server.close()
   })
 
   it('should connect and update config successfully', async () => {

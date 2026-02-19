@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { Readable } from 'node:stream'
 import path from 'path'
@@ -14,8 +15,8 @@ import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    const result = spawnSync('docker', ['info'])
+    return result.status === 0
   } catch {
     return false
   }
@@ -34,41 +35,45 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
   const booksImage = 'catalyst-example-books:test'
   const repoRoot = path.resolve(__dirname, '../../../')
 
-  const buildImages = async () => {
+  const buildImages = () => {
     console.log('Building Gateway image...')
-    const gatewayBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/gateway/Dockerfile', '-t', gatewayImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    const gatewayBuild = spawnSync(
+      'docker',
+      ['build', '-f', 'apps/gateway/Dockerfile', '-t', gatewayImage, '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
     )
-    if (gatewayBuild.exitCode !== 0) {
-      throw new Error(`docker build gateway failed: ${gatewayBuild.exitCode}`)
+    if (gatewayBuild.status !== 0) {
+      throw new Error(`docker build gateway failed: ${gatewayBuild.status}`)
     }
 
     console.log('Building Books service image...')
-    const booksBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'examples/books-api/Dockerfile', '-t', booksImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    const booksBuild = spawnSync(
+      'docker',
+      ['build', '-f', 'examples/books-api/Dockerfile', '-t', booksImage, '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
     )
-    if (booksBuild.exitCode !== 0) {
-      throw new Error(`docker build books failed: ${booksBuild.exitCode}`)
+    if (booksBuild.status !== 0) {
+      throw new Error(`docker build books failed: ${booksBuild.status}`)
     }
 
     console.log('Building Orchestrator image...')
-    const orchestratorBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    const orchestratorBuild = spawnSync(
+      'docker',
+      ['build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
     )
-    if (orchestratorBuild.exitCode !== 0) {
-      throw new Error(`docker build orchestrator failed: ${orchestratorBuild.exitCode}`)
+    if (orchestratorBuild.status !== 0) {
+      throw new Error(`docker build orchestrator failed: ${orchestratorBuild.status}`)
     }
 
     console.log('Building Auth image...')
-    const authBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-      { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+    const authBuild = spawnSync(
+      'docker',
+      ['build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
     )
-    if (authBuild.exitCode !== 0) {
-      throw new Error(`docker build auth failed: ${authBuild.exitCode}`)
+    if (authBuild.status !== 0) {
+      throw new Error(`docker build auth failed: ${authBuild.status}`)
     }
   }
 

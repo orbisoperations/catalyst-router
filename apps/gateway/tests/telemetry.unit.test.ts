@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { trace } from '@opentelemetry/api'
 import type { Logger } from '@logtape/logtape'
 import type { Meter } from '@opentelemetry/api'
@@ -11,41 +11,41 @@ import { GatewayGraphqlServer } from '../src/graphql/server.js'
 
 function createSpyTelemetry() {
   const childLogger = {
-    debug: mock(() => {}),
-    info: mock(() => {}),
-    warn: mock(() => {}),
-    error: mock(() => {}),
-    fatal: mock(() => {}),
-    getChild: mock(() => childLogger),
+    debug: vi.fn(() => {}),
+    info: vi.fn(() => {}),
+    warn: vi.fn(() => {}),
+    error: vi.fn(() => {}),
+    fatal: vi.fn(() => {}),
+    getChild: vi.fn(() => childLogger),
   }
 
-  const getChildSpy = mock(() => childLogger)
+  const getChildSpy = vi.fn(() => childLogger)
 
   const logger = {
-    debug: mock(() => {}),
-    info: mock(() => {}),
-    warn: mock(() => {}),
-    error: mock(() => {}),
-    fatal: mock(() => {}),
+    debug: vi.fn(() => {}),
+    info: vi.fn(() => {}),
+    warn: vi.fn(() => {}),
+    error: vi.fn(() => {}),
+    fatal: vi.fn(() => {}),
     getChild: getChildSpy,
   }
 
-  const counterAddSpy = mock(() => {})
-  const histogramRecordSpy = mock(() => {})
-  const upDownCounterAddSpy = mock(() => {})
+  const counterAddSpy = vi.fn(() => {})
+  const histogramRecordSpy = vi.fn(() => {})
+  const upDownCounterAddSpy = vi.fn(() => {})
 
-  const createCounterSpy = mock(() => ({ add: counterAddSpy }))
-  const createHistogramSpy = mock(() => ({ record: histogramRecordSpy }))
-  const createUpDownCounterSpy = mock(() => ({ add: upDownCounterAddSpy }))
+  const createCounterSpy = vi.fn(() => ({ add: counterAddSpy }))
+  const createHistogramSpy = vi.fn(() => ({ record: histogramRecordSpy }))
+  const createUpDownCounterSpy = vi.fn(() => ({ add: upDownCounterAddSpy }))
 
   const meter = {
     createCounter: createCounterSpy,
     createHistogram: createHistogramSpy,
     createUpDownCounter: createUpDownCounterSpy,
-    createObservableCounter: mock(() => ({})),
-    createObservableGauge: mock(() => ({})),
-    createObservableUpDownCounter: mock(() => ({})),
-    createGauge: mock(() => ({})),
+    createObservableCounter: vi.fn(() => ({})),
+    createObservableGauge: vi.fn(() => ({})),
+    createObservableUpDownCounter: vi.fn(() => ({})),
+    createGauge: vi.fn(() => ({})),
   }
 
   const telemetry: ServiceTelemetry = {
@@ -124,7 +124,7 @@ describe('GatewayGraphqlServer telemetry DI', () => {
     const server = new GatewayGraphqlServer(telemetry)
 
     // Mock fetch to reject — simulates unreachable service
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = vi.fn(() =>
       Promise.reject(new Error('ECONNREFUSED'))
     ) as unknown as typeof globalThis.fetch
 
