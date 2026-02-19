@@ -49,6 +49,10 @@ class MockConnectionPool extends ConnectionPool {
     }
     return this.mockStubs.get(endpoint) as unknown as RpcStub<PublicApi>
   }
+
+  getEnvoy(endpoint: string) {
+    return this.get(endpoint) as any
+  }
 }
 
 function createBusWithEnvoy(pool: MockConnectionPool) {
