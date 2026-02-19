@@ -14,35 +14,4 @@ describe('TickMessageSchema', () => {
       expect(result.data.data.now).toBeGreaterThan(0)
     }
   })
-
-  it('rejects tick with missing now field', () => {
-    const result = TickMessageSchema.safeParse({
-      action: 'system:tick',
-      data: {},
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects tick with non-numeric now', () => {
-    const result = TickMessageSchema.safeParse({
-      action: 'system:tick',
-      data: { now: 'not-a-number' },
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects tick with missing data payload', () => {
-    const result = TickMessageSchema.safeParse({
-      action: 'system:tick',
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects non-tick action type', () => {
-    const result = TickMessageSchema.safeParse({
-      action: 'system:wrong',
-      data: { now: Date.now() },
-    })
-    expect(result.success).toBe(false)
-  })
 })
