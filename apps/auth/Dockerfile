@@ -37,11 +37,15 @@ COPY packages/types packages/types
 COPY packages/service packages/service
 COPY packages/telemetry packages/telemetry
 
-# Bundle with esbuild
+# Bundle with esbuild — all code inlined except native addons.
+# Banner provides CJS compatibility (require, __dirname) for bundled npm packages.
 RUN pnpm exec esbuild apps/auth/src/server.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/server.mjs --format=esm \
-  --packages=external --loader:.cedar=text
+  --external:better-sqlite3 \
+  --external:@cedar-policy/cedar-wasm \
+  --loader:.cedar=text \
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 # Create production deployment with flat node_modules
 RUN pnpm deploy --filter=@catalyst/auth-service --prod /deploy

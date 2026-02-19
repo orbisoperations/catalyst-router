@@ -1,11 +1,11 @@
 import type { AuthorizationEngine } from '../authorization-engine.js'
-import adminPolicy from './admin.cedar' with { type: 'text' }
-import dataCustodianPolicy from './data-custodian.cedar' with { type: 'text' }
+import adminPolicy from './admin.cedar'
+import dataCustodianPolicy from './data-custodian.cedar'
 import type { Action, IBGPEntity, PeerEntity, Role, RouteEntity } from './models.js'
-import nodeCustodianPolicy from './node-custodian.cedar' with { type: 'text' }
-import nodePolicy from './node.cedar' with { type: 'text' }
-import CATALYST_SCHEMA from './schema.cedarschema' with { type: 'text' }
-import userPolicy from './user.cedar' with { type: 'text' }
+import nodeCustodianPolicy from './node-custodian.cedar'
+import nodePolicy from './node.cedar'
+import CATALYST_SCHEMA from './schema.cedar'
+import userPolicy from './user.cedar'
 
 export {
   adminPolicy,
