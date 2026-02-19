@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests"
+    "test:integration": "vitest run --passWithNoTests container integration"
   },
   "dependencies": {
     "@catalyst/config": "workspace:*",
@@ -25,6 +25,8 @@
   },
   "devDependencies": {
     "@catalyst/authorization": "workspace:*",
+    "@hono/node-server": "catalog:",
+    "@hono/node-ws": "catalog:",
     "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
