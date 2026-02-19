@@ -17,8 +17,9 @@ import {
   type Context,
   type Tracer,
 } from '@opentelemetry/api'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc'
+import type { ChannelCredentials } from '@grpc/grpc-js'
 import { EXPORT_TIMEOUT_MS } from './constants.js'
 import { buildResource } from './resource.js'
 
@@ -79,6 +80,7 @@ export interface TracerConfig {
   otlpEndpoint?: string
   samplingRatio?: number
   serviceInstanceId?: string
+  credentials?: ChannelCredentials
 }
 
 /**
@@ -119,8 +121,9 @@ export function initTracer(config: TracerConfig): void {
         : undefined
 
   const exporter = new OTLPTraceExporter({
-    url: `${otlpEndpoint}/v1/traces`,
+    url: otlpEndpoint,
     timeoutMillis: EXPORT_TIMEOUT_MS,
+    ...(config.credentials ? { credentials: config.credentials } : {}),
   })
 
   tracerProvider = new NodeTracerProvider({

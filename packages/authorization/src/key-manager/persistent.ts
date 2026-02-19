@@ -24,11 +24,14 @@ export class PersistentLocalKeyManager implements IKeyManager {
   private currentKey: ManagedKey | null = null
   private previousKeys: ManagedKey[] = []
   private initialized = false
+  private readonly issuer?: string
 
   constructor(
     private store: IKeyStore,
-    private options: { gracePeriodMs?: number } = {}
-  ) {}
+    private options: { gracePeriodMs?: number; issuer?: string } = {}
+  ) {
+    this.issuer = options.issuer
+  }
 
   isInitialized(): boolean {
     return this.initialized
@@ -209,6 +212,10 @@ export class PersistentLocalKeyManager implements IKeyManager {
       .setJti(crypto.randomUUID())
       .setExpirationTime(Math.floor((options.expiresAt ?? Date.now() + 3600000) / 1000))
       .setAudience(options.audience ?? [])
+
+    if (this.issuer) {
+      builder.setIssuer(this.issuer)
+    }
 
     return builder.sign(this.currentKey.privateKey)
   }

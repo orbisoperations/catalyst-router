@@ -34,6 +34,14 @@ namespace CATALYST {
         trustedNodes: Set<String>,
         trustedDomains: Set<String>
     };
+    entity TELEMETRY_EXPORTER {
+        id: String,
+        name: String,
+        type: String,
+        role: String,
+        trustedNodes: Set<String>,
+        trustedDomains: Set<String>
+    };
 
     entity IBGP {
         nodeId: String,
@@ -52,6 +60,10 @@ namespace CATALYST {
         domainId: String
     };
     entity AdminPanel {
+        nodeId: String,
+        domainId: String
+    };
+    entity Collector {
         nodeId: String,
         domainId: String
     };
@@ -124,5 +136,10 @@ namespace CATALYST {
     action MANAGE appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
         resource: AdminPanel
+    };
+
+    action TELEMETRY_EXPORT appliesTo {
+        principal: [ADMIN, TELEMETRY_EXPORTER],
+        resource: [Collector]
     };
 }

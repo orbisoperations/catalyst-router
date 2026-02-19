@@ -5,6 +5,7 @@ import type { Action, IBGPEntity, PeerEntity, Role, RouteEntity } from './models
 import nodeCustodianPolicy from './node-custodian.cedar' with { type: 'text' }
 import nodePolicy from './node.cedar' with { type: 'text' }
 import CATALYST_SCHEMA from './schema.cedar' with { type: 'text' }
+import telemetryExporterPolicy from './telemetry-exporter.cedar' with { type: 'text' }
 import userPolicy from './user.cedar' with { type: 'text' }
 
 export {
@@ -13,6 +14,7 @@ export {
   dataCustodianPolicy,
   nodeCustodianPolicy,
   nodePolicy,
+  telemetryExporterPolicy,
   userPolicy,
 }
 
@@ -25,6 +27,7 @@ export const ALL_POLICIES = [
   nodeCustodianPolicy,
   dataCustodianPolicy,
   userPolicy,
+  telemetryExporterPolicy,
 ].join('\n')
 
 /**
@@ -41,11 +44,13 @@ export type CatalystPolicyDomain = [
       [Role.DATA_CUSTODIAN]: Record<string, unknown>
       [Role.NODE_CUSTODIAN]: Record<string, unknown>
       [Role.USER]: Record<string, unknown>
+      [Role.TELEMETRY_EXPORTER]: Record<string, unknown>
       IBGP: IBGPEntity
       Peer: PeerEntity
       Route: RouteEntity
       Token: Record<string, unknown>
       AdminPanel: Record<string, unknown>
+      Collector: Record<string, unknown>
     }
   },
 ]
