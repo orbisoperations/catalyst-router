@@ -17,7 +17,6 @@
     "hono": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
     "testcontainers": "catalog:testing"
   }
 }

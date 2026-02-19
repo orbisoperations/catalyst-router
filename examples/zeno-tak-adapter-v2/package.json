@@ -22,7 +22,6 @@
     "zod": "^4"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "@types/node": "^20.14.9",
     "@types/uuid": "^11.0.0",
     "bun-types": "latest",

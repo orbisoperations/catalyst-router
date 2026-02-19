@@ -14,8 +14,8 @@
     "test:integration": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -E 'integration|container')"
   },
   "dependencies": {
-    "@catalyst/config": "catalog:",
-    "@catalyst/telemetry": "catalog:",
+    "@catalyst/config": "workspace:*",
+    "@catalyst/telemetry": "workspace:*",
     "@hono/node-server": "catalog:",
     "@hono/node-ws": "catalog:",
     "hono": "catalog:"
