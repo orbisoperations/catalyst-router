@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests"
+    "test:integration": "vitest run --passWithNoTests container integration"
   },
   "dependencies": {
     "@catalyst/auth-service": "workspace:*",

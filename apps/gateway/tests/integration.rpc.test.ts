@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { createNodeWebSocket } from '@hono/node-ws'
-import { serve } from '@hono/node-server'
 import { newWebSocketRpcSession } from 'capnweb'
+import { catalystHonoServer } from '@catalyst/service'
 import type { GatewayUpdateResult } from '../src/rpc/server.js'
 import { createRpcHandler, GatewayRpcServer } from '../src/rpc/server.js'
 
 describe('RPC Integration', () => {
-  let server: ReturnType<typeof serve>
+  let server: ReturnType<typeof catalystHonoServer>
   let port: number
   let ws: WebSocket
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,18 +19,14 @@ describe('RPC Integration', () => {
   beforeAll(async () => {
     const rpcServer = new GatewayRpcServer(updateCallback)
     const app = createRpcHandler(rpcServer)
-    const { injectWebSocket } = createNodeWebSocket({ app })
 
-    server = serve({
-      fetch: app.fetch,
-      port: 0, // Random port
-    })
-    injectWebSocket(server)
-    port = (server.address() as { port: number }).port
+    server = catalystHonoServer(app, { port: 0 })
+    await server.start()
+    port = server.port
   })
 
-  afterAll(() => {
-    if (server) server.close()
+  afterAll(async () => {
+    if (server) await server.stop()
   })
 
   it('should connect and update config successfully', async () => {

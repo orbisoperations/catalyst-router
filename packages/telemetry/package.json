@@ -12,7 +12,7 @@
   "scripts": {
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests container integration",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
