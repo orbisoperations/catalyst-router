@@ -1,3 +1,4 @@
+import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { createYoga } from 'graphql-yoga'
 import { makeExecutableSchema } from '@graphql-tools/schema'
@@ -53,10 +54,16 @@ app.all('/graphql', (c) => yoga.fetch(c.req.raw as unknown as Request, c.env))
 
 app.get('/health', (c) => c.json({ status: 'ok' }))
 
-const port = Number(process.env.PORT) || 8080
-console.log(`Movies service starting on port ${port}...`)
-
-export default {
-  fetch: app.fetch,
-  port,
+// Auto-start when run directly (not when imported by tests)
+const isMain =
+  process.argv[1]?.endsWith('index.ts') ||
+  process.argv[1]?.endsWith('index.js') ||
+  process.argv[1]?.endsWith('index.mjs')
+if (isMain) {
+  const port = Number(process.env.PORT) || 8080
+  console.log(`Movies service starting on port ${port}...`)
+  serve({ fetch: app.fetch, port })
+  console.log('MOVIES_STARTED')
 }
+
+export default app

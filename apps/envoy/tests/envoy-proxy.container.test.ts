@@ -7,12 +7,11 @@ import {
   type StartedTestContainer,
   type StartedNetwork,
 } from 'testcontainers'
-import { Hono } from 'hono'
-import { createNodeWebSocket } from '@hono/node-ws'
 import { serve } from '@hono/node-server'
 import path from 'path'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
+import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
 import { OrchestratorService } from '../../orchestrator/src/service.js'
 import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
@@ -179,9 +178,9 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
   let envoyContainer: StartedTestContainer
 
   // In-process Node servers
-  let authServer: ReturnType<typeof serve>
-  let envoyServer: ReturnType<typeof serve>
-  let orchServer: ReturnType<typeof serve>
+  let authServer: CatalystHonoServer
+  let envoyServer: CatalystHonoServer
+  let orchServer: CatalystHonoServer
 
   // Catalyst services (for lifecycle management)
   let authService: AuthService
@@ -224,12 +223,9 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     authService = await AuthService.create({ config: authConfig })
     const systemToken = authService.systemToken
 
-    const authApp = new Hono()
-    const { injectWebSocket: authInjectWs } = createNodeWebSocket({ app: authApp })
-    authApp.route('/', authService.handler)
-    authServer = serve({ fetch: authApp.fetch, port: 0 })
-    authInjectWs(authServer)
-    const authPort = (authServer.address() as { port: number }).port
+    authServer = catalystHonoServer(authService.handler, { services: [authService], port: 0 })
+    await authServer.start()
+    const authPort = authServer.port
 
     // Envoy service (with ADS gRPC on a pre-allocated port)
     const tempXds = serve({ fetch: () => new Response(''), port: 0 })
@@ -243,12 +239,9 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     })
     envoyService = await EnvoyService.create({ config: envoyConfig })
 
-    const envoyApp = new Hono()
-    const { injectWebSocket: envoyInjectWs } = createNodeWebSocket({ app: envoyApp })
-    envoyApp.route('/', envoyService.handler)
-    envoyServer = serve({ fetch: envoyApp.fetch, port: 0 })
-    envoyInjectWs(envoyServer)
-    const envoyPort = (envoyServer.address() as { port: number }).port
+    envoyServer = catalystHonoServer(envoyService.handler, { services: [envoyService], port: 0 })
+    await envoyServer.start()
+    const envoyPort = envoyServer.port
 
     // Orchestrator (connects to auth + envoy service)
     const tempOrch = serve({ fetch: () => new Response(''), port: 0 })
@@ -276,11 +269,11 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     })
     orchService = await OrchestratorService.create({ config: orchConfig })
 
-    const orchApp = new Hono()
-    const { injectWebSocket: orchInjectWs } = createNodeWebSocket({ app: orchApp })
-    orchApp.route('/', orchService.handler)
-    orchServer = serve({ fetch: orchApp.fetch, port: orchPort })
-    orchInjectWs(orchServer)
+    orchServer = catalystHonoServer(orchService.handler, {
+      services: [orchService],
+      port: orchPort,
+    })
+    await orchServer.start()
 
     // ── 4. Mint CLI token ──────────────────────────────────────────
     const mintResult = await mintTokenHandler({
@@ -347,15 +340,10 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     await booksContainer?.stop().catch(() => {})
     await network?.stop().catch(() => {})
 
-    // 2. Stop Node servers
-    orchServer?.close()
-    envoyServer?.close()
-    authServer?.close()
-
-    // 3. Shutdown Catalyst services (async cleanup)
-    await orchService?.shutdown()
-    await envoyService?.shutdown()
-    await authService?.shutdown()
+    // 2. Stop Node servers (fire-and-forget — process exits anyway)
+    orchServer?.stop().catch(() => {})
+    envoyServer?.stop().catch(() => {})
+    authServer?.stop().catch(() => {})
   }, SETUP_TIMEOUT)
 
   it(

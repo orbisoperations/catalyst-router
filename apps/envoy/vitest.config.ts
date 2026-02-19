@@ -4,6 +4,7 @@ import { cedarTextLoader } from '../../packages/authorization/vitest-cedar-plugi
 export default defineConfig({
   test: {
     environment: 'node',
+    teardownTimeout: 15000,
   },
   plugins: [cedarTextLoader()],
 })

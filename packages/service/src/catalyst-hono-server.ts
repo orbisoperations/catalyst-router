@@ -4,24 +4,41 @@ import { createNodeWebSocket } from '@hono/node-ws'
 import { getLogger } from '@catalyst/telemetry'
 import { telemetryMiddleware } from '@catalyst/telemetry/middleware/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 
 import type { CatalystService } from './catalyst-service.js'
+
+type UpgradeWebSocketFn = ReturnType<typeof createNodeWebSocket>['upgradeWebSocket']
 
 /**
  * The `upgradeWebSocket` function created by `createNodeWebSocket`.
  *
- * RPC handlers that need WebSocket support should import this from
- * `@catalyst/service` and pass it to `newRpcResponse()`.
+ * @deprecated Use `getUpgradeWebSocket(c)` instead to support multiple
+ * servers in the same process (e.g. integration tests).
  *
- * It is initialized lazily when `CatalystHonoServer.start()` is called.
- * Before that, calling it will throw with a descriptive error.
+ * Initialized with a throwing sentinel so that accidental calls before
+ * `CatalystHonoServer.start()` produce a clear error.
  */
-export let upgradeWebSocket: ReturnType<typeof createNodeWebSocket>['upgradeWebSocket'] = (() => {
+export let upgradeWebSocket: UpgradeWebSocketFn = (() => {
   throw new Error(
     'upgradeWebSocket is not available — CatalystHonoServer.start() has not been called. ' +
     'Use getUpgradeWebSocket(c) instead.'
   )
-}) as unknown as ReturnType<typeof createNodeWebSocket>['upgradeWebSocket']
+}) as unknown as UpgradeWebSocketFn
+
+/** Context key for per-server upgradeWebSocket. */
+const WS_CTX_KEY = 'catalyst:upgradeWebSocket'
+
+/**
+ * Get the correct `upgradeWebSocket` for the current request.
+ *
+ * Prefers the per-server instance stored on the Hono context (set by
+ * CatalystHonoServer middleware), falling back to the module-level
+ * singleton for backward compatibility.
+ */
+export function getUpgradeWebSocket(c: Context): UpgradeWebSocketFn {
+  return (c.get(WS_CTX_KEY) as UpgradeWebSocketFn) ?? upgradeWebSocket
+}
 
 export interface CatalystHonoServerOptions {
   /** Port to listen on. Defaults to 3000. */
@@ -90,8 +107,17 @@ export class CatalystHonoServer {
 
     // Wire Node.js WebSocket support via @hono/node-ws
     const nodeWs = createNodeWebSocket({ app })
-    upgradeWebSocket = nodeWs.upgradeWebSocket
+    const localUpgradeWs = nodeWs.upgradeWebSocket
+    upgradeWebSocket = localUpgradeWs
     this._injectWebSocket = nodeWs.injectWebSocket
+
+    // Make the per-server upgradeWebSocket available on every request context.
+    // This allows multiple CatalystHonoServers in the same process (integration tests)
+    // where the module-level singleton would be overwritten by the last server.
+    app.use('*', async (c, next) => {
+      c.set(WS_CTX_KEY, localUpgradeWs)
+      await next()
+    })
 
     // Standard telemetry middleware
     app.use(telemetryMiddleware({ ignorePaths }))
@@ -157,18 +183,20 @@ export class CatalystHonoServer {
 
   /** Gracefully stop: shut down services, flush telemetry, close server. */
   async stop(): Promise<void> {
-    // Shut down all registered services
-    if (this._options.services) {
-      await Promise.allSettled(this._options.services.map((s) => s.shutdown()))
-    }
-
-    // Stop the HTTP server
+    // Close the HTTP server first — force-close active connections so it resolves promptly.
+    // Done before service shutdown so WebSocket handlers don't keep the server alive.
     if (this._server) {
       const server = this._server
       this._server = undefined
+      server.closeAllConnections()
       await new Promise<void>((resolve) => {
         server.close(() => resolve())
       })
+    }
+
+    // Shut down all registered services (flushes telemetry etc.)
+    if (this._options.services) {
+      await Promise.allSettled(this._options.services.map((s) => s.shutdown()))
     }
 
     // Remove signal handlers to avoid duplicate calls
