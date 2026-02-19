@@ -23,7 +23,6 @@ export interface Plan {
   action: Action
   prevState: RouteTable
   newState: RouteTable
-  propagations: Propagation[]
   portOperations: PortOperation[]
   routeMetadata: Map<string, LocRibEntry>
 }
@@ -66,12 +65,12 @@ export class RoutingInformationBase {
   }
 
   /**
-   * Compute the new state and propagation targets for an action.
-   * Does NOT mutate this.state. Synchronous.
+   * Compute the new state and port operations for an action.
+   * Pure — does NOT mutate this.state or the PortAllocator. Synchronous.
    *
-   * Note: port allocation via the PortAllocator is performed during plan
-   * to ensure propagation targets have correct envoyPort values for multi-hop.
-   * This is a side effect on the allocator, but not on the RIB's routing state.
+   * Returns declarative port operations (allocate/release) that commit()
+   * will execute. Propagations are computed in commit() after ports are
+   * resolved, since propagation messages need actual port values.
    */
   plan(action: Action): PlanResult {
     const prevState = this.state
@@ -82,16 +81,7 @@ export class RoutingInformationBase {
     }
 
     const newState = stateResult.state
-
-    // Compute declarative port operations (pure — no allocator mutation)
     const portOperations = this.computePortOps(action, newState, prevState)
-
-    // Allocate/release ports before computing propagations so that
-    // portAllocator.getPort() returns correct values for multi-hop rewrite.
-    this.allocatePorts(action, newState, prevState)
-
-    const propagations = this.computePropagations(action, newState, prevState)
-
     const routeMetadata = this.computeRouteMetadata(newState)
 
     return {
@@ -99,25 +89,32 @@ export class RoutingInformationBase {
       action,
       prevState,
       newState,
-      propagations,
       portOperations,
       routeMetadata,
     }
   }
 
   /**
-   * Atomically apply the plan's new state. Returns the committed result
-   * including propagation targets. The caller is responsible for executing
-   * propagations via transport (typically fire-and-forget to avoid cross-node
-   * deadlocks in the ActionQueue).
+   * Execute the plan: allocate ports, stamp them onto state, compute
+   * propagations, and apply the final state. The caller is responsible
+   * for executing propagations via transport (typically fire-and-forget
+   * to avoid cross-node deadlocks in the ActionQueue).
    */
   commit(plan: Plan): CommitResult {
     const prevState = this.state
-    let newState = plan.newState
 
-    // Update lastSent for peers that will receive propagations
+    // 1. Execute port operations on the allocator
+    this.executePortOps(plan.portOperations)
+
+    // 2. Stamp resolved port values onto routes in the new state
+    let newState = this.stampPortsOnState(plan.newState)
+
+    // 3. Compute propagations (now has correct port values from allocator)
+    const propagations = this.computePropagations(plan.action, newState, plan.prevState)
+
+    // 4. Update lastSent for peers that will receive propagations
     const sentPeerNames = new Set(
-      plan.propagations
+      propagations
         .filter((p) => p.type === 'update' || p.type === 'keepalive')
         .map((p) => p.peer.name)
     )
@@ -134,6 +131,7 @@ export class RoutingInformationBase {
       }
     }
 
+    // 5. Apply state
     this.state = newState
     this.routeMetadata = plan.routeMetadata
 
@@ -145,9 +143,52 @@ export class RoutingInformationBase {
       action: plan.action,
       prevState: plan.prevState,
       newState,
-      propagations: plan.propagations,
+      propagations,
       portOperations: plan.portOperations,
       routesChanged,
+    }
+  }
+
+  /**
+   * Execute port allocate/release operations on the allocator.
+   */
+  private executePortOps(ops: PortOperation[]): void {
+    if (!this.portAllocator) return
+    for (const op of ops) {
+      if (op.type === 'allocate') {
+        const result = this.portAllocator.allocate(op.key)
+        if (!result.success) {
+          this.logger.error`Port allocation failed for ${op.key}: ${result.error}`
+        }
+      } else {
+        this.portAllocator.release(op.key)
+      }
+    }
+  }
+
+  /**
+   * Stamp envoyPort values from the allocator onto routes in the state.
+   * Must run after executePortOps() so getPort() returns correct values.
+   */
+  private stampPortsOnState(state: RouteTable): RouteTable {
+    if (!this.portAllocator) return state
+    return {
+      ...state,
+      local: {
+        ...state.local,
+        routes: state.local.routes.map((r) => {
+          const port = this.portAllocator!.getPort(r.name)
+          return port && !r.envoyPort ? { ...r, envoyPort: port } : r
+        }),
+      },
+      internal: {
+        ...state.internal,
+        routes: state.internal.routes.map((r) => {
+          const key = `egress_${r.name}_via_${r.peerName}`
+          const port = this.portAllocator!.getPort(key)
+          return port && !r.envoyPort ? { ...r, envoyPort: port } : r
+        }),
+      },
     }
   }
 
@@ -191,7 +232,9 @@ export class RoutingInformationBase {
       }
     }
 
-    // Allocate egress ports for internal routes that don't have one yet
+    // Allocate egress ports for internal routes that don't have a local egress port yet.
+    // Note: route.envoyPort here is the *remote* peer's port — we check the allocator
+    // for whether a *local* egress port has been assigned for this route.
     for (const route of newState.internal.routes) {
       const egressKey = `egress_${route.name}_via_${route.peerName}`
       if (!this.portAllocator.getPort(egressKey)) {
@@ -209,69 +252,6 @@ export class RoutingInformationBase {
     }
 
     return ops
-  }
-
-  /**
-   * Allocate and release envoy ports for the state transition.
-   * Must run before computePropagations so getPort() returns correct values.
-   * @deprecated Will be replaced by executePortOps() + stampPortsOnState() in next PR.
-   */
-  private allocatePorts(action: Action, newState: RouteTable, prevState: RouteTable): void {
-    if (!this.portAllocator) return
-
-    const routeActions = [
-      Actions.LocalRouteCreate,
-      Actions.LocalRouteDelete,
-      Actions.InternalProtocolUpdate,
-      Actions.InternalProtocolClose,
-      Actions.InternalProtocolOpen,
-      Actions.InternalProtocolConnected,
-    ]
-    if (!routeActions.includes(action.action)) return
-
-    // Allocate ports for local routes that need them
-    for (const route of newState.local.routes) {
-      if (!route.envoyPort) {
-        const result = this.portAllocator.allocate(route.name)
-        if (result.success) {
-          route.envoyPort = result.port
-        } else {
-          this.logger.error`Port allocation failed for ${route.name}: ${result.error}`
-        }
-      }
-    }
-
-    // Release ports for deleted local routes
-    if (action.action === Actions.LocalRouteDelete) {
-      const deletedRoute = prevState.local.routes.find(
-        (r) => !newState.local.routes.some((lr) => lr.name === r.name)
-      )
-      if (deletedRoute) {
-        this.portAllocator.release(deletedRoute.name)
-      }
-    }
-
-    // Allocate egress ports for internal routes
-    for (const route of newState.internal.routes) {
-      const egressKey = `egress_${route.name}_via_${route.peerName}`
-      const result = this.portAllocator.allocate(egressKey)
-      if (result.success) {
-        if (!route.envoyPort) {
-          route.envoyPort = result.port
-        }
-      } else {
-        this.logger.error`Egress port allocation failed for ${egressKey}: ${result.error}`
-      }
-    }
-
-    // Release egress ports for closed peer connections
-    if (action.action === Actions.InternalProtocolClose) {
-      const closedPeer = action.data.peerInfo.name
-      const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === closedPeer)
-      for (const route of removedRoutes) {
-        this.portAllocator.release(`egress_${route.name}_via_${route.peerName}`)
-      }
-    }
   }
 
   private computeNewState(
