@@ -26,6 +26,12 @@ export type InternalRoute = DataChannelDefinition & {
   nodePath: string[]
 }
 
+export type LocRibEntry = {
+  bestPath: InternalRoute
+  alternatives: InternalRoute[]
+  selectionReason: string
+}
+
 export type RouteTable = {
   local: {
     routes: DataChannelDefinition[]
