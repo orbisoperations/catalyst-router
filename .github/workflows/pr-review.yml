@@ -41,7 +41,12 @@ jobs:
       - name: Check if top of stack
         id: stack-check
         run: |
-          DEPENDENTS=$(gh pr list --base "${{ steps.pr-info.outputs.head_ref }}" --json number --jq 'length')
+          HEAD_REF="${{ steps.pr-info.outputs.head_ref }}"
+          if [ -z "$HEAD_REF" ]; then
+            echo "Error: head_ref is empty"
+            exit 1
+          fi
+          DEPENDENTS=$(gh pr list --repo "${{ github.repository }}" --base "$HEAD_REF" --json number --jq 'length')
           echo "is_top=$([ "$DEPENDENTS" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
