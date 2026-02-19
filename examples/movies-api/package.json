@@ -10,6 +10,7 @@
   "dependencies": {
     "@graphql-tools/schema": "catalog:",
     "@graphql-tools/stitching-directives": "catalog:",
+    "@hono/node-server": "catalog:",
     "graphql": "catalog:",
     "graphql-yoga": "catalog:",
     "hono": "catalog:"

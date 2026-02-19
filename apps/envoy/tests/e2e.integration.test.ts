@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { Hono } from 'hono'
-import { createNodeWebSocket } from '@hono/node-ws'
 import { serve } from '@hono/node-server'
 import { newWebSocketRpcSession } from 'capnweb'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
+import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
 import { OrchestratorService } from '../../orchestrator/src/service.js'
 import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
@@ -26,11 +25,12 @@ import type { EnvoyRpcServer } from '../src/rpc/server.js'
  * Uses CLI handlers with real auth tokens to exercise the full control plane.
  */
 describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
-  // Servers
-  let authServer: ReturnType<typeof serve>
+  // Servers — catalystHonoServer for services with WebSocket RPC,
+  // raw serve() for books-api (no WebSocket needed)
+  let authServer: CatalystHonoServer
   let booksServer: ReturnType<typeof serve>
-  let envoyServer: ReturnType<typeof serve>
-  let orchServer: ReturnType<typeof serve>
+  let envoyServer: CatalystHonoServer
+  let orchServer: CatalystHonoServer
 
   // Services (for shutdown)
   let authService: AuthService
@@ -52,11 +52,12 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     authService = await AuthService.create({ config: authConfig })
     systemToken = authService.systemToken
 
-    const authApp = new Hono()
-    const { injectWebSocket: authInjectWs } = createNodeWebSocket({ app: authApp })
-    authApp.route('/', authService.handler)
-    authServer = serve({ fetch: authApp.fetch, port: 0 })
-    authInjectWs(authServer)
+    authServer = catalystHonoServer(authService.handler, {
+      services: [authService],
+      port: 0,
+    })
+    await authServer.start()
+    const authPort = authServer.port
 
     // ── 2. Start Books API ─────────────────────────────────────────
     const booksModule = await import('../../../examples/books-api/src/index.js')
@@ -73,20 +74,18 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     })
     envoyService = await EnvoyService.create({ config: envoyConfig })
 
-    const envoyApp = new Hono()
-    const { injectWebSocket: envoyInjectWs } = createNodeWebSocket({ app: envoyApp })
-    envoyApp.route('/', envoyService.handler)
-    envoyServer = serve({ fetch: envoyApp.fetch, port: 0 })
-    envoyInjectWs(envoyServer)
+    envoyServer = catalystHonoServer(envoyService.handler, {
+      services: [envoyService],
+      port: 0,
+    })
+    await envoyServer.start()
+    const envoyPort = envoyServer.port
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
     // Pre-allocate a port for the orchestrator so we can set node.endpoint
     const tempServer = serve({ fetch: () => new Response(''), port: 0 })
     const orchPort = (tempServer.address() as { port: number }).port
     tempServer.close()
-
-    const authPort = (authServer.address() as { port: number }).port
-    const envoyPort = (envoyServer.address() as { port: number }).port
 
     const orchConfig = CatalystConfigSchema.parse({
       node: {
@@ -109,11 +108,11 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     })
     orchService = await OrchestratorService.create({ config: orchConfig })
 
-    const orchApp = new Hono()
-    const { injectWebSocket: orchInjectWs } = createNodeWebSocket({ app: orchApp })
-    orchApp.route('/', orchService.handler)
-    orchServer = serve({ fetch: orchApp.fetch, port: orchPort })
-    orchInjectWs(orchServer)
+    orchServer = catalystHonoServer(orchService.handler, {
+      services: [orchService],
+      port: orchPort,
+    })
+    await orchServer.start()
 
     ports = {
       auth: authPort,
@@ -138,17 +137,13 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     cliToken = mintResult.data.token
   }, 30000)
 
-  afterAll(async () => {
-    // Stop servers first, then services
-    orchServer?.close()
-    envoyServer?.close()
+  afterAll(() => {
+    // Just close servers — skip service/telemetry shutdown since the test process exits anyway
     booksServer?.close()
-    authServer?.close()
-
-    await orchService?.shutdown()
-    await envoyService?.shutdown()
-    await authService?.shutdown()
-  }, 10000)
+    orchServer?.stop().catch(() => {})
+    envoyServer?.stop().catch(() => {})
+    authServer?.stop().catch(() => {})
+  }, 5000)
 
   it('minted valid auth tokens', () => {
     expect(systemToken).toBeDefined()
