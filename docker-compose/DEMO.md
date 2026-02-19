@@ -36,12 +36,12 @@ Peering topology: **A <-> B <-> C** (B acts as transit; full mesh is not require
 - Docker Engine 24+ and Docker Compose v2
 - ~4 GB free RAM (14 containers)
 - Ports 3001-3003, 5001-5003, 9911-9913, 10001-10003, 10011-10012, 10021-10022, 10031-10032 available on the host
-- [Bun](https://bun.sh) installed (for running CLI commands)
-- Clone of this repository with dependencies installed (`bun install`)
+- Node.js 22 and [pnpm](https://pnpm.io/) installed
+- Clone of this repository with dependencies installed (`pnpm install`)
 
 **Note:** Healthchecks in the compose file use `127.0.0.1` instead of
-`localhost` because Alpine resolves `localhost` to IPv6 `::1`, while Bun
-binds to IPv4 only.
+`localhost` because Alpine resolves `localhost` to IPv6 `::1`, while Node.js
+binds to IPv4 only by default in many containers.
 
 ## Host Port Reference
 
@@ -58,7 +58,7 @@ binds to IPv4 only.
 
 ## Step 1: Build
 
-Build all images. This runs a single `bun install` in the base stage and
+Build all images. This runs a single `pnpm install` in the base stage and
 creates per-service targets (auth, orchestrator, envoy, books-api).
 
 ```bash
@@ -140,14 +140,14 @@ The `books` hostname is a Docker network alias that resolves within each
 stack's data network.
 
 ```bash
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3001/rpc \
   --token "$SYSTEM_TOKEN_A" \
   node route create books-a http://books:8080 --protocol http:graphql
 ```
 
 ```bash
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3002/rpc \
   --token "$SYSTEM_TOKEN_B" \
   node route create books-b http://books:8080 --protocol http:graphql
@@ -156,7 +156,7 @@ bun run apps/cli/src/index.ts \
 Verify on stack A:
 
 ```bash
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3001/rpc \
   --token "$SYSTEM_TOKEN_A" \
   node route list
@@ -179,7 +179,7 @@ Mint tokens on each auth server for the remote nodes that will connect:
 
 ```bash
 # Auth-A mints a token for node-b (so node-b can authenticate when connecting to orch-a)
-PEER_TOKEN_B_ON_A=$(bun run apps/cli/src/index.ts \
+PEER_TOKEN_B_ON_A=$(pnpm run cli -- \
   --auth-url ws://localhost:5001/rpc \
   --token "$SYSTEM_TOKEN_A" \
   auth token mint node-b.somebiz.local.io \
@@ -187,7 +187,7 @@ PEER_TOKEN_B_ON_A=$(bun run apps/cli/src/index.ts \
   --trusted-domains somebiz.local.io --expires-in 7d 2>/dev/null | tail -1)
 
 # Auth-B mints a token for node-a (so node-a can authenticate when connecting to orch-b)
-PEER_TOKEN_A_ON_B=$(bun run apps/cli/src/index.ts \
+PEER_TOKEN_A_ON_B=$(pnpm run cli -- \
   --auth-url ws://localhost:5002/rpc \
   --token "$SYSTEM_TOKEN_B" \
   auth token mint node-a.somebiz.local.io \
@@ -195,7 +195,7 @@ PEER_TOKEN_A_ON_B=$(bun run apps/cli/src/index.ts \
   --trusted-domains somebiz.local.io --expires-in 7d 2>/dev/null | tail -1)
 
 # Auth-B mints a token for node-c
-PEER_TOKEN_C_ON_B=$(bun run apps/cli/src/index.ts \
+PEER_TOKEN_C_ON_B=$(pnpm run cli -- \
   --auth-url ws://localhost:5002/rpc \
   --token "$SYSTEM_TOKEN_B" \
   auth token mint node-c.somebiz.local.io \
@@ -203,7 +203,7 @@ PEER_TOKEN_C_ON_B=$(bun run apps/cli/src/index.ts \
   --trusted-domains somebiz.local.io --expires-in 7d 2>/dev/null | tail -1)
 
 # Auth-C mints a token for node-b
-PEER_TOKEN_B_ON_C=$(bun run apps/cli/src/index.ts \
+PEER_TOKEN_B_ON_C=$(pnpm run cli -- \
   --auth-url ws://localhost:5003/rpc \
   --token "$SYSTEM_TOKEN_C" \
   auth token mint node-b.somebiz.local.io \
@@ -228,7 +228,7 @@ relationship must be configured.
 
 ```bash
 # A peers with B (A presents PEER_TOKEN_A_ON_B to authenticate with B's auth)
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3001/rpc \
   --token "$SYSTEM_TOKEN_A" \
   node peer create node-b.somebiz.local.io ws://orch-b:3000/rpc \
@@ -236,7 +236,7 @@ bun run apps/cli/src/index.ts \
   --peer-token "$PEER_TOKEN_A_ON_B"
 
 # B peers with A (B presents PEER_TOKEN_B_ON_A to authenticate with A's auth)
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3002/rpc \
   --token "$SYSTEM_TOKEN_B" \
   node peer create node-a.somebiz.local.io ws://orch-a:3000/rpc \
@@ -244,7 +244,7 @@ bun run apps/cli/src/index.ts \
   --peer-token "$PEER_TOKEN_B_ON_A"
 
 # B peers with C
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3002/rpc \
   --token "$SYSTEM_TOKEN_B" \
   node peer create node-c.somebiz.local.io ws://orch-c:3000/rpc \
@@ -252,7 +252,7 @@ bun run apps/cli/src/index.ts \
   --peer-token "$PEER_TOKEN_B_ON_C"
 
 # C peers with B
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3003/rpc \
   --token "$SYSTEM_TOKEN_C" \
   node peer create node-b.somebiz.local.io ws://orch-b:3000/rpc \
@@ -263,7 +263,7 @@ bun run apps/cli/src/index.ts \
 Verify peering on node A:
 
 ```bash
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3001/rpc \
   --token "$SYSTEM_TOKEN_A" \
   node peer list
@@ -279,7 +279,7 @@ Check that orchestrator C (which has no local books service) sees both routes
 as `internal`:
 
 ```bash
-bun run apps/cli/src/index.ts \
+pnpm run cli -- \
   --orchestrator-url ws://localhost:3003/rpc \
   --token "$SYSTEM_TOKEN_C" \
   node route list
