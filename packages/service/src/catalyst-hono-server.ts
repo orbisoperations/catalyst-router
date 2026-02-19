@@ -1,3 +1,4 @@
+import type { Server as HttpServer } from 'node:http'
 import { createAdaptorServer } from '@hono/node-server'
 import type { ServerType } from '@hono/node-server'
 import { createNodeWebSocket } from '@hono/node-ws'
@@ -103,7 +104,7 @@ export class CatalystHonoServer {
     const hostname = this._options.hostname ?? '0.0.0.0'
     const ignorePaths = this._options.telemetryIgnorePaths ?? ['/', '/health']
 
-    const app = new Hono()
+    const app = new Hono<{ Variables: Record<string, unknown> }>()
 
     // Wire Node.js WebSocket support via @hono/node-ws
     const nodeWs = createNodeWebSocket({ app })
@@ -188,7 +189,7 @@ export class CatalystHonoServer {
     if (this._server) {
       const server = this._server
       this._server = undefined
-      server.closeAllConnections()
+      ;(server as HttpServer).closeAllConnections()
       await new Promise<void>((resolve) => {
         server.close(() => resolve())
       })
