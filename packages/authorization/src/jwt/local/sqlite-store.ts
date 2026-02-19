@@ -51,20 +51,20 @@ export class SqliteTokenStore implements TokenStore {
       VALUES ($jti, $expires_at, $certificate_fingerprint, $subject_alternative_names, $entity_id, $entity_name, $entity_type, $is_revoked)
     `)
     stmt.run({
-      $jti: record.jti,
-      $expires_at: record.expiry,
-      $certificate_fingerprint: record.cfn ?? null,
-      $subject_alternative_names: JSON.stringify(record.sans),
-      $entity_id: record.entityId,
-      $entity_name: record.entityName,
-      $entity_type: record.entityType,
-      $is_revoked: record.revoked ? 1 : 0,
+      jti: record.jti,
+      expires_at: record.expiry,
+      certificate_fingerprint: record.cfn ?? null,
+      subject_alternative_names: JSON.stringify(record.sans),
+      entity_id: record.entityId,
+      entity_name: record.entityName,
+      entity_type: record.entityType,
+      is_revoked: record.revoked ? 1 : 0,
     })
   }
 
   async findToken(jti: string): Promise<TokenRecord | null> {
     const stmt = this.db.prepare('SELECT * FROM token WHERE jti = $jti')
-    const result = stmt.get({ $jti: jti }) as TokenRow | null
+    const result = stmt.get({ jti }) as TokenRow | null
     if (!result) return null
 
     return {
@@ -100,7 +100,7 @@ export class SqliteTokenStore implements TokenStore {
    */
   async isRevoked(jti: string): Promise<boolean> {
     const stmt = this.db.prepare('SELECT is_revoked FROM token WHERE jti = $jti')
-    const row = stmt.get({ $jti: jti }) as { is_revoked: number } | null
+    const row = stmt.get({ jti }) as { is_revoked: number } | null
     return row ? row.is_revoked === 1 : false
   }
 
@@ -121,12 +121,12 @@ export class SqliteTokenStore implements TokenStore {
 
     if (filter?.certificateFingerprint) {
       query += ' AND certificate_fingerprint = $cfn'
-      params.$cfn = filter.certificateFingerprint
+      params.cfn = filter.certificateFingerprint
     }
 
     if (filter?.san) {
       query += ' AND subject_alternative_names LIKE $san'
-      params.$san = `%${filter.san}%`
+      params.san = `%${filter.san}%`
     }
 
     const stmt = this.db.prepare(query)

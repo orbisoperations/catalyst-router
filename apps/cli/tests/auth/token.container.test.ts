@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import path from 'path'
 import {
   GenericContainer,
@@ -11,8 +12,8 @@ import { createAuthClient } from '../../src/clients/auth-client.js'
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    const result = spawnSync('docker', ['info'])
+    return result.status === 0
   } catch {
     return false
   }
@@ -36,11 +37,12 @@ describe.skipIf(skipTests)('Token Commands Container Tests', () => {
 
   beforeAll(async () => {
     console.log('Building auth image...')
-    const authBuild = Bun.spawnSync(
-      ['docker', 'build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
+    const authBuild = spawnSync(
+      'docker',
+      ['build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
       { cwd: repoRoot }
     )
-    if (authBuild.exitCode !== 0) {
+    if (authBuild.status !== 0) {
       throw new Error('Failed to build auth image')
     }
 

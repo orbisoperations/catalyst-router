@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts"
+    "start": "tsx src/index.ts"
   }
 }

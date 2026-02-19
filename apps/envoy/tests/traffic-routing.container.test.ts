@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Hono } from 'hono'
-import { websocket } from 'hono/bun'
+import { createNodeWebSocket } from '@hono/node-ws'
+import { serve } from '@hono/node-server'
 import * as grpc from '@grpc/grpc-js'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
@@ -24,10 +25,10 @@ const ADS_SERVICE_PATH =
  * Snapshot Cache -> ADS gRPC -> protobuf DiscoveryResponse.
  */
 describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
-  let authServer: ReturnType<typeof Bun.serve>
-  let booksServer: ReturnType<typeof Bun.serve>
-  let envoyServer: ReturnType<typeof Bun.serve>
-  let orchServer: ReturnType<typeof Bun.serve>
+  let authServer: ReturnType<typeof serve>
+  let booksServer: ReturnType<typeof serve>
+  let envoyServer: ReturnType<typeof serve>
+  let orchServer: ReturnType<typeof serve>
 
   let authService: AuthService
   let envoyService: EnvoyService
@@ -49,21 +50,23 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     systemToken = authService.systemToken
 
     const authApp = new Hono()
+    const { injectWebSocket: authInjectWs } = createNodeWebSocket({ app: authApp })
     authApp.route('/', authService.handler)
-    authServer = Bun.serve({ fetch: authApp.fetch, port: 0, websocket })
+    authServer = serve({ fetch: authApp.fetch, port: 0 })
+    authInjectWs(authServer)
 
     // ── 2. Start Books API ─────────────────────────────────────────
     const booksModule = await import('../../../examples/books-api/src/index.js')
-    booksServer = Bun.serve({
+    booksServer = serve({
       fetch: booksModule.default.fetch,
       port: 0,
     })
 
     // ── 3. Start Envoy Service (with ADS gRPC) ────────────────────
     // Pre-allocate the xDS port
-    const tempXds = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    xdsPort = tempXds.port
-    tempXds.stop()
+    const tempXds = serve({ fetch: () => new Response(''), port: 0 })
+    xdsPort = (tempXds.address() as { port: number }).port
+    tempXds.close()
 
     const envoyConfig = CatalystConfigSchema.parse({
       node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
@@ -73,13 +76,18 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     envoyService = await EnvoyService.create({ config: envoyConfig })
 
     const envoyApp = new Hono()
+    const { injectWebSocket: envoyInjectWs } = createNodeWebSocket({ app: envoyApp })
     envoyApp.route('/', envoyService.handler)
-    envoyServer = Bun.serve({ fetch: envoyApp.fetch, port: 0, websocket })
+    envoyServer = serve({ fetch: envoyApp.fetch, port: 0 })
+    envoyInjectWs(envoyServer)
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
-    const tempOrch = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const orchPort = tempOrch.port
-    tempOrch.stop()
+    const tempOrch = serve({ fetch: () => new Response(''), port: 0 })
+    const orchPort = (tempOrch.address() as { port: number }).port
+    tempOrch.close()
+
+    const authPort = (authServer.address() as { port: number }).port
+    const envoyPort = (envoyServer.address() as { port: number }).port
 
     const orchConfig = CatalystConfigSchema.parse({
       node: {
@@ -90,11 +98,11 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
       orchestrator: {
         ibgp: { secret: 'test-secret' },
         auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
+          endpoint: `ws://localhost:${authPort}/rpc`,
           systemToken,
         },
         envoyConfig: {
-          endpoint: `ws://localhost:${envoyServer.port}/api`,
+          endpoint: `ws://localhost:${envoyPort}/api`,
           portRange: [[10000, 10100]],
         },
       },
@@ -103,14 +111,16 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     orchService = await OrchestratorService.create({ config: orchConfig })
 
     const orchApp = new Hono()
+    const { injectWebSocket: orchInjectWs } = createNodeWebSocket({ app: orchApp })
     orchApp.route('/', orchService.handler)
-    orchServer = Bun.serve({ fetch: orchApp.fetch, port: orchPort, websocket })
+    orchServer = serve({ fetch: orchApp.fetch, port: orchPort })
+    orchInjectWs(orchServer)
 
     ports = {
-      auth: authServer.port,
-      books: booksServer.port,
-      envoy: envoyServer.port,
-      orchestrator: orchServer.port,
+      auth: authPort,
+      books: (booksServer.address() as { port: number }).port,
+      envoy: envoyPort,
+      orchestrator: orchPort,
     }
 
     // ── 5. Mint CLI token ──────────────────────────────────────────
@@ -129,10 +139,10 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
   }, 30000)
 
   afterAll(async () => {
-    orchServer?.stop()
-    envoyServer?.stop()
-    booksServer?.stop()
-    authServer?.stop()
+    orchServer?.close()
+    envoyServer?.close()
+    booksServer?.close()
+    authServer?.close()
 
     await orchService?.shutdown()
     await envoyService?.shutdown()

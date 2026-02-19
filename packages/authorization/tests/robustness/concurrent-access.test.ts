@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { SqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
 import type { TokenRecord } from '../../src/jwt/index.js'
 

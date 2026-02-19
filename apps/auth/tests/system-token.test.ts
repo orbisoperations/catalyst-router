@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'bun:test'
+import { beforeAll, describe, expect, it } from 'vitest'
 import * as jose from 'jose'
 
 describe('System Admin Token', () => {

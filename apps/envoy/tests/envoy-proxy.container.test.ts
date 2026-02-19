@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import {
   GenericContainer,
   Wait,
@@ -7,7 +8,8 @@ import {
   type StartedNetwork,
 } from 'testcontainers'
 import { Hono } from 'hono'
-import { websocket } from 'hono/bun'
+import { createNodeWebSocket } from '@hono/node-ws'
+import { serve } from '@hono/node-server'
 import path from 'path'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
@@ -38,7 +40,7 @@ const TEST_TIMEOUT = 30_000 // 30 seconds
 
 const isDockerRunning = (): boolean => {
   try {
-    return Bun.spawnSync(['docker', 'info']).exitCode === 0
+    return spawnSync('docker', ['info']).status === 0
   } catch {
     return false
   }
@@ -176,10 +178,10 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
   let booksContainer: StartedTestContainer
   let envoyContainer: StartedTestContainer
 
-  // In-process Bun servers
-  let authServer: ReturnType<typeof Bun.serve>
-  let envoyServer: ReturnType<typeof Bun.serve>
-  let orchServer: ReturnType<typeof Bun.serve>
+  // In-process Node servers
+  let authServer: ReturnType<typeof serve>
+  let envoyServer: ReturnType<typeof serve>
+  let orchServer: ReturnType<typeof serve>
 
   // Catalyst services (for lifecycle management)
   let authService: AuthService
@@ -195,23 +197,13 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     network = await new Network().start()
 
     // ── 2. Build + start books-api container ───────────────────────
-    // The Dockerfile uses a deps-caching layer: workspace package.json
-    // files are copied first so `bun install` is cached across rebuilds.
     console.log('[setup] Building books-api image...')
-    const build = Bun.spawn(
-      [
-        CONTAINER_RUNTIME,
-        'build',
-        '-t',
-        'books-service:envoy-test',
-        '-f',
-        'examples/books-api/Dockerfile',
-        '.',
-      ],
-      { cwd: repoRoot, stdout: 'ignore', stderr: 'inherit' }
+    const buildResult = spawnSync(
+      CONTAINER_RUNTIME,
+      ['build', '-t', 'books-service:envoy-test', '-f', 'examples/books-api/Dockerfile', '.'],
+      { cwd: repoRoot, stdio: 'inherit' }
     )
-    const buildExit = await build.exited
-    if (buildExit !== 0) throw new Error('Failed to build books-api image')
+    if (buildResult.status !== 0) throw new Error('Failed to build books-api image')
 
     console.log('[setup] Starting books-api container...')
     booksContainer = await new GenericContainer('books-service:envoy-test')
@@ -233,13 +225,16 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     const systemToken = authService.systemToken
 
     const authApp = new Hono()
+    const { injectWebSocket: authInjectWs } = createNodeWebSocket({ app: authApp })
     authApp.route('/', authService.handler)
-    authServer = Bun.serve({ fetch: authApp.fetch, port: 0, websocket })
+    authServer = serve({ fetch: authApp.fetch, port: 0 })
+    authInjectWs(authServer)
+    const authPort = (authServer.address() as { port: number }).port
 
     // Envoy service (with ADS gRPC on a pre-allocated port)
-    const tempXds = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const xdsPort = tempXds.port
-    tempXds.stop()
+    const tempXds = serve({ fetch: () => new Response(''), port: 0 })
+    const xdsPort = (tempXds.address() as { port: number }).port
+    tempXds.close()
 
     const envoyConfig = CatalystConfigSchema.parse({
       node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
@@ -249,13 +244,16 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     envoyService = await EnvoyService.create({ config: envoyConfig })
 
     const envoyApp = new Hono()
+    const { injectWebSocket: envoyInjectWs } = createNodeWebSocket({ app: envoyApp })
     envoyApp.route('/', envoyService.handler)
-    envoyServer = Bun.serve({ fetch: envoyApp.fetch, port: 0, websocket })
+    envoyServer = serve({ fetch: envoyApp.fetch, port: 0 })
+    envoyInjectWs(envoyServer)
+    const envoyPort = (envoyServer.address() as { port: number }).port
 
     // Orchestrator (connects to auth + envoy service)
-    const tempOrch = Bun.serve({ fetch: () => new Response(''), port: 0 })
-    const orchPort = tempOrch.port
-    tempOrch.stop()
+    const tempOrch = serve({ fetch: () => new Response(''), port: 0 })
+    const orchPort = (tempOrch.address() as { port: number }).port
+    tempOrch.close()
 
     const orchConfig = CatalystConfigSchema.parse({
       node: {
@@ -266,11 +264,11 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
       orchestrator: {
         ibgp: { secret: 'test-secret' },
         auth: {
-          endpoint: `ws://localhost:${authServer.port}/rpc`,
+          endpoint: `ws://localhost:${authPort}/rpc`,
           systemToken,
         },
         envoyConfig: {
-          endpoint: `ws://localhost:${envoyServer.port}/api`,
+          endpoint: `ws://localhost:${envoyPort}/api`,
           portRange: [[ENVOY_LISTENER_PORT, ENVOY_LISTENER_PORT]],
         },
       },
@@ -279,8 +277,10 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     orchService = await OrchestratorService.create({ config: orchConfig })
 
     const orchApp = new Hono()
+    const { injectWebSocket: orchInjectWs } = createNodeWebSocket({ app: orchApp })
     orchApp.route('/', orchService.handler)
-    orchServer = Bun.serve({ fetch: orchApp.fetch, port: orchPort, websocket })
+    orchServer = serve({ fetch: orchApp.fetch, port: orchPort })
+    orchInjectWs(orchServer)
 
     // ── 4. Mint CLI token ──────────────────────────────────────────
     const mintResult = await mintTokenHandler({
@@ -288,7 +288,7 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
       principal: 'CATALYST::ADMIN',
       name: 'Test CLI',
       type: 'service',
-      authUrl: `ws://localhost:${authServer.port}/rpc`,
+      authUrl: `ws://localhost:${authPort}/rpc`,
       token: systemToken,
     })
     if (!mintResult.success) throw new Error(`Failed to mint CLI token: ${mintResult.error}`)
@@ -347,10 +347,10 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     await booksContainer?.stop().catch(() => {})
     await network?.stop().catch(() => {})
 
-    // 2. Stop Bun servers (synchronous)
-    orchServer?.stop()
-    envoyServer?.stop()
-    authServer?.stop()
+    // 2. Stop Node servers
+    orchServer?.close()
+    envoyServer?.close()
+    authServer?.close()
 
     // 3. Shutdown Catalyst services (async cleanup)
     await orchService?.shutdown()
