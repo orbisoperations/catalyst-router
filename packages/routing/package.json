@@ -8,6 +8,9 @@
     ".": "./src/index.ts"
   },
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@catalyst/config": "workspace:*",
     "zod": "catalog:"

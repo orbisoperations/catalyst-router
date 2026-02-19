@@ -15,7 +15,7 @@ Generate [rpi-image-gen](https://github.com/raspberrypi/rpi-image-gen) configura
 - **Layer validation** -- verifies all referenced layers exist (embedded or built-in) before writing
 - **Dry-run support** -- preview generated YAML on stdout without writing to disk
 - **Environment variable support** -- `CATALYST_NODE_ID`, `CATALYST_PEERING_SECRET`, `CATALYST_DOMAINS`, `CATALYST_BOOTSTRAP_TOKEN`, `PORT`
-- **Standalone binary** -- compile to a single ARM64 executable with `bun build --compile`
+- **Standalone binary** -- compile to a single ARM64 executable with `node --experimental-sea`
 
 ---
 
@@ -31,7 +31,7 @@ Generate [rpi-image-gen](https://github.com/raspberrypi/rpi-image-gen) configura
 
 ## Prerequisites
 
-- **[Bun](https://bun.sh/)** >= 1.0 or **Node.js** >= 20 (for running from source)
+- **[Node.js](https://nodejs.org/)** >= 22 (for running from source)
 - This package lives inside the **catalyst-node** monorepo -- clone the full repo first
 - **Image build** requires one of:
   - **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** -- build from macOS/Windows/Linux via `build-docker.sh`
@@ -45,7 +45,7 @@ Generate [rpi-image-gen](https://github.com/raspberrypi/rpi-image-gen) configura
 
 ```bash
 # From the monorepo root
-bun run rpi:config
+pnpm run rpi:config
 ```
 
 The CLI will prompt for deployment mode, device, credentials, WiFi, SSH keys, and node settings.
@@ -53,7 +53,7 @@ The CLI will prompt for deployment mode, device, credentials, WiFi, SSH keys, an
 ### 2. Generate a config (non-interactive / CI)
 
 ```bash
-bun run rpi:config -- \
+pnpm run rpi:config -- \
   --non-interactive \
   --mode native \
   --password "changeme" \
@@ -72,9 +72,8 @@ bun run rpi:config -- \
 No native arm64 Debian host needed. The build runs inside a Debian container.
 
 ```bash
-# Native mode: cross-compile the binary first
-bun build --compile --target=bun-linux-arm64 \
-  --outfile dist/rpi/bin/catalyst-node apps/node/src/index.ts
+# Native mode: build the binary first
+pnpm --filter @catalyst/node-service build
 
 # Build the image via Docker (first run pulls ~1 GB base image)
 ./builds/rpi/build-docker.sh --source-dir dist/rpi dist/rpi/config.yaml
@@ -90,9 +89,8 @@ The output `.img` file is written to `dist/rpi/build/` (or `--build-dir`).
 #### Option B: Native arm64 Debian host
 
 ```bash
-# Native mode: compile the binary first
-bun build --compile --target=bun-linux-arm64 \
-  --outfile dist/rpi/bin/catalyst-node apps/node/src/index.ts
+# Native mode: build the binary first
+pnpm --filter @catalyst/node-service build
 
 # Run the build directly (requires Debian Bookworm/Trixie arm64)
 ./builds/rpi/build.sh --source-dir dist/rpi dist/rpi/config.yaml
@@ -114,17 +112,17 @@ sudo rpi-imager --cli \
 
 ```bash
 # Using the root script alias
-bun run rpi:config
+pnpm run rpi:config
 
 # Or directly
-bun run apps/rpi-config/src/index.ts
+npx tsx apps/rpi-config/src/index.ts
 ```
 
 ### Build with tsup
 
 ```bash
 cd apps/rpi-config
-bun run build
+pnpm run build
 node dist/index.js --help
 ```
 
@@ -134,10 +132,10 @@ node dist/index.js --help
 cd apps/rpi-config
 
 # Cross-compile for Raspberry Pi (linux-arm64)
-bun run compile
+pnpm run compile
 
 # Or compile for the current platform
-bun run compile:native
+pnpm run compile:native
 ```
 
 The binary is written to `dist/rpi-config/catalyst-rpi-config`.
@@ -148,7 +146,7 @@ The binary is written to `dist/rpi-config/catalyst-rpi-config`.
 
 ### Native Binary
 
-- **Single process** -- auth, gateway, and orchestrator run in one Bun-compiled binary
+- **Single process** -- auth, gateway, and orchestrator run in one Node.js-compiled binary
 - **Low overhead** -- ~300-500 MB RAM
 - **Fast boot** -- ~5-10 seconds to ready
 - **Root partition** -- 400% of base image
@@ -361,7 +359,7 @@ CLI flags take precedence over environment variables.
 
 ```bash
 # Example: generate, build, and clean up
-bun run rpi:config -- --non-interactive --password "pass" --peering-secret "s" -o /tmp/rpi-build
+pnpm run rpi:config -- --non-interactive --password "pass" --peering-secret "s" -o /tmp/rpi-build
 ./builds/rpi/build-docker.sh --source-dir /tmp/rpi-build /tmp/rpi-build/config.yaml
 rm -rf /tmp/rpi-build
 ```
