@@ -22,9 +22,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-repo
 
-      - run: bun run lint
-      - run: bun run format:check
-      - run: bun run --filter '*' typecheck
+      - run: pnpm run lint
+      - run: pnpm run format:check
+      - run: pnpm exec turbo run typecheck
 
   test-unit:
     name: Unit Tests
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-repo
 
-      - run: bun run test:unit
+      - run: pnpm exec turbo run test:unit
 
   test-container:
     name: Container Tests
@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-repo
 
-      - run: bun run test:container
+      - run: pnpm exec turbo run test:integration
         env:
           CATALYST_CONTAINER_TESTS_ENABLED: 'true'
 
