@@ -20,6 +20,8 @@
     "@catalyst/authorization": "workspace:*",
     "@catalyst/config": "workspace:*",
     "@catalyst/service": "workspace:*",
+    "@cedar-policy/cedar-wasm": "catalog:",
+    "better-sqlite3": "catalog:",
     "hono": "catalog:"
   },
   "devDependencies": {

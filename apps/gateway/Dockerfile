@@ -33,11 +33,12 @@ COPY packages/telemetry packages/telemetry
 COPY packages/service packages/service
 COPY packages/config packages/config
 
-# Bundle with esbuild
+# Bundle with esbuild — all code inlined.
+# Banner provides CJS compatibility (require, __dirname) for bundled npm packages.
 RUN pnpm exec esbuild apps/gateway/src/index.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/server.mjs --format=esm \
-  --packages=external
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 # Create production deployment with flat node_modules
 RUN pnpm deploy --filter=@catalyst/gateway-service --prod /deploy
