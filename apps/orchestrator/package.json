@@ -12,20 +12,19 @@
     "test:integration": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -E 'integration|container')"
   },
   "dependencies": {
-    "@catalyst/auth-service": "catalog:",
-    "@catalyst/authorization": "catalog:",
-    "@catalyst/config": "catalog:",
-    "@catalyst/envoy-service": "catalog:",
-    "@catalyst/routing": "catalog:",
-    "@catalyst/service": "catalog:",
-    "@catalyst/telemetry": "catalog:",
+    "@catalyst/auth-service": "workspace:*",
+    "@catalyst/authorization": "workspace:*",
+    "@catalyst/config": "workspace:*",
+    "@catalyst/envoy-service": "workspace:*",
+    "@catalyst/routing": "workspace:*",
+    "@catalyst/service": "workspace:*",
+    "@catalyst/telemetry": "workspace:*",
     "@hono/capnweb": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
     "vitest": "catalog:testing"

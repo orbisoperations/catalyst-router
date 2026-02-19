@@ -37,7 +37,6 @@
     }
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
     "hono": "^4.11.7",
     "typescript": "catalog:dev"
   }

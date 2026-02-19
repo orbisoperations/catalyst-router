@@ -8,9 +8,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@catalyst/config": "catalog:",
-    "@catalyst/routing": "catalog:",
-    "@catalyst/service": "catalog:",
+    "@catalyst/config": "workspace:*",
+    "@catalyst/routing": "workspace:*",
+    "@catalyst/service": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
     "@hono/capnweb": "catalog:",
     "@opentelemetry/api": "catalog:",
@@ -21,9 +21,8 @@
     "protobufjs": "^7.5.4"
   },
   "devDependencies": {
-    "@catalyst/authorization": "catalog:",
-    "@catalyst/orchestrator-service": "catalog:",
-    "@types/bun": "catalog:dev",
+    "@catalyst/authorization": "workspace:*",
+    "@catalyst/orchestrator-service": "workspace:*",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev"
   }
