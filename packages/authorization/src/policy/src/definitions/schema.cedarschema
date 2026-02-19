@@ -55,6 +55,10 @@ namespace CATALYST {
         nodeId: String,
         domainId: String
     };
+    entity Gateway {
+        nodeId: String,
+        domainId: String
+    };
 
     action LOGIN appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
@@ -116,9 +120,24 @@ namespace CATALYST {
         resource: Token
     };
 
-    action CHECK_PERMISSIONS appliesTo {
-        principal: NODE,
-        resource: AdminPanel
+    action PEER_LIST appliesTo {
+        principal: [ADMIN, NODE_CUSTODIAN, USER],
+        resource: [Peer, AdminPanel]
+    };
+
+    action ROUTE_LIST appliesTo {
+        principal: [ADMIN, DATA_CUSTODIAN, USER],
+        resource: [Route, AdminPanel]
+    };
+
+    action IBGP_LIST appliesTo {
+        principal: [ADMIN, NODE, NODE_CUSTODIAN],
+        resource: [IBGP, AdminPanel]
+    };
+
+    action GATEWAY_CONFIG_UPDATE appliesTo {
+        principal: [ADMIN, NODE],
+        resource: [Gateway, AdminPanel]
     };
 
     action MANAGE appliesTo {

@@ -35,7 +35,6 @@ export interface PublicApi {
   getIBGPClient(
     token: string
   ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
-  dispatch(action: Action): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export interface NetworkClient {
@@ -1031,9 +1030,6 @@ export class CatalystNodeBus extends RpcTarget {
             },
           },
         }
-      },
-      dispatch: async (action: Action) => {
-        return this.dispatch(action)
       },
     }
   }

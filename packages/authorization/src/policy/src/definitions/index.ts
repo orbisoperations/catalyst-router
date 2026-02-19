@@ -4,7 +4,7 @@ import dataCustodianPolicy from './data-custodian.cedar' with { type: 'text' }
 import type { Action, IBGPEntity, PeerEntity, Role, RouteEntity } from './models.js'
 import nodeCustodianPolicy from './node-custodian.cedar' with { type: 'text' }
 import nodePolicy from './node.cedar' with { type: 'text' }
-import CATALYST_SCHEMA from './schema.cedar' with { type: 'text' }
+import CATALYST_SCHEMA from './schema.cedarschema' with { type: 'text' }
 import userPolicy from './user.cedar' with { type: 'text' }
 
 export {
@@ -46,6 +46,7 @@ export type CatalystPolicyDomain = [
       Route: RouteEntity
       Token: Record<string, unknown>
       AdminPanel: Record<string, unknown>
+      Gateway: Record<string, unknown>
     }
   },
 ]
