@@ -22,9 +22,9 @@ The `TokenManager` sits on top of the `KeyManager`:
 
 ```typescript
 import { LocalTokenManager } from '@catalyst-router/authorization/jwt'
-import { BunSqliteTokenStore } from '@catalyst-router/authorization/jwt/local/sqlite-store'
+import { SqliteTokenStore } from '@catalyst-router/authorization/jwt/local/sqlite-store'
 
-const tokenStore = new BunSqliteTokenStore('./tokens.db')
+const tokenStore = new SqliteTokenStore('./tokens.db')
 const tokenManager = new LocalTokenManager(keyManager, tokenStore, 'node-01')
 ```
 

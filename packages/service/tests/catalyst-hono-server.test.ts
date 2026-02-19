@@ -1,4 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { createServer } from 'node:net'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import { CatalystHonoServer, catalystHonoServer } from '../src/catalyst-hono-server.js'
 
@@ -64,7 +65,7 @@ describe('CatalystHonoServer', () => {
     expect(body.services).toEqual(['test-svc'])
   })
 
-  it('throws if start() is called while already running', () => {
+  it('throws if start() is called while already running', async () => {
     const port = getPort()
     const handler = new Hono()
     const server = tracked(new CatalystHonoServer(handler, { port }))
@@ -73,19 +74,35 @@ describe('CatalystHonoServer', () => {
     expect(() => server.start()).toThrow(/already running/)
   })
 
-  it('throws if the requested port is already in use', async () => {
+  it('exits when the requested port is already in use', async () => {
     const port = getPort()
 
-    // Occupy the port with a raw Bun server
-    const blocker = Bun.serve({ fetch: () => new Response('busy'), port })
+    // Occupy the port with a raw TCP server
+    const blocker = createServer()
+    await new Promise<void>((resolve) => blocker.listen(port, resolve))
+
+    // Mock process.exit and suppress the uncaught exception vitest captures
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+    const uncaughtSpy = vi.fn()
+    process.on('uncaughtException', uncaughtSpy)
 
     try {
       const handler = new Hono()
       const server = new CatalystHonoServer(handler, { port })
+      server.start()
 
-      expect(() => server.start()).toThrow(/port.*in use|already in use/i)
+      // EADDRINUSE fires asynchronously — wait for it
+      await vi.waitFor(() => {
+        expect(exitSpy).toHaveBeenCalledWith(1)
+      })
+
+      await server.stop()
     } finally {
-      blocker.stop()
+      process.removeListener('uncaughtException', uncaughtSpy)
+      exitSpy.mockRestore()
+      await new Promise<void>((resolve, reject) =>
+        blocker.close((err) => (err ? reject(err) : resolve()))
+      )
     }
   })
 
