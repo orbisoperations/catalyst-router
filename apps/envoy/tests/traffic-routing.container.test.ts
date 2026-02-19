@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { Hono } from 'hono'
-import { createNodeWebSocket } from '@hono/node-ws'
 import { serve } from '@hono/node-server'
 import * as grpc from '@grpc/grpc-js'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
+import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
 import { OrchestratorService } from '../../orchestrator/src/service.js'
 import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
@@ -25,10 +24,10 @@ const ADS_SERVICE_PATH =
  * Snapshot Cache -> ADS gRPC -> protobuf DiscoveryResponse.
  */
 describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
-  let authServer: ReturnType<typeof serve>
+  let authServer: CatalystHonoServer
   let booksServer: ReturnType<typeof serve>
-  let envoyServer: ReturnType<typeof serve>
-  let orchServer: ReturnType<typeof serve>
+  let envoyServer: CatalystHonoServer
+  let orchServer: CatalystHonoServer
 
   let authService: AuthService
   let envoyService: EnvoyService
@@ -49,11 +48,12 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     authService = await AuthService.create({ config: authConfig })
     systemToken = authService.systemToken
 
-    const authApp = new Hono()
-    const { injectWebSocket: authInjectWs } = createNodeWebSocket({ app: authApp })
-    authApp.route('/', authService.handler)
-    authServer = serve({ fetch: authApp.fetch, port: 0 })
-    authInjectWs(authServer)
+    authServer = catalystHonoServer(authService.handler, {
+      services: [authService],
+      port: 0,
+    })
+    await authServer.start()
+    const authPort = authServer.port
 
     // ── 2. Start Books API ─────────────────────────────────────────
     const booksModule = await import('../../../examples/books-api/src/index.js')
@@ -75,19 +75,17 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     })
     envoyService = await EnvoyService.create({ config: envoyConfig })
 
-    const envoyApp = new Hono()
-    const { injectWebSocket: envoyInjectWs } = createNodeWebSocket({ app: envoyApp })
-    envoyApp.route('/', envoyService.handler)
-    envoyServer = serve({ fetch: envoyApp.fetch, port: 0 })
-    envoyInjectWs(envoyServer)
+    envoyServer = catalystHonoServer(envoyService.handler, {
+      services: [envoyService],
+      port: 0,
+    })
+    await envoyServer.start()
+    const envoyPort = envoyServer.port
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
     const tempOrch = serve({ fetch: () => new Response(''), port: 0 })
     const orchPort = (tempOrch.address() as { port: number }).port
     tempOrch.close()
-
-    const authPort = (authServer.address() as { port: number }).port
-    const envoyPort = (envoyServer.address() as { port: number }).port
 
     const orchConfig = CatalystConfigSchema.parse({
       node: {
@@ -110,11 +108,11 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     })
     orchService = await OrchestratorService.create({ config: orchConfig })
 
-    const orchApp = new Hono()
-    const { injectWebSocket: orchInjectWs } = createNodeWebSocket({ app: orchApp })
-    orchApp.route('/', orchService.handler)
-    orchServer = serve({ fetch: orchApp.fetch, port: orchPort })
-    orchInjectWs(orchServer)
+    orchServer = catalystHonoServer(orchService.handler, {
+      services: [orchService],
+      port: orchPort,
+    })
+    await orchServer.start()
 
     ports = {
       auth: authPort,
@@ -138,16 +136,12 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     cliToken = mintResult.data.token
   }, 30000)
 
-  afterAll(async () => {
-    orchServer?.close()
-    envoyServer?.close()
+  afterAll(() => {
     booksServer?.close()
-    authServer?.close()
-
-    await orchService?.shutdown()
-    await envoyService?.shutdown()
-    await authService?.shutdown()
-  }, 10000)
+    orchServer?.stop().catch(() => {})
+    envoyServer?.stop().catch(() => {})
+    authServer?.stop().catch(() => {})
+  }, 5000)
 
   it('ADS gRPC server delivers protobuf CDS and LDS after route creation', async () => {
     // Create the route via CLI handler
