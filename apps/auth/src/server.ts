@@ -10,6 +10,12 @@ import { websocket } from 'hono/bun'
 export let systemToken: string | undefined
 
 /**
+ * The current telemetry exporter token for authenticated OTLP export.
+ * Refreshed periodically by the auth service itself.
+ */
+export let otelToken = ''
+
+/**
  * Initializes and starts the Auth service.
  */
 export async function startServer() {
@@ -17,6 +23,7 @@ export async function startServer() {
   const auth = await AuthService.create({ config })
 
   systemToken = auth.systemToken
+  otelToken = auth.otelToken
 
   return {
     app: auth.handler,

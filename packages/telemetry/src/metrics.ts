@@ -1,6 +1,7 @@
 import { metrics, type Meter } from '@opentelemetry/api'
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics'
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http'
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-grpc'
+import type { ChannelCredentials } from '@grpc/grpc-js'
 import { buildResource } from './resource.js'
 import { DEFAULT_SERVICE_NAME, EXPORT_TIMEOUT_MS, validateEnvironment } from './constants.js'
 
@@ -11,6 +12,7 @@ export interface MetricsConfig {
   otlpEndpoint?: string
   exportIntervalMs?: number // default 60_000
   serviceInstanceId?: string
+  credentials?: ChannelCredentials
 }
 
 let meterProvider: MeterProvider | null = null
@@ -35,8 +37,9 @@ export function configureMetrics(config?: MetricsConfig): void {
   const resource = buildResource({ serviceName, serviceVersion, environment, serviceInstanceId })
 
   const exporter = new OTLPMetricExporter({
-    url: `${otlpEndpoint}/v1/metrics`,
+    url: otlpEndpoint,
     timeoutMillis: EXPORT_TIMEOUT_MS,
+    ...(config?.credentials ? { credentials: config.credentials } : {}),
   })
 
   const reader = new PeriodicExportingMetricReader({

@@ -40,6 +40,9 @@ interface AuthRpcApi {
 const REFRESH_THRESHOLD = 0.8
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 const REFRESH_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
+const OTEL_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const OTEL_REFRESH_THRESHOLD = 0.8
+const OTEL_REFRESH_CHECK_INTERVAL = 60 * 60 * 1000
 
 export class OrchestratorService extends CatalystService {
   readonly info = { name: 'orchestrator', version: '0.0.0' }
@@ -50,6 +53,9 @@ export class OrchestratorService extends CatalystService {
   private _tokenIssuedAt: Date | undefined
   private _tokenExpiresAt: Date | undefined
   private _refreshInterval: ReturnType<typeof setInterval> | undefined
+  private _otelToken = ''
+  private _otelTokenExpiresAt = 0
+  private _otelRefreshInterval: ReturnType<typeof setInterval> | undefined
 
   constructor(options: CatalystServiceOptions) {
     super(options)
@@ -63,11 +69,18 @@ export class OrchestratorService extends CatalystService {
     // Mint node token if auth is configured
     await this.mintNodeToken()
 
+    // Fetch telemetry token
+    await this.fetchTelemetryToken()
+
     // Set up periodic token refresh
     if (this.config.orchestrator?.auth) {
       this._refreshInterval = setInterval(
         () => this.refreshNodeTokenIfNeeded(),
         REFRESH_CHECK_INTERVAL
+      )
+      this._otelRefreshInterval = setInterval(
+        () => this.refreshTelemetryTokenIfNeeded(),
+        OTEL_REFRESH_CHECK_INTERVAL
       )
       this.telemetry.logger.info`Token refresh check enabled (every hour)`
     }
@@ -107,6 +120,10 @@ export class OrchestratorService extends CatalystService {
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval)
       this._refreshInterval = undefined
+    }
+    if (this._otelRefreshInterval) {
+      clearInterval(this._otelRefreshInterval)
+      this._otelRefreshInterval = undefined
     }
   }
 
@@ -151,6 +168,38 @@ export class OrchestratorService extends CatalystService {
     } catch (error) {
       this.telemetry.logger.error`Failed to mint node token: ${error}`
       throw error
+    }
+  }
+
+  private async fetchTelemetryToken(): Promise<void> {
+    if (!this.config.orchestrator?.auth) return
+    const { endpoint, systemToken: sysToken } = this.config.orchestrator.auth
+    // Derive auth HTTP endpoint from WebSocket endpoint
+    const authUrl = endpoint.replace(/^ws/, 'http').replace(/\/rpc$/, '')
+    try {
+      const res = await fetch(`${authUrl}/telemetry/token`, {
+        headers: { Authorization: `Bearer ${sysToken}` },
+      })
+      if (!res.ok) {
+        this.telemetry.logger.error`Telemetry token fetch failed: ${res.status}`
+        return
+      }
+      const body = (await res.json()) as { token: string; expiresAt: string }
+      this._otelToken = body.token
+      this._otelTokenExpiresAt = new Date(body.expiresAt).getTime()
+      this.telemetry.logger.info`Telemetry token fetched successfully`
+    } catch (err) {
+      this.telemetry.logger.error`Telemetry token fetch failed: ${err}`
+    }
+  }
+
+  private async refreshTelemetryTokenIfNeeded(): Promise<void> {
+    if (!this._otelToken || !this._otelTokenExpiresAt) return
+    const now = Date.now()
+    const issuedAt = this._otelTokenExpiresAt - OTEL_TOKEN_TTL_MS
+    const tokenAge = now - issuedAt
+    if (tokenAge >= OTEL_TOKEN_TTL_MS * OTEL_REFRESH_THRESHOLD) {
+      await this.fetchTelemetryToken()
     }
   }
 

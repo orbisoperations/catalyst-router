@@ -1,3 +1,4 @@
+import type { ChannelCredentials as GrpcChannelCredentials } from '@grpc/grpc-js'
 import { configureLogger, shutdownLogger, resetLogger, getLogger } from './logger.js'
 import type { LoggerConfig } from './logger.js'
 import { configureMetrics, shutdownMetrics, getMeter } from './metrics.js'
@@ -48,7 +49,7 @@ export type { InstrumentUpgradeOptions } from './middleware/capnweb-transport.js
 // Builder + DI
 // ---------------------------------------------------------------------------
 export { TelemetryBuilder } from './builder.js'
-export type { ServiceTelemetry, InstrumentRpcOptions } from './types.js'
+export type { ServiceTelemetry, InstrumentRpcOptions, AuthBuilderOpts } from './types.js'
 
 // ---------------------------------------------------------------------------
 // Unified init / shutdown
@@ -61,6 +62,8 @@ export interface TelemetryInitOptions {
   otlpEndpoint?: string
   samplingRatio?: number
   serviceInstanceId?: string
+  /** Per-call gRPC credential injection for authenticated OTLP export. */
+  tokenFn?: () => string
 }
 
 /**
@@ -74,6 +77,22 @@ export interface TelemetryInitOptions {
  */
 export async function initTelemetry(opts: TelemetryInitOptions): Promise<void> {
   try {
+    // Build gRPC credentials if tokenFn is provided
+    let credentials: GrpcChannelCredentials | undefined
+    if (opts.tokenFn) {
+      const grpc = await import('@grpc/grpc-js')
+      const tokenFn = opts.tokenFn
+      const callCredentials = grpc.credentials.createFromMetadataGenerator((_params, cb) => {
+        const meta = new grpc.Metadata()
+        meta.set('authorization', `Bearer ${tokenFn()}`)
+        cb(null, meta)
+      })
+      credentials = grpc.credentials.combineChannelCredentials(
+        grpc.credentials.createInsecure(),
+        callCredentials
+      )
+    }
+
     initTracer({
       serviceName: opts.serviceName,
       serviceVersion: opts.serviceVersion,
@@ -81,6 +100,7 @@ export async function initTelemetry(opts: TelemetryInitOptions): Promise<void> {
       otlpEndpoint: opts.otlpEndpoint,
       samplingRatio: opts.samplingRatio,
       serviceInstanceId: opts.serviceInstanceId,
+      credentials,
     })
 
     await configureLogger({
@@ -89,6 +109,7 @@ export async function initTelemetry(opts: TelemetryInitOptions): Promise<void> {
       environment: opts.environment as LoggerConfig['environment'],
       otlpEndpoint: opts.otlpEndpoint,
       serviceInstanceId: opts.serviceInstanceId,
+      credentials,
     })
 
     configureMetrics({
@@ -97,6 +118,7 @@ export async function initTelemetry(opts: TelemetryInitOptions): Promise<void> {
       environment: opts.environment,
       otlpEndpoint: opts.otlpEndpoint,
       serviceInstanceId: opts.serviceInstanceId,
+      credentials,
     })
   } catch (err) {
     // Roll back any already-initialized subsystems
