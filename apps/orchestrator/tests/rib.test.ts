@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { RoutingInformationBase, type Plan } from '../src/rib.js'
 import type { OrchestratorConfig } from '../src/types.js'
 
-const NODE: PeerInfo = {
+const NODE: OrchestratorConfig['node'] = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
@@ -308,7 +308,7 @@ describe('RoutingInformationBase', () => {
       const routes = rib.getState().internal.routes
       expect(routes).toHaveLength(1)
       expect(routes[0].name).toBe('svc-b')
-      expect(routes[0].peerName).toBe(PEER_B.name)
+      expect(routes[0].peer.name).toBe(PEER_B.name)
       expect(routes[0].nodePath).toEqual([PEER_B.name])
     })
 

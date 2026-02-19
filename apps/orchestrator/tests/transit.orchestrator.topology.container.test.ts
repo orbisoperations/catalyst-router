@@ -9,7 +9,8 @@ import {
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers'
-import type { DataChannel, NetworkClient, PublicApi } from '../src/orchestrator.js'
+import type { DataChannel, NetworkClient, PublicApi, InternalRoute } from '../src/orchestrator.js'
+import type { PeerRecord } from '@catalyst/routing'
 import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
 
 const isDockerRunning = () => {
@@ -143,7 +144,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
         const netResult = await client.getNetworkClient(token)
         if (!netResult.success) throw new Error('Failed to get network client for check')
         const peers = await netResult.client.listPeers()
-        const peer = peers.find((p) => p.name === peerName)
+        const peer = peers.find((p: PeerRecord) => p.name === peerName)
         if (peer && peer.connectionStatus === 'connected') return
         await new Promise((r) => setTimeout(r, 500))
       }
@@ -215,7 +216,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           const dataBResult = await clientB.getDataChannelClient(auth.systemToken)
           if (!dataBResult.success) throw new Error('Failed to get data client B')
           const routes = await dataBResult.client.listRoutes()
-          if (routes.internal.some((r) => r.name === 'service-a')) {
+          if (routes.internal.some((r: InternalRoute) => r.name === 'service-a')) {
             learnedOnB = true
             break
           }
@@ -248,7 +249,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           const dataCResult = await clientC.getDataChannelClient(auth.systemToken)
           if (!dataCResult.success) throw new Error('Failed to get data client C')
           const routes = await dataCResult.client.listRoutes()
-          const routeA = routes.internal.find((r) => r.name === 'service-a')
+          const routeA = routes.internal.find((r: InternalRoute) => r.name === 'service-a')
           if (routeA) {
             learnedOnC = true
             // Verify nodePath: [B, A]
@@ -277,7 +278,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           const dataCResult = await clientC.getDataChannelClient(auth.systemToken)
           if (!dataCResult.success) throw new Error('Failed to get data client C')
           const routes = await dataCResult.client.listRoutes()
-          if (!routes.internal.some((r) => r.name === 'service-a')) {
+          if (!routes.internal.some((r: InternalRoute) => r.name === 'service-a')) {
             removedOnC = true
             break
           }
@@ -308,7 +309,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           const dataCResult = await clientC.getDataChannelClient(auth.systemToken)
           if (!dataCResult.success) throw new Error('Failed to get data client C')
           const routes = await dataCResult.client.listRoutes()
-          if (!routes.internal.some((r) => r.name === 'service-a-v2')) {
+          if (!routes.internal.some((r: InternalRoute) => r.name === 'service-a-v2')) {
             disconnectedWithdrawalOnC = true
             break
           }
@@ -531,7 +532,7 @@ describe.skipIf(skipTests)('Orchestrator Transit Container Tests', () => {
           const dataCResult = await clientC.getDataChannelClient(authC.systemToken)
           if (!dataCResult.success) throw new Error('Failed to get data client C')
           const routes = await dataCResult.client.listRoutes()
-          const routeA = routes.internal.find((r) => r.name === 'service-a')
+          const routeA = routes.internal.find((r: InternalRoute) => r.name === 'service-a')
           if (routeA) {
             learnedOnC = true
             expect(routeA.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])

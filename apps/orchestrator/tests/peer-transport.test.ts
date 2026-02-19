@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { PeerTransport, type Propagation, type UpdateMessage } from '../src/peer-transport.js'
 import { ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { PeerInfo, PeerRecord } from '@catalyst/routing'

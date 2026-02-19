@@ -9,7 +9,8 @@ import {
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers'
-import type { NetworkClient, PublicApi } from '../src/orchestrator.js'
+import type { NetworkClient, PublicApi, InternalRoute } from '../src/orchestrator.js'
+import type { PeerRecord } from '@catalyst/routing'
 import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
 
 const isDockerRunning = () => {
@@ -140,7 +141,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         const netResult = await client.getNetworkClient(token)
         if (!netResult.success) throw new Error('Failed to get network client for check')
         const peers = await netResult.client.listPeers()
-        const peer = peers.find((p) => p.name === peerName)
+        const peer = peers.find((p: PeerRecord) => p.name === peerName)
         if (peer && peer.connectionStatus === 'connected') return
         await new Promise((r) => setTimeout(r, 500))
       }
@@ -222,7 +223,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         const dataBBefore = await clientB.getDataChannelClient(auth.systemToken)
         if (!dataBBefore.success) throw new Error('Failed to get data client B')
         const routesBefore = await dataBBefore.client.listRoutes()
-        expect(routesBefore.internal.some((r) => r.name === 'service-a')).toBe(false)
+        expect(routesBefore.internal.some((r: InternalRoute) => r.name === 'service-a')).toBe(false)
         console.log('[ok] Confirmed route not on B before propagation')
 
         const routeResult = await dataAResult.client.addRoute({
@@ -244,7 +245,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
           const dataBResult = await clientB.getDataChannelClient(auth.systemToken)
           if (!dataBResult.success) throw new Error('Failed to get data client B')
           const routes = await dataBResult.client.listRoutes()
-          matchingRoute = routes.internal.find((r) => r.name === 'service-a')
+          matchingRoute = routes.internal.find((r: InternalRoute) => r.name === 'service-a')
           if (matchingRoute) {
             learnedOnB = true
             break
@@ -452,7 +453,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
             const netResult = await client.getNetworkClient(token)
             if (!netResult.success) throw new Error('Failed to get network client for check')
             const peers = await netResult.client.listPeers()
-            const peer = peers.find((p) => p.name === peerName)
+            const peer = peers.find((p: PeerRecord) => p.name === peerName)
             if (peer && peer.connectionStatus === 'connected') return
             await new Promise((r) => setTimeout(r, 500))
           }
@@ -472,7 +473,9 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         const dataBBefore = await clientB.getDataChannelClient(authB.systemToken)
         if (!dataBBefore.success) throw new Error('Failed to get data client B')
         const routesBefore = await dataBBefore.client.listRoutes()
-        expect(routesBefore.internal.some((r) => r.name === 'service-separate-auth')).toBe(false)
+        expect(
+          routesBefore.internal.some((r: InternalRoute) => r.name === 'service-separate-auth')
+        ).toBe(false)
         console.log('[ok] Confirmed route not on B before propagation')
 
         const routeResult = await dataAResult.client.addRoute({
@@ -493,7 +496,9 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
           const dataBResult = await clientB.getDataChannelClient(authB.systemToken)
           if (!dataBResult.success) throw new Error('Failed to get data client B')
           const routes = await dataBResult.client.listRoutes()
-          matchingRoute = routes.internal.find((r) => r.name === 'service-separate-auth')
+          matchingRoute = routes.internal.find(
+            (r: InternalRoute) => r.name === 'service-separate-auth'
+          )
           if (matchingRoute) {
             learnedOnB = true
             break

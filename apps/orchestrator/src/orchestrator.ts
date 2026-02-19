@@ -1,77 +1,34 @@
-import type { z } from 'zod'
 import {
   Actions,
   type Action,
   type DataChannelDefinition,
   type InternalRoute,
   type PeerInfo,
-  type PeerRecord,
   type RouteTable,
-  type UpdateMessageSchema,
 } from '@catalyst/routing'
 export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import { createPortAllocator, type PortAllocator } from '@catalyst/envoy-service'
-import {
-  newHttpBatchRpcSession,
-  newWebSocketRpcSession,
-  type RpcCompatible,
-  type RpcStub,
-  RpcTarget,
-} from 'capnweb'
+import { newWebSocketRpcSession, type RpcStub, RpcTarget } from 'capnweb'
 import { PeerTransport } from './peer-transport.js'
 import type {
   PublicApi,
+  UpdateMessage,
   NetworkClient,
   DataChannel,
   IBGPClient,
-  UpdateMessage,
-  EnvoyApi,
-  GatewayApi,
 } from './api-types.js'
-import { ActionQueue, type DispatchResult } from './action-queue.js'
+import { ActionQueue, type DispatchResult, type PostCommitOutcome } from './action-queue.js'
 import { RoutingInformationBase, type CommitResult } from './rib.js'
+import { ConnectionPool } from './connection-pool.js'
 
 export type { PublicApi, NetworkClient, DataChannel, IBGPClient } from './api-types.js'
 
-<<<<<<< HEAD
-export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
-  return newHttpBatchRpcSession<API>(endpoint)
-}
+// Re-export for backward compatibility (tests, peer-transport, etc.)
+export { ConnectionPool } from './connection-pool.js'
+export { getHttpPeerSession, getWebSocketPeerSession } from './connection-pool.js'
 
-export function getWebSocketPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
-  return newWebSocketRpcSession<API>(endpoint)
-}
-
-export class ConnectionPool {
-  private stubs: Map<string, RpcStub<PublicApi>>
-  constructor(private type: 'ws' | 'http' = 'http') {
-    this.stubs = new Map<string, RpcStub<PublicApi>>()
-  }
-
-  get(endpoint: string | undefined) {
-    if (!endpoint) return undefined
-    if (this.stubs.has(endpoint)) {
-      return this.stubs.get(endpoint)
-    }
-    switch (this.type) {
-      case 'http': {
-        const stub = newHttpBatchRpcSession<PublicApi>(endpoint)
-        this.stubs.set(endpoint, stub)
-        return stub
-      }
-      case 'ws': {
-        const stub = newWebSocketRpcSession<PublicApi>(endpoint)
-        this.stubs.set(endpoint, stub)
-        return stub
-      }
-    }
-  }
-}
-
-=======
->>>>>>> 355a1b9 (refactor(orchestrator): reduce to thin shell coordinating RIB pipeline)
 /**
  * Auth Service RPC API interface
  */
@@ -108,7 +65,7 @@ export class CatalystNodeBus extends RpcTarget {
   private portAllocator?: PortAllocator
   private rib: RoutingInformationBase
   private queue: ActionQueue
-  public lastNotificationPromise?: Promise<void>
+  public lastNotificationPromise?: Promise<PostCommitOutcome>
 
   constructor(opts: {
     state?: RouteTable
@@ -128,11 +85,13 @@ export class CatalystNodeBus extends RpcTarget {
     if (opts.authEndpoint) {
       this.authClient = newWebSocketRpcSession<AuthServiceApi>(opts.authEndpoint)
     }
-    this.connectionPool =
-      opts.connectionPool?.pool ??
-      (opts.connectionPool?.type
-        ? new ConnectionPool(opts.connectionPool.type)
-        : new ConnectionPool())
+    if (opts.connectionPool?.pool) {
+      this.connectionPool = opts.connectionPool.pool
+    } else if (opts.connectionPool?.type) {
+      this.connectionPool = new ConnectionPool(opts.connectionPool.type)
+    } else {
+      this.connectionPool = new ConnectionPool()
+    }
 
     this.peerTransport = new PeerTransport(this.connectionPool, opts.nodeToken)
 
@@ -210,6 +169,18 @@ export class CatalystNodeBus extends RpcTarget {
     return this.queue.enqueue(sentAction)
   }
 
+  /**
+   * Dispatch an action and strip the postCommit Promise so the result
+   * is safe to serialize over RPC (Promises are not serializable).
+   */
+  private async dispatchForRpc(
+    action: Action
+  ): Promise<{ success: true } | { success: false; error: string }> {
+    const result = await this.dispatch(action)
+    if (!result.success) return result
+    return { success: true }
+  }
+
   private async pipeline(sentAction: Action): Promise<DispatchResult> {
     this.logger.info`Dispatching action: ${sentAction.action}`
 
@@ -227,16 +198,24 @@ export class CatalystNodeBus extends RpcTarget {
     // 2. Commit: apply state atomically (synchronous)
     const commitResult = this.rib.commit(plan)
 
-    // 3. Post-commit side effects (fire-and-forget to avoid ActionQueue deadlock)
-    this.lastNotificationPromise = this.handlePostCommit(sentAction, commitResult).catch((e) => {
+    const postCommit = this.handlePostCommit(sentAction, commitResult).catch((e) => {
       this.logger.error`Error in post-commit for ${sentAction.action}: ${e}`
+      return {
+        propagationResults: [] as PromiseSettledResult<void>[],
+        envoySyncOk: false,
+        graphqlSyncOk: false,
+      } satisfies PostCommitOutcome
     })
 
-    return { success: true }
+    this.lastNotificationPromise = postCommit
+
+    return { success: true, postCommit }
   }
 
-  private async handlePostCommit(sentAction: Action, commitResult: CommitResult): Promise<void> {
-    // Execute propagations (peer transport)
+  private async handlePostCommit(
+    sentAction: Action,
+    commitResult: CommitResult
+  ): Promise<PostCommitOutcome> {
     const peerResults = await this.peerTransport.fanOut(commitResult.propagations)
 
     // LocalPeerCreate: if open succeeded, trigger InternalProtocolConnected
@@ -251,21 +230,18 @@ export class CatalystNodeBus extends RpcTarget {
       }
     }
 
-    // Infrastructure side effects (envoy + graphql)
-    await this.handleEnvoyPush(sentAction, commitResult.newState, commitResult.prevState)
-    await this.handleGraphqlConfiguration()
+    const envoySyncOk = await this.syncEnvoy(sentAction)
+    const graphqlSyncOk = await this.syncGraphql()
+
+    return { propagationResults: peerResults, envoySyncOk, graphqlSyncOk }
   }
 
-  private async handleEnvoyPush(
-    action: Action,
-    _state: RouteTable,
-    _prevState: RouteTable
-  ): Promise<void> {
+  private async syncEnvoy(action: Action): Promise<boolean> {
     const envoyEndpoint = this.config.envoyConfig?.endpoint
-    if (!envoyEndpoint || !this.portAllocator) return
+    if (!envoyEndpoint || !this.portAllocator) return true
 
     // Only react to route-affecting actions
-    const routeActions = [
+    const routeActions: string[] = [
       Actions.LocalRouteCreate,
       Actions.LocalRouteDelete,
       Actions.InternalProtocolUpdate,
@@ -273,7 +249,7 @@ export class CatalystNodeBus extends RpcTarget {
       Actions.InternalProtocolOpen,
       Actions.InternalProtocolConnected,
     ]
-    if (!routeActions.includes(action.action)) return
+    if (!routeActions.includes(action.action)) return true
 
     // Push complete config to envoy service
     try {
@@ -285,15 +261,18 @@ export class CatalystNodeBus extends RpcTarget {
       })
       if (!result.success) {
         this.logger.error`Envoy config sync failed: ${result.error}`
+        return false
       }
+      return true
     } catch (e) {
       this.logger.error`Error syncing to Envoy service: ${e}`
+      return false
     }
   }
 
-  private async handleGraphqlConfiguration(): Promise<void> {
+  private async syncGraphql(): Promise<boolean> {
     const gatewayEndpoint = this.config.gqlGatewayConfig?.endpoint
-    if (!gatewayEndpoint) return
+    if (!gatewayEndpoint) return true
 
     const graphqlRoutes = [...this.state.local.routes, ...this.state.internal.routes].filter(
       (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
@@ -301,7 +280,7 @@ export class CatalystNodeBus extends RpcTarget {
 
     if (graphqlRoutes.length === 0) {
       this.logger.debug`No GraphQL routes to sync`
-      return
+      return true
     }
 
     this.logger.info`Syncing ${graphqlRoutes.length} GraphQL routes to gateway`
@@ -313,11 +292,13 @@ export class CatalystNodeBus extends RpcTarget {
       })
       if (!result.success) {
         this.logger.error`Gateway sync failed: ${result.error}`
-      } else {
-        this.logger.info`Gateway sync successful`
+        return false
       }
+      this.logger.info`Gateway sync successful`
+      return true
     } catch (e) {
       this.logger.error`Error syncing to gateway: ${e}`
+      return false
     }
   }
 
@@ -333,11 +314,11 @@ export class CatalystNodeBus extends RpcTarget {
           success: true as const,
           client: {
             addPeer: (peer: PeerInfo) =>
-              this.dispatch({ action: Actions.LocalPeerCreate, data: peer }),
+              this.dispatchForRpc({ action: Actions.LocalPeerCreate, data: peer }),
             updatePeer: (peer: PeerInfo) =>
-              this.dispatch({ action: Actions.LocalPeerUpdate, data: peer }),
+              this.dispatchForRpc({ action: Actions.LocalPeerUpdate, data: peer }),
             removePeer: (peer: Pick<PeerInfo, 'name'>) =>
-              this.dispatch({ action: Actions.LocalPeerDelete, data: peer }),
+              this.dispatchForRpc({ action: Actions.LocalPeerDelete, data: peer }),
             listPeers: async () => this.rib.getState().internal.peers,
           },
         }
@@ -352,9 +333,9 @@ export class CatalystNodeBus extends RpcTarget {
           success: true as const,
           client: {
             addRoute: (route: DataChannelDefinition) =>
-              this.dispatch({ action: Actions.LocalRouteCreate, data: route }),
+              this.dispatchForRpc({ action: Actions.LocalRouteCreate, data: route }),
             removeRoute: (route: DataChannelDefinition) =>
-              this.dispatch({ action: Actions.LocalRouteDelete, data: route }),
+              this.dispatchForRpc({ action: Actions.LocalRouteDelete, data: route }),
             listRoutes: async () => ({
               local: this.rib.getState().local.routes,
               internal: this.rib.getState().internal.routes,
@@ -372,21 +353,24 @@ export class CatalystNodeBus extends RpcTarget {
           success: true as const,
           client: {
             open: (peer: PeerInfo) =>
-              this.dispatch({ action: Actions.InternalProtocolOpen, data: { peerInfo: peer } }),
+              this.dispatchForRpc({
+                action: Actions.InternalProtocolOpen,
+                data: { peerInfo: peer },
+              }),
             close: (peer: PeerInfo, code: number, reason?: string) =>
-              this.dispatch({
+              this.dispatchForRpc({
                 action: Actions.InternalProtocolClose,
                 data: { peerInfo: peer, code, reason },
               }),
             update: (peer: PeerInfo, update: UpdateMessage) =>
-              this.dispatch({
+              this.dispatchForRpc({
                 action: Actions.InternalProtocolUpdate,
                 data: { peerInfo: peer, update },
               }),
           },
         }
       },
-      dispatch: (action: Action) => this.dispatch(action),
+      dispatch: (action: Action) => this.dispatchForRpc(action),
     }
   }
 }

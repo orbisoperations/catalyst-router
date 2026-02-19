@@ -44,6 +44,14 @@ class MockConnectionPool extends ConnectionPool {
     }
     return this.mockStubs.get(endpoint) as unknown as RpcStub<PublicApi>
   }
+
+  getEnvoy(endpoint: string) {
+    return this.get(endpoint) as unknown as ReturnType<ConnectionPool['getEnvoy']>
+  }
+
+  getGateway(endpoint: string) {
+    return this.get(endpoint) as unknown as ReturnType<ConnectionPool['getGateway']>
+  }
 }
 
 describe('CatalystNodeBus > GraphQL Gateway Sync', () => {

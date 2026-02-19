@@ -113,7 +113,7 @@ export class RoutingInformationBase {
   private allocatePorts(action: Action, newState: RouteTable, prevState: RouteTable): void {
     if (!this.portAllocator) return
 
-    const routeActions = [
+    const routeActions: string[] = [
       Actions.LocalRouteCreate,
       Actions.LocalRouteDelete,
       Actions.InternalProtocolUpdate,
@@ -147,7 +147,7 @@ export class RoutingInformationBase {
 
     // Allocate egress ports for internal routes
     for (const route of newState.internal.routes) {
-      const egressKey = `egress_${route.name}_via_${route.peerName}`
+      const egressKey = `egress_${route.name}_via_${route.peer.name}`
       const result = this.portAllocator.allocate(egressKey)
       if (result.success) {
         if (!route.envoyPort) {
@@ -161,9 +161,9 @@ export class RoutingInformationBase {
     // Release egress ports for closed peer connections
     if (action.action === Actions.InternalProtocolClose) {
       const closedPeer = action.data.peerInfo.name
-      const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === closedPeer)
+      const removedRoutes = prevState.internal.routes.filter((r) => r.peer.name === closedPeer)
       for (const route of removedRoutes) {
-        this.portAllocator.release(`egress_${route.name}_via_${route.peerName}`)
+        this.portAllocator.release(`egress_${route.name}_via_${route.peer.name}`)
       }
     }
   }
@@ -251,7 +251,9 @@ export class RoutingInformationBase {
             ...state,
             internal: {
               ...state.internal,
-              routes: state.internal.routes.filter((r) => r.peerName !== action.data.peerInfo.name),
+              routes: state.internal.routes.filter(
+                (r) => r.peer.name !== action.data.peerInfo.name
+              ),
               peers: peerList.filter((p) => p.name !== action.data.peerInfo.name),
             },
           }
@@ -342,17 +344,16 @@ export class RoutingInformationBase {
 
             // Remove existing if any (upsert)
             currentInternalRoutes = currentInternalRoutes.filter(
-              (r) => !(r.name === u.route.name && r.peerName === sourcePeerName)
+              (r) => !(r.name === u.route.name && r.peer.name === sourcePeerName)
             )
             currentInternalRoutes.push({
               ...u.route,
-              peerName: sourcePeerName,
               peer: peerInfo,
               nodePath: nodePath,
             })
           } else if (u.action === 'remove') {
             currentInternalRoutes = currentInternalRoutes.filter(
-              (r) => r.name !== u.route.name || r.peerName !== sourcePeerName
+              (r) => r.name !== u.route.name || r.peer.name !== sourcePeerName
             )
           }
         }
@@ -391,7 +392,7 @@ export class RoutingInformationBase {
           .map((r) => {
             let route = r as DataChannelDefinition
             if (this.config.envoyConfig && this.portAllocator) {
-              const egressKey = `egress_${r.name}_via_${r.peerName}`
+              const egressKey = `egress_${r.name}_via_${r.peer.name}`
               const localPort = this.portAllocator.getPort(egressKey)
               if (localPort) {
                 route = { ...r, envoyPort: localPort }
@@ -559,7 +560,7 @@ export class RoutingInformationBase {
     prevState: RouteTable,
     newState: RouteTable
   ): Propagation[] {
-    const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === peerName)
+    const removedRoutes = prevState.internal.routes.filter((r) => r.peer.name === peerName)
     if (removedRoutes.length === 0) return []
 
     this.logger.info`Propagating withdrawal of ${removedRoutes.length} routes from ${peerName}`

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { ActionQueue, type DispatchResult } from '../src/action-queue.js'
 import { Actions, type Action } from '@catalyst/routing'
 

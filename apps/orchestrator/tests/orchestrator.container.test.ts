@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import type { PublicApi, PeerInfo } from '../src/orchestrator'
+import type { PublicApi, PeerInfo, InternalRoute } from '../src/orchestrator'
 import { Actions } from '@catalyst/routing'
 
 import type { PeerInfo as _PeerInfo, PublicApi as _PublicApi } from '../src/orchestrator'
@@ -199,7 +199,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
         const dataBResult = await clientB.getDataChannelClient(systemToken)
         if (!dataBResult.success) throw new Error('Failed to get data client B')
         const routes = await dataBResult.client.listRoutes()
-        if (routes.internal.some((r) => r.name === 'service-a')) {
+        if (routes.internal.some((r: InternalRoute) => r.name === 'service-a')) {
           learnedOnB = true
           break
         }
@@ -249,7 +249,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
         const dataCResult = await clientC.getDataChannelClient(systemToken)
         if (!dataCResult.success) throw new Error('Failed to get data client C')
         const routes = await dataCResult.client.listRoutes()
-        const routeA = routes.internal.find((r) => r.name === 'service-a')
+        const routeA = routes.internal.find((r: InternalRoute) => r.name === 'service-a')
         if (routeA) {
           learnedOnC = true
           expect(routeA.nodePath).toEqual(['node-b.somebiz.local.io', 'node-a.somebiz.local.io'])
@@ -302,6 +302,14 @@ class MockConnectionPool extends ConnectionPool {
       this.mockStubs.set(endpoint, stub as Record<string, unknown>)
     }
     return this.mockStubs.get(endpoint) as unknown as RpcStub<PublicApi>
+  }
+
+  getEnvoy(endpoint: string) {
+    return this.get(endpoint) as unknown as ReturnType<ConnectionPool['getEnvoy']>
+  }
+
+  getGateway(endpoint: string) {
+    return this.get(endpoint) as unknown as ReturnType<ConnectionPool['getGateway']>
   }
 }
 

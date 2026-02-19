@@ -2,7 +2,7 @@ import type { z } from 'zod'
 import type { PeerInfo, PeerRecord, UpdateMessageSchema } from '@catalyst/routing'
 import { getLogger } from '@catalyst/telemetry'
 import type { ConnectionPool } from './connection-pool.js'
-import type { Propagation, UpdateMessage } from './api-types.js'
+export type UpdateMessage = z.infer<typeof UpdateMessageSchema>
 
 export type Propagation =
   | { type: 'update'; peer: PeerRecord; localNode: PeerInfo; update: UpdateMessage }
