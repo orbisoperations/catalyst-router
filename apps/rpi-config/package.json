@@ -9,6 +9,7 @@
     "build": "tsup",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "compile": "esbuild src/index.ts --bundle --platform=node --target=node22 --outfile=../../dist/rpi-config/catalyst-rpi-config.mjs --format=esm --packages=external --banner:js='#!/usr/bin/env node'",
     "test": "vitest",
     "test:watch": "vitest --watch"
   },
@@ -18,9 +19,11 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "@types/node": "catalog:dev",
+    "esbuild": "catalog:dev",
+    "tsup": "catalog:dev",
+    "tsx": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
   }
 }

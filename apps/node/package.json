@@ -9,6 +9,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "build": "tsup",
+    "typecheck": "tsc --noEmit",
     "dev": "tsup --watch",
     "start": "node dist/index.js"
   },
