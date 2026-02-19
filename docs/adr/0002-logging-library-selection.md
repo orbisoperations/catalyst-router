@@ -1,6 +1,6 @@
 # ADR-0002: Logging Library Selection
 
-**Status:** Accepted
+**Status:** Accepted (Amended 2026-02-19, see [ADR-0011](./0011-adopt-nodejs-runtime.md))
 **Date:** 2026-01-26
 **Decision Owner(s):** @jaeyojae @gsantiago-orbis
 **Technical Story:** Select a logging library that integrates with the unified observability architecture (ADR-0001)
@@ -12,8 +12,9 @@ As part of implementing unified observability for catalyst-router (see ADR-0001)
 1. Provides a developer-friendly API for structured logging
 2. Supports automatic trace_id injection for log correlation
 3. Can bridge to OpenTelemetry Logs for the unified collector approach
-4. Works reliably on the Bun runtime
-5. Produces structured JSON output for production
+4. ~~Works reliably on the Bun runtime~~
+5. Works reliably on the Node.js runtime
+6. Produces structured JSON output for production
 
 ### Current State
 
@@ -32,7 +33,8 @@ Services currently use inconsistent logging approaches:
 | Developer-friendly API | Must     | Reduce friction, improve adoption   |
 | Trace ID correlation   | Must     | Core to observability strategy      |
 | OTEL Logs integration  | Should   | For Option 1 (unified SDK) approach |
-| Bun compatibility      | Must     | Primary runtime                     |
+| ~~Bun compatibility~~  | ~~Must~~ | ~~Primary runtime~~                 |
+| Node.js compatibility  | Must     | Primary runtime                     |
 | TypeScript support     | Must     | Type-safe logging                   |
 | Low overhead           | Should   | Minimal latency impact              |
 
@@ -76,7 +78,8 @@ We will adopt LogTape as the logging library for all catalyst-router services.
    // Automatically added to every log record
    ```
 
-5. **Bun Compatibility** — Works without Node.js-specific APIs
+5. ~~**Bun Compatibility** — Works without Node.js-specific APIs~~
+6. **Node.js Compatibility** — Works with Node.js APIs; no Bun-specific dependencies
 
 ### Trade-offs Accepted
 
@@ -174,7 +177,8 @@ logger.error`Connection failed: ${error.message}`
 
 - **Developer Experience** - API should feel natural, not verbose
 - **Observability Integration** - Must support ADR-0001 architecture
-- **Runtime Compatibility** - Must work on Bun (not just Node.js)
+- ~~**Runtime Compatibility** - Must work on Bun (not just Node.js)~~
+- **Runtime Compatibility** - Must work on Node.js
 - **Ecosystem Maturity** - Balance between innovation and stability
 
 ### Option 1: LogTape

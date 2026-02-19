@@ -1,6 +1,6 @@
 # ADR-0001: Unified OpenTelemetry Observability
 
-**Status:** Accepted
+**Status:** Accepted (Amended 2026-02-19, see [ADR-0011](./0011-adopt-nodejs-runtime.md))
 **Date:** 2026-01-26
 **Decision Owner(s):** @jtaylor-orbis @jaeyojae @gsantiago-orbis
 **Technical Story:** Enable end-to-end request tracing across federated GraphQL services
@@ -133,7 +133,8 @@ Services → @catalyst/telemetry → OTLP → OTEL Collector → Backends
 
 - **Performance overhead** - Typical OTEL overhead is <1ms per request (acceptable)
 - **Storage requirements** - Depends on sampling rate and retention policy
-- **Bun compatibility** - OTEL Node SDK works on Bun but not officially supported
+- ~~**Bun compatibility** - OTEL Node SDK works on Bun but not officially supported~~
+- **Node.js first-class support** - OTEL Node SDK targets Node.js as the primary runtime; all instrumentation libraries are officially supported
 
 ## Risks and Mitigations
 
@@ -172,7 +173,8 @@ Services → @catalyst/telemetry → OTLP → OTEL Collector → Backends
 
 ### Decision Drivers
 
-- **Interoperability** - Must work across Bun runtime, Hono framework, GraphQL Yoga
+- ~~**Interoperability** - Must work across Bun runtime, Hono framework, GraphQL Yoga~~
+- **Interoperability** - Must work across Node.js runtime, Hono framework, GraphQL Yoga
 - **Industry Standard** - Prefer widely-adopted standards over proprietary solutions
 - **Minimal Coupling** - Application code should not depend on specific backends
 - **Developer Experience** - Logging API should be ergonomic, not verbose

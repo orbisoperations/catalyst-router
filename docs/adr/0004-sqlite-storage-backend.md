@@ -1,6 +1,6 @@
 # ADR-0004: SQLite as Unified Storage Backend
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0012](./0012-sqlite-on-nodejs.md)
 **Date:** 2026-01-26
 **Decision Owner(s):** @jtaylor-orbis @jaeyojae @gsantiago-orbis
 **Technical Story:** Replace in-memory stores with persistent SQLite storage for all application state
