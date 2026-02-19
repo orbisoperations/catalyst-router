@@ -17,7 +17,7 @@ import type { EnvoyRpcServer } from '../src/rpc/server.js'
 /**
  * End-to-end integration test: Auth -> Orchestrator -> Envoy -> Books API
  *
- * Starts 4 real Bun servers in-process:
+ * Starts 4 real Node.js servers in-process:
  * 1. Auth service (in-memory DBs, mints system admin token)
  * 2. Books API (GraphQL service)
  * 3. Envoy service (receives xDS config via RPC)

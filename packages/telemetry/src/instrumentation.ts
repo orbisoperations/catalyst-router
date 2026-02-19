@@ -1,9 +1,8 @@
 /**
- * @catalyst/telemetry — Manual tracer setup (Bun-compatible)
+ * @catalyst/telemetry — Manual tracer setup
  *
  * Uses NodeTracerProvider + BatchSpanProcessor instead of NodeSDK
- * auto-instrumentation, which silently fails on Bun (patches Node.js
- * http internals that Bun doesn't use).
+ * auto-instrumentation for explicit control over tracer lifecycle.
  *
  * Callers must call initTracer() explicitly — no side effects on import.
  */
