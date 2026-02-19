@@ -30,11 +30,12 @@ RUN pnpm install --frozen-lockfile
 # Copy app source
 COPY examples/books-api examples/books-api
 
-# Bundle with esbuild
+# Bundle with esbuild — all code inlined.
+# Banner provides CJS compatibility (require, __dirname) for bundled npm packages.
 RUN pnpm exec esbuild examples/books-api/src/index.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/index.mjs --format=esm \
-  --packages=external
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 # Create production deployment with flat node_modules
 RUN pnpm deploy --filter=@catalyst-examples/books-api --prod /deploy
