@@ -14,6 +14,7 @@
     "@catalyst/types": "workspace:*",
     "@cedar-policy/cedar-wasm": "catalog:",
     "@hono/capnweb": "catalog:",
+    "better-sqlite3": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",
     "jose": "catalog:",
@@ -25,6 +26,7 @@
     "test:integration": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -E 'integration|container')"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "catalog:dev",
     "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "typescript": "catalog:dev"

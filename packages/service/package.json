@@ -16,10 +16,12 @@
   "dependencies": {
     "@catalyst/config": "catalog:",
     "@catalyst/telemetry": "catalog:",
+    "@hono/node-server": "catalog:",
+    "@hono/node-ws": "catalog:",
     "hono": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
+    "@types/node": "catalog:dev",
     "typescript": "catalog:dev",
     "vitest": "catalog:testing"
   }

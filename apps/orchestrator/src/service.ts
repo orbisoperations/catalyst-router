@@ -4,10 +4,8 @@ import { Principal } from '@catalyst/authorization'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
-import { upgradeWebSocket, websocket } from 'hono/bun'
+import { upgradeWebSocket } from '@catalyst/service'
 import { CatalystNodeBus } from './orchestrator.js'
-
-export { websocket }
 
 /**
  * Auth Service RPC API for token minting.

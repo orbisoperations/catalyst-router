@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite'
+import Database from 'better-sqlite3'
 import type { TokenStore, TokenRecord, EntityType } from '../index.js'
 
 interface TokenRow {
@@ -12,8 +12,8 @@ interface TokenRow {
   is_revoked: number
 }
 
-export class BunSqliteTokenStore implements TokenStore {
-  private db: Database
+export class SqliteTokenStore implements TokenStore {
+  private db: Database.Database
 
   constructor(path: string = ':memory:') {
     this.db = new Database(path)
@@ -21,7 +21,9 @@ export class BunSqliteTokenStore implements TokenStore {
   }
 
   private initialize() {
-    this.db.run(`
+    this.db
+      .prepare(
+        `
       CREATE TABLE IF NOT EXISTS token (
         jti TEXT PRIMARY KEY,
         expires_at INTEGER NOT NULL,
@@ -32,11 +34,15 @@ export class BunSqliteTokenStore implements TokenStore {
         entity_type TEXT NOT NULL,
         is_revoked INTEGER NOT NULL DEFAULT 0 -- 0=false, 1=true
       )
-    `)
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_token_expires_at ON token(expires_at)`)
-    this.db.run(
-      `CREATE INDEX IF NOT EXISTS idx_token_certificate_fingerprint ON token(certificate_fingerprint)`
-    )
+    `
+      )
+      .run()
+    this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_token_expires_at ON token(expires_at)`).run()
+    this.db
+      .prepare(
+        `CREATE INDEX IF NOT EXISTS idx_token_certificate_fingerprint ON token(certificate_fingerprint)`
+      )
+      .run()
   }
 
   async recordToken(record: TokenRecord): Promise<void> {
@@ -74,14 +80,14 @@ export class BunSqliteTokenStore implements TokenStore {
   }
 
   async revokeToken(jti: string): Promise<void> {
-    this.db.run('UPDATE token SET is_revoked = 1 WHERE jti = ?', [jti])
+    this.db.prepare('UPDATE token SET is_revoked = 1 WHERE jti = ?').run(jti)
   }
 
   async revokeBySan(san: string): Promise<void> {
     // Simple LIKE search for JSON array string
-    this.db.run('UPDATE token SET is_revoked = 1 WHERE subject_alternative_names LIKE ?', [
-      `%${san}%`,
-    ])
+    this.db
+      .prepare('UPDATE token SET is_revoked = 1 WHERE subject_alternative_names LIKE ?')
+      .run(`%${san}%`)
   }
 
   /**
@@ -101,7 +107,7 @@ export class BunSqliteTokenStore implements TokenStore {
   async getRevocationList(): Promise<string[]> {
     const now = Math.floor(Date.now() / 1000)
     const rows = this.db
-      .query('SELECT jti FROM token WHERE is_revoked = 1 AND expires_at > ?')
+      .prepare('SELECT jti FROM token WHERE is_revoked = 1 AND expires_at > ?')
       .all(now) as { jti: string }[]
     return rows.map((r) => r.jti)
   }
