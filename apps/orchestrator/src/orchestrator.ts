@@ -13,10 +13,7 @@ import {
 export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
-import {
-  createPortAllocator,
-  type PortAllocator,
-} from '@catalyst/envoy-service/src/port-allocator.js'
+import { createPortAllocator, type PortAllocator } from '@catalyst/envoy-service'
 import {
   newHttpBatchRpcSession,
   newWebSocketRpcSession,
