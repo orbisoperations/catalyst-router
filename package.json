@@ -15,7 +15,11 @@
     "compile:gateway:docker": "docker build -f apps/gateway/Dockerfile -t catalyst-gateway .",
     "compile:orchestrator:docker": "docker build -f apps/orchestrator/Dockerfile -t catalyst-orchestrator .",
     "compile:all:docker": "bun run compile:auth:docker && bun run compile:gateway:docker && bun run compile:orchestrator:docker",
-    "rpi:config": "bun run apps/rpi-config/src/index.ts"
+    "rpi:config": "bun run apps/rpi-config/src/index.ts",
+    "test": "bun test apps/ packages/ examples/",
+    "test:unit": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -vE 'integration|container')",
+    "test:integration": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -E 'integration|container')",
+    "test:container": "bun test $(find apps packages examples \\( -name '*.container.test.ts' -o -name '*.container.spec.ts' \\) ! -path '*/node_modules/*')"
   },
   "workspaces": {
     "packages": [
