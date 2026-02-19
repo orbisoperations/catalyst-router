@@ -13,6 +13,9 @@ export type PeerConnectionStatus = z.infer<typeof PeerConnectionStatusEnum>
 export const PeerRecordSchema = PeerInfoSchema.extend({
   connectionStatus: PeerConnectionStatusEnum,
   lastConnected: z.date().optional(),
+  lastReceived: z.number().optional(),
+  lastSent: z.number().optional(),
+  holdTime: z.number().optional(),
 })
 
 export type PeerRecord = z.infer<typeof PeerRecordSchema>

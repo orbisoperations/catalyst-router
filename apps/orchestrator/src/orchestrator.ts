@@ -44,16 +44,16 @@ interface AuthServicePermissionsHandlers {
   }): Promise<
     | { success: true; allowed: boolean }
     | {
-        success: false
-        errorType:
-          | 'token_expired'
-          | 'token_malformed'
-          | 'token_revoked'
-          | 'permission_denied'
-          | 'system_error'
-        reason?: string
-        reasons?: string[]
-      }
+      success: false
+      errorType:
+      | 'token_expired'
+      | 'token_malformed'
+      | 'token_revoked'
+      | 'permission_denied'
+      | 'system_error'
+      reason?: string
+      reasons?: string[]
+    }
   >
 }
 
@@ -70,7 +70,8 @@ export class CatalystNodeBus extends RpcTarget {
   private portAllocator?: PortAllocator
   private rib: RoutingInformationBase
   private queue: ActionQueue
-  public lastNotificationPromise?: Promise<void>
+  private tickTimer?: ReturnType<typeof setInterval>
+  public lastNotificationPromise?: Promise<PostCommitOutcome>
 
   constructor(opts: {
     state?: RouteTable
@@ -124,6 +125,36 @@ export class CatalystNodeBus extends RpcTarget {
         `Node name ${name} does not match any configured domains: ${domains.join(', ')}`
       )
     }
+  }
+
+  startTick(): void {
+    if (this.tickTimer) return
+    const intervalMs = this.computeTickInterval()
+    this.logger.info`Starting keepalive tick (interval: ${intervalMs}ms)`
+    this.tickTimer = setInterval(() => {
+      this.dispatch({ action: Actions.Tick, data: { now: Date.now() } }).catch((e) => {
+        this.logger.error`Tick dispatch failed: ${e}`
+      })
+    }, intervalMs)
+  }
+
+  stopTick(): void {
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer)
+      this.tickTimer = undefined
+    }
+  }
+
+  private computeTickInterval(): number {
+    const peers = this.rib.getState().internal.peers
+    const holdTimes = peers
+      .filter((p) => p.connectionStatus === 'connected' && p.holdTime != null)
+      .map((p) => p.holdTime!)
+
+    if (holdTimes.length === 0) return 30_000
+
+    const minHoldTime = Math.min(...holdTimes)
+    return Math.max(1000, (minHoldTime / 6) * 1000)
   }
 
   private async validateToken(
