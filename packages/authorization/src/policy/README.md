@@ -1,6 +1,6 @@
 # authorization-engine
 
-A TypeScript wrapper around the [Cedar Policy Engine](https://www.cedarpolicy.com/), providing type-safe entity building, fluent APIs, and robust authorization checks for your Node.js/Bun applications.
+A TypeScript wrapper around the [Cedar Policy Engine](https://www.cedarpolicy.com/), providing type-safe entity building, fluent APIs, and robust authorization checks for your Node.js applications.
 
 ## Features
 
@@ -13,9 +13,7 @@ A TypeScript wrapper around the [Cedar Policy Engine](https://www.cedarpolicy.co
 ## Installation
 
 ```bash
-bun install authorization-engine
-# or
-npm install authorization-engine
+pnpm add authorization-engine
 ```
 
 ## Quick Start
