@@ -1,22 +1,34 @@
-import type { z } from 'zod'
-import type { PeerInfo, PeerRecord, UpdateMessageSchema } from '@catalyst/routing'
+import type { PeerInfo, PeerRecord } from '@catalyst/routing'
 import { getLogger } from '@catalyst/telemetry'
 import type { ConnectionPool } from './orchestrator.js'
+import type { Propagation, UpdateMessage } from './api-types.js'
 
-export type UpdateMessage = z.infer<typeof UpdateMessageSchema>
-
-export type Propagation =
-  | { type: 'update'; peer: PeerRecord; localNode: PeerInfo; update: UpdateMessage }
-  | { type: 'open'; peer: PeerRecord; localNode: PeerInfo }
-  | { type: 'close'; peer: PeerRecord; localNode: PeerInfo; code: number; reason?: string }
+export type { Propagation, UpdateMessage } from './api-types.js'
 
 export class PeerTransport {
   private readonly logger = getLogger(['catalyst', 'peer-transport'])
 
   constructor(
     private readonly pool: ConnectionPool,
-    private readonly nodeToken?: string
+    private readonly nodeToken?: string,
+    private readonly rpcTimeoutMs: number = 10_000
   ) {}
+
+  private withTimeout<T>(fn: () => Promise<T>, operation: string, peerName: string): Promise<T> {
+    let timeoutId: NodeJS.Timeout
+    return Promise.race([
+      fn().finally(() => clearTimeout(timeoutId)),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () =>
+            reject(
+              new Error(`RPC timeout: ${operation} to ${peerName} after ${this.rpcTimeoutMs}ms`)
+            ),
+          this.rpcTimeoutMs
+        )
+      }),
+    ])
+  }
 
   private getToken(peer: PeerRecord): string {
     const token = peer.peerToken || this.nodeToken
@@ -38,24 +50,36 @@ export class PeerTransport {
     const token = this.getToken(peer)
     const stub = this.getStub(peer)
     if (!stub) return
-    const result = await stub.getIBGPClient(token)
+    const result = await this.withTimeout(
+      async () => stub.getIBGPClient(token),
+      'getIBGPClient',
+      peer.name
+    )
     if (!result.success) {
       this.logger.error`Failed to get iBGP client for ${peer.name}: ${result.error}`
       return
     }
-    await result.client.update(localNode, update)
+    await this.withTimeout(async () => result.client.update(localNode, update), 'update', peer.name)
   }
 
   async sendOpen(peer: PeerRecord, localNode: PeerInfo): Promise<void> {
     const token = this.getToken(peer)
     const stub = this.getStub(peer)
     if (!stub) return
-    const result = await stub.getIBGPClient(token)
+    const result = await this.withTimeout(
+      async () => stub.getIBGPClient(token),
+      'getIBGPClient',
+      peer.name
+    )
     if (!result.success) {
       this.logger.error`Failed to get iBGP client for ${peer.name}: ${result.error}`
       return
     }
-    const openResult = await result.client.open(localNode)
+    const openResult = await this.withTimeout(
+      async () => result.client.open(localNode),
+      'open',
+      peer.name
+    )
     if (!openResult.success) {
       this.logger.error`Failed to open connection to ${peer.name}: ${openResult.error}`
     }
@@ -70,12 +94,20 @@ export class PeerTransport {
     const token = this.getToken(peer)
     const stub = this.getStub(peer)
     if (!stub) return
-    const result = await stub.getIBGPClient(token)
+    const result = await this.withTimeout(
+      async () => stub.getIBGPClient(token),
+      'getIBGPClient',
+      peer.name
+    )
     if (!result.success) {
       this.logger.error`Failed to get iBGP client for ${peer.name}: ${result.error}`
       return
     }
-    await result.client.close(localNode, code, reason)
+    await this.withTimeout(
+      async () => result.client.close(localNode, code, reason),
+      'close',
+      peer.name
+    )
   }
 
   async fanOut(propagations: Propagation[]): Promise<PromiseSettledResult<void>[]> {

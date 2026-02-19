@@ -1,4 +1,3 @@
-import type { z } from 'zod'
 import {
   Actions,
   newRouteTable,
@@ -8,7 +7,6 @@ import {
   type PeerInfo,
   type PeerRecord,
   type RouteTable,
-  type UpdateMessageSchema,
 } from '@catalyst/routing'
 export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
@@ -22,51 +20,17 @@ import {
   RpcTarget,
 } from 'capnweb'
 import { PeerTransport, type Propagation } from './peer-transport.js'
+import type {
+  PublicApi,
+  NetworkClient,
+  DataChannel,
+  IBGPClient,
+  UpdateMessage,
+  EnvoyApi,
+  GatewayApi,
+} from './api-types.js'
 
-export interface PublicApi {
-  getNetworkClient(
-    token: string
-  ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }>
-  getDataChannelClient(
-    token: string
-  ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }>
-  getIBGPClient(
-    token: string
-  ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }>
-  dispatch(action: Action): Promise<{ success: true } | { success: false; error: string }>
-}
-
-export interface NetworkClient {
-  addPeer(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
-  updatePeer(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
-  removePeer(
-    peer: Pick<PeerInfo, 'name'>
-  ): Promise<{ success: true } | { success: false; error: string }>
-  listPeers(): Promise<PeerRecord[]>
-}
-
-export interface DataChannel {
-  addRoute(
-    route: DataChannelDefinition
-  ): Promise<{ success: true } | { success: false; error: string }>
-  removeRoute(
-    route: DataChannelDefinition
-  ): Promise<{ success: true } | { success: false; error: string }>
-  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
-}
-
-export interface IBGPClient {
-  open(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
-  close(
-    peer: PeerInfo,
-    code: number,
-    reason?: string
-  ): Promise<{ success: true } | { success: false; error: string }>
-  update(
-    peer: PeerInfo,
-    update: z.infer<typeof UpdateMessageSchema>
-  ): Promise<{ success: true } | { success: false; error: string }>
-}
+export type { PublicApi, NetworkClient, DataChannel, IBGPClient } from './api-types.js'
 
 export function getHttpPeerSession<API extends RpcCompatible<API>>(endpoint: string) {
   return newHttpBatchRpcSession<API>(endpoint)
@@ -82,9 +46,10 @@ export class ConnectionPool {
     this.stubs = new Map<string, RpcStub<PublicApi>>()
   }
 
-  get(endpoint: string) {
-    if (this.stubs.has(endpoint)) {
-      return this.stubs.get(endpoint)
+  get(endpoint: string): RpcStub<PublicApi> {
+    const cached = this.stubs.get(endpoint)
+    if (cached) {
+      return cached
     }
     switch (this.type) {
       case 'http': {
@@ -98,6 +63,14 @@ export class ConnectionPool {
         return stub
       }
     }
+  }
+
+  getEnvoy(endpoint: string): RpcStub<EnvoyApi> {
+    return this.get(endpoint) as unknown as RpcStub<EnvoyApi>
+  }
+
+  getGateway(endpoint: string): RpcStub<GatewayApi> {
+    return this.get(endpoint) as unknown as RpcStub<GatewayApi>
   }
 }
 
@@ -533,22 +506,19 @@ export class CatalystNodeBus extends RpcTarget {
     this.logger.info`Syncing ${graphqlRoutes.length} GraphQL routes to gateway`
 
     try {
-      const stub = this.connectionPool.get(gatewayEndpoint)
-      if (stub) {
-        const config = {
-          services: graphqlRoutes.map((r) => ({
-            name: r.name,
-            url: r.endpoint!,
-          })),
-        }
+      const stub = this.connectionPool.getGateway(gatewayEndpoint)
+      const config = {
+        services: graphqlRoutes.map((r) => ({
+          name: r.name,
+          url: r.endpoint!,
+        })),
+      }
 
-        // @ts-expect-error - Gateway RPC implementation uses updateConfig
-        const result = await stub.updateConfig(config)
-        if (!result.success) {
-          this.logger.error`Gateway sync failed: ${result.error}`
-        } else {
-          this.logger.info`Gateway sync successful`
-        }
+      const result = await stub.updateConfig(config)
+      if (!result.success) {
+        this.logger.error`Gateway sync failed: ${result.error}`
+      } else {
+        this.logger.info`Gateway sync successful`
       }
     } catch (e) {
       this.logger.error`Error syncing to gateway: ${e}`
@@ -795,17 +765,14 @@ export class CatalystNodeBus extends RpcTarget {
 
     // Push complete config to envoy service (fire-and-forget)
     try {
-      const stub = this.connectionPool.get(envoyEndpoint)
-      if (stub) {
-        // @ts-expect-error - Envoy RPC stub typed separately
-        const result = await stub.updateRoutes({
-          local: this.state.local.routes,
-          internal: this.state.internal.routes,
-          portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
-        })
-        if (!result.success) {
-          this.logger.error`Envoy config sync failed: ${result.error}`
-        }
+      const stub = this.connectionPool.getEnvoy(envoyEndpoint)
+      const result = await stub.updateRoutes({
+        local: this.state.local.routes,
+        internal: this.state.internal.routes,
+        portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
+      })
+      if (!result.success) {
+        this.logger.error`Envoy config sync failed: ${result.error}`
       }
     } catch (e) {
       this.logger.error`Error syncing to Envoy service: ${e}`
@@ -926,7 +893,7 @@ export class CatalystNodeBus extends RpcTarget {
                 data: { peerInfo: peer, code, reason },
               })
             },
-            update: async (peer: PeerInfo, update: z.infer<typeof UpdateMessageSchema>) => {
+            update: async (peer: PeerInfo, update: UpdateMessage) => {
               return this.dispatch({
                 action: Actions.InternalProtocolUpdate,
                 data: {
