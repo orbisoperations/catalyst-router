@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Actions, type PeerInfo } from '@catalyst/routing'
 import { RoutingInformationBase, type Plan } from '../src/rib.js'
 import type { OrchestratorConfig } from '../src/types.js'
+import { createPortAllocator } from '@catalyst/envoy-service'
 
 const NODE: PeerInfo = {
   name: 'node-a.somebiz.local.io',
@@ -746,6 +747,150 @@ describe('RoutingInformationBase', () => {
         const routeNames = update.updates.map((u) => u.route.name)
         expect(routeNames).not.toContain('svc-c')
       }
+    })
+  })
+
+  describe('portOperations', () => {
+    const ENVOY_CONFIG: OrchestratorConfig = {
+      node: NODE,
+      envoyConfig: { endpoint: 'http://envoy:18000', portRange: [[10000, 10100]] },
+    }
+
+    function createRibWithPorts() {
+      const allocator = createPortAllocator(ENVOY_CONFIG.envoyConfig!.portRange)
+      return { rib: new RoutingInformationBase(ENVOY_CONFIG, allocator), allocator }
+    }
+
+    function planCommitWithPorts(
+      rib: RoutingInformationBase,
+      action: Parameters<typeof rib.plan>[0]
+    ) {
+      const plan = rib.plan(action)
+      if (!plan.success) throw new Error(`plan failed: ${plan.error}`)
+      return rib.commit(plan)
+    }
+
+    it('LocalRouteCreate includes allocate operation for the route', () => {
+      const { rib } = createRibWithPorts()
+      const plan = rib.plan({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://a:8080' },
+      })
+
+      expect(plan.success).toBe(true)
+      const p = plan as Plan
+      expect(p.portOperations).toContainEqual({ type: 'allocate', key: 'books-api' })
+    })
+
+    it('LocalRouteDelete includes release operation for the route', () => {
+      const { rib } = createRibWithPorts()
+      planCommitWithPorts(rib, {
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://a:8080' },
+      })
+
+      const plan = rib.plan({
+        action: Actions.LocalRouteDelete,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://a:8080' },
+      })
+
+      expect(plan.success).toBe(true)
+      const p = plan as Plan
+      expect(p.portOperations).toContainEqual({ type: 'release', key: 'books-api' })
+    })
+
+    it('InternalProtocolUpdate includes allocate for egress port', () => {
+      const { rib } = createRibWithPorts()
+      connectPeer(rib, PEER_B)
+
+      const plan = rib.plan({
+        action: Actions.InternalProtocolUpdate,
+        data: {
+          peerInfo: PEER_B,
+          update: {
+            updates: [
+              {
+                action: 'add',
+                route: { name: 'svc-b', protocol: 'http' as const, endpoint: 'http://b:8080' },
+                nodePath: [PEER_B.name],
+              },
+            ],
+          },
+        },
+      })
+
+      expect(plan.success).toBe(true)
+      const p = plan as Plan
+      expect(p.portOperations).toContainEqual({
+        type: 'allocate',
+        key: `egress_svc-b_via_${PEER_B.name}`,
+      })
+    })
+
+    it('InternalProtocolClose includes release for egress ports of closed peer', () => {
+      const { rib } = createRibWithPorts()
+      connectPeer(rib, PEER_B)
+
+      planCommitWithPorts(rib, {
+        action: Actions.InternalProtocolUpdate,
+        data: {
+          peerInfo: PEER_B,
+          update: {
+            updates: [
+              {
+                action: 'add',
+                route: { name: 'svc-b', protocol: 'http' as const, endpoint: 'http://b:8080' },
+                nodePath: [PEER_B.name],
+              },
+            ],
+          },
+        },
+      })
+
+      const plan = rib.plan({
+        action: Actions.InternalProtocolClose,
+        data: { peerInfo: PEER_B, code: 1000 },
+      })
+
+      expect(plan.success).toBe(true)
+      const p = plan as Plan
+      expect(p.portOperations).toContainEqual({
+        type: 'release',
+        key: `egress_svc-b_via_${PEER_B.name}`,
+      })
+    })
+
+    it('returns empty portOperations for non-route actions', () => {
+      const { rib } = createRibWithPorts()
+      const plan = rib.plan({ action: Actions.LocalPeerCreate, data: PEER_B })
+
+      expect(plan.success).toBe(true)
+      const p = plan as Plan
+      expect(p.portOperations).toEqual([])
+    })
+
+    it('returns empty portOperations when no port allocator configured', () => {
+      const rib = createRib() // no port allocator
+      const plan = rib.plan({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'svc-a', protocol: 'http' as const, endpoint: 'http://a:8080' },
+      })
+
+      expect(plan.success).toBe(true)
+      const p = plan as Plan
+      expect(p.portOperations).toEqual([])
+    })
+
+    it('portOperations are passed through to CommitResult', () => {
+      const { rib } = createRibWithPorts()
+      const plan = rib.plan({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'books-api', protocol: 'http' as const, endpoint: 'http://a:8080' },
+      })
+
+      expect(plan.success).toBe(true)
+      const result = rib.commit(plan as Plan)
+      expect(result.portOperations).toContainEqual({ type: 'allocate', key: 'books-api' })
     })
   })
 })
