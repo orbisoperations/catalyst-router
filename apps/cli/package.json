@@ -21,15 +21,14 @@
     "inquirer": "catalog:",
     "ws": "catalog:",
     "zod": "catalog:",
-    "@catalyst/orchestrator-service": "catalog:",
-    "@catalyst/routing": "catalog:",
-    "@catalyst/authorization": "catalog:"
+    "@catalyst/orchestrator-service": "workspace:*",
+    "@catalyst/routing": "workspace:*",
+    "@catalyst/authorization": "workspace:*"
   },
   "devDependencies": {
     "@types/inquirer": "catalog:dev",
     "@types/node": "catalog:dev",
     "@types/ws": "catalog:dev",
-    "@types/bun": "catalog:dev",
     "testcontainers": "catalog:testing",
     "tsx": "catalog:dev",
     "typescript": "catalog:dev"

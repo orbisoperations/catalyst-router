@@ -9,8 +9,8 @@
   },
   "private": true,
   "dependencies": {
-    "@catalyst/service": "catalog:",
-    "@catalyst/telemetry": "catalog:",
+    "@catalyst/service": "workspace:*",
+    "@catalyst/telemetry": "workspace:*",
     "@catalyst/types": "workspace:*",
     "@cedar-policy/cedar-wasm": "catalog:",
     "@hono/capnweb": "catalog:",
@@ -27,7 +27,6 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "catalog:dev",
-    "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "typescript": "catalog:dev"
   }
