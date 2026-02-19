@@ -95,7 +95,7 @@ The server (`CatalystHonoServer`) handles SIGTERM/SIGINT and calls `shutdown()` 
 
 - Telemetry middleware (HTTP request tracing and metrics)
 - A `/health` endpoint returning `{ status: 'ok', services: [...] }`
-- `Bun.serve()` binding
+- `@hono/node-server` binding
 - Graceful shutdown on SIGTERM/SIGINT
 
 ### Options
@@ -106,7 +106,7 @@ The server (`CatalystHonoServer`) handles SIGTERM/SIGINT and calls `shutdown()` 
 | `hostname`             | `string`            | `'0.0.0.0'`        | Hostname to bind to.                           |
 | `services`             | `CatalystService[]` | `[]`               | Services whose `shutdown()` is called on stop. |
 | `telemetryIgnorePaths` | `string[]`          | `['/', '/health']` | Paths excluded from telemetry middleware.      |
-| `websocket`            | `unknown`           | -                  | Bun WebSocket handler for RPC-over-WebSocket.  |
+| `websocket`            | -                   | -                  | _(removed — WebSocket is wired internally)_    |
 
 ## Pre-built telemetry
 

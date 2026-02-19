@@ -25,6 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
     "vitest": "catalog:testing"

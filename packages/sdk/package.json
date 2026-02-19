@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@types/node": "catalog:dev",
     "@vitest/coverage-v8": "catalog:testing",
     "tsup": "catalog:dev",
     "typescript": "catalog:dev",
