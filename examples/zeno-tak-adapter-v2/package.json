@@ -10,7 +10,7 @@
     "test": "pnpm run test:unit && pnpm run test:integration",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
     "build:tests": "node build-tests.mjs",
-    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests container integration",
     "test:all": "pnpm run test:unit && pnpm run test:integration"
   },
   "dependencies": {

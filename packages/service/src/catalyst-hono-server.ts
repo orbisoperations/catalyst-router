@@ -76,8 +76,8 @@ export class CatalystHonoServer {
     this._options = options ?? {}
   }
 
-  /** Start listening. Wires SIGTERM/SIGINT for graceful shutdown. */
-  start(): this {
+  /** Start listening. Resolves once the server is bound. Wires SIGTERM/SIGINT for graceful shutdown. */
+  async start(): Promise<this> {
     if (this._server) {
       throw new Error('Server is already running. Call stop() before starting again.')
     }
@@ -126,7 +126,10 @@ export class CatalystHonoServer {
     // Inject WebSocket handling into the HTTP server
     this._injectWebSocket(this._server)
 
-    this._server.listen(port, hostname)
+    // Wait for the server to actually bind (required for port: 0)
+    await new Promise<void>((resolve) => {
+      this._server!.listen(port, hostname, () => resolve())
+    })
 
     // Wire graceful shutdown
     const shutdownHandler = async () => {
@@ -142,6 +145,14 @@ export class CatalystHonoServer {
     logger.info`Catalyst server${names} listening on ${hostname}:${port}`
 
     return this
+  }
+
+  /** The port the server is listening on. Only valid after start(). */
+  get port(): number {
+    if (!this._server) throw new Error('Server is not running')
+    const addr = this._server.address()
+    if (typeof addr === 'string' || !addr) throw new Error('Cannot determine port')
+    return addr.port
   }
 
   /** Gracefully stop: shut down services, flush telemetry, close server. */
