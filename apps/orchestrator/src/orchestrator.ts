@@ -66,6 +66,7 @@ export class CatalystNodeBus extends RpcTarget {
   private rib: RoutingInformationBase
   private queue: ActionQueue
   private tickTimer?: ReturnType<typeof setInterval>
+  private currentTickInterval?: number
   public lastNotificationPromise?: Promise<PostCommitOutcome>
 
   constructor(opts: {
@@ -127,6 +128,7 @@ export class CatalystNodeBus extends RpcTarget {
   startTick(): void {
     if (this.tickTimer) return
     const intervalMs = this.computeTickInterval()
+    this.currentTickInterval = intervalMs
     this.logger.info`Starting keepalive tick (interval: ${intervalMs}ms)`
     this.tickTimer = setInterval(() => {
       this.dispatch({ action: Actions.Tick, data: { now: Date.now() } }).catch((e) => {
@@ -139,6 +141,17 @@ export class CatalystNodeBus extends RpcTarget {
     if (this.tickTimer) {
       clearInterval(this.tickTimer)
       this.tickTimer = undefined
+    }
+  }
+
+  private restartTickIfNeeded(): void {
+    if (!this.tickTimer) return
+    const newInterval = this.computeTickInterval()
+    if (newInterval !== this.currentTickInterval) {
+      this.logger
+        .info`Tick interval changed from ${this.currentTickInterval}ms to ${newInterval}ms — restarting`
+      this.stopTick()
+      this.startTick()
     }
   }
 
@@ -256,6 +269,17 @@ export class CatalystNodeBus extends RpcTarget {
           data: { peerInfo: sentAction.data },
         })
       }
+    }
+
+    const peerActions = [
+      Actions.LocalPeerCreate,
+      Actions.LocalPeerDelete,
+      Actions.InternalProtocolOpen,
+      Actions.InternalProtocolClose,
+      Actions.InternalProtocolConnected,
+    ]
+    if (peerActions.includes(sentAction.action)) {
+      this.restartTickIfNeeded()
     }
 
     const envoySyncOk = await this.syncEnvoy(sentAction)
