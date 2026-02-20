@@ -17,6 +17,7 @@ export const Actions = {
   InternalProtocolClose: 'internal:protocol:close',
   InternalProtocolConnected: 'internal:protocol:connected',
   InternalProtocolUpdate: 'internal:protocol:update',
+  InternalProtocolKeepalive: 'internal:protocol:keepalive',
 
   // System
   Tick: 'system:tick',

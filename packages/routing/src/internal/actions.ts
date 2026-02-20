@@ -50,3 +50,10 @@ export const InternalProtocolConnectedMessageSchema = z.object({
     peerInfo: PeerInfoSchema,
   }),
 })
+
+export const InternalProtocolKeepaliveMessageSchema = z.object({
+  action: z.literal(Actions.InternalProtocolKeepalive),
+  data: z.object({
+    peerInfo: PeerInfoSchema,
+  }),
+})

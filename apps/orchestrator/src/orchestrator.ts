@@ -39,16 +39,16 @@ interface AuthServicePermissionsHandlers {
   }): Promise<
     | { success: true; allowed: boolean }
     | {
-      success: false
-      errorType:
-      | 'token_expired'
-      | 'token_malformed'
-      | 'token_revoked'
-      | 'permission_denied'
-      | 'system_error'
-      reason?: string
-      reasons?: string[]
-    }
+        success: false
+        errorType:
+          | 'token_expired'
+          | 'token_malformed'
+          | 'token_revoked'
+          | 'permission_denied'
+          | 'system_error'
+        reason?: string
+        reasons?: string[]
+      }
   >
 }
 
@@ -394,6 +394,11 @@ export class CatalystNodeBus extends RpcTarget {
               this.dispatchForRpc({
                 action: Actions.InternalProtocolUpdate,
                 data: { peerInfo: peer, update },
+              }),
+            keepalive: (peer: PeerInfo) =>
+              this.dispatch({
+                action: Actions.InternalProtocolKeepalive,
+                data: { peerInfo: peer },
               }),
           },
         }

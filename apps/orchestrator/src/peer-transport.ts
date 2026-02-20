@@ -109,11 +109,17 @@ export class PeerTransport {
     )
   }
 
-  async sendKeepalive(peer: PeerRecord): Promise<void> {
+  async sendKeepalive(peer: PeerRecord, localNode: PeerInfo): Promise<void> {
     this.logger.debug`Sending keepalive to ${peer.name}`
-    // Keepalive is a no-op RPC ping. For now we use a zero-update message
-    // as the transport-level heartbeat. A dedicated keepalive RPC method
-    // can be added later without changing the propagation model.
+    const token = this.getToken(peer)
+    const stub = this.getStub(peer)
+    if (!stub) return
+    const result = await stub.getIBGPClient(token)
+    if (!result.success) {
+      this.logger.error`Failed to get iBGP client for ${peer.name}: ${result.error}`
+      return
+    }
+    await result.client.keepalive(localNode)
   }
 
   async fanOut(propagations: Propagation[]): Promise<PromiseSettledResult<void>[]> {
@@ -127,7 +133,7 @@ export class PeerTransport {
           case 'close':
             return this.sendClose(p.peer, p.localNode, p.code, p.reason)
           case 'keepalive':
-            return this.sendKeepalive(p.peer)
+            return this.sendKeepalive(p.peer, p.localNode)
         }
       })
     )

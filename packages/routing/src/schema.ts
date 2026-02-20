@@ -11,6 +11,7 @@ import {
   InternalProtocolUpdateMessageSchema,
   InternalProtocolCloseMessageSchema,
   InternalProtocolConnectedMessageSchema,
+  InternalProtocolKeepaliveMessageSchema,
 } from './internal/actions.js'
 import { TickMessageSchema } from './system/actions.js'
 
@@ -27,6 +28,7 @@ export const ActionSchema = z.discriminatedUnion('action', [
   InternalProtocolUpdateMessageSchema,
   InternalProtocolCloseMessageSchema,
   InternalProtocolConnectedMessageSchema,
+  InternalProtocolKeepaliveMessageSchema,
   TickMessageSchema,
 ])
 

@@ -54,6 +54,7 @@ export interface IBGPClient {
     peer: PeerInfo,
     update: UpdateMessage
   ): Promise<{ success: true } | { success: false; error: string }>
+  keepalive(peer: PeerInfo): Promise<{ success: true } | { success: false; error: string }>
 }
 
 export interface EnvoyApi {
@@ -74,4 +75,4 @@ export type Propagation =
   | { type: 'update'; peer: PeerRecord; localNode: PeerInfo; update: UpdateMessage }
   | { type: 'open'; peer: PeerRecord; localNode: PeerInfo }
   | { type: 'close'; peer: PeerRecord; localNode: PeerInfo; code: number; reason?: string }
-  | { type: 'keepalive'; peer: PeerRecord }
+  | { type: 'keepalive'; peer: PeerRecord; localNode: PeerInfo }

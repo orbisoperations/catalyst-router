@@ -324,7 +324,7 @@ export class RoutingInformationBase {
           internal: {
             ...state.internal,
             peers: peerList.filter((p) => p.name !== action.data.name),
-            routes: state.internal.routes.filter((r) => r.peerName !== action.data.name),
+            routes: state.internal.routes.filter((r) => r.peer.name !== action.data.name),
           },
         }
         break
@@ -458,6 +458,28 @@ export class RoutingInformationBase {
             routes: currentInternalRoutes,
             peers: state.internal.peers.map((p) =>
               p.name === sourcePeerName ? { ...p, lastReceived: now } : p
+            ),
+          },
+        }
+        break
+      }
+      case Actions.InternalProtocolKeepalive: {
+        const peerName = action.data.peerInfo.name
+        const peer = state.internal.peers.find((p) => p.name === peerName)
+        if (!peer || peer.connectionStatus !== 'connected') {
+          return {
+            success: false,
+            error: `Keepalive from unknown or disconnected peer '${peerName}'`,
+          }
+        }
+
+        const now = Date.now()
+        state = {
+          ...state,
+          internal: {
+            ...state.internal,
+            peers: state.internal.peers.map((p) =>
+              p.name === peerName ? { ...p, lastReceived: now } : p
             ),
           },
         }
@@ -704,7 +726,7 @@ export class RoutingInformationBase {
             peer.lastSent != null &&
             now - peer.lastSent > (peer.holdTime / 3) * 1000
           ) {
-            propagations.push({ type: 'keepalive', peer })
+            propagations.push({ type: 'keepalive', peer, localNode: this.config.node })
           }
         }
 
