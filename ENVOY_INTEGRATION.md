@@ -439,13 +439,13 @@ Cluster {
 
 ### 5.4 Library Stack
 
-| Library                   | Role                  | Why                                                                     |
-| :------------------------ | :-------------------- | :---------------------------------------------------------------------- |
-| `nice-grpc`               | gRPC server framework | TypeScript-first, async iterables for streaming, middleware support     |
-| `ts-proto`                | Proto code generation | Generates idiomatic TypeScript (not Java-style protobufjs)              |
-| `@grpc/grpc-js`           | gRPC transport        | Pure JS implementation, Bun compatible (95.25% gRPC test suite passing) |
-| `nice-grpc-opentelemetry` | Observability         | OTEL middleware for gRPC -- integrates with `@catalyst/telemetry`       |
-| `buf`                     | Proto toolchain       | Manages envoy proto transitive dependencies via Buf Schema Registry     |
+| Library                   | Role                  | Why                                                                 |
+| :------------------------ | :-------------------- | :------------------------------------------------------------------ |
+| `nice-grpc`               | gRPC server framework | TypeScript-first, async iterables for streaming, middleware support |
+| `ts-proto`                | Proto code generation | Generates idiomatic TypeScript (not Java-style protobufjs)          |
+| `@grpc/grpc-js`           | gRPC transport        | Pure JS implementation, Node.js compatible                          |
+| `nice-grpc-opentelemetry` | Observability         | OTEL middleware for gRPC -- integrates with `@catalyst/telemetry`   |
+| `buf`                     | Proto toolchain       | Manages envoy proto transitive dependencies via Buf Schema Registry |
 
 **Proto generation:**
 
@@ -1017,7 +1017,6 @@ export class EnvoyRpcServer extends RpcTarget {
 
 import { loadDefaultConfig } from '@catalyst/config'
 import { catalystHonoServer } from '@catalyst/service'
-import { websocket } from 'hono/bun'
 import { EnvoyService } from './service.js'
 
 const config = loadDefaultConfig({ serviceType: 'envoy' })
@@ -1026,7 +1025,6 @@ const envoy = await EnvoyService.create({ config })
 catalystHonoServer(envoy.handler, {
   services: [envoy],
   port: config.port,
-  websocket,
 }).start()
 ```
 
@@ -1251,7 +1249,7 @@ Each phase is a separate Graphite PR, targeting under 600 lines (Constitution XI
 
 **PR**: `chore(envoy): add dockerfile and compose configuration`
 
-- `apps/envoy/Dockerfile` -- multi-stage Bun build (see [Dockerfile Structure](#dockerfile-structure))
+- `apps/envoy/Dockerfile` -- multi-stage Node.js build (see [Dockerfile Structure](#dockerfile-structure))
 - Updated all three compose files in `docker-compose/` with `envoy-service` + `envoy-proxy` containers
 - Added `docker-compose/envoy-bootstrap.yaml` for Docker Compose Envoy proxy configuration
 - Container test: `apps/envoy/tests/envoy-proxy.container.test.ts` -- end-to-end traffic routing through a real Envoy proxy
@@ -1263,18 +1261,18 @@ The Envoy service Dockerfile (`apps/envoy/Dockerfile`) follows the same two-stag
 other Catalyst services:
 
 ```
-Stage 1: deps (oven/bun:1.3.6-alpine)
-  - Copies all workspace package.json files for complete Bun resolution
-  - Runs `bun install --omit=dev --ignore-scripts` to cache external dependencies
+Stage 1: deps (node:22-alpine)
+  - Copies all workspace package.json files for complete pnpm resolution
+  - Runs `pnpm install --frozen-lockfile --prod` to cache external dependencies
 
-Stage 2: runtime (oven/bun:1.3.6-alpine)
+Stage 2: runtime (node:22-alpine)
   - Copies cached node_modules from deps stage
   - Copies app source + workspace dependencies:
     apps/envoy, packages/config, packages/routing, packages/service, packages/telemetry
-  - Runs `bun install --omit=dev --ignore-scripts` to recreate workspace symlinks
+  - Runs `pnpm install --frozen-lockfile --prod` to recreate workspace symlinks
   - Non-root user (appuser:appgroup) for security
   - Exposes ports 3000 (Hono/RPC) and 18000 (xDS gRPC)
-  - Entrypoint: bun run src/index.ts
+  - Entrypoint: node src/index.js
 ```
 
 Build from the repo root:
@@ -1292,7 +1290,7 @@ All three compose files (`docker.compose.yaml`, `two-node.compose.yaml`,
 
 | Setting      | Value                      | Purpose                           |
 | :----------- | :------------------------- | :-------------------------------- |
-| Build        | `apps/envoy/Dockerfile`    | Bun-based Envoy service           |
+| Build        | `apps/envoy/Dockerfile`    | Node.js-based Envoy service       |
 | Ports        | `3010:3000`, `18000:18000` | Hono/RPC (WebSocket) + xDS gRPC   |
 | Health check | `GET /health` on port 3000 | Standard Catalyst health endpoint |
 | Depends on   | `otel-collector` (healthy) | Telemetry must be available       |
@@ -1369,7 +1367,7 @@ Once running, you can verify the Envoy data plane:
 
 #### Test Architecture
 
-Hybrid setup: in-process Bun services + Docker containers on a shared network.
+Hybrid setup: in-process Node.js services + Docker containers on a shared network.
 
 **In-process (host):**
 
@@ -1390,7 +1388,7 @@ Envoy proxies connect to their respective in-process xDS servers via
 network using service aliases.
 
 ```
-Host (Bun test)                          Docker Network
+Host (Node.js test)                      Docker Network
  Auth, EnvoySvc A/B, Orch A/B      books-api | envoy-a | envoy-b
          │ xDS (gRPC)                       ↑         ↑
          └──────── host.docker.internal ────┘         │
