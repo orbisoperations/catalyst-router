@@ -167,7 +167,7 @@ export class CatalystNodeBus extends RpcTarget {
 
     if (holdTimes.length === 0) return 30_000
 
-    const minHoldTime = Math.min(...holdTimes)
+    const minHoldTime = holdTimes.reduce((a, b) => Math.min(a, b))
     return Math.max(1000, (minHoldTime / 6) * 1000)
   }
 
