@@ -292,4 +292,68 @@ describe('Port Allocation + Envoy (RIB-level)', () => {
     const releases = result.portOperations.filter((op) => op.type === 'release')
     expect(releases).toHaveLength(2)
   })
+
+  it('Tick-based peer expiry releases egress ports (no port leak)', () => {
+    const { rib, allocator } = createRibWithEnvoy()
+    connectPeer(rib, PEER_B)
+
+    // Receive 2 routes from B
+    planCommit(rib, {
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: PEER_B,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: { name: 'svc-1', protocol: 'http' as const, endpoint: 'http://1:8080' },
+              nodePath: [PEER_B.name],
+            },
+            {
+              action: 'add',
+              route: { name: 'svc-2', protocol: 'http' as const, endpoint: 'http://2:8080' },
+              nodePath: [PEER_B.name],
+            },
+          ],
+        },
+      },
+    })
+
+    // Both egress ports should be allocated
+    expect(allocator.getPort(`egress_svc-1_via_${PEER_B.name}`)).toBeDefined()
+    expect(allocator.getPort(`egress_svc-2_via_${PEER_B.name}`)).toBeDefined()
+
+    const availableBefore = allocator.availableCount()
+
+    // Set peer timing so it expires on next tick
+    const state = rib.getState()
+    const updatedPeers = state.internal.peers.map((p) =>
+      p.name === PEER_B.name ? { ...p, holdTime: 60, lastReceived: 1000, lastSent: 1000 } : p
+    )
+    rib.commit({
+      success: true,
+      action: { action: Actions.Tick, data: { now: 0 } },
+      prevState: state,
+      newState: { ...state, internal: { ...state.internal, peers: updatedPeers } },
+      portOperations: [],
+      routeMetadata: new Map(),
+    })
+
+    // Tick that expires B (62s after lastReceived, exceeds 60s holdTime)
+    const result = planCommit(rib, { action: Actions.Tick, data: { now: 62_000 } })
+
+    // Peer B should be expired
+    expect(rib.getState().internal.peers.find((p) => p.name === PEER_B.name)).toBeUndefined()
+
+    // Ports should be released
+    expect(allocator.getPort(`egress_svc-1_via_${PEER_B.name}`)).toBeUndefined()
+    expect(allocator.getPort(`egress_svc-2_via_${PEER_B.name}`)).toBeUndefined()
+
+    // Available count should have increased by 2
+    expect(allocator.availableCount()).toBe(availableBefore + 2)
+
+    // portOperations should include the releases
+    const releases = result.portOperations.filter((op) => op.type === 'release')
+    expect(releases).toHaveLength(2)
+  })
 })
