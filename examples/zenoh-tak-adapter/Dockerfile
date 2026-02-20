@@ -2,15 +2,14 @@
 #
 # Multi-stage build:
 #   1. Copy zenohd from the official Zenoh image (no Rust compilation needed)
-#   2. Compile the Bun adapter app to a standalone binary
+#   2. Bundle the Node.js adapter app with esbuild
 #   3. Combine into a minimal runtime image
 
 # --- Stage 1: Get zenohd from official image ---
 FROM eclipse/zenoh:latest AS zenoh
 
-# --- Stage 2: Build the Bun app ---
-# Use Alpine-based Bun so the compiled binary links against musl (matches runtime).
-FROM oven/bun:1-alpine AS bun-build
+# --- Stage 2: Build the Node.js app ---
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
@@ -18,16 +17,16 @@ WORKDIR /app
 COPY . .
 
 # Install workspace dependencies
-RUN bun install --ignore-scripts
+RUN corepack enable && pnpm install --frozen-lockfile
 
-# Compile to a standalone binary (musl-linked, runs on Alpine)
+# Bundle to a single file with esbuild
 WORKDIR /app/examples/zenoh-tak-adapter
-RUN bun build src/index.ts --compile --minify --outfile /app/zenoh-tak-adapter
+RUN pnpm exec esbuild src/index.ts --bundle --platform=node --target=node22 \
+  --outfile=/app/zenoh-tak-adapter.mjs --format=esm
 
 # --- Stage 3: Runtime ---
 # Alpine to match the eclipse/zenoh musl-linked zenohd binary.
-# Bun app also built on Alpine (oven/bun:1-alpine) for musl compatibility.
-FROM alpine:3.21
+FROM node:22-alpine
 
 # Install shared libraries needed by zenohd (musl-linked)
 RUN apk add --no-cache libgcc libstdc++
@@ -38,8 +37,8 @@ COPY --from=zenoh /zenohd /usr/local/bin/zenohd
 COPY --from=zenoh /libzenoh_plugin_rest.so /usr/local/lib/
 COPY --from=zenoh /libzenoh_plugin_storage_manager.so /usr/local/lib/
 
-# Bun app binary (standalone, works on Alpine)
-COPY --from=bun-build /app/zenoh-tak-adapter /zenoh-tak-adapter
+# Bundled Node.js app
+COPY --from=build /app/zenoh-tak-adapter.mjs /app/index.mjs
 
 # zenohd plugin search path
 ENV ZENOH_PLUGIN_SEARCH_DIR=/usr/local/lib
@@ -52,4 +51,4 @@ ENV ZENOHD_REST_PORT=8080
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-CMD ["/zenoh-tak-adapter"]
+CMD ["node", "/app/index.mjs"]

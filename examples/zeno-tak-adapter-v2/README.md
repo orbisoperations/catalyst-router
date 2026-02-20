@@ -41,14 +41,14 @@ Bidirectional bridge between [Eclipse Zenoh](https://zenoh.io/) pub/sub and a [T
 
 ```bash
 # 1. Install dependencies
-bun install
+pnpm install
 
 # 2. Configure environment
 cp .env.example .env
 # Edit .env -- at minimum set ZENOH_ROUTER_URL, TAK_HOST, TAK_PORT
 
 # 3. Build and run
-bun run dev
+pnpm run dev
 ```
 
 > You need a running Zenoh router with the `remote-api` plugin and a reachable TAK server. See [Local Development](docs/local-development.md) for detailed setup instructions.
