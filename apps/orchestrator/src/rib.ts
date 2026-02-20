@@ -470,6 +470,7 @@ export class RoutingInformationBase {
           if (
             peer.connectionStatus === 'connected' &&
             peer.holdTime != null &&
+            peer.holdTime > 0 &&
             peer.lastReceived != null &&
             now - peer.lastReceived > peer.holdTime * 1000
           ) {
@@ -683,6 +684,7 @@ export class RoutingInformationBase {
             (p) =>
               p.connectionStatus === 'connected' &&
               p.holdTime != null &&
+              p.holdTime > 0 &&
               p.lastReceived != null &&
               now - p.lastReceived > p.holdTime * 1000
           )
@@ -697,6 +699,7 @@ export class RoutingInformationBase {
           if (
             peer.connectionStatus === 'connected' &&
             peer.holdTime != null &&
+            peer.holdTime > 0 &&
             peer.lastSent != null &&
             now - peer.lastSent > (peer.holdTime / 3) * 1000
           ) {
