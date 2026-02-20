@@ -136,8 +136,8 @@ export class RoutingInformationBase {
     this.routeMetadata = plan.routeMetadata
 
     const routesChanged =
-      prevState.local.routes !== plan.newState.local.routes ||
-      prevState.internal.routes !== plan.newState.internal.routes
+      prevState.local.routes !== newState.local.routes ||
+      prevState.internal.routes !== newState.internal.routes
 
     return {
       action: plan.action,
