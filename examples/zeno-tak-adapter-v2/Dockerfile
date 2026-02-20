@@ -2,8 +2,8 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Install dependencies
-COPY package.json pnpm-lock.yaml* ./
-RUN corepack enable && pnpm install --frozen-lockfile
+COPY package.json ./
+RUN corepack enable && pnpm install
 
 # Copy source, build script, and Zenoh configs
 COPY src ./src
