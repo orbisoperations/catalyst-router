@@ -1,7 +1,7 @@
 import type { Plugin } from 'vite'
 
 /**
- * Vite plugin that loads .cedar policy files as raw text.
+ * Vite plugin that loads .cedar and .cedarschema files as raw text.
  * Cedar files use a custom syntax that Vite/Rollup does not
  * understand natively, so this plugin loads them as raw text.
  */

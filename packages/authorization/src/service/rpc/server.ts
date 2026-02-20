@@ -5,7 +5,7 @@ import { getUpgradeWebSocket } from '@catalyst/service'
 
 import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
 import { jwtToEntity } from '../../jwt/index.js'
-import { Principal, type CatalystPolicyEngine } from '../../policy/src/index.js'
+import { Principal, type CatalystPolicyEngine, type Action } from '../../policy/src/index.js'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import {
   type AuthorizeActionRequest,
@@ -250,7 +250,7 @@ export class AuthRpcServer extends RpcTarget {
         // Perform Cedar authorization
         const result = this.policyService!.isAuthorized({
           principal: principal.uid,
-          action: `CATALYST::Action::${actionId}`,
+          action: `CATALYST::Action::${actionId}` as `CATALYST::Action::${Action}`,
           resource: { type: 'CATALYST::AdminPanel', id: 'admin-panel' },
           entities: entities.getAll(),
           context: {},
