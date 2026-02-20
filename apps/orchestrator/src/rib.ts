@@ -210,6 +210,7 @@ export class RoutingInformationBase {
       Actions.InternalProtocolClose,
       Actions.InternalProtocolOpen,
       Actions.InternalProtocolConnected,
+      Actions.Tick,
     ]
     if (!routeActions.includes(action.action)) return []
 
@@ -246,6 +247,17 @@ export class RoutingInformationBase {
     if (action.action === Actions.InternalProtocolClose) {
       const closedPeer = action.data.peerInfo.name
       const removedRoutes = prevState.internal.routes.filter((r) => r.peerName === closedPeer)
+      for (const route of removedRoutes) {
+        ops.push({ type: 'release', key: `egress_${route.name}_via_${route.peerName}` })
+      }
+    }
+
+    // Release egress ports for peers expired by Tick (hold timer expiry)
+    if (action.action === Actions.Tick) {
+      const removedRoutes = prevState.internal.routes.filter(
+        (r) =>
+          !newState.internal.routes.some((nr) => nr.name === r.name && nr.peerName === r.peerName)
+      )
       for (const route of removedRoutes) {
         ops.push({ type: 'release', key: `egress_${route.name}_via_${route.peerName}` })
       }
