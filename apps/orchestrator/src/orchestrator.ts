@@ -1,13 +1,10 @@
-import type { z } from 'zod'
 import {
   Actions,
   type Action,
   type DataChannelDefinition,
   type InternalRoute,
   type PeerInfo,
-  type PeerRecord,
   type RouteTable,
-  type UpdateMessageSchema,
 } from '@catalyst/routing'
 export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
@@ -15,15 +12,7 @@ import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import { createPortAllocator, type PortAllocator } from '@catalyst/envoy-service'
 import { newWebSocketRpcSession, type RpcStub, RpcTarget } from 'capnweb'
 import { PeerTransport } from './peer-transport.js'
-import type {
-  PublicApi,
-  NetworkClient,
-  DataChannel,
-  IBGPClient,
-  UpdateMessage,
-  EnvoyApi,
-  GatewayApi,
-} from './api-types.js'
+import type { PublicApi, UpdateMessage } from './api-types.js'
 import { ActionQueue, type DispatchResult } from './action-queue.js'
 import { RoutingInformationBase, type CommitResult } from './rib.js'
 import { ConnectionPool } from './connection-pool.js'
@@ -44,16 +33,16 @@ interface AuthServicePermissionsHandlers {
   }): Promise<
     | { success: true; allowed: boolean }
     | {
-      success: false
-      errorType:
-      | 'token_expired'
-      | 'token_malformed'
-      | 'token_revoked'
-      | 'permission_denied'
-      | 'system_error'
-      reason?: string
-      reasons?: string[]
-    }
+        success: false
+        errorType:
+          | 'token_expired'
+          | 'token_malformed'
+          | 'token_revoked'
+          | 'permission_denied'
+          | 'system_error'
+        reason?: string
+        reasons?: string[]
+      }
   >
 }
 
@@ -143,6 +132,10 @@ export class CatalystNodeBus extends RpcTarget {
       clearInterval(this.tickTimer)
       this.tickTimer = undefined
     }
+  }
+
+  shutdown(): void {
+    this.stopTick()
   }
 
   private computeTickInterval(): number {
