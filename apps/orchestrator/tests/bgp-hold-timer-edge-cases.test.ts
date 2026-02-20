@@ -75,25 +75,86 @@ function setPeerTimingFields(
 }
 
 describe('Hold Timer Edge Cases', () => {
-  it('holdTime=0 causes immediate expiry (any elapsed time > 0ms triggers)', () => {
+  it('holdTime=0 means never expire per RFC 4271 §4.2', () => {
     const rib = createRib()
     connectPeer(rib, PEER_B)
 
-    // holdTime=0 → holdTime * 1000 = 0 → any elapsed time > 0 triggers expiry.
-    // (Note: RFC 4271 treats holdTime=0 as "infinite", but our impl treats
-    // it as an immediate expiry threshold. Documented here for awareness.)
+    // RFC 4271 §4.2: "A value of zero for the Hold Time field means
+    // that the Hold Timer and Keepalive Timer are not started."
+    // holdTime=0 → peer should NEVER expire from inactivity.
     setPeerTimingFields(rib, PEER_B.name, {
       holdTime: 0,
       lastReceived: 1000,
       lastSent: 1000,
     })
 
-    // Even 1ms elapsed → expired
-    const plan = rib.plan({ action: Actions.Tick, data: { now: 1001 } })
+    // Even far in the future → NOT expired
+    const plan = rib.plan({ action: Actions.Tick, data: { now: 999_999_999 } })
     expect(plan.success).toBe(true)
 
     const p = plan as Plan
-    expect(p.newState.internal.peers).toHaveLength(0)
+    expect(p.newState.internal.peers).toHaveLength(1)
+  })
+
+  it('holdTime=0 does not generate keepalives per RFC 4271 §4.2', () => {
+    const rib = createRib()
+    connectPeer(rib, PEER_B)
+
+    // holdTime=0 → keepalive timer should not start, no keepalives sent
+    setPeerTimingFields(rib, PEER_B.name, {
+      holdTime: 0,
+      lastReceived: 1000,
+      lastSent: 1000,
+    })
+
+    const plan = rib.plan({ action: Actions.Tick, data: { now: 999_999_999 } })
+    expect(plan.success).toBe(true)
+
+    const p = plan as Plan
+    const result = rib.commit(p)
+    const keepalives = result.propagations.filter((pr) => pr.type === 'keepalive')
+    expect(keepalives).toHaveLength(0)
+  })
+
+  it('holdTime=0 does not generate withdrawal propagations', () => {
+    const rib = createRib()
+    connectPeer(rib, PEER_B)
+    connectPeer(rib, PEER_C)
+
+    // Add a route from PEER_B so withdrawals would be visible
+    planCommit(rib, {
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: PEER_B,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: { name: 'svc-b', protocol: 'http' as const, endpoint: 'http://b:8080' },
+              nodePath: [PEER_B.name],
+            },
+          ],
+        },
+      },
+    })
+
+    // Set PEER_B holdTime=0 — should never expire or generate withdrawals
+    setPeerTimingFields(rib, PEER_B.name, {
+      holdTime: 0,
+      lastReceived: 1000,
+      lastSent: 1000,
+    })
+
+    const plan = rib.plan({ action: Actions.Tick, data: { now: 999_999_999 } })
+    expect(plan.success).toBe(true)
+
+    const p = plan as Plan
+    const result = rib.commit(p)
+
+    // Peer should still be connected, routes intact, no withdrawals
+    expect(result.newState.internal.peers.find((pr) => pr.name === PEER_B.name)).toBeDefined()
+    expect(result.newState.internal.routes).toHaveLength(1)
+    expect(result.propagations.filter((pr) => pr.type === 'update')).toHaveLength(0)
   })
 
   it('holdTime undefined means no expiry (backward compat)', () => {
