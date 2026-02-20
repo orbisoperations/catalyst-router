@@ -5,7 +5,7 @@
  * used in the Catalyst Node service discovery system.
  */
 
-import type { PathAttributes } from './messages'
+import type { PathAttributes } from './messages.js'
 
 /**
  * Represents a simplified route entry in the Routing Information Base (RIB).

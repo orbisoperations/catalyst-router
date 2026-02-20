@@ -1,6 +1,5 @@
 import type { ValidationResult } from '@catalyst/types'
 import type { JSONWebKeySet } from 'jose'
-import type { ValidationResult } from '@catalyst/types'
 
 /**
  * Options for signing a JWT
@@ -80,14 +79,4 @@ export interface IKeyStore {
   saveKeys(jwks: JSONWebKeySet): Promise<void>
   /** Load keys as a JWKS */
   loadKeys(): Promise<JSONWebKeySet | null>
-}
-
-/**
- * Interface for persisting key material.
- */
-export interface IKeyStore {
-    /** Save all keys as a JWKS */
-    saveKeys(jwks: JSONWebKeySet): Promise<void>
-    /** Load keys as a JWKS */
-    loadKeys(): Promise<JSONWebKeySet | null>
 }
