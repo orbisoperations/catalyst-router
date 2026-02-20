@@ -16,6 +16,7 @@ export function getWebSocketPeerSession<API extends RpcCompatible<API>>(endpoint
 
 export class ConnectionPool {
   private stubs: Map<string, RpcStub<PublicApi>>
+
   constructor(private type: 'ws' | 'http' = 'http') {
     this.stubs = new Map<string, RpcStub<PublicApi>>()
   }
