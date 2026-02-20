@@ -1,5 +1,5 @@
 # Build from repo root: docker build -f examples/zenoh-radar-publisher/Dockerfile -t zenoh-radar-publisher .
-FROM oven/bun:1 AS build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
@@ -7,22 +7,23 @@ WORKDIR /app
 COPY . .
 
 # Install workspace dependencies
-RUN bun install --ignore-scripts
+RUN corepack enable && pnpm install --frozen-lockfile
 
-# Compile to a standalone binary
+# Bundle to a single file with esbuild
 WORKDIR /app/examples/zenoh-radar-publisher
-RUN bun build src/index.ts --compile --minify --outfile /app/zenoh-radar-publisher
+RUN pnpm exec esbuild src/index.ts --bundle --platform=node --target=node22 \
+  --outfile=/app/zenoh-radar-publisher.mjs --format=esm
 
-# Runtime — minimal image, no bun runtime needed
-FROM debian:bookworm-slim
+# Runtime — minimal image
+FROM node:22-alpine
 
-COPY --from=build /app/zenoh-radar-publisher /zenoh-radar-publisher
+COPY --from=build /app/zenoh-radar-publisher.mjs /app/index.mjs
 
 ENV ZENOH_ROUTER_URL=http://zenoh-router:8000
 ENV PUBLISH_KEY=demo/radar/tracks
 ENV PUBLISH_INTERVAL_MS=1000
 
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-CMD ["/zenoh-radar-publisher"]
+CMD ["node", "/app/index.mjs"]

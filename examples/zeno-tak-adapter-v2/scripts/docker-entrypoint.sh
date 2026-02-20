@@ -81,4 +81,4 @@ export ZENOH_ROUTER_URL="${ZENOH_ROUTER_URL:-ws://localhost:10000}"
 echo "Adapter will connect to Zenoh at: $ZENOH_ROUTER_URL"
 
 # Run the application (receive signals as PID 1)
-exec bun dist/index.js --console-depth 10
+exec node dist/index.js

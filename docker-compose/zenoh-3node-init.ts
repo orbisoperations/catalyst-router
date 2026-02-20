@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env tsx
 /**
  * zenoh-3node-init.ts — Post-startup initialization for the Zenoh 3-node demo.
  *
@@ -12,9 +12,10 @@
  *
  * Usage:
  *   cd docker-compose
- *   bun run zenoh-3node-init.ts
+ *   tsx zenoh-3node-init.ts
  */
 
+import { execSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi, NetworkClient } from '../apps/orchestrator/src/orchestrator.js'
 
@@ -87,7 +88,7 @@ async function waitForHealth(
     } catch {
       // not ready yet
     }
-    await Bun.sleep(1000)
+    await new Promise((r) => setTimeout(r, 1000))
   }
   fail(
     `${label} did not become healthy within ${timeoutMs / 1000}s — is the compose stack running?`
@@ -96,12 +97,9 @@ async function waitForHealth(
 
 async function extractSystemToken(): Promise<string> {
   log('Extracting system token from auth service logs...')
-  const proc = Bun.spawn(['docker', 'compose', '-f', COMPOSE_FILE, 'logs', 'auth'], {
-    stdout: 'pipe',
-    stderr: 'pipe',
+  const stdout = execSync(`docker compose -f ${COMPOSE_FILE} logs auth`, {
+    encoding: 'utf-8',
   })
-  const stdout = await new Response(proc.stdout).text()
-  await proc.exited
 
   const match = stdout.match(/System Admin Token minted:\s*(\S+)/)
   if (!match) {
@@ -133,7 +131,7 @@ async function waitForPeerConnected(
     const peers = await (netResult as { success: true; client: NetworkClient }).client.listPeers()
     const peer = peers.find((p) => p.name === peerName)
     if (peer && peer.connectionStatus === 'connected') return
-    await Bun.sleep(500)
+    await new Promise((r) => setTimeout(r, 500))
   }
   fail(`Peer ${peerName} did not connect within ${timeoutMs / 1000}s`)
 }
@@ -156,7 +154,7 @@ async function waitForListener(
     } catch {
       // Envoy not ready yet
     }
-    await Bun.sleep(500)
+    await new Promise((r) => setTimeout(r, 500))
   }
   fail(`${label}: timed out waiting for listener '${listenerName}' (${timeoutMs / 1000}s)`)
 }
@@ -231,7 +229,7 @@ async function main() {
 
   // Wait for BGP handshakes
   log('  Waiting for peering handshakes...')
-  await Bun.sleep(1000)
+  await new Promise((r) => setTimeout(r, 1000))
   await Promise.all([
     waitForPeerConnected(clientA, token, NODES.b.id),
     waitForPeerConnected(clientB, token, NODES.a.id),
