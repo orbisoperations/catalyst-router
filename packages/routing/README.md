@@ -65,7 +65,7 @@ type RouteTable = {
 }
 ```
 
-**Local routes** are services advertised by this node (e.g., a GraphQL API running on this pod). **Internal routes** are services learned from peers via the iBGP protocol. Each internal route carries the full AS-PATH (`nodePath`) used for loop detection and best-path selection.
+**Local routes** are services advertised by this node (e.g., a GraphQL API running on this pod). **Internal routes** are services learned from peers via the iBGP protocol. Each internal route carries the full AS-PATH (`nodePath`) used for loop detection and best-path selection. Note: `nodePath` is optional in the `UpdateMessage` schema (defaults to `[]` if omitted); it is always present on stored `InternalRoute` records.
 
 ### Actions
 
@@ -106,8 +106,8 @@ A `DataChannelDefinition` describes a routable service endpoint:
 
 ```typescript
 type DataChannelDefinition = {
-  name: string // DNS-like identifier (1-253 chars, e.g. "books-api")
-  endpoint?: string // URL where the service is reachable
+  name: string // DNS-like identifier (1-253 chars, regex: /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/i)
+  endpoint?: string // URL where the service is reachable (validated as URL)
   protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc' | 'tcp'
   region?: string // Optional geographic hint
   tags?: string[] // Optional metadata tags
@@ -132,7 +132,20 @@ The `nodePath` serves two purposes:
 1. **Loop prevention** -- if a received route's `nodePath` contains our own node name, we drop it
 2. **Best-path selection** -- shorter paths are preferred (fewer hops = better)
 
-### Peer Records
+### Peer Info and Peer Records
+
+`PeerInfo` describes a node's identity (from `@catalyst/config` `NodeConfigSchema`):
+
+```typescript
+type PeerInfo = {
+  name: string // Fully qualified node name (e.g. "node-a.somebiz.local.io")
+  domains: string[] // Domain suffixes this node serves
+  endpoint?: string // RPC endpoint URL
+  labels?: Record<string, string> // Optional key-value metadata
+  peerToken?: string // Shared secret for peer authentication
+  envoyAddress?: string // Envoy proxy address for this node
+}
+```
 
 A `PeerRecord` extends `PeerInfo` with connection lifecycle state:
 
@@ -199,7 +212,7 @@ sequenceDiagram
     B->>A: KEEPALIVE
 
     Note over A,B: 4. Teardown
-    A->>B: InternalProtocolClose (code: 1000)
+    A->>B: InternalProtocolClose (code, reason?)
     Note over B: B withdraws all routes from A
 ```
 
@@ -371,9 +384,10 @@ When Envoy is configured as the data plane, the orchestrator allocates local por
 └─────────────────────────────────────────────────────────┘
 ```
 
-Port operations are computed declaratively in `plan()` and executed in `commit()`:
+Port operations are computed declaratively in `plan()` and executed in `commit()`. Note: `PortOperation` is defined in `@catalyst/orchestrator` (the RIB), not in this package:
 
 ```typescript
+// From @catalyst/orchestrator src/rib.ts
 interface PortOperation {
   type: 'allocate' | 'release'
   key: string
