@@ -11,7 +11,7 @@
 # Usage:
 #   docker compose -f docker-compose/zenoh-3node.compose.yaml up --build
 #   # Then run the init script to bootstrap auth, peer nodes, and create routes:
-#   bun run docker-compose/zenoh-3node-init.ts
+#   pnpm run docker-compose/zenoh-3node-init.ts
 
 services:
   # --- Observability stack ---
