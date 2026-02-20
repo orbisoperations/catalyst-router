@@ -1,5 +1,4 @@
-import type { z } from 'zod'
-import type { PeerInfo, PeerRecord, UpdateMessageSchema } from '@catalyst/routing'
+import type { PeerInfo, PeerRecord } from '@catalyst/routing'
 import { getLogger } from '@catalyst/telemetry'
 import type { ConnectionPool } from './connection-pool.js'
 import type { Propagation, UpdateMessage } from './api-types.js'
@@ -8,6 +7,7 @@ export type Propagation =
   | { type: 'update'; peer: PeerRecord; localNode: PeerInfo; update: UpdateMessage }
   | { type: 'open'; peer: PeerRecord; localNode: PeerInfo }
   | { type: 'close'; peer: PeerRecord; localNode: PeerInfo; code: number; reason?: string }
+  | { type: 'keepalive'; peer: PeerRecord; localNode: PeerInfo }
 
 export class PeerTransport {
   private readonly logger = getLogger(['catalyst', 'peer-transport'])
@@ -77,11 +77,17 @@ export class PeerTransport {
     await result.client.close(localNode, code, reason)
   }
 
-  async sendKeepalive(peer: PeerRecord): Promise<void> {
+  async sendKeepalive(peer: PeerRecord, localNode: PeerInfo): Promise<void> {
     this.logger.debug`Sending keepalive to ${peer.name}`
-    // Keepalive is a no-op RPC ping. For now we use a zero-update message
-    // as the transport-level heartbeat. A dedicated keepalive RPC method
-    // can be added later without changing the propagation model.
+    const token = this.getToken(peer)
+    const stub = this.getStub(peer)
+    if (!stub) return
+    const result = await stub.getIBGPClient(token)
+    if (!result.success) {
+      this.logger.error`Failed to get iBGP client for ${peer.name}: ${result.error}`
+      return
+    }
+    await result.client.keepalive(localNode)
   }
 
   async fanOut(propagations: Propagation[]): Promise<PromiseSettledResult<void>[]> {
@@ -95,7 +101,7 @@ export class PeerTransport {
           case 'close':
             return this.sendClose(p.peer, p.localNode, p.code, p.reason)
           case 'keepalive':
-            return this.sendKeepalive(p.peer)
+            return this.sendKeepalive(p.peer, p.localNode)
         }
       })
     )

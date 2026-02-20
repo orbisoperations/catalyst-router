@@ -462,6 +462,28 @@ export class RoutingInformationBase {
         }
         break
       }
+      case Actions.InternalProtocolKeepalive: {
+        const peerName = action.data.peerInfo.name
+        const peer = state.internal.peers.find((p) => p.name === peerName)
+        if (!peer || peer.connectionStatus !== 'connected') {
+          return {
+            success: false,
+            error: `Keepalive from unknown or disconnected peer '${peerName}'`,
+          }
+        }
+
+        const now = Date.now()
+        state = {
+          ...state,
+          internal: {
+            ...state.internal,
+            peers: state.internal.peers.map((p) =>
+              p.name === peerName ? { ...p, lastReceived: now } : p
+            ),
+          },
+        }
+        break
+      }
       case Actions.Tick: {
         const now = action.data.now
         const expiredPeerNames: string[] = []
@@ -700,7 +722,7 @@ export class RoutingInformationBase {
             peer.lastSent != null &&
             now - peer.lastSent > (peer.holdTime / 3) * 1000
           ) {
-            propagations.push({ type: 'keepalive', peer })
+            propagations.push({ type: 'keepalive', peer, localNode: this.config.node })
           }
         }
 
