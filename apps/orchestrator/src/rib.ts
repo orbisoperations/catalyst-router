@@ -363,7 +363,7 @@ export class RoutingInformationBase {
             ...state.internal,
             peers: state.internal.peers.map((p) =>
               p.name === action.data.peerInfo.name
-                ? { ...p, connectionStatus: 'connected', lastReceived: now }
+                ? { ...p, connectionStatus: 'connected', lastReceived: now, lastSent: now }
                 : p
             ),
           },
@@ -381,7 +381,7 @@ export class RoutingInformationBase {
               ...state.internal,
               peers: state.internal.peers.map((p) =>
                 p.name === action.data.peerInfo.name
-                  ? { ...p, connectionStatus: 'connected', lastReceived: now }
+                  ? { ...p, connectionStatus: 'connected', lastReceived: now, lastSent: now }
                   : p
               ),
             },

@@ -348,6 +348,56 @@ describe('Keepalive Tick Mechanism', () => {
     })
   })
 
+  describe('lastSent initialization on connect', () => {
+    it('InternalProtocolOpen initializes lastSent so keepalives can fire', () => {
+      const rib = createRib()
+      planCommit(rib, { action: Actions.LocalPeerCreate, data: PEER_B })
+
+      planCommit(rib, { action: Actions.InternalProtocolOpen, data: { peerInfo: PEER_B } })
+
+      const peer = rib.getState().internal.peers.find((p) => p.name === PEER_B.name)
+      expect(peer?.lastSent).toBeDefined()
+      expect(peer!.lastSent!).toBeGreaterThan(0)
+    })
+
+    it('InternalProtocolConnected initializes lastSent so keepalives can fire', () => {
+      const rib = createRib()
+      planCommit(rib, { action: Actions.LocalPeerCreate, data: PEER_B })
+
+      planCommit(rib, { action: Actions.InternalProtocolConnected, data: { peerInfo: PEER_B } })
+
+      const peer = rib.getState().internal.peers.find((p) => p.name === PEER_B.name)
+      expect(peer?.lastSent).toBeDefined()
+      expect(peer!.lastSent!).toBeGreaterThan(0)
+    })
+
+    it('newly connected peer receives keepalives after holdTime/3 elapses', () => {
+      const rib = createRib()
+      connectPeer(rib, PEER_B)
+
+      // After connect, lastSent should be initialized (this is the fix)
+      const peer = rib.getState().internal.peers.find((p) => p.name === PEER_B.name)
+      expect(peer?.lastSent).toBeDefined()
+      const connectTime = peer!.lastSent!
+
+      // Set holdTime and keep lastSent/lastReceived relative to connectTime
+      setPeerTimingFields(rib, PEER_B.name, {
+        holdTime: 60,
+        lastReceived: connectTime,
+        lastSent: connectTime,
+      })
+
+      // Tick past keepalive interval (holdTime/3 = 20s after lastSent)
+      const plan = rib.plan({ action: Actions.Tick, data: { now: connectTime + 25_000 } })
+      expect(plan.success).toBe(true)
+
+      const result = rib.commit(plan as Plan)
+      const keepalives = result.propagations.filter((pr) => pr.type === 'keepalive')
+      expect(keepalives).toHaveLength(1)
+      expect(keepalives[0].peer.name).toBe(PEER_B.name)
+    })
+  })
+
   describe('lastSent updates via commit', () => {
     it('commit updates lastSent for peers receiving propagations', () => {
       const rib = createRib()
