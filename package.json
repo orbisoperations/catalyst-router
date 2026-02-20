@@ -2,6 +2,9 @@
   "name": "catalyst-router",
   "private": true,
   "packageManager": "pnpm@9.12.1",
+  "engines": {
+    "node": ">=22.20.0"
+  },
   "scripts": {
     "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
     "cli": "tsx apps/cli/src/index.ts",
