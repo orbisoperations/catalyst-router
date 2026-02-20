@@ -16,8 +16,13 @@ export function getWebSocketPeerSession<API extends RpcCompatible<API>>(endpoint
 
 export class ConnectionPool {
   private stubs: Map<string, RpcStub<PublicApi>>
+  private envoyStubs: Map<string, RpcStub<EnvoyApi>>
+  private gatewayStubs: Map<string, RpcStub<GatewayApi>>
+
   constructor(private type: 'ws' | 'http' = 'http') {
     this.stubs = new Map<string, RpcStub<PublicApi>>()
+    this.envoyStubs = new Map<string, RpcStub<EnvoyApi>>()
+    this.gatewayStubs = new Map<string, RpcStub<GatewayApi>>()
   }
 
   get(endpoint: string) {
@@ -39,14 +44,24 @@ export class ConnectionPool {
   }
 
   getEnvoy(endpoint: string): RpcStub<EnvoyApi> {
-    return this.type === 'ws'
-      ? newWebSocketRpcSession<EnvoyApi>(endpoint)
-      : newHttpBatchRpcSession<EnvoyApi>(endpoint)
+    const cached = this.envoyStubs.get(endpoint)
+    if (cached) return cached
+    const stub =
+      this.type === 'ws'
+        ? newWebSocketRpcSession<EnvoyApi>(endpoint)
+        : newHttpBatchRpcSession<EnvoyApi>(endpoint)
+    this.envoyStubs.set(endpoint, stub)
+    return stub
   }
 
   getGateway(endpoint: string): RpcStub<GatewayApi> {
-    return this.type === 'ws'
-      ? newWebSocketRpcSession<GatewayApi>(endpoint)
-      : newHttpBatchRpcSession<GatewayApi>(endpoint)
+    const cached = this.gatewayStubs.get(endpoint)
+    if (cached) return cached
+    const stub =
+      this.type === 'ws'
+        ? newWebSocketRpcSession<GatewayApi>(endpoint)
+        : newHttpBatchRpcSession<GatewayApi>(endpoint)
+    this.gatewayStubs.set(endpoint, stub)
+    return stub
   }
 }
