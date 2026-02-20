@@ -155,6 +155,10 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
+  shutdown(): void {
+    this.stopTick()
+  }
+
   private computeTickInterval(): number {
     const peers = this.rib.getState().internal.peers
     const holdTimes = peers
