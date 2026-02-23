@@ -3,6 +3,7 @@ import {
   Actions,
   newRouteTable,
   type Action,
+  type ActionType,
   type DataChannelDefinition,
   type InternalRoute,
   type PeerInfo,
@@ -528,6 +529,11 @@ export class CatalystNodeBus extends RpcTarget {
         try {
           this.logger
             .info`LocalPeerCreate: attempting connection to ${action.data.name} at ${action.data.endpoint}`
+          if (!action.data.endpoint) {
+            this.logger
+              .warn`LocalPeerCreate: no endpoint for ${action.data.name} — skipping connection`
+            break
+          }
           const stub = this.connectionPool.get(action.data.endpoint)
           if (stub) {
             const token = action.data.peerToken!
@@ -584,6 +590,11 @@ export class CatalystNodeBus extends RpcTarget {
         ]
 
         if (allRoutes.length > 0) {
+          if (!action.data.peerInfo.endpoint) {
+            this.logger
+              .warn`InternalProtocolConnected: no endpoint for ${action.data.peerInfo.name} — skipping route sync`
+            break
+          }
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
@@ -640,6 +651,11 @@ export class CatalystNodeBus extends RpcTarget {
         ]
 
         if (allRoutes.length > 0) {
+          if (!action.data.peerInfo.endpoint) {
+            this.logger
+              .warn`InternalProtocolConnected: no endpoint for ${action.data.peerInfo.name} — skipping route sync`
+            break
+          }
           try {
             const stub = this.connectionPool.get(action.data.peerInfo.endpoint)
             if (stub) {
@@ -667,6 +683,8 @@ export class CatalystNodeBus extends RpcTarget {
         if (peer) {
           if (!peer.peerToken) {
             this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping close`
+          } else if (!peer.endpoint) {
+            this.logger.warn`LocalPeerDelete: no endpoint for ${peer.name} — skipping close`
           } else {
             try {
               const stub = this.connectionPool.get(peer.endpoint)
@@ -698,6 +716,11 @@ export class CatalystNodeBus extends RpcTarget {
             this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping route broadcast`
             continue
           }
+          if (!peer.endpoint) {
+            this.logger
+              .warn`LocalRouteCreate: no endpoint for ${peer.name} — skipping route broadcast`
+            continue
+          }
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
@@ -725,6 +748,11 @@ export class CatalystNodeBus extends RpcTarget {
             this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping route withdrawal`
             continue
           }
+          if (!peer.endpoint) {
+            this.logger
+              .warn`LocalRouteDelete: no endpoint for ${peer.name} — skipping route withdrawal`
+            continue
+          }
           try {
             const stub = this.connectionPool.get(peer.endpoint)
             if (stub) {
@@ -748,6 +776,11 @@ export class CatalystNodeBus extends RpcTarget {
         )) {
           if (!peer.peerToken) {
             this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping update propagation`
+            continue
+          }
+          if (!peer.endpoint) {
+            this.logger
+              .warn`InternalProtocolUpdate: no endpoint for ${peer.name} — skipping propagation`
             continue
           }
           try {
@@ -818,7 +851,7 @@ export class CatalystNodeBus extends RpcTarget {
     if (!envoyEndpoint || !this.portAllocator) return
 
     // Only react to route-affecting actions
-    const routeActions = [
+    const routeActions: ActionType[] = [
       Actions.LocalRouteCreate,
       Actions.LocalRouteDelete,
       Actions.InternalProtocolUpdate,
@@ -920,6 +953,10 @@ export class CatalystNodeBus extends RpcTarget {
     )) {
       if (!peer.peerToken) {
         this.logger.error`CRITICAL: no peerToken for ${peer.name} — skipping withdrawal propagation`
+        continue
+      }
+      if (!peer.endpoint) {
+        this.logger.warn`No endpoint for ${peer.name} — skipping withdrawal propagation`
         continue
       }
       try {
