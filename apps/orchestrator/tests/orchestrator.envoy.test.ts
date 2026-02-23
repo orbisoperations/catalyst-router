@@ -3,11 +3,11 @@ import { Actions, type PeerInfo } from '@catalyst/routing'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
 
-const MOCK_NODE: PeerInfo = {
+const MOCK_NODE = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
-}
+} satisfies PeerInfo
 
 const ENVOY_ENDPOINT = 'http://envoy:18000'
 
@@ -55,7 +55,7 @@ function createBusWithEnvoy(pool: MockConnectionPool) {
   return new CatalystNodeBus({
     config: {
       node: MOCK_NODE,
-      ibgp: { secret: 'secret' },
+
       envoyConfig: {
         endpoint: ENVOY_ENDPOINT,
         portRange: [[10000, 10100]],
@@ -227,7 +227,6 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     const plainBus = new CatalystNodeBus({
       config: {
         node: MOCK_NODE,
-        ibgp: { secret: 'secret' },
       },
       connectionPool: { pool: plainPool },
     })
@@ -247,7 +246,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     const tinyBus = new CatalystNodeBus({
       config: {
         node: MOCK_NODE,
-        ibgp: { secret: 'secret' },
+
         envoyConfig: {
           endpoint: ENVOY_ENDPOINT,
           portRange: [10000],
@@ -387,7 +386,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
     const plainBus = new CatalystNodeBus({
       config: {
         node: MOCK_NODE,
-        ibgp: { secret: 'secret' },
+
         // no envoyConfig
       },
       connectionPool: { pool: plainPool },
@@ -572,7 +571,7 @@ describe('CatalystNodeBus > Envoy Integration', () => {
           ...MOCK_NODE,
           envoyAddress: 'envoy-proxy-a',
         },
-        ibgp: { secret: 'secret' },
+
         envoyConfig: {
           endpoint: ENVOY_ENDPOINT,
           portRange: [[10000, 10100]],
