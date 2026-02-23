@@ -186,6 +186,9 @@ importers:
       '@types/node':
         specifier: catalog:dev
         version: 25.3.0
+      capnweb:
+        specifier: 'catalog:'
+        version: 0.4.0
       jose:
         specifier: 'catalog:'
         version: 6.1.3

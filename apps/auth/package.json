@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:dev",
+    "capnweb": "catalog:",
     "jose": "catalog:",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
