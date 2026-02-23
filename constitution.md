@@ -1,6 +1,6 @@
 # Catalyst Router Constitution
 
-**Version**: 1.1.0 | **Ratified**: 2026-02-05 | **Last Amended**: 2026-02-09
+**Version**: 1.1.1 | **Ratified**: 2026-02-05 | **Last Amended**: 2026-02-20
 
 > This constitution defines the immutable architectural principles for the Catalyst Router project.
 > All specifications, implementation plans, and code changes MUST comply with these principles.
@@ -10,26 +10,26 @@
 
 ## Quick Reference
 
-| ID    | Principle                     | Category    | Key Rule                                                                |
-| ----- | ----------------------------- | ----------- | ----------------------------------------------------------------------- |
-| I     | Decentralized Service Routing | Structural  | BGP-inspired L4-7 peering, no centralized routing                       |
-| II    | Core Pod Architecture         | Structural  | Orchestrator + sidecars, Capnweb RPC between components                 |
-| III   | V2 Dispatch Pattern           | Structural  | `dispatch()` → `handleAction()` → `handleNotify()`, not V1 plugins      |
-| IV    | Dependency Inversion          | Structural  | Accept interfaces, not concrete implementations                         |
-| V     | Package Boundary Integrity    | Structural  | Inward dependencies, no cross-package internal imports                  |
-| VI    | ESM Module Conventions        | Structural  | `.js` extensions, `type` imports, kebab-case files                      |
-| VII   | Schema-First Validation       | Quality     | Zod schemas on all external boundaries, `z.infer<>` for types           |
-| VIII  | Discriminated Union Results   | Quality     | `{ success, data/error }` for fallible operations                       |
-| IX    | Strict Typing                 | Quality     | No `any`, no `@ts-ignore`, explicit return types on public APIs         |
-| X     | Persistent State in SQLite    | Quality     | SQLite via `bun:sqlite`, WAL mode, no in-memory Maps for durable state  |
-| XI    | Database Naming Conventions   | Quality     | snake_case, singular tables, `_at` suffix for timestamps                |
-| XII   | Test-Driven Development       | Quality     | Red → green → refactor; unit + E2E coverage required                    |
-| XIII  | Small PRs & Graphite          | Quality     | Under 600 lines, `gt` commands only, stacked PRs                        |
-| XIV   | Conventional Commits          | Quality     | commitlint format: `type(scope): description`, lowercase, max 100 chars |
-| XV    | Security-First                | Operational | mTLS, cert-bound JWTs, timing-safe comparisons, policy engine           |
-| XVI   | Unified Observability (OTEL)  | Operational | LogTape + OTEL Collector, no `console.log`, Apache 2.0/MIT backends     |
-| XVII  | Distributed Systems Awareness | Operational | 30s clock tolerance, idempotent ops, graceful degradation               |
-| XVIII | Unified Service Lifecycle     | Structural  | All HTTP services extend `CatalystService`, use `catalystHonoServer()`  |
+| ID    | Principle                     | Category    | Key Rule                                                                   |
+| ----- | ----------------------------- | ----------- | -------------------------------------------------------------------------- |
+| I     | Decentralized Service Routing | Structural  | BGP-inspired L4-7 peering, no centralized routing                          |
+| II    | Core Pod Architecture         | Structural  | Orchestrator + sidecars, Capnweb RPC between components                    |
+| III   | V2 Dispatch Pattern           | Structural  | `dispatch()` → `handleAction()` → `handleNotify()`, not V1 plugins         |
+| IV    | Dependency Inversion          | Structural  | Accept interfaces, not concrete implementations                            |
+| V     | Package Boundary Integrity    | Structural  | Inward dependencies, no cross-package internal imports                     |
+| VI    | ESM Module Conventions        | Structural  | `.js` extensions, `type` imports, kebab-case files                         |
+| VII   | Schema-First Validation       | Quality     | Zod schemas on all external boundaries, `z.infer<>` for types              |
+| VIII  | Discriminated Union Results   | Quality     | `{ success, data/error }` for fallible operations                          |
+| IX    | Strict Typing                 | Quality     | No `any`, no `@ts-ignore`, explicit return types on public APIs            |
+| X     | Persistent State in SQLite    | Quality     | SQLite via `better-sqlite3`, WAL mode, no in-memory Maps for durable state |
+| XI    | Database Naming Conventions   | Quality     | snake_case, singular tables, `_at` suffix for timestamps                   |
+| XII   | Test-Driven Development       | Quality     | Red → green → refactor; unit + E2E coverage required                       |
+| XIII  | Small PRs & Graphite          | Quality     | Under 600 lines, `gt` commands only, stacked PRs                           |
+| XIV   | Conventional Commits          | Quality     | commitlint format: `type(scope): description`, lowercase, max 100 chars    |
+| XV    | Security-First                | Operational | mTLS, cert-bound JWTs, timing-safe comparisons, policy engine              |
+| XVI   | Unified Observability (OTEL)  | Operational | LogTape + OTEL Collector, no `console.log`, Apache 2.0/MIT backends        |
+| XVII  | Distributed Systems Awareness | Operational | 30s clock tolerance, idempotent ops, graceful degradation                  |
+| XVIII | Unified Service Lifecycle     | Structural  | All HTTP services extend `CatalystService`, use `catalystHonoServer()`     |
 
 ---
 
@@ -123,7 +123,7 @@
 | `import { signToken } from './jwt.js'`        | `import { signToken } from './jwt'` (missing extension)   |
 | `import type { SignOptions } from './jwt.js'` | `import { SignOptions } from './jwt.js'` (missing `type`) |
 
-**Rationale**: ESM compliance ensures compatibility with Bun and Node.js runtimes and prevents build-time ambiguity.
+**Rationale**: ESM compliance ensures compatibility with the Node.js runtime and prevents build-time ambiguity.
 
 **Compliance Check**: Do all imports use `.js` extensions? Are type-only imports marked with `type`?
 
@@ -133,14 +133,14 @@
 
 **Statement**: All HTTP services in the pod MUST extend the `CatalystService` abstract base class from `@catalyst/service` and expose their routes via a `.handler` Hono route group. Services run either standalone via `catalystHonoServer()` or composed on a shared Hono instance via `app.route('/prefix', svc.handler)`. The base class provides config injection, automatic OpenTelemetry setup (with noop fallback), and lifecycle management (`create()` -> `initialize()` -> `ready` -> `shutdown()`). Services MUST NOT implement their own server binding, signal handling, or telemetry bootstrap.
 
-| DO                                                                    | DON'T                                                           |
-| --------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Extend `CatalystService` for new services                             | Create bare `new Hono()` + manual `Bun.serve()` in service apps |
-| Expose routes via `.handler` Hono route group                         | Set up `TelemetryBuilder` manually in individual services       |
-| Use `catalystHonoServer(svc.handler, { services: [svc] }).start()`    | Write custom SIGTERM/SIGINT handlers per service                |
-| Use `this.telemetry.logger` for logging                               | Use `console.log` in services                                   |
-| Override `onInitialize()` for async setup, `onShutdown()` for cleanup | Skip the base class for "simple" services                       |
-| Accept `CatalystServiceOptions` in constructor                        | Construct services without config injection                     |
+| DO                                                                    | DON'T                                                       |
+| --------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Extend `CatalystService` for new services                             | Create bare `new Hono()` + manual `serve()` in service apps |
+| Expose routes via `.handler` Hono route group                         | Set up `TelemetryBuilder` manually in individual services   |
+| Use `catalystHonoServer(svc.handler, { services: [svc] }).start()`    | Write custom SIGTERM/SIGINT handlers per service            |
+| Use `this.telemetry.logger` for logging                               | Use `console.log` in services                               |
+| Override `onInitialize()` for async setup, `onShutdown()` for cleanup | Skip the base class for "simple" services                   |
+| Accept `CatalystServiceOptions` in constructor                        | Construct services without config injection                 |
 
 **Key APIs**:
 
@@ -168,7 +168,7 @@ catalystHonoServer(app, { services: [auth, gateway] }).start()
 
 **Rationale**: A unified service base class eliminates boilerplate duplication across services (telemetry setup, config loading, signal handling, health endpoints). It enforces consistent lifecycle management, ensures all services are observable by default, and enables composition of multiple services onto a single Hono server for the core pod.
 
-**Compliance Check**: Does this new service extend `CatalystService`? Does it expose routes via `.handler`? Does it use `catalystHonoServer()` for server binding? Is there any manual `Bun.serve()`, custom signal handling, or direct `TelemetryBuilder` usage?
+**Compliance Check**: Does this new service extend `CatalystService`? Does it expose routes via `.handler`? Does it use `catalystHonoServer()` for server binding? Is there any manual `serve()`, custom signal handling, or direct `TelemetryBuilder` usage?
 
 ---
 
@@ -224,7 +224,7 @@ catalystHonoServer(app, { services: [auth, gateway] }).start()
 
 ### X. Persistent State in SQLite
 
-**Statement**: All application state that must survive restarts MUST be stored in SQLite via `bun:sqlite`. In-memory `Map<K,V>` stores are only permitted for ephemeral caches (connection pools, RPC stubs) and test doubles. SQLite databases must use WAL mode, foreign keys ON, and busy_timeout 5000.
+**Statement**: All application state that must survive restarts MUST be stored in SQLite via `better-sqlite3` (see ADR-0012). In-memory `Map<K,V>` stores are only permitted for ephemeral caches (connection pools, RPC stubs) and test doubles. SQLite databases must use WAL mode, foreign keys ON, and busy_timeout 5000.
 
 | DO                                                                           | DON'T                                                        |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------ |
