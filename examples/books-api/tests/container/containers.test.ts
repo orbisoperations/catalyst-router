@@ -28,7 +28,7 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
     beforeAll(async () => {
       // Build and start the container
       // context is repository root
-      const repoRoot = path.resolve(__dirname, '../../..')
+      const repoRoot = path.resolve(__dirname, '../../../..')
 
       const dockerfile = 'examples/books-api/Dockerfile'
 
@@ -79,7 +79,7 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
     let startedContainer: StartedTestContainer
 
     beforeAll(async () => {
-      const repoRoot = path.resolve(__dirname, '../../..')
+      const repoRoot = path.resolve(__dirname, '../../../..')
 
       const dockerfile = 'examples/movies-api/Dockerfile'
 

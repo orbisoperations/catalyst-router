@@ -10,18 +10,18 @@ import {
   type StartedTestContainer,
   type StartedNetwork,
 } from 'testcontainers'
-import type { PublicApi, NetworkClient } from '../../orchestrator/src/orchestrator.js'
+import type { PublicApi, NetworkClient } from '../../../orchestrator/src/orchestrator.js'
 import {
   startAuthService,
   type AuthServiceContext,
-} from '../../orchestrator/tests/auth-test-helpers.js'
+} from '../../../orchestrator/tests/helpers/auth-test-helpers.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
 const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
-const repoRoot = path.resolve(__dirname, '../../..')
+const repoRoot = path.resolve(__dirname, '../../../..')
 
 /** Fixed Envoy listener port — used for both ingress (Node A) and egress (Node B). */
 const ENVOY_LISTENER_PORT = 10000

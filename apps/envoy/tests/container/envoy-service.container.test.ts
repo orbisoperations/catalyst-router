@@ -3,14 +3,14 @@ import { spawnSync } from 'node:child_process'
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers'
 import * as grpc from '@grpc/grpc-js'
 import path from 'path'
-import { getProtoRoot } from '../src/xds/proto-encoding.js'
+import { getProtoRoot } from '../../src/xds/proto-encoding.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
 const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
-const repoRoot = path.resolve(__dirname, '../../..')
+const repoRoot = path.resolve(__dirname, '../../../..')
 const envoyServiceImage = 'catalyst-envoy-service:container-test'
 
 /** Default ports for the envoy service inside the container. */

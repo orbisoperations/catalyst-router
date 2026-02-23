@@ -8,7 +8,7 @@ import {
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers'
-import { createAuthClient } from '../../src/clients/auth-client.js'
+import { createAuthClient } from '../../../src/clients/auth-client.js'
 
 const isDockerRunning = () => {
   try {
@@ -29,7 +29,7 @@ if (skipTests) {
 describe.skipIf(skipTests)('Token Commands Container Tests', () => {
   const TIMEOUT = 300000 // 5 minutes
   const authImage = 'catalyst-auth:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../../')
+  const repoRoot = path.resolve(__dirname, '../../../../../')
 
   let network: StartedNetwork
   let auth: StartedTestContainer
