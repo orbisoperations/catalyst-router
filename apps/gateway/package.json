@@ -22,13 +22,12 @@
     "graphql-yoga": "catalog:",
     "hono": "catalog:",
     "zod": "catalog:",
-    "@catalyst/config": "catalog:",
-    "@catalyst/service": "catalog:",
+    "@catalyst/config": "workspace:*",
+    "@catalyst/service": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
     "@opentelemetry/api": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",

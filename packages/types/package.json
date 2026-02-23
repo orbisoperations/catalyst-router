@@ -17,7 +17,6 @@
     "test:integration": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -E 'integration|container')"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "typescript": "catalog:dev"
   }

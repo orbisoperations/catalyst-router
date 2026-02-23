@@ -3,91 +3,26 @@
   "private": true,
   "scripts": {
     "start:m0p2": "docker compose -f docker-compose/example.m0p2.compose.yaml up --build",
-    "cli": "bun apps/cli/src/index.ts",
+    "cli": "tsx apps/cli/src/index.ts",
     "prepare": "husky",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "compile:node:exec": "bun build --compile --target=bun-linux-arm64 --outfile dist/node/catalyst-node apps/node/src/index.ts",
-    "compile:rpi-config:exec": "bun build --compile --target=bun-linux-arm64 --outfile dist/rpi-config/catalyst-rpi-config apps/rpi-config/src/index.ts",
     "compile:auth:docker": "docker build -f apps/auth/Dockerfile -t catalyst-auth .",
     "compile:gateway:docker": "docker build -f apps/gateway/Dockerfile -t catalyst-gateway .",
     "compile:orchestrator:docker": "docker build -f apps/orchestrator/Dockerfile -t catalyst-orchestrator .",
-    "compile:all:docker": "bun run compile:auth:docker && bun run compile:gateway:docker && bun run compile:orchestrator:docker",
-    "rpi:config": "bun run apps/rpi-config/src/index.ts",
-    "test": "bun test apps/ packages/ examples/",
-    "test:unit": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -vE 'integration|container')",
-    "test:integration": "bun test $(find apps packages examples \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' ! -path '*e2e*' | grep -E 'integration|container')",
-    "test:container": "bun test $(find apps packages examples \\( -name '*.container.test.ts' -o -name '*.container.spec.ts' \\) ! -path '*/node_modules/*')"
+    "compile:all:docker": "pnpm run compile:auth:docker && pnpm run compile:gateway:docker && pnpm run compile:orchestrator:docker",
+    "rpi:config": "pnpm exec tsx apps/rpi-config/src/index.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run --reporter=verbose",
+    "test:integration": "vitest run --reporter=verbose",
+    "test:container": "vitest run"
   },
-  "workspaces": {
-    "packages": [
-      "apps/*",
-      "packages/*",
-      "examples/*"
-    ],
-    "catalog": {
-      "hono": "^4.11.3",
-      "graphql": "16.12.0",
-      "graphql-yoga": "^5.18.0",
-      "zod": "^4.0.0",
-      "capnweb": "^0.4.0",
-      "@hono/capnweb": "^0.1.0",
-      "@hono/node-server": "^1.19.7",
-      "@hono/node-ws": "^1.3.0",
-      "commander": "^14.0.2",
-      "@graphql-tools/schema": "^10.0.31",
-      "@graphql-tools/delegate": "^12.0.4",
-      "@graphql-tools/stitch": "^10.1.8",
-      "@graphql-tools/utils": "^11.0.0",
-      "@graphql-tools/wrap": "^11.1.4",
-      "@graphql-tools/stitching-directives": "^4.0.10",
-      "@aws-sdk/client-s3": "^3.964.0",
-      "jose": "^6.0.0",
-      "argon2": "^0.44.0",
-      "better-sqlite3": "^12.6.2",
-      "@cedar-policy/cedar-wasm": "^4.8.2",
-      "@opentelemetry/api": "^1.9.0",
-      "chalk": "^5.3.0",
-      "inquirer": "^9.2.14",
-      "ws": "^8.19.0",
-      "ip": "^2.0.1",
-      "@catalyst/auth-service": "workspace:*",
-      "@catalyst/authorization": "workspace:*",
-      "@catalyst/cli": "workspace:*",
-      "@catalyst/config": "workspace:*",
-      "@catalyst/envoy-service": "workspace:*",
-      "@catalyst/gateway-service": "workspace:*",
-      "@catalyst/node-service": "workspace:*",
-      "@catalyst/orchestrator-service": "workspace:*",
-      "@catalyst/routing": "workspace:*",
-      "@catalyst/sdk": "workspace:*",
-      "@catalyst/service": "workspace:*",
-      "@catalyst/telemetry": "workspace:*",
-      "@catalyst/types": "workspace:*"
-    },
-    "catalogs": {
-      "dev": {
-        "typescript": "^5.9.3",
-        "@types/node": "^25.0.3",
-        "@types/better-sqlite3": "^7.6.13",
-        "@types/bun": "^1.3.6",
-        "tsup": "^8.5.1",
-        "tsx": "^4.7.1",
-        "@types/inquirer": "^9.0.7",
-        "@types/ws": "^8.18.1"
-      },
-      "testing": {
-        "vitest": "^4.0.16",
-        "@vitest/coverage-v8": "^4.0.16",
-        "testcontainers": "^11.11.0",
-        "@playwright/test": "^1.57.0"
-      }
+  "pnpm": {
+    "overrides": {
+      "graphql": "16.12.0"
     }
-  },
-  "resolutions": {
-    "graphql": "16.12.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",

@@ -13,7 +13,6 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
     "typescript": "catalog:dev"
   }
 }

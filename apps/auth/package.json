@@ -16,13 +16,12 @@
     "start": "bun run src/server.ts"
   },
   "dependencies": {
-    "@catalyst/authorization": "catalog:",
-    "@catalyst/config": "catalog:",
-    "@catalyst/service": "catalog:",
+    "@catalyst/authorization": "workspace:*",
+    "@catalyst/config": "workspace:*",
+    "@catalyst/service": "workspace:*",
     "hono": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:dev",
     "@types/node": "catalog:dev",
     "jose": "catalog:",
     "testcontainers": "catalog:testing",
