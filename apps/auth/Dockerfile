@@ -44,7 +44,7 @@ RUN pnpm exec esbuild apps/auth/src/server.ts \
   --outfile=dist/server.mjs --format=esm \
   --external:better-sqlite3 \
   --external:@cedar-policy/cedar-wasm \
-  --loader:.cedar=text \
+  --loader:.cedar=text --loader:.cedarschema=text \
   --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 # Create production deployment with flat node_modules
