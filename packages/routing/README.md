@@ -478,6 +478,15 @@ const createRoute: Action = {
   },
 }
 
+// Withdraw a local service (requires full DataChannelDefinition, not just name)
+const deleteRoute: Action = {
+  action: Actions.LocalRouteDelete,
+  data: {
+    name: 'books-api',
+    protocol: 'http',
+  },
+}
+
 // Configure a peer
 const addPeer: Action = {
   action: Actions.LocalPeerCreate,
