@@ -13,10 +13,15 @@ import type { CatalystService } from './catalyst-service.js'
  * RPC handlers that need WebSocket support should import this from
  * `@catalyst/service` and pass it to `newRpcResponse()`.
  *
- * It is initialized lazily when a `CatalystHonoServer` is constructed,
- * so it is always available before `start()` is called.
+ * It is initialized lazily when `CatalystHonoServer.start()` is called.
+ * Before that, calling it will throw with a descriptive error.
  */
-export let upgradeWebSocket: ReturnType<typeof createNodeWebSocket>['upgradeWebSocket']
+export let upgradeWebSocket: ReturnType<typeof createNodeWebSocket>['upgradeWebSocket'] = (() => {
+  throw new Error(
+    'upgradeWebSocket is not available — CatalystHonoServer.start() has not been called. ' +
+    'Use getUpgradeWebSocket(c) instead.'
+  )
+}) as unknown as ReturnType<typeof createNodeWebSocket>['upgradeWebSocket']
 
 export interface CatalystHonoServerOptions {
   /** Port to listen on. Defaults to 3000. */
