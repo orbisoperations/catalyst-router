@@ -7,11 +7,12 @@
     "start": "tsx src/index.ts",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests"
+    "test:integration": "vitest run --passWithNoTests container integration"
   },
   "dependencies": {
     "@graphql-tools/schema": "catalog:",
     "@graphql-tools/stitching-directives": "catalog:",
+    "@hono/node-server": "catalog:",
     "graphql": "catalog:",
     "graphql-yoga": "catalog:",
     "hono": "catalog:"

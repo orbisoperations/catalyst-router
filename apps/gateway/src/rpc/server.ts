@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { Hono } from 'hono'
-import { upgradeWebSocket } from '@catalyst/service'
+import { getUpgradeWebSocket } from '@catalyst/service'
 import { RpcTarget } from 'capnweb'
 import { newRpcResponse } from '@hono/capnweb'
 import { TelemetryBuilder } from '@catalyst/telemetry'
@@ -70,7 +70,7 @@ export function createRpcHandler(rpcServer: GatewayRpcServer): Hono {
   const app = new Hono()
   app.get('/', (c) => {
     return newRpcResponse(c, rpcServer, {
-      upgradeWebSocket,
+      upgradeWebSocket: getUpgradeWebSocket(c),
     })
   })
   return app

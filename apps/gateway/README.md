@@ -7,17 +7,17 @@ The **Catalyst Gateway** is a high-performance, dynamic GraphQL Federation serve
 - **Universal Federation**: Dynamically stitches multiple remote GraphQL schemas into a single unified API.
 - **Zero-Downtime Reconfiguration**: Updates the schema graph instantly via RPC without dropping connections.
 - **High Performance RPC**: Uses **Cap'n Web** over WebSockets for typed, efficient configuration management.
-- **Production Ready**: Containerized with a minimal footprint (Distroless + Bun compiled binary).
+- **Production Ready**: Containerized with a minimal footprint (minimal Node.js Alpine image).
 - **Type-Safe**: Fully typed end-to-end with TypeScript.
 
 ## 🛠️ Tech Stack
 
-- **Runtime**: [Bun](https://bun.sh)
+- **Runtime**: [Node.js](https://nodejs.org) 22+
 - **Web Framework**: [Hono](https://hono.dev)
 - **GraphQL Engine**: [GraphQL Yoga](https://the-guild.dev/graphql/yoga)
 - **Schema Stitching**: [GraphQL Tools](https://the-guild.dev/graphql/tools)
 - **RPC**: [Cap'n Web](https://github.com/capnproto/capnproto)
-- **Testing**: [Testcontainers](https://testcontainers.com) + [Bun Test](https://bun.sh/docs/cli/test)
+- **Testing**: [Testcontainers](https://testcontainers.com) + [Vitest](https://vitest.dev)
 
 ## 📐 Architecture & API
 
@@ -82,7 +82,7 @@ We use **Testcontainers** to verify the Gateway in a real Docker environment, en
 
 ```ascii
 +-------------------------------------------------------+
-|                   Test Runner (Bun)                   |
+|                   Test Runner (Vitest)                   |
 |         apps/gateway/tests/container.test.ts      |
 +---------------------------+---------------------------+
                             |
@@ -110,7 +110,7 @@ We use **Testcontainers** to verify the Gateway in a real Docker environment, en
 
 ## 📦 Docker Support
 
-The Gateway is built as a standalone executable on top of a Distroless image for maximum security and minimum size.
+The Gateway is built as a lightweight Node.js Alpine image for maximum security and minimum size.
 
 ```bash
 # Build

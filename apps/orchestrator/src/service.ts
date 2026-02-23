@@ -4,7 +4,7 @@ import { Principal } from '@catalyst/authorization'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
-import { upgradeWebSocket } from '@catalyst/service'
+import { getUpgradeWebSocket } from '@catalyst/service'
 import { CatalystNodeBus } from './orchestrator.js'
 
 /**
@@ -94,7 +94,7 @@ export class OrchestratorService extends CatalystService {
     // Mount RPC route
     this.handler.all('/rpc', (c) => {
       return newRpcResponse(c, this._bus.publicApi(), {
-        upgradeWebSocket,
+        upgradeWebSocket: getUpgradeWebSocket(c),
       })
     })
 

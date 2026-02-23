@@ -9,7 +9,7 @@ export function cedarTextLoader(): Plugin {
   return {
     name: 'cedar-text-loader',
     transform(_code: string, id: string) {
-      if (id.endsWith('.cedar')) {
+      if (id.endsWith('.cedar') || id.endsWith('.cedarschema')) {
         return {
           code: `import { readFileSync } from 'node:fs'\nexport default readFileSync(${JSON.stringify(id)}, 'utf-8')`,
           map: null,

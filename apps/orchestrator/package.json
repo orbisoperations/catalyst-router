@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests"
+    "test:integration": "vitest run --passWithNoTests container integration"
   },
   "dependencies": {
     "@catalyst/auth-service": "workspace:*",
@@ -19,7 +20,9 @@
     "@catalyst/routing": "workspace:*",
     "@catalyst/service": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
+    "@cedar-policy/cedar-wasm": "catalog:",
     "@hono/capnweb": "catalog:",
+    "better-sqlite3": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",
     "zod": "catalog:"

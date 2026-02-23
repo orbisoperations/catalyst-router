@@ -12,13 +12,16 @@
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests",
-    "start": "tsx src/server.ts"
+    "test:integration": "vitest run --passWithNoTests container integration",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@catalyst/authorization": "workspace:*",
     "@catalyst/config": "workspace:*",
     "@catalyst/service": "workspace:*",
+    "@cedar-policy/cedar-wasm": "catalog:",
+    "better-sqlite3": "catalog:",
     "hono": "catalog:"
   },
   "devDependencies": {

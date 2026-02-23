@@ -26,7 +26,10 @@ export async function startServer() {
 }
 
 // Auto-start if this file is the entry point
-const isMain = process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')
+const isMain =
+  process.argv[1]?.endsWith('server.ts') ||
+  process.argv[1]?.endsWith('server.js') ||
+  process.argv[1]?.endsWith('server.mjs')
 if (isMain) {
   startServer()
     .then((result) => {

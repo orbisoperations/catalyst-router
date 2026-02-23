@@ -1,7 +1,7 @@
 import { newRpcResponse } from '@hono/capnweb'
 import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
-import { upgradeWebSocket } from '@catalyst/service'
+import { getUpgradeWebSocket } from '@catalyst/service'
 
 import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
 import { jwtToEntity } from '../../jwt/index.js'
@@ -292,7 +292,7 @@ export function createAuthRpcHandler(rpcServer: AuthRpcServer): Hono {
 
   app.get('/', (c) => {
     return newRpcResponse(c, rpcServer, {
-      upgradeWebSocket,
+      upgradeWebSocket: getUpgradeWebSocket(c),
     })
   })
 
