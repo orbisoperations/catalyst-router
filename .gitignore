@@ -4,6 +4,7 @@ dist/
 out/
 build/
 coverage/
+.turbo/
 
 # Logs
 logs
