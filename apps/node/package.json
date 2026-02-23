@@ -5,8 +5,9 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "vitest",
-    "test:watch": "vitest",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit/ --passWithNoTests",
+    "test:integration": "vitest run tests/integration/ --passWithNoTests",
     "test:coverage": "vitest run --coverage",
     "build": "tsup",
     "typecheck": "tsc --noEmit",
