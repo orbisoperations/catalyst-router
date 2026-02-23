@@ -16,7 +16,7 @@ export type ActionResult = { success: true } | { success: false; error: string }
  */
 export interface DataChannelClient {
   addRoute(route: DataChannelDefinition): Promise<ActionResult>
-  removeRoute(route: DataChannelDefinition): Promise<ActionResult>
+  removeRoute(route: Pick<DataChannelDefinition, 'name'>): Promise<ActionResult>
   listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 

@@ -2,10 +2,18 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
+    // Inherit strictness, but avoid TS declaration-type expansion crash during `tsc --noEmit`
+    // when this app includes the Cedar ambient definitions from packages/authorization.
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "../../packages/authorization/src/policy/src/definitions/cedar.d.ts"
+  ]
 }

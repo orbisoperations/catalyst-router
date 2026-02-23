@@ -83,7 +83,8 @@ export class ConnectionPool {
     this.stubs = new Map<string, RpcStub<PublicApi>>()
   }
 
-  get(endpoint: string) {
+  get(endpoint: string | undefined) {
+    if (!endpoint) return undefined
     if (this.stubs.has(endpoint)) {
       return this.stubs.get(endpoint)
     }
@@ -826,7 +827,7 @@ export class CatalystNodeBus extends RpcTarget {
       Actions.InternalProtocolOpen,
       Actions.InternalProtocolConnected,
     ]
-    if (!routeActions.includes(action.action)) return
+    if (!(routeActions as ReadonlyArray<Action['action']>).includes(action.action)) return
 
     // Allocate ports for local routes that need them
     for (const route of this.state.local.routes) {
