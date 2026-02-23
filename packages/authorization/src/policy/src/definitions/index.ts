@@ -4,7 +4,7 @@ import dataCustodianPolicy from './data-custodian.cedar'
 import type { Action, IBGPEntity, PeerEntity, Role, RouteEntity } from './models.js'
 import nodeCustodianPolicy from './node-custodian.cedar'
 import nodePolicy from './node.cedar'
-import CATALYST_SCHEMA from './schema.cedar'
+import CATALYST_SCHEMA from './schema.cedarschema'
 import userPolicy from './user.cedar'
 
 export {

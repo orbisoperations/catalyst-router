@@ -51,12 +51,12 @@ COPY examples examples
 RUN pnpm exec esbuild apps/auth/src/server.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/auth.mjs --format=esm \
-  --packages=external --loader:.cedar=text
+  --packages=external --loader:.cedar=text --loader:.cedarschema=text
 
 RUN pnpm exec esbuild apps/orchestrator/src/server.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/orchestrator.mjs --format=esm \
-  --packages=external --loader:.cedar=text
+  --packages=external --loader:.cedar=text --loader:.cedarschema=text
 
 RUN pnpm exec esbuild apps/envoy/src/index.ts \
   --bundle --platform=node --target=node22 \
