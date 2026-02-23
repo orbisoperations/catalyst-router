@@ -1,12 +1,13 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import path from 'path'
 import type { StartedTestContainer } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    const result = spawnSync('docker', ['info'])
+    return result.status === 0
   } catch {
     return false
   }
@@ -29,23 +30,10 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
       // context is repository root
       const repoRoot = path.resolve(__dirname, '../../..')
 
-      const imageName = 'books-service:test'
       const dockerfile = 'examples/books-api/Dockerfile'
 
-      // Workaround for Bun incompatibility with testcontainers' build strategy.
-      // GenericContainer.fromDockerfile() uses 'tar-stream' which fails in Bun with:
-      // "TypeError: The 'sourceEnd' argument must be of type number. Received undefined"
-      // This is likely due to differences in Buffer/Stream implementation in Bun vs Node.
-      // We manually build the image using the docker CLI instead.
       console.log('Building books-api image...')
-      const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-        cwd: repoRoot,
-        stdout: 'ignore',
-        stderr: 'inherit',
-      })
-      await proc.exited
-
-      const container = await new GenericContainer(imageName)
+      const container = await GenericContainer.fromDockerfile(repoRoot, dockerfile).build()
       startedContainer = await container
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))
@@ -93,18 +81,10 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
     beforeAll(async () => {
       const repoRoot = path.resolve(__dirname, '../../..')
 
-      const imageName = 'movies-service:test'
       const dockerfile = 'examples/movies-api/Dockerfile'
 
       console.log('[TEST] [FIXTURE BUILD] Building movies-api image...')
-      const proc = Bun.spawn(['docker', 'build', '-t', imageName, '-f', dockerfile, '.'], {
-        cwd: repoRoot,
-        stdout: 'ignore',
-        stderr: 'inherit',
-      })
-      await proc.exited
-
-      const container = await new GenericContainer(imageName)
+      const container = await GenericContainer.fromDockerfile(repoRoot, dockerfile).build()
       startedContainer = await container
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))

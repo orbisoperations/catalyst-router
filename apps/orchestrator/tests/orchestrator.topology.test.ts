@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
 import { newRouteTable, type PeerInfo, type RouteTable } from '@catalyst/routing'
 

@@ -9,11 +9,11 @@
   },
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/server.ts",
-    "test": "bun test",
-    "test:unit": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -vE 'integration|container')",
-    "test:integration": "bun test $(find . \\( -name '*.test.ts' -o -name '*.spec.ts' \\) ! -path '*/node_modules/*' | grep -E 'integration|container')",
-    "start": "bun run src/server.ts"
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
+    "test:integration": "vitest run --include '**/*{integration,container}*' --passWithNoTests",
+    "start": "tsx src/server.ts"
   },
   "dependencies": {
     "@catalyst/authorization": "workspace:*",
@@ -26,6 +26,6 @@
     "jose": "catalog:",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
-    "vitest": "^1.2.1"
+    "vitest": "catalog:testing"
   }
 }

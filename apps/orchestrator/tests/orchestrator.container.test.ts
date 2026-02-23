@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GenericContainer,
   Network,
@@ -7,20 +7,20 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 
+import { spawnSync } from 'node:child_process'
 import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { PublicApi, PeerInfo } from '../src/orchestrator'
 import { Actions } from '@catalyst/routing'
 
-import path from 'path'
-import type { PeerInfo, PublicApi } from '../src/orchestrator'
+import type { PeerInfo as _PeerInfo, PublicApi as _PublicApi } from '../src/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
 
 const isDockerRunning = () => {
   try {
-    const result = Bun.spawnSync(['docker', 'info'])
-    return result.exitCode === 0
+    const result = spawnSync('docker', ['info'])
+    return result.status === 0
   } catch {
     return false
   }
@@ -47,17 +47,18 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   beforeAll(async () => {
     const repoRoot = path.resolve(__dirname, '../../../')
 
-    const buildImage = async (dockerfilePath: string, imageName: string) => {
+    const buildImage = (dockerfilePath: string, imageName: string) => {
       console.log(`Building ${imageName} image for Container tests...`)
-      const buildResult = Bun.spawnSync(
-        ['docker', 'build', '-f', dockerfilePath, '-t', imageName, '.'],
-        { cwd: repoRoot, stdout: 'inherit', stderr: 'inherit' }
+      const buildResult = spawnSync(
+        'docker',
+        ['build', '-f', dockerfilePath, '-t', imageName, '.'],
+        { cwd: repoRoot, stdio: 'inherit' }
       )
-      if (buildResult.exitCode !== 0) throw new Error(`Docker build ${imageName} failed`)
+      if (buildResult.status !== 0) throw new Error(`Docker build ${imageName} failed`)
     }
 
-    await buildImage('apps/orchestrator/Dockerfile', orchestratorImage)
-    await buildImage('apps/auth/Dockerfile', authImage)
+    buildImage('apps/orchestrator/Dockerfile', orchestratorImage)
+    buildImage('apps/auth/Dockerfile', authImage)
 
     network = await new Network().start()
 
@@ -285,15 +286,15 @@ class MockConnectionPool extends ConnectionPool {
   get(endpoint: string) {
     if (!this.mockStubs.has(endpoint)) {
       const stub = {
-        updateConfig: mock(async (config: GatewayConfig) => {
+        updateConfig: vi.fn(async (config: GatewayConfig) => {
           this.calls.push({ endpoint, config })
           return { success: true }
         }),
-        getIBGPClient: mock(async () => ({
+        getIBGPClient: vi.fn(async () => ({
           success: true,
           client: {
-            update: mock(async () => ({ success: true })),
-            open: mock(async () => ({ success: true })),
+            update: vi.fn(async () => ({ success: true })),
+            open: vi.fn(async () => ({ success: true })),
           },
         })),
       }

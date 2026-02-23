@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'bun:test'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { AuthRpcServer } from '../../src/service/rpc/server.js'
 import {
   type TokenHandlers,
@@ -88,7 +88,7 @@ describe('Auth Progressive API', () => {
         entity: { id: 's1', name: 'Service', type: 'service' },
         principal: Principal.NODE,
       })
-      expect(newToken).toBeString()
+      expect(newToken).toBeTypeOf('string')
 
       // List and find it
       const tokens = await handlers.list({})
@@ -125,7 +125,7 @@ describe('Auth Progressive API', () => {
         newKeyId: string
       }
       expect(result.success).toBe(true)
-      expect(result.newKeyId).toBeString()
+      expect(result.newKeyId).toBeTypeOf('string')
     })
   })
 

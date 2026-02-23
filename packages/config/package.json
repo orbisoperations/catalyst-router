@@ -12,13 +12,14 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "dependencies": {
     "zod": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:dev",
-    "@types/node": "catalog:dev"
+    "@types/node": "catalog:dev",
+    "vitest": "catalog:testing"
   }
 }

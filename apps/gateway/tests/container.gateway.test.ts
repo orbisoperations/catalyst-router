@@ -1,10 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type { StartedTestContainer, StartedNetwork } from 'testcontainers'
 import { GenericContainer, Wait, Network } from 'testcontainers'
 import path from 'path'
 import { newWebSocketRpcSession } from 'capnweb'
 
-const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
 describe.skipIf(skipTests)('Gateway Container Integration', () => {
@@ -26,17 +25,12 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
 
     // 1. Build & Start Books (Background)
     const startBooks = async () => {
-      const imageName = 'books-service:test'
-      await Bun.spawn(
-        [CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', 'examples/books-api/Dockerfile', '.'],
-        {
-          cwd: repoRoot,
-          stdout: 'ignore',
-          stderr: 'inherit',
-        }
-      ).exited
+      const image = await GenericContainer.fromDockerfile(
+        repoRoot,
+        'examples/books-api/Dockerfile'
+      ).build()
 
-      booksContainer = await new GenericContainer(imageName)
+      booksContainer = await image
         .withNetwork(network)
         .withNetworkAliases('books')
         .withExposedPorts(8080)
@@ -46,17 +40,12 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
 
     // 2. Build & Start Movies (Background)
     const startMovies = async () => {
-      const imageName = 'movies-service:test'
-      await Bun.spawn(
-        [CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', 'examples/movies-api/Dockerfile', '.'],
-        {
-          cwd: repoRoot,
-          stdout: 'ignore',
-          stderr: 'inherit',
-        }
-      ).exited
+      const image = await GenericContainer.fromDockerfile(
+        repoRoot,
+        'examples/movies-api/Dockerfile'
+      ).build()
 
-      moviesContainer = await new GenericContainer(imageName)
+      moviesContainer = await image
         .withNetwork(network)
         .withNetworkAliases('movies')
         .withExposedPorts(8080)
@@ -66,17 +55,12 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
 
     // 3. Build & Start Gateway (Background)
     const startGateway = async () => {
-      const imageName = 'gateway-service:test'
-      await Bun.spawn(
-        [CONTAINER_RUNTIME, 'build', '-t', imageName, '-f', 'apps/gateway/Dockerfile', '.'],
-        {
-          cwd: repoRoot,
-          stdout: 'ignore',
-          stderr: 'inherit',
-        }
-      ).exited
+      const image = await GenericContainer.fromDockerfile(
+        repoRoot,
+        'apps/gateway/Dockerfile'
+      ).build()
 
-      gatewayContainer = await new GenericContainer(imageName)
+      gatewayContainer = await image
         .withNetwork(network)
         .withExposedPorts(4000)
         .withWaitStrategy(Wait.forHttp('/', 4000))
