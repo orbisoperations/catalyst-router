@@ -9,6 +9,7 @@ import {
   type StartedTestContainer,
 } from 'testcontainers'
 import { createOrchestratorClient } from '../../src/clients/orchestrator-client.js'
+import type { DataChannelDefinition } from '@catalyst/routing'
 
 const isDockerRunning = () => {
   try {
@@ -151,7 +152,7 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
       // Delete route
       const deleteResult = await dcClient.removeRoute({
         name: 'test-service',
-      })
+      } as DataChannelDefinition)
       expect(deleteResult.success).toBe(true)
 
       // List routes (should be back to initial count)

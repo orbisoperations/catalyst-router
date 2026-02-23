@@ -1,13 +1,13 @@
 import { createOrchestratorClient } from '../clients/orchestrator-client.js'
 import type { CreatePeerInput, DeletePeerInput, ListPeersInput } from '../types.js'
-import type { PeerInfo } from '@catalyst/routing'
+import type { PeerRecord } from '@catalyst/routing'
 
 export type CreatePeerResult =
   | { success: true; data: { name: string } }
   | { success: false; error: string }
 
 export type ListPeersResult =
-  | { success: true; data: { peers: PeerInfo[] } }
+  | { success: true; data: { peers: PeerRecord[] } }
   | { success: false; error: string }
 
 export type DeletePeerResult =
