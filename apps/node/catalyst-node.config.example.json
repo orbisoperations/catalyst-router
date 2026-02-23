@@ -1,0 +1,6 @@
+{
+  "nodeId": "my-node.somebiz.local.io",
+  "domains": ["somebiz.local.io"],
+  "keysDb": "./data/keys.db",
+  "tokensDb": "./data/tokens.db"
+}

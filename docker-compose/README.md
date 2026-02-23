@@ -3,11 +3,13 @@
 This directory contains Docker Compose configurations for running Catalyst Router in different topologies.
 TODO: Need to actually add the telemetry to the services for docker.compose.yaml and two-node.compose.yaml.
 
-| File                        | Topology           | Observability  | Auth Model          |
-| --------------------------- | ------------------ | -------------- | ------------------- |
-| `docker.compose.yaml`       | Single node        | OTEL Collector | Minimal             |
-| `two-node.compose.yaml`     | Two-node peering   | OTEL Collector | Shared auth         |
-| `example.m0p2.compose.yaml` | Single node (M0P2) | None           | Full bootstrap flow |
+| File                               | Topology                        | Observability  | Auth Model          |
+| ---------------------------------- | ------------------------------- | -------------- | ------------------- |
+| `docker.compose.yaml`              | Single node                     | OTEL Collector | Minimal             |
+| `two-node.compose.yaml`            | Two-node peering                | OTEL Collector | Shared auth         |
+| `two-node-composite.compose.yaml`  | Two composite nodes             | None           | Per-node (built-in) |
+| `two-node-individual.compose.yaml` | Two nodes (separate containers) | None           | Per-node auth       |
+| `example.m0p2.compose.yaml`        | Single node (M0P2)              | None           | Full bootstrap flow |
 
 ## Single Node (`docker.compose.yaml`)
 
@@ -60,6 +62,48 @@ docker compose -f docker-compose/two-node.compose.yaml up --build
 ```
 
 Both nodes share `CATALYST_PEERING_SECRET=valid-secret` and `CATALYST_DOMAINS=somebiz.local.io`, so they can establish a peering session and exchange service routes. Node A advertises the books subgraph; Node B advertises the movies subgraph.
+
+## Two-Node Composite (`two-node-composite.compose.yaml`)
+
+Two composite nodes for peering UAT. Each node runs auth, orchestrator, and gateway in a single container. This is the primary deployment pattern going forward.
+
+**Node A** (`node-a.somebiz.local.io`):
+
+- **node-a**: Composite node (:3001) -- auth + orchestrator + gateway
+- **books-service**: Books subgraph
+
+**Node B** (`node-b.somebiz.local.io`):
+
+- **node-b**: Composite node (:3002) -- auth + orchestrator + gateway
+- **movies-service**: Movies subgraph
+
+### Usage
+
+```bash
+docker compose -f docker-compose/two-node-composite.compose.yaml up --build -d
+```
+
+Nodes are network-isolated (`node-a-net`, `node-b-net`) and share a `peering` network for cross-node orchestrator RPC. See [docs/docker-uat.md](../docs/docker-uat.md) for the full step-by-step UAT runbook including health checks, expected output, log verification, and troubleshooting.
+
+## Two-Node Individual (`two-node-individual.compose.yaml`)
+
+Two nodes with separate containers per service, network-isolated. Each node has its own auth, orchestrator, and gateway. Only orchestrators share the peering network.
+
+**Node A** -- `node-a-net`:
+
+- **auth-a** (:4020), **gateway-a** (:4000), **orchestrator-a** (:3001), **books-service**
+
+**Node B** -- `node-b-net`:
+
+- **auth-b** (:4021), **gateway-b** (:4001), **orchestrator-b** (:3002), **movies-service**
+
+### Usage
+
+```bash
+docker compose -f docker-compose/two-node-individual.compose.yaml up --build -d
+```
+
+See [docs/docker-uat.md](../docs/docker-uat.md) for the full step-by-step UAT runbook including health checks for all service types, expected output, log verification, and troubleshooting.
 
 ## M0P2 Example with Auth Integration (`example.m0p2.compose.yaml`)
 

@@ -119,17 +119,21 @@
     "apps/node": {
       "name": "@catalyst/node-service",
       "version": "1.0.0",
+      "bin": {
+        "catalyst-node": "dist/index.js",
+      },
       "dependencies": {
+        "@catalyst/auth-service": "catalog:",
+        "@catalyst/authorization": "catalog:",
         "@catalyst/config": "catalog:",
+        "@catalyst/gateway-service": "catalog:",
+        "@catalyst/orchestrator-service": "catalog:",
         "@catalyst/service": "catalog:",
         "@catalyst/telemetry": "catalog:",
-        "@hono/node-server": "catalog:",
         "capnweb": "catalog:",
         "commander": "catalog:",
-        "graphql": "catalog:",
-        "graphql-yoga": "catalog:",
         "hono": "catalog:",
-        "ip": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@types/node": "catalog:dev",
@@ -1342,8 +1346,6 @@
     "ini": ["ini@4.1.1", "", {}, "sha512-QQnnxNyfvmHFIsj7gkPcYymR8Jdw/o7mp5ZFihxn6h8Ci6fh3Dx4E1gPjpQEpIuPo9XVNY/ZUwh4BPMjGyL01g=="],
 
     "inquirer": ["inquirer@9.3.8", "", { "dependencies": { "@inquirer/external-editor": "^1.0.2", "@inquirer/figures": "^1.0.3", "ansi-escapes": "^4.3.2", "cli-width": "^4.1.0", "mute-stream": "1.0.0", "ora": "^5.4.1", "run-async": "^3.0.0", "rxjs": "^7.8.1", "string-width": "^4.2.3", "strip-ansi": "^6.0.1", "wrap-ansi": "^6.2.0", "yoctocolors-cjs": "^2.1.2" } }, "sha512-pFGGdaHrmRKMh4WoDDSowddgjT1Vkl90atobmTeSmcPGdYiwikch/m/Ef5wRaiamHejtw0cUUMMerzDUXCci2w=="],
-
-    "ip": ["ip@2.0.1", "", {}, "sha512-lJUL9imLTNi1ZfXT+DU6rBBdbiKGBuay9B6xGSPVjUeQwaH1RIGqef8RZkUtHioLmSNpPR5M4HVKJGm1j8FWVQ=="],
 
     "is-arrayish": ["is-arrayish@0.2.1", "", {}, "sha512-zz06S8t0ozoDXMG+ube26zeCTNXcKIPJZJi8hBrF4idCLms4CG9QtK7qBl1boi5ODzFpjswb5JPmHCbMpjaYzg=="],
 
