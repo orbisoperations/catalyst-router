@@ -23,7 +23,7 @@ type UpgradeWebSocketFn = ReturnType<typeof createNodeWebSocket>['upgradeWebSock
 export let upgradeWebSocket: UpgradeWebSocketFn = (() => {
   throw new Error(
     'upgradeWebSocket is not available — CatalystHonoServer.start() has not been called. ' +
-    'Use getUpgradeWebSocket(c) instead.'
+      'Use getUpgradeWebSocket(c) instead.'
   )
 }) as unknown as UpgradeWebSocketFn
 
