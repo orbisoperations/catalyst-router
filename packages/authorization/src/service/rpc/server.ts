@@ -1,7 +1,7 @@
 import { newRpcResponse } from '@hono/capnweb'
 import { RpcTarget } from 'capnweb'
 import { Hono } from 'hono'
-import { upgradeWebSocket } from 'hono/bun'
+import { upgradeWebSocket } from '@catalyst/service'
 
 import type { JWTTokenFactory } from '../../jwt/jwt-token-factory.js'
 import { jwtToEntity } from '../../jwt/index.js'

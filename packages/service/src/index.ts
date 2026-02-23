@@ -1,5 +1,5 @@
 export { CatalystService } from './catalyst-service.js'
-export { CatalystHonoServer, catalystHonoServer } from './catalyst-hono-server.js'
+export { CatalystHonoServer, catalystHonoServer, upgradeWebSocket } from './catalyst-hono-server.js'
 export type {
   CatalystServiceOptions,
   ICatalystService,

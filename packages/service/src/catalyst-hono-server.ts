@@ -1,8 +1,27 @@
+import { createAdaptorServer } from '@hono/node-server'
+import type { ServerType } from '@hono/node-server'
+import { createNodeWebSocket } from '@hono/node-ws'
 import { getLogger } from '@catalyst/telemetry'
 import { telemetryMiddleware } from '@catalyst/telemetry/middleware/hono'
 import { Hono } from 'hono'
 
 import type { CatalystService } from './catalyst-service.js'
+
+/**
+ * The `upgradeWebSocket` function created by `createNodeWebSocket`.
+ *
+ * RPC handlers that need WebSocket support should import this from
+ * `@catalyst/service` and pass it to `newRpcResponse()`.
+ *
+ * It is initialized lazily when `CatalystHonoServer.start()` is called.
+ * Before that, calling it will throw with a descriptive error.
+ */
+export let upgradeWebSocket: ReturnType<typeof createNodeWebSocket>['upgradeWebSocket'] = (() => {
+  throw new Error(
+    'upgradeWebSocket is not available — CatalystHonoServer.start() has not been called. ' +
+    'Use getUpgradeWebSocket(c) instead.'
+  )
+}) as unknown as ReturnType<typeof createNodeWebSocket>['upgradeWebSocket']
 
 export interface CatalystHonoServerOptions {
   /** Port to listen on. Defaults to 3000. */
@@ -13,8 +32,6 @@ export interface CatalystHonoServerOptions {
   services?: CatalystService[]
   /** Paths to exclude from telemetry middleware. Defaults to ['/', '/health']. */
   telemetryIgnorePaths?: string[]
-  /** Bun WebSocket handler (from hono/bun `websocket`). Required for RPC-over-WebSocket. */
-  websocket?: unknown
 }
 
 /**
@@ -23,7 +40,7 @@ export interface CatalystHonoServerOptions {
  * Wraps a Hono handler (typically a service's `.handler` route group) with:
  * - Telemetry middleware (HTTP request tracing + metrics)
  * - Standard `/health` endpoint
- * - `Bun.serve()` binding
+ * - `@hono/node-server` binding with WebSocket support
  * - Graceful shutdown on SIGTERM/SIGINT
  *
  * @example
@@ -49,7 +66,8 @@ export interface CatalystHonoServerOptions {
 export class CatalystHonoServer {
   private readonly _handler: Hono
   private readonly _options: CatalystHonoServerOptions
-  private _server: ReturnType<typeof Bun.serve> | undefined
+  private _server: ServerType | undefined
+  private _injectWebSocket: ReturnType<typeof createNodeWebSocket>['injectWebSocket'] | undefined
   private _shutdownHandlers: (() => Promise<void>)[] = []
   private readonly _logger = getLogger(['catalyst', 'hono-server'])
 
@@ -70,6 +88,11 @@ export class CatalystHonoServer {
 
     const app = new Hono()
 
+    // Wire Node.js WebSocket support via @hono/node-ws
+    const nodeWs = createNodeWebSocket({ app })
+    upgradeWebSocket = nodeWs.upgradeWebSocket
+    this._injectWebSocket = nodeWs.injectWebSocket
+
     // Standard telemetry middleware
     app.use(telemetryMiddleware({ ignorePaths }))
 
@@ -85,26 +108,25 @@ export class CatalystHonoServer {
     // Mount the provided handler
     app.route('/', this._handler)
 
-    const serveOptions: Parameters<typeof Bun.serve>[0] = {
+    this._server = createAdaptorServer({
       fetch: app.fetch,
-      port,
       hostname,
-    }
-    if (this._options.websocket) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(serveOptions as any).websocket = this._options.websocket
-    } else {
-      this._logger.warn`'No websocket handler provided, RPC-over-WebSocket will not be available'`
-    }
-    this._server = Bun.serve(serveOptions)
+    })
 
-    // Hard fail if the requested port was unavailable
-    if (this._server.port !== port) {
-      const actualPort = this._server.port
-      this._server.stop()
-      this._server = undefined
-      throw new Error(`Port ${port} is already in use (server bound to ${actualPort} instead)`)
-    }
+    // Crash hard on port conflicts rather than silently misbehaving.
+    // Attached before listen() so the handler is ready when the error fires.
+    this._server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        this._logger.error`Port ${port} is already in use`
+        process.exit(1)
+      }
+      throw err
+    })
+
+    // Inject WebSocket handling into the HTTP server
+    this._injectWebSocket(this._server)
+
+    this._server.listen(port, hostname)
 
     // Wire graceful shutdown
     const shutdownHandler = async () => {
@@ -131,8 +153,11 @@ export class CatalystHonoServer {
 
     // Stop the HTTP server
     if (this._server) {
-      this._server.stop()
+      const server = this._server
       this._server = undefined
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve())
+      })
     }
 
     // Remove signal handlers to avoid duplicate calls

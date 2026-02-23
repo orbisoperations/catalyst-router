@@ -7,7 +7,7 @@
     "declaration": true,
     "outDir": "./dist",
     "rootDir": ".",
-    "types": ["bun"]
+    "types": ["node"]
   },
   "include": ["src", "tests"],
   "exclude": ["node_modules", "dist"]

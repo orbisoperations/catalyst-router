@@ -34,10 +34,10 @@ Key rotation is a critical security feature. When `rotate()` is called:
 
 ```typescript
 import { PersistentLocalKeyManager } from '@catalyst-router/authorization/key-manager'
-import { BunSqliteKeyStore } from '@catalyst-router/authorization/key-manager/sqlite-key-store'
+import { SqliteKeyStore } from '@catalyst-router/authorization/key-manager/sqlite-key-store'
 
 // 1. Initialize Store
-const store = new BunSqliteKeyStore('./keys.db')
+const store = new SqliteKeyStore('./keys.db')
 
 // 2. Initialize Manager
 const keyManager = new PersistentLocalKeyManager(store, {

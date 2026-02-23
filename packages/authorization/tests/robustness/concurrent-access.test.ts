@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { BunSqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
+import { SqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
 import type { TokenRecord } from '../../src/jwt/index.js'
 
 /**
@@ -12,10 +12,10 @@ import type { TokenRecord } from '../../src/jwt/index.js'
  * - Token listing consistency
  */
 describe('Concurrent Access Robustness', () => {
-  let store: BunSqliteTokenStore
+  let store: SqliteTokenStore
 
   beforeEach(() => {
-    store = new BunSqliteTokenStore(':memory:')
+    store = new SqliteTokenStore(':memory:')
   })
 
   describe('concurrent token recording', () => {

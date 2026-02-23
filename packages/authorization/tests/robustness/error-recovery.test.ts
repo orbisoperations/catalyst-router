@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { BunSqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
+import { SqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
 import { PersistentLocalKeyManager } from '../../src/key-manager/persistent.js'
-import { BunSqliteKeyStore } from '../../src/key-manager/sqlite-key-store.js'
+import { SqliteKeyStore } from '../../src/key-manager/sqlite-key-store.js'
 import type { TokenRecord } from '../../src/jwt/index.js'
 import { existsSync, rmSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -32,7 +32,7 @@ describe('Error Recovery Robustness', () => {
 
   describe('token store error handling', () => {
     it('should handle invalid JSON in SANs field gracefully', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const token: TokenRecord = {
         jti: 'test-jti',
@@ -54,7 +54,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle expired token cleanup gracefully', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const now = Math.floor(Date.now() / 1000) // Current time in seconds
 
@@ -81,7 +81,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle finding non-existent tokens', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const found = await store.findToken('non-existent-jti')
 
@@ -89,7 +89,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle checking revocation of non-existent tokens', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const isRevoked = await store.isRevoked('non-existent-jti')
 
@@ -98,7 +98,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle empty result sets', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const allTokens = await store.listTokens()
       const filteredTokens = await store.listTokens({ certificateFingerprint: 'non-existent' })
@@ -112,7 +112,7 @@ describe('Error Recovery Robustness', () => {
 
   describe('key manager error recovery', () => {
     it('should recover from missing keys directory', async () => {
-      const keyStore = new BunSqliteKeyStore(join(testDir, 'keys.db'))
+      const keyStore = new SqliteKeyStore(join(testDir, 'keys.db'))
       const keyManager = new PersistentLocalKeyManager(keyStore)
 
       // Initialize should create keys even if directory is new
@@ -123,7 +123,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle rotation when keys file is corrupted', async () => {
-      const keyStore = new BunSqliteKeyStore(join(testDir, 'keys.db'))
+      const keyStore = new SqliteKeyStore(join(testDir, 'keys.db'))
       const keyManager = new PersistentLocalKeyManager(keyStore)
 
       await keyManager.initialize()
@@ -136,7 +136,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should return empty JWKS when not initialized', async () => {
-      const keyStore = new BunSqliteKeyStore(join(testDir, 'keys.db'))
+      const keyStore = new SqliteKeyStore(join(testDir, 'keys.db'))
       const keyManager = new PersistentLocalKeyManager(keyStore)
 
       // Without initialization, should return empty JWKS
@@ -146,7 +146,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle shutdown without initialization', async () => {
-      const keyStore = new BunSqliteKeyStore(join(testDir, 'keys.db'))
+      const keyStore = new SqliteKeyStore(join(testDir, 'keys.db'))
       const keyManager = new PersistentLocalKeyManager(keyStore)
 
       // Shutdown without init should not throw
@@ -159,7 +159,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle multiple initializations gracefully', async () => {
-      const keyStore = new BunSqliteKeyStore(join(testDir, 'keys.db'))
+      const keyStore = new SqliteKeyStore(join(testDir, 'keys.db'))
       const keyManager = new PersistentLocalKeyManager(keyStore)
 
       await keyManager.initialize()
@@ -180,7 +180,7 @@ describe('Error Recovery Robustness', () => {
 
   describe('partial operation failures', () => {
     it('should maintain consistency if some operations in batch fail', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const tokens: TokenRecord[] = [
         {
@@ -225,7 +225,7 @@ describe('Error Recovery Robustness', () => {
 
   describe('resource exhaustion handling', () => {
     it('should handle large token lists efficiently', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       // Insert 1000 tokens
       const tokens: TokenRecord[] = Array.from({ length: 1000 }, (_, i) => ({
@@ -252,7 +252,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle large revocation lists efficiently', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       // Insert and revoke 500 tokens
       const tokens: TokenRecord[] = Array.from({ length: 500 }, (_, i) => ({
@@ -282,7 +282,7 @@ describe('Error Recovery Robustness', () => {
 
   describe('edge case data handling', () => {
     it('should handle tokens with very long SANs', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const longSans = Array.from({ length: 100 }, (_, i) => `user-${i}@example.com`)
 
@@ -304,7 +304,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle tokens with special characters in entity fields', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const token: TokenRecord = {
         jti: 'special-chars-token',
@@ -324,7 +324,7 @@ describe('Error Recovery Robustness', () => {
     })
 
     it('should handle tokens at expiration boundaries', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       const now = Math.floor(Date.now() / 1000) // Seconds
 
@@ -364,7 +364,7 @@ describe('Error Recovery Robustness', () => {
 
   describe('transaction consistency', () => {
     it('should maintain database consistency across operations', async () => {
-      const store = new BunSqliteTokenStore(':memory:')
+      const store = new SqliteTokenStore(':memory:')
 
       // Create, revoke, query in rapid succession
       const token: TokenRecord = {

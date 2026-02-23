@@ -7,8 +7,8 @@ import type {
 } from '../key-manager/index.js'
 import type { MintOptions, TokenRecord, TokenStore } from './index.js'
 import { PersistentLocalKeyManager } from '../key-manager/persistent.js'
-import { BunSqliteKeyStore } from '../key-manager/sqlite-key-store.js'
-import { BunSqliteTokenStore } from './local/sqlite-store.js'
+import { SqliteKeyStore } from '../key-manager/sqlite-key-store.js'
+import { SqliteTokenStore } from './local/sqlite-store.js'
 import { LocalTokenManager } from './local/index.js'
 
 /**
@@ -76,8 +76,8 @@ export class JWTTokenFactory {
     const keyDbFile = local.keyDbFile ?? 'keys.db'
     const tokenDbFile = local.tokenDbFile ?? 'tokens.db'
 
-    const keyStore: IKeyStore = new BunSqliteKeyStore(keyDbFile)
-    const tokenStore: TokenStore = new BunSqliteTokenStore(tokenDbFile)
+    const keyStore: IKeyStore = new SqliteKeyStore(keyDbFile)
+    const tokenStore: TokenStore = new SqliteTokenStore(tokenDbFile)
 
     this.keyManager = new PersistentLocalKeyManager(keyStore, {
       gracePeriodMs: local.gracePeriodMs,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { BunSqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
+import { SqliteTokenStore } from '../../src/jwt/local/sqlite-store.js'
 import type { TokenRecord } from '../../src/jwt/index.js'
 
 /**
@@ -9,10 +9,10 @@ import type { TokenRecord } from '../../src/jwt/index.js'
  * be used to perform SQL injection attacks against the token store.
  */
 describe('SQL Injection Security', () => {
-  let store: BunSqliteTokenStore
+  let store: SqliteTokenStore
 
   beforeEach(() => {
-    store = new BunSqliteTokenStore(':memory:')
+    store = new SqliteTokenStore(':memory:')
   })
 
   describe('findToken SQL injection attempts', () => {

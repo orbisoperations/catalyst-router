@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { BunSqliteTokenStore, BunSqliteKeyStore, PersistentLocalKeyManager } from '../src/index.js'
+import { SqliteTokenStore, SqliteKeyStore, PersistentLocalKeyManager } from '../src/index.js'
 
 describe('Authorization Persistence', () => {
-  describe('BunSqliteTokenStore', () => {
-    let store: BunSqliteTokenStore
+  describe('SqliteTokenStore', () => {
+    let store: SqliteTokenStore
 
     beforeEach(() => {
-      store = new BunSqliteTokenStore(':memory:')
+      store = new SqliteTokenStore(':memory:')
     })
 
     it('should record and find tokens', async () => {
@@ -79,9 +79,9 @@ describe('Authorization Persistence', () => {
     })
   })
 
-  describe('BunSqliteKeyStore and PersistentLocalKeyManager', () => {
+  describe('SqliteKeyStore and PersistentLocalKeyManager', () => {
     it('should persist and reload keys', async () => {
-      const keyStore = new BunSqliteKeyStore(':memory:')
+      const keyStore = new SqliteKeyStore(':memory:')
       const manager1 = new PersistentLocalKeyManager(keyStore)
       await manager1.initialize()
 
@@ -96,7 +96,7 @@ describe('Authorization Persistence', () => {
     })
 
     it('should handle rotation with persistence', async () => {
-      const keyStore = new BunSqliteKeyStore(':memory:')
+      const keyStore = new SqliteKeyStore(':memory:')
       const manager = new PersistentLocalKeyManager(keyStore)
       await manager.initialize()
 
