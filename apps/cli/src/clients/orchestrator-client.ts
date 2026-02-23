@@ -1,6 +1,6 @@
 import { newWebSocketRpcSession } from 'capnweb'
 import { resolveServiceUrl } from './resolve-url.js'
-import type { PeerInfo, DataChannelDefinition, InternalRoute } from '@catalyst/routing'
+import type { PeerInfo, PeerRecord, DataChannelDefinition, InternalRoute } from '@catalyst/routing'
 
 // Polyfill Symbol.asyncDispose if necessary
 // @ts-expect-error - polyfilling Symbol.asyncDispose
@@ -30,7 +30,7 @@ export interface NetworkClient {
   addPeer(peer: PeerInfo): Promise<ActionResult>
   updatePeer(peer: PeerInfo): Promise<ActionResult>
   removePeer(peer: Pick<PeerInfo, 'name'>): Promise<ActionResult>
-  listPeers(): Promise<PeerInfo[]>
+  listPeers(): Promise<PeerRecord[]>
 }
 
 /**

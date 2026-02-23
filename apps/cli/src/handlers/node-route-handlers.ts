@@ -1,21 +1,22 @@
 import { createOrchestratorClient } from '../clients/orchestrator-client.js'
 import type { CreateRouteInput, DeleteRouteInput, ListRoutesInput } from '../types.js'
-import type { DataChannelDefinition, InternalRoute } from '@catalyst/routing'
+import type { DataChannelDefinition } from '@catalyst/routing'
 
 export type CreateRouteResult =
   | { success: true; data: { name: string } }
   | { success: false; error: string }
 
+export type CliRouteEntry =
+  | (DataChannelDefinition & { source: 'local' })
+  | (DataChannelDefinition & {
+      source: 'internal'
+      peer: string
+      peerName: string
+      nodePath: string[]
+    })
+
 export type ListRoutesResult =
-  | {
-      success: true
-      data: {
-        routes: Array<
-          | (DataChannelDefinition & { source: 'local' })
-          | (InternalRoute & { source: 'internal'; peer: string })
-        >
-      }
-    }
+  | { success: true; data: { routes: CliRouteEntry[] } }
   | { success: false; error: string }
 
 export type DeleteRouteResult =
@@ -100,7 +101,7 @@ export async function deleteRouteHandler(input: DeleteRouteInput): Promise<Delet
 
     const result = await dcResult.client.removeRoute({
       name: input.name,
-    })
+    } as DataChannelDefinition)
 
     if (result.success) {
       return { success: true, data: { name: input.name } }
