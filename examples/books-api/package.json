@@ -17,6 +17,7 @@
     "hono": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:dev",
     "testcontainers": "catalog:testing",
     "vitest": "catalog:testing"
   }

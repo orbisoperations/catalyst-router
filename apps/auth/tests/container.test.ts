@@ -53,7 +53,7 @@ describe('Auth Service Container', () => {
     // but static import should work if we fix the name
     const { newWebSocketRpcSession } = await import('capnweb')
 
-    // Bun has global WebSocket
+    // Node.js 22+ has global WebSocket
     const client = newWebSocketRpcSession(url, {
       WebSocket: WebSocket as unknown as new (url: string) => WebSocket,
     })

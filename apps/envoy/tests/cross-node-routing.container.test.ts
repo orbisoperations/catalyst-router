@@ -251,7 +251,7 @@ function withLogConsumer(label: string) {
  * │                  └───────────────┘                                  │
  * └───────────────────────────────────────────────────────────────────────┘
  *
- * Host (Bun test process):
+ * Host (Node.js test process):
  *   - Builds Docker images
  *   - Connects to orch-a / orch-b via mapped ports (capnweb RPC)
  *   - Peers orchestrators, creates routes

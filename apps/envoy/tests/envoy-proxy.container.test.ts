@@ -152,7 +152,7 @@ async function waitForListener(
  * Architecture:
  * ```
  * ┌───────────────────────────────────────────────────┐
- * │ Host (Bun test process)                           │
+ * │ Host (Node.js test process)                        │
  * │  Auth Service      (:random)                      │
  * │  Envoy Service     (:random) + ADS gRPC (:xds)   │
  * │  Orchestrator      (:random)                      │
