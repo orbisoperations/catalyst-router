@@ -5,7 +5,7 @@ import type {
   VerifyTokenInput,
   RevokeTokenInput,
   ListTokensInput,
-} from '../types.js'
+} from '../../../src/types.js'
 
 describe('Auth Token Handlers', () => {
   describe('Type Definitions', () => {

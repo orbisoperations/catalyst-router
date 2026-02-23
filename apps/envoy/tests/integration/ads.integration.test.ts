@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { serve } from '@hono/node-server'
 import * as grpc from '@grpc/grpc-js'
-import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
-import { XdsControlPlane } from '../src/xds/control-plane.js'
-import { buildIngressListener, buildLocalCluster } from '../src/xds/resources.js'
+import { createSnapshotCache } from '../../src/xds/snapshot-cache.js'
+import { XdsControlPlane } from '../../src/xds/control-plane.js'
+import { buildIngressListener, buildLocalCluster } from '../../src/xds/resources.js'
 import {
   LISTENER_TYPE_URL,
   CLUSTER_TYPE_URL,
   getProtoRoot,
   encodeDiscoveryResponse,
-} from '../src/xds/proto-encoding.js'
+} from '../../src/xds/proto-encoding.js'
 
 const ADS_SERVICE_PATH =
   '/envoy.service.discovery.v3.AggregatedDiscoveryService/StreamAggregatedResources'

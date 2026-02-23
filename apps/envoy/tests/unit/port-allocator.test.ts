@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { expandPortRange, createPortAllocator } from '../src/port-allocator.js'
+import { expandPortRange, createPortAllocator } from '../../src/port-allocator.js'
 
 describe('expandPortRange', () => {
   it('expands single ports', () => {

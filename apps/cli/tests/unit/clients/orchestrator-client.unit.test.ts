@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOrchestratorClient } from '../../src/clients/orchestrator-client.js'
+import { createOrchestratorClient } from '../../../src/clients/orchestrator-client.js'
 
 describe('Orchestrator Client', () => {
   it('should create client with default URL', async () => {

@@ -6,7 +6,7 @@ import type { ServiceTelemetry } from '@catalyst/telemetry'
 import type { CatalystConfig } from '@catalyst/config'
 
 // Lazy import to let mock setup run first if needed
-const { EnvoyService } = await import('../src/service.js')
+const { EnvoyService } = await import('../../src/service.js')
 
 // ---------------------------------------------------------------------------
 // Helpers

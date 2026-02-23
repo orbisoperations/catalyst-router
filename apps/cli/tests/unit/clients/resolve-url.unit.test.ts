@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { resolveServiceUrl } from '../../src/clients/resolve-url.js'
+import { resolveServiceUrl } from '../../../src/clients/resolve-url.js'
 
 describe('resolveServiceUrl', () => {
   const TEST_ENV_VAR = 'CATALYST_TEST_SERVICE_URL'
