@@ -32,7 +32,7 @@ Each service app (auth, gateway, orchestrator, node) independently set up Hono s
 Introduce a `@catalyst/service` package (`packages/service/`) with two primary exports:
 
 1. **`CatalystService`** -- abstract base class providing config injection, automatic OpenTelemetry setup, and a lifecycle state machine (`created` -> `initializing` -> `ready` -> `shutting_down` -> `stopped`).
-2. **`CatalystHonoServer` / `catalystHonoServer()`** -- generic Hono server wrapper that adds telemetry middleware, a standard `/health` endpoint, `Bun.serve()` binding, and graceful shutdown on SIGTERM/SIGINT.
+2. **`CatalystHonoServer` / `catalystHonoServer()`** -- generic Hono server wrapper that adds telemetry middleware, a standard `/health` endpoint, Node.js HTTP binding via `@hono/node-server`, and graceful shutdown on SIGTERM/SIGINT.
 
 Each service extends `CatalystService`, defines `info` (name, version) and `handler` (a Hono route group), and overrides `onInitialize()` to build domain objects and register routes. Server entrypoints are ~10 lines:
 
