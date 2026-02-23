@@ -12,9 +12,9 @@
 #   envoy-mesh            — envoy-proxy-a, envoy-proxy-b, envoy-proxy-c
 #
 # Build:
-#   All Bun services share a single Dockerfile (docker-compose/Dockerfile.test)
+#   All Node.js services share a single Dockerfile (docker-compose/Dockerfile.test)
 #   with per-service build targets. The base stage copies the entire monorepo
-#   and runs bun install once; service targets only set WORKDIR + CMD.
+#   and runs pnpm install once; service targets only set WORKDIR + CMD.
 #
 # Bootstrap:
 #   1. Start auth services first:
