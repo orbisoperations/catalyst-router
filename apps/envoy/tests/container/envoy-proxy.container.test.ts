@@ -8,7 +8,6 @@ import {
   type StartedNetwork,
 } from 'testcontainers'
 import { serve } from '@hono/node-server'
-import path from 'path'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
@@ -16,13 +15,11 @@ import { EnvoyService } from '../../src/service.js'
 import { OrchestratorService } from '../../../orchestrator/src/service.js'
 import { mintTokenHandler } from '../../../cli/src/handlers/auth-token-handlers.js'
 import { createRouteHandler } from '../../../cli/src/handlers/node-route-handlers.js'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-
-const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
-const repoRoot = path.resolve(__dirname, '../../../..')
 
 /** Fixed port for the Envoy listener — portRange is [[10000, 10000]]. */
 const ENVOY_LISTENER_PORT = 10000
@@ -195,17 +192,9 @@ describe.skipIf(skipTests)('Envoy Proxy Container: Real Traffic Routing', () => 
     // ── 1. Docker network ──────────────────────────────────────────
     network = await new Network().start()
 
-    // ── 2. Build + start books-api container ───────────────────────
-    console.log('[setup] Building books-api image...')
-    const buildResult = spawnSync(
-      CONTAINER_RUNTIME,
-      ['build', '-t', 'books-service:envoy-test', '-f', 'examples/books-api/Dockerfile', '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
-    )
-    if (buildResult.status !== 0) throw new Error('Failed to build books-api image')
-
+    // ── 2. Start books-api container ──────────────────────────────
     console.log('[setup] Starting books-api container...')
-    booksContainer = await new GenericContainer('books-service:envoy-test')
+    booksContainer = await new GenericContainer(TEST_IMAGES.booksApi)
       .withNetwork(network)
       .withNetworkAliases('books')
       .withExposedPorts(8080)

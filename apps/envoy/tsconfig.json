@@ -15,5 +15,6 @@
     "src/**/*",
     "tests/**/*",
     "../../packages/authorization/src/policy/src/definitions/cedar.d.ts"
-  ]
+  ],
+  "exclude": ["tests/container"]
 }

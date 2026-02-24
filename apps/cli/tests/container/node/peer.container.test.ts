@@ -7,8 +7,8 @@ import {
   type StartedTestContainer,
   type StartedNetwork,
 } from 'testcontainers'
-import path from 'path'
 import { createOrchestratorClient } from '../../../src/clients/orchestrator-client.js'
+import { TEST_IMAGES } from '../../../../../tests/docker-images.js'
 
 const isDockerRunning = () => {
   try {
@@ -28,9 +28,6 @@ if (skipTests) {
 
 describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
-  const orchestratorImage = 'catalyst-node:next-topology-e2e'
-  const authImage = 'catalyst-auth:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../../../')
 
   let network: StartedNetwork
   let auth: StartedTestContainer
@@ -38,34 +35,13 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
   let systemToken: string
 
   beforeAll(async () => {
-    console.log('Building images...')
-    // Build orchestrator image
-    const orchestratorBuild = spawnSync(
-      'docker',
-      ['build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-      { cwd: repoRoot }
-    )
-    if (orchestratorBuild.status !== 0) {
-      throw new Error('Failed to build orchestrator image')
-    }
-
-    // Build auth image
-    const authBuild = spawnSync(
-      'docker',
-      ['build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-      { cwd: repoRoot }
-    )
-    if (authBuild.status !== 0) {
-      throw new Error('Failed to build auth image')
-    }
-
     // Create network
     network = await new Network().start()
 
     // Start auth service
     console.log('Starting auth service...')
     const authLogs: string[] = []
-    auth = await new GenericContainer(authImage)
+    auth = await new GenericContainer(TEST_IMAGES.auth)
       .withNetwork(network)
       .withNetworkAliases('auth')
       .withExposedPorts(5000)
@@ -105,7 +81,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
 
     // Start orchestrator
     console.log('Starting orchestrator...')
-    orchestrator = await new GenericContainer(orchestratorImage)
+    orchestrator = await new GenericContainer(TEST_IMAGES.orchestrator)
       .withNetwork(network)
       .withNetworkAliases('orchestrator')
       .withExposedPorts(3000)

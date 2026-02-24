@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { Readable } from 'node:stream'
-import path from 'path'
 import {
   GenericContainer,
   Network,
@@ -16,6 +15,7 @@ import {
   startAuthService,
   type AuthServiceContext,
 } from '../helpers/auth-test-helpers.js'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 const isDockerRunning = () => {
   try {
@@ -33,53 +33,6 @@ if (skipTests) {
 
 describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
-  const orchestratorImage = 'catalyst-node:next-topology-e2e'
-  const authImage = 'catalyst-auth:next-topology-e2e'
-  const gatewayImage = 'catalyst-gateway:test'
-  const booksImage = 'catalyst-example-books:test'
-  const repoRoot = path.resolve(__dirname, '../../../../')
-
-  const buildImages = () => {
-    console.log('Building Gateway image...')
-    const gatewayBuild = spawnSync(
-      'docker',
-      ['build', '-f', 'apps/gateway/Dockerfile', '-t', gatewayImage, '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
-    )
-    if (gatewayBuild.status !== 0) {
-      throw new Error(`docker build gateway failed: ${gatewayBuild.status}`)
-    }
-
-    console.log('Building Books service image...')
-    const booksBuild = spawnSync(
-      'docker',
-      ['build', '-f', 'examples/books-api/Dockerfile', '-t', booksImage, '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
-    )
-    if (booksBuild.status !== 0) {
-      throw new Error(`docker build books failed: ${booksBuild.status}`)
-    }
-
-    console.log('Building Orchestrator image...')
-    const orchestratorBuild = spawnSync(
-      'docker',
-      ['build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
-    )
-    if (orchestratorBuild.status !== 0) {
-      throw new Error(`docker build orchestrator failed: ${orchestratorBuild.status}`)
-    }
-
-    console.log('Building Auth image...')
-    const authBuild = spawnSync(
-      'docker',
-      ['build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
-    )
-    if (authBuild.status !== 0) {
-      throw new Error(`docker build auth failed: ${authBuild.status}`)
-    }
-  }
 
   describe('Shared Auth', () => {
     let network: StartedNetwork
@@ -91,11 +44,10 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
     const peerBLogs: string[] = []
 
     beforeAll(async () => {
-      await buildImages()
       network = await new Network().start()
 
       // Start shared auth service
-      auth = await startAuthService(network, 'auth', authImage)
+      auth = await startAuthService(network, 'auth', TEST_IMAGES.auth)
 
       const startContainer = async (
         name: string,
@@ -104,9 +56,9 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         env: Record<string, string> = {},
         ports: number[] = []
       ) => {
-        let image = orchestratorImage
-        if (alias === 'gateway') image = gatewayImage
-        if (alias === 'books') image = booksImage
+        let image = TEST_IMAGES.orchestrator as string
+        if (alias === 'gateway') image = TEST_IMAGES.gateway
+        if (alias === 'books') image = TEST_IMAGES.booksApi
 
         let container = new GenericContainer(image)
           .withNetwork(network)
@@ -267,12 +219,11 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
     const peerBLogs: string[] = []
 
     beforeAll(async () => {
-      await buildImages()
       network = await new Network().start()
 
       // Start separate auth services
-      authA = await startAuthService(network, 'auth-a', authImage, 'bootstrap-a')
-      authB = await startAuthService(network, 'auth-b', authImage, 'bootstrap-b')
+      authA = await startAuthService(network, 'auth-a', TEST_IMAGES.auth, 'bootstrap-a')
+      authB = await startAuthService(network, 'auth-b', TEST_IMAGES.auth, 'bootstrap-b')
 
       const startContainer = async (
         name: string,
@@ -281,9 +232,9 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
         env: Record<string, string> = {},
         ports: number[] = []
       ) => {
-        let image = orchestratorImage
-        if (alias === 'gateway') image = gatewayImage
-        if (alias === 'books') image = booksImage
+        let image = TEST_IMAGES.orchestrator as string
+        if (alias === 'gateway') image = TEST_IMAGES.gateway
+        if (alias === 'books') image = TEST_IMAGES.booksApi
 
         let container = new GenericContainer(image)
           .withNetwork(network)

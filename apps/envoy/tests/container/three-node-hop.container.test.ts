@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { Readable } from 'node:stream'
-import path from 'path'
 import {
   GenericContainer,
   Wait,
@@ -15,13 +14,13 @@ import {
   startAuthService,
   type AuthServiceContext,
 } from '../../../orchestrator/tests/helpers/auth-test-helpers.js'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
 const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
-const repoRoot = path.resolve(__dirname, '../../../..')
 
 /** Fixed Envoy listener port — one route per test, one port per node. */
 const ENVOY_LISTENER_PORT = 10000
@@ -31,16 +30,6 @@ const SETUP_TIMEOUT = 600_000 // 10 minutes
 
 /** Timeout for individual test cases. */
 const TEST_TIMEOUT = 60_000 // 60 seconds
-
-// ---------------------------------------------------------------------------
-// Docker image names — use three-node-e2e tag to avoid collision
-// ---------------------------------------------------------------------------
-
-const ORCH_IMAGE = 'catalyst-orchestrator:three-node-e2e'
-const ENVOY_SVC_IMAGE = 'catalyst-envoy:three-node-e2e'
-const ENVOY_PROXY_IMAGE = 'catalyst-envoy-proxy:three-node-e2e'
-const AUTH_IMAGE = 'catalyst-auth:three-node-e2e'
-const BOOKS_IMAGE = 'books-service:three-node-e2e'
 
 // ---------------------------------------------------------------------------
 // Docker availability check
@@ -57,25 +46,6 @@ const isDockerRunning = (): boolean => {
 const skipTests = !isDockerRunning()
 if (skipTests) {
   console.warn('Skipping three-node hop container tests: Docker not running')
-}
-
-// ---------------------------------------------------------------------------
-// Image builder with caching
-// ---------------------------------------------------------------------------
-
-async function buildImageIfNeeded(imageName: string, dockerfile: string): Promise<void> {
-  const check = spawnSync(CONTAINER_RUNTIME, ['image', 'inspect', imageName])
-  if (check.status === 0) {
-    console.log(`Using existing image: ${imageName}`)
-    return
-  }
-  console.log(`Building image: ${imageName}...`)
-  const buildResult = spawnSync(
-    CONTAINER_RUNTIME,
-    ['build', '-f', dockerfile, '-t', imageName, '.'],
-    { cwd: repoRoot, stdio: 'inherit' }
-  )
-  if (buildResult.status !== 0) throw new Error(`Failed to build ${imageName}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -229,23 +199,16 @@ interface ThreeNodeCluster {
  * Traffic: C -> B -> A -> books-api
  */
 async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster> {
-  // ── 1. Build images ────────────────────────────────────────────
-  await buildImageIfNeeded(AUTH_IMAGE, 'apps/auth/Dockerfile')
-  await buildImageIfNeeded(ORCH_IMAGE, 'apps/orchestrator/Dockerfile')
-  await buildImageIfNeeded(ENVOY_SVC_IMAGE, 'apps/envoy/Dockerfile')
-  await buildImageIfNeeded(ENVOY_PROXY_IMAGE, 'apps/envoy/Dockerfile.envoy-proxy')
-  await buildImageIfNeeded(BOOKS_IMAGE, 'examples/books-api/Dockerfile')
-
-  // ── 2. Docker network ──────────────────────────────────────────
+  // ── 1. Docker network ──────────────────────────────────────────
   const network = await new Network().start()
 
-  // ── 3. Auth service ────────────────────────────────────────────
-  const auth = await startAuthService(network, 'auth', AUTH_IMAGE)
+  // ── 2. Auth service ────────────────────────────────────────────
+  const auth = await startAuthService(network, 'auth', TEST_IMAGES.auth)
   const systemToken = auth.systemToken
 
-  // ── 4. Books API ───────────────────────────────────────────────
+  // ── 3. Books API ───────────────────────────────────────────────
   console.log('[setup] Starting books-api container...')
-  const booksContainer = await new GenericContainer(BOOKS_IMAGE)
+  const booksContainer = await new GenericContainer(TEST_IMAGES.booksApi)
     .withNetwork(network)
     .withNetworkAliases('books')
     .withExposedPorts(8080)
@@ -253,10 +216,10 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
     .withLogConsumer(withLogConsumer('books'))
     .start()
 
-  // ── 5. Envoy Services (A, B, C) ───────────────────────────────
+  // ── 4. Envoy Services (A, B, C) ───────────────────────────────
   const startEnvoySvc = async (id: string, alias: string): Promise<StartedTestContainer> => {
     console.log(`[setup] Starting ${alias}...`)
-    return new GenericContainer(ENVOY_SVC_IMAGE)
+    return new GenericContainer(TEST_IMAGES.envoy)
       .withNetwork(network)
       .withNetworkAliases(alias)
       .withExposedPorts(3000, 18000)
@@ -276,11 +239,11 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
   const envoySvcB = await startEnvoySvc('b', 'envoy-svc-b')
   const envoySvcC = await startEnvoySvc('c', 'envoy-svc-c')
 
-  // ── 6. Envoy Proxies (A, B, C) ────────────────────────────────
+  // ── 5. Envoy Proxies (A, B, C) ────────────────────────────────
   const startEnvoyProxy = async (alias: string, xdsHost: string): Promise<StartedTestContainer> => {
     console.log(`[setup] Starting ${alias}...`)
     const bootstrap = generateBootstrapYaml(xdsHost, 18000)
-    return new GenericContainer(ENVOY_PROXY_IMAGE)
+    return new GenericContainer(TEST_IMAGES.envoyProxy)
       .withNetwork(network)
       .withNetworkAliases(alias)
       .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
@@ -303,7 +266,7 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
   // Brief wait for ADS streams to establish
   await new Promise((r) => setTimeout(r, 1000))
 
-  // ── 7. Orchestrators (A, B, C) ─────────────────────────────────
+  // ── 6. Orchestrators (A, B, C) ─────────────────────────────────
   const startOrchestrator = async (
     alias: string,
     nodeId: string,
@@ -311,7 +274,7 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
     envoyProxyAlias: string
   ): Promise<StartedTestContainer> => {
     console.log(`[setup] Starting ${alias}...`)
-    return new GenericContainer(ORCH_IMAGE)
+    return new GenericContainer(TEST_IMAGES.orchestrator)
       .withNetwork(network)
       .withNetworkAliases(alias)
       .withExposedPorts(3000)
@@ -352,7 +315,7 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
 
   console.log('[setup] All 11 containers started.')
 
-  // ── 8. Peer orchestrators: A <-> B, B <-> C ────────────────────
+  // ── 7. Peer orchestrators: A <-> B, B <-> C ────────────────────
   console.log('[setup] Peering nodes: A <-> B, B <-> C...')
   const clientA = getOrchestratorClient(orchA)
   const clientB = getOrchestratorClient(orchB)
@@ -408,7 +371,7 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
   await waitForPeerConnected(clientC, systemToken, 'node-b.somebiz.local.io')
   console.log('[setup] BGP peering established: A <-> B <-> C')
 
-  // ── 9. Create books-api route on Node A ────────────────────────
+  // ── 8. Create books-api route on Node A ────────────────────────
   console.log(`[setup] Creating books-api route on Node A (protocol: ${protocol})...`)
   const dataAResult = await clientA.getDataChannelClient(systemToken)
   if (!dataAResult.success) throw new Error('Failed to get data client A')
@@ -422,7 +385,7 @@ async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster
     throw new Error(`Failed to create route: ${routeResult.error || 'Unknown error'}`)
   }
 
-  // ── 10. Wait for xDS propagation across all 3 nodes ────────────
+  // ── 9. Wait for xDS propagation across all 3 nodes ─────────────
   // Node A: ingress listener for books-api
   console.log('[setup] Waiting for Envoy A ingress listener...')
   await waitForListener(envoyAAdminPort, 'ingress_books-api', 60_000)

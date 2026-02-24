@@ -1,0 +1,12 @@
+import { buildImages } from '../../../../tests/build-images.js'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
+
+export function setup(): void {
+  buildImages([
+    TEST_IMAGES.auth,
+    TEST_IMAGES.orchestrator,
+    TEST_IMAGES.envoy,
+    TEST_IMAGES.envoyProxy,
+    TEST_IMAGES.booksApi,
+  ])
+}
