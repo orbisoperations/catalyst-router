@@ -9,6 +9,9 @@
   },
   "private": true,
   "scripts": {
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit/ --passWithNoTests",
+    "test:integration": "vitest run tests/integration/ --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
