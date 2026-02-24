@@ -8,6 +8,7 @@ import {
   buildTcpProxyIngressListener,
   buildTcpProxyEgressListener,
   isTcpProxyListener,
+  type XdsListener,
 } from '../../src/xds/resources.js'
 
 // ---------------------------------------------------------------------------
@@ -20,7 +21,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     expect(listener.name).toBe('ingress_books-api')
   })
@@ -30,7 +30,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const addr = listener.address.socket_address
     expect(addr.address).toBe('0.0.0.0')
@@ -42,7 +41,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const hcm = listener.filter_chains[0].filters[0].typed_config
     const route = hcm.route_config.virtual_hosts[0].routes[0].route
@@ -54,7 +52,6 @@ describe('buildIngressListener', () => {
       channelName: 'movies-api',
       port: 9001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const hcm = listener.filter_chains[0].filters[0].typed_config
     expect(hcm.stat_prefix).toBe('ingress_movies-api')
@@ -65,7 +62,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const filter = listener.filter_chains[0].filters[0]
     expect(filter.name).toBe('envoy.filters.network.http_connection_manager')
@@ -777,9 +773,10 @@ describe('buildXdsSnapshot protocol-aware', () => {
     })
 
     // Listener: route timeout disabled
+    const listener = snapshot.listeners[0] as XdsListener
     const route =
-      snapshot.listeners[0].filter_chains[0].filters[0].typed_config.route_config.virtual_hosts[0]
-        .routes[0].route
+      listener.filter_chains[0].filters[0].typed_config.route_config.virtual_hosts[0].routes[0]
+        .route
     expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
 
     // Cluster: HTTP/2 upstream enabled
@@ -806,7 +803,7 @@ describe('buildXdsSnapshot protocol-aware', () => {
     })
 
     // Listener: WebSocket upgrade + timeout disabled
-    const hcm = snapshot.listeners[0].filter_chains[0].filters[0].typed_config
+    const hcm = (snapshot.listeners[0] as XdsListener).filter_chains[0].filters[0].typed_config
     expect(hcm.upgrade_configs).toEqual([{ upgrade_type: 'websocket' }])
     const route = hcm.route_config.virtual_hosts[0].routes[0].route
     expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
