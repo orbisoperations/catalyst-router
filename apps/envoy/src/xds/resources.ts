@@ -424,7 +424,7 @@ export interface BuildXdsSnapshotInput {
   internal: InternalRoute[]
   portAllocations: Record<string, number>
   bindAddress: string
-  version: string
+  version?: string
 }
 
 /**
@@ -439,7 +439,7 @@ export interface BuildXdsSnapshotInput {
  * - all others → HTTP connection manager listener (L7)
  */
 export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
-  const version = input.version
+  const version = input.version ?? Date.now().toString()
 
   const listeners: Array<XdsListener | XdsTcpProxyListener> = []
   const clusters: XdsCluster[] = []

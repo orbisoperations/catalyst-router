@@ -78,7 +78,6 @@ export function peerCommands(): Command {
               Name: p.name,
               Endpoint: p.endpoint,
               Domains: p.domains?.join(', ') || '-',
-              Status: p.connectionStatus || 'unknown',
             }))
           )
         }

@@ -12,7 +12,7 @@ export type ListRoutesResult =
       data: {
         routes: Array<
           | (DataChannelDefinition & { source: 'local' })
-          | (InternalRoute & { source: 'internal'; peer: string })
+          | (Omit<InternalRoute, 'peer'> & { source: 'internal'; peer: string })
         >
       }
     }
