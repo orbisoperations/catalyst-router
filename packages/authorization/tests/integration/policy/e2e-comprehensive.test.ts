@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { AuthorizationEngine } from '../../../../src/policy/src/authorization-engine.js'
-import { EntityBuilderFactory } from '../../../../src/policy/src/entity-builder.js'
-import { GenericZodModel } from '../../../../src/policy/src/providers/GenericZodModel.js'
+import { AuthorizationEngine } from '../../../src/policy/src/authorization-engine.js'
+import { EntityBuilderFactory } from '../../../src/policy/src/entity-builder.js'
+import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodModel.js'
 
 describe('Full E2E Verification', () => {
   // 1. Define Domain

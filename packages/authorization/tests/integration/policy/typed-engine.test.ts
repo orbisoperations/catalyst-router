@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { AuthorizationEngine } from '../../../../src/policy/src/authorization-engine.js'
-import { EntityBuilder, EntityBuilderFactory } from '../../../../src/policy/src/entity-builder.js'
-import { EntityCollection } from '../../../../src/policy/src/entity-collection.js'
-import { GenericZodModel } from '../../../../src/policy/src/providers/GenericZodModel.js'
+import { AuthorizationEngine } from '../../../src/policy/src/authorization-engine.js'
+import { EntityBuilder, EntityBuilderFactory } from '../../../src/policy/src/entity-builder.js'
+import { EntityCollection } from '../../../src/policy/src/entity-collection.js'
+import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodModel.js'
 
 describe('Strongly Typed Authorization Engine', () => {
   // 1. Define Domain Types

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AuthorizationEngine } from '../../../../src/policy/src/authorization-engine.js'
+import { AuthorizationEngine } from '../../../src/policy/src/authorization-engine.js'
 
 describe('Namespaced Authorization', () => {
   type MyDomain = [

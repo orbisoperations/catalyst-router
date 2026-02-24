@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { EntityBuilder } from '../../../../src/policy/src/entity-builder.js'
-import { GenericZodModel } from '../../../../src/policy/src/providers/GenericZodModel.js'
+import { EntityBuilder } from '../../../src/policy/src/entity-builder.js'
+import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodModel.js'
 
 describe('Model-Agnostic Usage Integration', () => {
   // --- Scenario 1: Orchestrator Route Integration (Mocked Schema) ---

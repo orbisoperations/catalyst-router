@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { AuthorizationEngine } from '../../../../src/policy/src/authorization-engine.js'
-import { EntityBuilderFactory } from '../../../../src/policy/src/entity-builder.js'
+import { AuthorizationEngine } from '../../../src/policy/src/authorization-engine.js'
+import { EntityBuilderFactory } from '../../../src/policy/src/entity-builder.js'
 
 describe('Multiple Namespaces Type Scoping', () => {
   type MultiDomain = [
