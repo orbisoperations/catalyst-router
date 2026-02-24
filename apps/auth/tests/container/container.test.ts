@@ -10,7 +10,7 @@ describe('Auth Service Container', () => {
   let container: StartedTestContainer
   let port: number
 
-  const repoRoot = resolve(__dirname, '../../../')
+  const repoRoot = resolve(__dirname, '../../../../')
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {

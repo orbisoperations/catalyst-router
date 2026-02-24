@@ -4,11 +4,11 @@ import * as grpc from '@grpc/grpc-js'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
-import { EnvoyService } from '../src/service.js'
-import { OrchestratorService } from '../../orchestrator/src/service.js'
-import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
-import { createRouteHandler } from '../../cli/src/handlers/node-route-handlers.js'
-import { getProtoRoot, LISTENER_TYPE_URL, CLUSTER_TYPE_URL } from '../src/xds/proto-encoding.js'
+import { EnvoyService } from '../../src/service.js'
+import { OrchestratorService } from '../../../orchestrator/src/service.js'
+import { mintTokenHandler } from '../../../cli/src/handlers/auth-token-handlers.js'
+import { createRouteHandler } from '../../../cli/src/handlers/node-route-handlers.js'
+import { getProtoRoot, LISTENER_TYPE_URL, CLUSTER_TYPE_URL } from '../../src/xds/proto-encoding.js'
 
 const ADS_SERVICE_PATH =
   '/envoy.service.discovery.v3.AggregatedDiscoveryService/StreamAggregatedResources'
@@ -56,7 +56,7 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     const authPort = authServer.port
 
     // ── 2. Start Books API ─────────────────────────────────────────
-    const booksModule = await import('../../../examples/books-api/src/index.js')
+    const booksModule = await import('../../../../examples/books-api/src/index.js')
     booksServer = serve({
       fetch: booksModule.default.fetch,
       port: 0,

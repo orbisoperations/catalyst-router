@@ -8,7 +8,7 @@ import {
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers'
-import { createOrchestratorClient } from '../../src/clients/orchestrator-client.js'
+import { createOrchestratorClient } from '../../../src/clients/orchestrator-client.js'
 
 const isDockerRunning = () => {
   try {
@@ -30,7 +30,7 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
   const TIMEOUT = 300000 // 5 minutes
   const orchestratorImage = 'catalyst-node:next-topology-e2e'
   const authImage = 'catalyst-auth:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../../')
+  const repoRoot = path.resolve(__dirname, '../../../../../')
 
   let network: StartedNetwork
   let auth: StartedTestContainer

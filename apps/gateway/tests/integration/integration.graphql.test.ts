@@ -17,7 +17,7 @@ describe.skipIf(skipTests)('Gateway Integration', () => {
 
   beforeAll(async () => {
     console.log('Starting Gateway Integration Test')
-    const repoRoot = path.resolve(__dirname, '../../..')
+    const repoRoot = path.resolve(__dirname, '../../../..')
     console.log('Repo root:', repoRoot)
 
     // 1. Start Books Service

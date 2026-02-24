@@ -18,7 +18,7 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
   let gatewayPort: number
   let rpcClient: { updateConfig(config: unknown): Promise<{ success: boolean }> } | null = null
   let ws: WebSocket
-  const repoRoot = path.resolve(__dirname, '../../..')
+  const repoRoot = path.resolve(__dirname, '../../../..')
 
   beforeAll(async () => {
     network = await new Network().start()

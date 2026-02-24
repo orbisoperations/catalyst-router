@@ -12,17 +12,17 @@ import path from 'path'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
-import { EnvoyService } from '../src/service.js'
-import { OrchestratorService } from '../../orchestrator/src/service.js'
-import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
-import { createRouteHandler } from '../../cli/src/handlers/node-route-handlers.js'
+import { EnvoyService } from '../../src/service.js'
+import { OrchestratorService } from '../../../orchestrator/src/service.js'
+import { mintTokenHandler } from '../../../cli/src/handlers/auth-token-handlers.js'
+import { createRouteHandler } from '../../../cli/src/handlers/node-route-handlers.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
 const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
-const repoRoot = path.resolve(__dirname, '../../..')
+const repoRoot = path.resolve(__dirname, '../../../..')
 
 /** Fixed port for the Envoy listener — portRange is [[10000, 10000]]. */
 const ENVOY_LISTENER_PORT = 10000
