@@ -8,8 +8,8 @@ import {
 } from 'testcontainers'
 
 import { spawnSync } from 'node:child_process'
-import path from 'path'
 import type { Readable } from 'node:stream'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 import { newWebSocketRpcSession } from 'capnweb'
 import type { PublicApi } from '../../src/orchestrator'
 
@@ -37,31 +37,13 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   let nodeC: StartedTestContainer
   let systemToken: string
 
-  const orchestratorImage = 'catalyst-node:next-topology-e2e'
-  const authImage = 'catalyst-auth:next-topology-e2e'
-
   beforeAll(async () => {
-    const repoRoot = path.resolve(__dirname, '../../../../')
-
-    const buildImage = (dockerfilePath: string, imageName: string) => {
-      console.log(`Building ${imageName} image for Container tests...`)
-      const buildResult = spawnSync(
-        'docker',
-        ['build', '-f', dockerfilePath, '-t', imageName, '.'],
-        { cwd: repoRoot, stdio: 'inherit' }
-      )
-      if (buildResult.status !== 0) throw new Error(`Docker build ${imageName} failed`)
-    }
-
-    buildImage('apps/orchestrator/Dockerfile', orchestratorImage)
-    buildImage('apps/auth/Dockerfile', authImage)
-
     network = await new Network().start()
 
     // Start auth service first
     console.log('Starting auth service...')
     const authLogs: string[] = []
-    auth = await new GenericContainer(authImage)
+    auth = await new GenericContainer(TEST_IMAGES.auth)
       .withNetwork(network)
       .withNetworkAliases('auth')
       .withExposedPorts(5000)
@@ -99,7 +81,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
     console.log(`Extracted system token: ${systemToken.substring(0, 20)}...`)
 
     const startNode = async (name: string, alias: string) => {
-      return await new GenericContainer(orchestratorImage)
+      return await new GenericContainer(TEST_IMAGES.orchestrator)
         .withNetwork(network)
         .withNetworkAliases(alias)
         .withExposedPorts(3000)

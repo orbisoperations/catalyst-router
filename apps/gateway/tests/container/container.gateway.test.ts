@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type { StartedTestContainer, StartedNetwork } from 'testcontainers'
 import { GenericContainer, Wait, Network } from 'testcontainers'
-import path from 'path'
 import { newWebSocketRpcSession } from 'capnweb'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
@@ -18,19 +18,13 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
   let gatewayPort: number
   let rpcClient: { updateConfig(config: unknown): Promise<{ success: boolean }> } | null = null
   let ws: WebSocket
-  const repoRoot = path.resolve(__dirname, '../../../..')
 
   beforeAll(async () => {
     network = await new Network().start()
 
-    // 1. Build & Start Books (Background)
+    // 1. Start Books (Background)
     const startBooks = async () => {
-      const image = await GenericContainer.fromDockerfile(
-        repoRoot,
-        'examples/books-api/Dockerfile'
-      ).build()
-
-      booksContainer = await image
+      booksContainer = await new GenericContainer(TEST_IMAGES.booksApi)
         .withNetwork(network)
         .withNetworkAliases('books')
         .withExposedPorts(8080)
@@ -38,14 +32,9 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
         .start()
     }
 
-    // 2. Build & Start Movies (Background)
+    // 2. Start Movies (Background)
     const startMovies = async () => {
-      const image = await GenericContainer.fromDockerfile(
-        repoRoot,
-        'examples/movies-api/Dockerfile'
-      ).build()
-
-      moviesContainer = await image
+      moviesContainer = await new GenericContainer(TEST_IMAGES.moviesApi)
         .withNetwork(network)
         .withNetworkAliases('movies')
         .withExposedPorts(8080)
@@ -53,14 +42,9 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
         .start()
     }
 
-    // 3. Build & Start Gateway (Background)
+    // 3. Start Gateway (Background)
     const startGateway = async () => {
-      const image = await GenericContainer.fromDockerfile(
-        repoRoot,
-        'apps/gateway/Dockerfile'
-      ).build()
-
-      gatewayContainer = await image
+      gatewayContainer = await new GenericContainer(TEST_IMAGES.gateway)
         .withNetwork(network)
         .withExposedPorts(4000)
         .withWaitStrategy(Wait.forHttp('/', 4000))
@@ -69,7 +53,7 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
       gatewayPort = gatewayContainer.getMappedPort(4000)
     }
 
-    // Run builds in parallel to save time
+    // Run starts in parallel to save time
     await Promise.all([startBooks(), startMovies(), startGateway()])
   }, TIMEOUT)
 

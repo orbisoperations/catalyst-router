@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit/ --passWithNoTests",
     "test:integration": "vitest run tests/integration/ --passWithNoTests",
-    "test:container": "vitest run tests/container/ --no-file-parallelism --passWithNoTests"
+    "test:container": "vitest run -c vitest.container.config.ts --passWithNoTests"
   },
   "dependencies": {
     "capnweb": "catalog:",

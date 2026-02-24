@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import { spawnSync } from 'node:child_process'
-import path from 'path'
 import {
   GenericContainer,
   Network,
@@ -15,6 +14,7 @@ import {
   startAuthService,
   type AuthServiceContext,
 } from '../helpers/auth-test-helpers.js'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 const isDockerRunning = () => {
   try {
@@ -32,38 +32,6 @@ if (skipTests) {
 
 describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
-  const orchestratorImage = 'catalyst-node:next-topology-e2e'
-  const authImage = 'catalyst-auth:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../../')
-
-  const buildImages = async () => {
-    const checkImage = (imageName: string) =>
-      spawnSync('docker', ['image', 'inspect', imageName]).status === 0
-
-    if (!checkImage(orchestratorImage)) {
-      console.log('Building Orchestrator image for Topology tests...')
-      const orchestratorBuild = spawnSync(
-        'docker',
-        ['build', '-f', 'apps/orchestrator/Dockerfile', '-t', orchestratorImage, '.'],
-        { cwd: repoRoot, stdio: 'inherit' }
-      )
-      if (orchestratorBuild.status !== 0) throw new Error('Docker build orchestrator failed')
-    } else {
-      console.log(`Using existing image: ${orchestratorImage}`)
-    }
-
-    if (!checkImage(authImage)) {
-      console.log('Building Auth image for Topology tests...')
-      const authBuild = spawnSync(
-        'docker',
-        ['build', '-f', 'apps/auth/Dockerfile', '-t', authImage, '.'],
-        { cwd: repoRoot, stdio: 'inherit' }
-      )
-      if (authBuild.status !== 0) throw new Error('Docker build auth failed')
-    } else {
-      console.log(`Using existing image: ${authImage}`)
-    }
-  }
 
   describe('Shared Auth: 2 nodes, 1 auth server', () => {
     let network: StartedNetwork
@@ -72,15 +40,14 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
     let nodeB: StartedTestContainer
 
     beforeAll(async () => {
-      await buildImages()
       network = await new Network().start()
 
       // Start shared auth service
-      auth = await startAuthService(network, 'auth', authImage)
+      auth = await startAuthService(network, 'auth', TEST_IMAGES.auth)
 
       const startNode = async (name: string, alias: string) => {
         console.log(`Starting node ${name}...`)
-        const container = await new GenericContainer(orchestratorImage)
+        const container = await new GenericContainer(TEST_IMAGES.orchestrator)
           .withNetwork(network)
           .withNetworkAliases(alias)
           .withExposedPorts(3000)
@@ -275,12 +242,11 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
     let nodeB: StartedTestContainer
 
     beforeAll(async () => {
-      await buildImages()
       network = await new Network().start()
 
       // Start separate auth services
-      authA = await startAuthService(network, 'auth-a', authImage, 'bootstrap-a')
-      authB = await startAuthService(network, 'auth-b', authImage, 'bootstrap-b')
+      authA = await startAuthService(network, 'auth-a', TEST_IMAGES.auth, 'bootstrap-a')
+      authB = await startAuthService(network, 'auth-b', TEST_IMAGES.auth, 'bootstrap-b')
 
       const startNode = async (
         name: string,
@@ -289,7 +255,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
         systemToken: string
       ) => {
         console.log(`Starting node ${name}...`)
-        const container = await new GenericContainer(orchestratorImage)
+        const container = await new GenericContainer(TEST_IMAGES.orchestrator)
           .withNetwork(network)
           .withNetworkAliases(alias)
           .withExposedPorts(3000)

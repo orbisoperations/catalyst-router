@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import path from 'path'
 import type { StartedTestContainer } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 const isDockerRunning = () => {
   try {
@@ -26,15 +26,7 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
     let startedContainer: StartedTestContainer
 
     beforeAll(async () => {
-      // Build and start the container
-      // context is repository root
-      const repoRoot = path.resolve(__dirname, '../../../..')
-
-      const dockerfile = 'examples/books-api/Dockerfile'
-
-      console.log('Building books-api image...')
-      const container = await GenericContainer.fromDockerfile(repoRoot, dockerfile).build()
-      startedContainer = await container
+      startedContainer = await new GenericContainer(TEST_IMAGES.booksApi)
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))
         .start()
@@ -79,13 +71,7 @@ describe.skipIf(skipTests)('Example GraphQL Servers', () => {
     let startedContainer: StartedTestContainer
 
     beforeAll(async () => {
-      const repoRoot = path.resolve(__dirname, '../../../..')
-
-      const dockerfile = 'examples/movies-api/Dockerfile'
-
-      console.log('[TEST] [FIXTURE BUILD] Building movies-api image...')
-      const container = await GenericContainer.fromDockerfile(repoRoot, dockerfile).build()
-      startedContainer = await container
+      startedContainer = await new GenericContainer(TEST_IMAGES.moviesApi)
         .withExposedPorts(8080)
         .withWaitStrategy(Wait.forHttp('/health', 8080))
         .start()

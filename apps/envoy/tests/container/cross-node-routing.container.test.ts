@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { Readable } from 'node:stream'
-import path from 'path'
 import {
   GenericContainer,
   Wait,
@@ -15,13 +14,13 @@ import {
   startAuthService,
   type AuthServiceContext,
 } from '../../../orchestrator/tests/helpers/auth-test-helpers.js'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
 const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
-const repoRoot = path.resolve(__dirname, '../../../..')
 
 /** Fixed Envoy listener port — used for both ingress (Node A) and egress (Node B). */
 const ENVOY_LISTENER_PORT = 10000
@@ -31,16 +30,6 @@ const SETUP_TIMEOUT = 600_000 // 10 minutes
 
 /** Timeout for individual test cases. */
 const TEST_TIMEOUT = 60_000 // 60 seconds
-
-// ---------------------------------------------------------------------------
-// Docker image names
-// ---------------------------------------------------------------------------
-
-const ORCH_IMAGE = 'catalyst-orchestrator:cross-node-e2e'
-const ENVOY_SVC_IMAGE = 'catalyst-envoy:cross-node-e2e'
-const ENVOY_PROXY_IMAGE = 'catalyst-envoy-proxy:cross-node-e2e'
-const AUTH_IMAGE = 'catalyst-auth:cross-node-e2e'
-const BOOKS_IMAGE = 'books-service:cross-node-e2e'
 
 // ---------------------------------------------------------------------------
 // Docker availability check
@@ -57,25 +46,6 @@ const isDockerRunning = (): boolean => {
 const skipTests = !isDockerRunning()
 if (skipTests) {
   console.warn('Skipping cross-node routing container tests: Docker not running')
-}
-
-// ---------------------------------------------------------------------------
-// Image builder with caching
-// ---------------------------------------------------------------------------
-
-async function buildImageIfNeeded(imageName: string, dockerfile: string): Promise<void> {
-  const check = spawnSync(CONTAINER_RUNTIME, ['image', 'inspect', imageName])
-  if (check.status === 0) {
-    console.log(`Using existing image: ${imageName}`)
-    return
-  }
-  console.log(`Building image: ${imageName}...`)
-  const buildResult = spawnSync(
-    CONTAINER_RUNTIME,
-    ['build', '-f', dockerfile, '-t', imageName, '.'],
-    { cwd: repoRoot, stdio: 'inherit' }
-  )
-  if (buildResult.status !== 0) throw new Error(`Failed to build ${imageName}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -282,23 +252,16 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
   let systemToken: string
 
   beforeAll(async () => {
-    // ── 1. Build images ────────────────────────────────────────────
-    await buildImageIfNeeded(AUTH_IMAGE, 'apps/auth/Dockerfile')
-    await buildImageIfNeeded(ORCH_IMAGE, 'apps/orchestrator/Dockerfile')
-    await buildImageIfNeeded(ENVOY_SVC_IMAGE, 'apps/envoy/Dockerfile')
-    await buildImageIfNeeded(ENVOY_PROXY_IMAGE, 'apps/envoy/Dockerfile.envoy-proxy')
-    await buildImageIfNeeded(BOOKS_IMAGE, 'examples/books-api/Dockerfile')
-
-    // ── 2. Docker network ──────────────────────────────────────────
+    // ── 1. Docker network ──────────────────────────────────────────
     network = await new Network().start()
 
-    // ── 3. Auth service ────────────────────────────────────────────
-    auth = await startAuthService(network, 'auth', AUTH_IMAGE)
+    // ── 2. Auth service ────────────────────────────────────────────
+    auth = await startAuthService(network, 'auth', TEST_IMAGES.auth)
     systemToken = auth.systemToken
 
-    // ── 4. Books API ───────────────────────────────────────────────
+    // ── 3. Books API ───────────────────────────────────────────────
     console.log('[setup] Starting books-api container...')
-    booksContainer = await new GenericContainer(BOOKS_IMAGE)
+    booksContainer = await new GenericContainer(TEST_IMAGES.booksApi)
       .withNetwork(network)
       .withNetworkAliases('books')
       .withExposedPorts(8080)
@@ -306,9 +269,9 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       .withLogConsumer(withLogConsumer('books'))
       .start()
 
-    // ── 5. Envoy Service A ─────────────────────────────────────────
+    // ── 4. Envoy Service A ─────────────────────────────────────────
     console.log('[setup] Starting envoy-svc-a...')
-    envoySvcA = await new GenericContainer(ENVOY_SVC_IMAGE)
+    envoySvcA = await new GenericContainer(TEST_IMAGES.envoy)
       .withNetwork(network)
       .withNetworkAliases('envoy-svc-a')
       .withExposedPorts(3000, 18000)
@@ -323,9 +286,9 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       .withLogConsumer(withLogConsumer('envoy-svc-a'))
       .start()
 
-    // ── 6. Envoy Service B ─────────────────────────────────────────
+    // ── 5. Envoy Service B ─────────────────────────────────────────
     console.log('[setup] Starting envoy-svc-b...')
-    envoySvcB = await new GenericContainer(ENVOY_SVC_IMAGE)
+    envoySvcB = await new GenericContainer(TEST_IMAGES.envoy)
       .withNetwork(network)
       .withNetworkAliases('envoy-svc-b')
       .withExposedPorts(3000, 18000)
@@ -340,10 +303,10 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       .withLogConsumer(withLogConsumer('envoy-svc-b'))
       .start()
 
-    // ── 7. Envoy Proxy A (ADS → envoy-svc-a:18000) ────────────────
+    // ── 6. Envoy Proxy A (ADS → envoy-svc-a:18000) ────────────────
     console.log('[setup] Starting envoy-proxy-a...')
     const bootstrapA = generateBootstrapYaml('envoy-svc-a', 18000)
-    envoyProxyA = await new GenericContainer(ENVOY_PROXY_IMAGE)
+    envoyProxyA = await new GenericContainer(TEST_IMAGES.envoyProxy)
       .withNetwork(network)
       .withNetworkAliases('envoy-proxy-a')
       .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
@@ -355,10 +318,10 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       .start()
     envoyAAdminPort = envoyProxyA.getMappedPort(9901)
 
-    // ── 8. Envoy Proxy B (ADS → envoy-svc-b:18000) ────────────────
+    // ── 7. Envoy Proxy B (ADS → envoy-svc-b:18000) ────────────────
     console.log('[setup] Starting envoy-proxy-b...')
     const bootstrapB = generateBootstrapYaml('envoy-svc-b', 18000)
-    envoyProxyB = await new GenericContainer(ENVOY_PROXY_IMAGE)
+    envoyProxyB = await new GenericContainer(TEST_IMAGES.envoyProxy)
       .withNetwork(network)
       .withNetworkAliases('envoy-proxy-b')
       .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
@@ -373,9 +336,9 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
     // Brief wait for ADS streams to establish
     await new Promise((r) => setTimeout(r, 1000))
 
-    // ── 9. Orchestrator A ──────────────────────────────────────────
+    // ── 8. Orchestrator A ──────────────────────────────────────────
     console.log('[setup] Starting orch-a...')
-    orchA = await new GenericContainer(ORCH_IMAGE)
+    orchA = await new GenericContainer(TEST_IMAGES.orchestrator)
       .withNetwork(network)
       .withNetworkAliases('orch-a')
       .withExposedPorts(3000)
@@ -394,9 +357,9 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       .withLogConsumer(withLogConsumer('orch-a'))
       .start()
 
-    // ── 10. Orchestrator B ─────────────────────────────────────────
+    // ── 9. Orchestrator B ──────────────────────────────────────────
     console.log('[setup] Starting orch-b...')
-    orchB = await new GenericContainer(ORCH_IMAGE)
+    orchB = await new GenericContainer(TEST_IMAGES.orchestrator)
       .withNetwork(network)
       .withNetworkAliases('orch-b')
       .withExposedPorts(3000)
@@ -417,7 +380,7 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
 
     console.log('[setup] All 8 containers started.')
 
-    // ── 11. Peer the two orchestrators via RPC ─────────────────────
+    // ── 10. Peer the two orchestrators via RPC ────────────────────
     console.log('[setup] Peering Node A and Node B...')
     const clientA = getOrchestratorClient(orchA)
     const clientB = getOrchestratorClient(orchB)
@@ -450,7 +413,7 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
     await waitForPeerConnected(clientB, systemToken, 'node-a.somebiz.local.io')
     console.log('[setup] BGP peering established.')
 
-    // ── 12. Create books-api route on Node A ───────────────────────
+    // ── 11. Create books-api route on Node A ──────────────────────
     // Endpoint uses Docker DNS alias so Envoy Proxy A can reach books-api.
     console.log('[setup] Creating books-api route on Node A...')
     const dataAResult = await clientA.getDataChannelClient(systemToken)
@@ -465,7 +428,7 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
       throw new Error(`Failed to create route: ${routeResult.error || 'Unknown error'}`)
     }
 
-    // ── 13. Wait for xDS propagation ───────────────────────────────
+    // ── 12. Wait for xDS propagation ──────────────────────────────
     // Node A: ingress listener for books-api
     console.log('[setup] Waiting for Envoy A ingress listener...')
     await waitForListener(envoyAAdminPort, 'ingress_books-api', 60_000)

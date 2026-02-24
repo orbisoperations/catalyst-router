@@ -2,16 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers'
 import * as grpc from '@grpc/grpc-js'
-import path from 'path'
 import { getProtoRoot } from '../../src/xds/proto-encoding.js'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-
-const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
-const repoRoot = path.resolve(__dirname, '../../../..')
-const envoyServiceImage = 'catalyst-envoy-service:container-test'
 
 /** Default ports for the envoy service inside the container. */
 const CONFIG_PORT = 3000
@@ -57,18 +53,9 @@ describe.skipIf(skipTests)('Envoy Service Container: Dockerfile Validation', () 
   let xdsPort: number
 
   beforeAll(async () => {
-    // Build the envoy service image
-    console.log('[setup] Building envoy service image...')
-    const buildResult = spawnSync(
-      CONTAINER_RUNTIME,
-      ['build', '-t', envoyServiceImage, '-f', 'apps/envoy/Dockerfile', '.'],
-      { cwd: repoRoot, stdio: 'inherit' }
-    )
-    if (buildResult.status !== 0) throw new Error('Failed to build envoy service image')
-
     // Start the container with both ports exposed
     console.log('[setup] Starting envoy service container...')
-    container = await new GenericContainer(envoyServiceImage)
+    container = await new GenericContainer(TEST_IMAGES.envoy)
       .withExposedPorts(CONFIG_PORT, XDS_PORT)
       .withEnvironment({
         PORT: String(CONFIG_PORT),

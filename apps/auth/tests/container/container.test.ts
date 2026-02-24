@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type { StartedTestContainer } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
-import { resolve } from 'path'
+import { TEST_IMAGES } from '../../../../tests/docker-images.js'
 
 // Increase timeout for docker build
 const TIMEOUT = 180_000
@@ -10,18 +10,12 @@ describe('Auth Service Container', () => {
   let container: StartedTestContainer
   let port: number
 
-  const repoRoot = resolve(__dirname, '../../../../')
   const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
   beforeAll(async () => {
     if (skipTests) return
 
-    // Build image
-    console.log('Building Docker image from', repoRoot)
-
-    const image = await GenericContainer.fromDockerfile(repoRoot, 'apps/auth/Dockerfile').build()
-
-    container = await image
+    container = await new GenericContainer(TEST_IMAGES.auth)
       .withExposedPorts(4020)
       .withEnvironment({
         CATALYST_AUTH_PORT: '4020',
