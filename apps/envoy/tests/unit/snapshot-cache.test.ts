@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
-import type { XdsSnapshot } from '../src/xds/snapshot-cache.js'
-import { buildIngressListener, buildLocalCluster } from '../src/xds/resources.js'
+import { createSnapshotCache } from '../../src/xds/snapshot-cache.js'
+import type { XdsSnapshot } from '../../src/xds/snapshot-cache.js'
+import { buildIngressListener, buildLocalCluster } from '../../src/xds/resources.js'
 
 function makeSnapshot(version: string): XdsSnapshot {
   return { version, listeners: [], clusters: [] }

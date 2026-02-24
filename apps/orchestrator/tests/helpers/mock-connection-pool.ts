@@ -1,4 +1,4 @@
-import { ConnectionPool, type CatalystNodeBus, type PublicApi } from '../src/orchestrator.js'
+import { ConnectionPool, type CatalystNodeBus, type PublicApi } from '../../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
 
 export class MockConnectionPool extends ConnectionPool {

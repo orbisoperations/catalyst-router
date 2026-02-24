@@ -12,7 +12,7 @@ describe('System Admin Token', () => {
     process.env.CATALYST_PEERING_ENDPOINT = 'http://localhost:3000'
 
     // Import and start server to trigger minting
-    const { startServer } = await import('../src/server.js')
+    const { startServer } = await import('../../src/server.js')
     const result = await startServer()
     systemToken = result.systemToken!
   })

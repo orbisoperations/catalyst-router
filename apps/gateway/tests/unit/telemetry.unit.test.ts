@@ -3,7 +3,7 @@ import { trace } from '@opentelemetry/api'
 import type { Logger } from '@logtape/logtape'
 import type { Meter } from '@opentelemetry/api'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
-import { GatewayGraphqlServer } from '../src/graphql/server.js'
+import { GatewayGraphqlServer } from '../../src/graphql/server.js'
 
 // ---------------------------------------------------------------------------
 // Spy factory — builds a ServiceTelemetry with observable instruments

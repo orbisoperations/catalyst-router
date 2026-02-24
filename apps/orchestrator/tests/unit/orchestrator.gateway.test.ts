@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Actions, type PeerInfo } from '@catalyst/routing'
-import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../src/orchestrator.js'
+import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../../src/orchestrator.js'
 import type { RpcStub } from 'capnweb'
 
 const MOCK_NODE: PeerInfo = {

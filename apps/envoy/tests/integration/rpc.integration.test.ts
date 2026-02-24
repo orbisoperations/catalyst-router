@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { newWebSocketRpcSession } from 'capnweb'
 import { catalystHonoServer } from '@catalyst/service'
-import type { UpdateResult } from '../src/rpc/server.js'
-import { EnvoyRpcServer, createRpcHandler } from '../src/rpc/server.js'
+import type { UpdateResult } from '../../src/rpc/server.js'
+import { EnvoyRpcServer, createRpcHandler } from '../../src/rpc/server.js'
 
 describe('Envoy RPC Integration', () => {
   let server: ReturnType<typeof catalystHonoServer>

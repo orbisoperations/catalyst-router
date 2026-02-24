@@ -8,8 +8,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --passWithNoTests container integration",
+    "test:unit": "vitest run tests/unit/ --passWithNoTests",
+    "test:integration": "vitest run tests/integration/ --passWithNoTests",
     "test:rpc": "tsx scripts/test-rpc.ts"
   },
   "dependencies": {

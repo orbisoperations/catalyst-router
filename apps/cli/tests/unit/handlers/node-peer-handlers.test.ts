@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CreatePeerInput, DeletePeerInput, ListPeersInput } from '../types.js'
+import type { CreatePeerInput, DeletePeerInput, ListPeersInput } from '../../../src/types.js'
 
 describe('Node Peer Handlers', () => {
   describe('Type Definitions', () => {

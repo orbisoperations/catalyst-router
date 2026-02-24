@@ -4,14 +4,14 @@ import { newWebSocketRpcSession } from 'capnweb'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
-import { EnvoyService } from '../src/service.js'
-import { OrchestratorService } from '../../orchestrator/src/service.js'
-import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
+import { EnvoyService } from '../../src/service.js'
+import { OrchestratorService } from '../../../orchestrator/src/service.js'
+import { mintTokenHandler } from '../../../cli/src/handlers/auth-token-handlers.js'
 import {
   createRouteHandler,
   listRoutesHandler,
-} from '../../cli/src/handlers/node-route-handlers.js'
-import type { EnvoyRpcServer } from '../src/rpc/server.js'
+} from '../../../cli/src/handlers/node-route-handlers.js'
+import type { EnvoyRpcServer } from '../../src/rpc/server.js'
 
 /**
  * End-to-end integration test: Auth -> Orchestrator -> Envoy -> Books API
@@ -60,7 +60,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     const authPort = authServer.port
 
     // ── 2. Start Books API ─────────────────────────────────────────
-    const booksModule = await import('../../../examples/books-api/src/index.js')
+    const booksModule = await import('../../../../examples/books-api/src/index.js')
     booksServer = serve({
       fetch: booksModule.default.fetch,
       port: 0,

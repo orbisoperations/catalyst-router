@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../src/orchestrator.js'
+import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../../src/orchestrator.js'
 import { newRouteTable, type PeerInfo, type RouteTable } from '@catalyst/routing'
-import { MockConnectionPool } from './mock-connection-pool.js'
+import { MockConnectionPool } from '../helpers/mock-connection-pool.js'
 
 describe('Orchestrator Transit Tests (Mocked Container Logic)', () => {
   let pool: MockConnectionPool

@@ -8,7 +8,7 @@ import {
   buildTcpProxyIngressListener,
   buildTcpProxyEgressListener,
   isTcpProxyListener,
-} from '../src/xds/resources.js'
+} from '../../src/xds/resources.js'
 
 // ---------------------------------------------------------------------------
 // buildIngressListener

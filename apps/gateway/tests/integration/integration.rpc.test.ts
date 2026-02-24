@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { newWebSocketRpcSession } from 'capnweb'
 import { catalystHonoServer } from '@catalyst/service'
-import type { GatewayUpdateResult } from '../src/rpc/server.js'
-import { createRpcHandler, GatewayRpcServer } from '../src/rpc/server.js'
+import type { GatewayUpdateResult } from '../../src/rpc/server.js'
+import { createRpcHandler, GatewayRpcServer } from '../../src/rpc/server.js'
 
 describe('RPC Integration', () => {
   let server: ReturnType<typeof catalystHonoServer>

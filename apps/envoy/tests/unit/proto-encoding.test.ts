@@ -8,7 +8,7 @@ import {
   encodeTcpProxyListener,
   LISTENER_TYPE_URL,
   CLUSTER_TYPE_URL,
-} from '../src/xds/proto-encoding.js'
+} from '../../src/xds/proto-encoding.js'
 import {
   buildIngressListener,
   buildEgressListener,
@@ -16,7 +16,7 @@ import {
   buildRemoteCluster,
   buildTcpProxyIngressListener,
   buildTcpProxyEgressListener,
-} from '../src/xds/resources.js'
+} from '../../src/xds/resources.js'
 
 // ---------------------------------------------------------------------------
 // Proto root structure

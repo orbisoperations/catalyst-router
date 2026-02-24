@@ -3,8 +3,8 @@ import type { Hono } from 'hono'
 import type { StartedTestContainer } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
 import path from 'path'
-import type { GatewayGraphqlServer } from '../src/graphql/server.ts'
-import { createGatewayHandler } from '../src/graphql/server.ts'
+import type { GatewayGraphqlServer } from '../../src/graphql/server.ts'
+import { createGatewayHandler } from '../../src/graphql/server.ts'
 
 const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
 
