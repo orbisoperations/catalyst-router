@@ -19,7 +19,6 @@ export type PeerRecord = z.infer<typeof PeerRecordSchema>
 
 export type InternalRoute = DataChannelDefinition & {
   peer: PeerInfo
-  peerName: string
   nodePath: string[]
 }
 
