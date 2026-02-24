@@ -11,8 +11,7 @@ export type ListRoutesResult =
       success: true
       data: {
         routes: Array<
-          | (DataChannelDefinition & { source: 'local' })
-          | (Omit<InternalRoute, 'peer'> & { source: 'internal'; peer: string })
+          (DataChannelDefinition & { source: 'local' }) | (InternalRoute & { source: 'internal' })
         >
       }
     }
@@ -73,7 +72,6 @@ export async function listRoutesHandler(input: ListRoutesInput): Promise<ListRou
       ...routes.internal.map((r) => ({
         ...r,
         source: 'internal' as const,
-        peer: r.peerName,
       })),
     ]
 

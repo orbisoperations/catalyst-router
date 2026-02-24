@@ -95,7 +95,7 @@ export function routeCommands(): Command {
                 Endpoint: r.endpoint || 'N/A',
                 Protocol: r.protocol,
                 Source: r.source,
-                Peer: 'peer' in r ? r.peer : '-',
+                Peer: r.source === 'internal' ? r.peerName : '-',
               }))
             )
           }
