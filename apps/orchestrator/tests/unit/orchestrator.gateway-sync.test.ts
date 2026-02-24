@@ -4,11 +4,11 @@ import type { PublicApi, PeerInfo } from '../../src/orchestrator'
 import { Actions } from '@catalyst/routing'
 import { CatalystNodeBus, ConnectionPool } from '../../src/orchestrator'
 
-const MOCK_NODE: PeerInfo = {
+const MOCK_NODE = {
   name: 'node-a.somebiz.local.io',
   endpoint: 'http://node-a:3000',
   domains: ['somebiz.local.io'],
-}
+} satisfies PeerInfo
 
 const GATEWAY_ENDPOINT = 'http://gateway:4000'
 

@@ -9,29 +9,29 @@ describe('Orchestrator Transit Tests (Mocked Container Logic)', () => {
   let nodeB: CatalystNodeBus
   let nodeC: CatalystNodeBus
 
-  const infoA: PeerInfo = {
+  const infoA = {
     name: 'node-a.somebiz.local.io',
     endpoint: 'ws://node-a',
     domains: ['somebiz.local.io'],
     peerToken: 'token-for-a',
-  }
-  const infoB: PeerInfo = {
+  } satisfies PeerInfo
+  const infoB = {
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://node-b',
     domains: ['somebiz.local.io'],
     peerToken: 'token-for-b',
-  }
-  const infoC: PeerInfo = {
+  } satisfies PeerInfo
+  const infoC = {
     name: 'node-c.somebiz.local.io',
     endpoint: 'ws://node-c',
     domains: ['somebiz.local.io'],
     peerToken: 'token-for-c',
-  }
+  } satisfies PeerInfo
 
   beforeEach(() => {
     pool = new MockConnectionPool()
 
-    const createNode = (info: PeerInfo) => {
+    const createNode = (info: PeerInfo & { endpoint: string }) => {
       const bus = new CatalystNodeBus({
         config: { node: info },
         connectionPool: { pool },
