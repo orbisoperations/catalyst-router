@@ -8,23 +8,23 @@ describe('Orchestrator Peering Tests (Mocked Container Logic)', () => {
   let nodeA: CatalystNodeBus
   let nodeB: CatalystNodeBus
 
-  const infoA: PeerInfo = {
+  const infoA = {
     name: 'node-a.somebiz.local.io',
     endpoint: 'ws://node-a',
     domains: ['somebiz.local.io'],
     peerToken: 'token-for-a',
-  }
-  const infoB: PeerInfo = {
+  } satisfies PeerInfo
+  const infoB = {
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://node-b',
     domains: ['somebiz.local.io'],
     peerToken: 'token-for-b',
-  }
+  } satisfies PeerInfo
 
   beforeEach(() => {
     pool = new MockConnectionPool()
 
-    const createNode = (info: PeerInfo) => {
+    const createNode = (info: PeerInfo & { endpoint: string }) => {
       const bus = new CatalystNodeBus({
         config: { node: info },
         connectionPool: { pool },
