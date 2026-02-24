@@ -411,7 +411,6 @@ export function buildRemoteCluster(opts: {
 
 interface InternalRoute extends DataChannelDefinition {
   peer: { name: string; envoyAddress?: string }
-  peerName: string
   nodePath: string[]
 }
 
@@ -487,7 +486,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
     const peerAddress = route.peer.envoyAddress
     if (!peerAddress) continue
 
-    const egressKey = `egress_${route.name}_via_${route.peerName}`
+    const egressKey = `egress_${route.name}_via_${route.peer.name}`
     const egressPort = input.portAllocations[egressKey]
     if (!egressPort) continue
 
@@ -495,7 +494,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
       listeners.push(
         buildTcpProxyEgressListener({
           channelName: route.name,
-          peerName: route.peerName,
+          peerName: route.peer.name,
           port: egressPort,
           bindAddress: input.bindAddress,
         })
@@ -504,7 +503,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
       listeners.push(
         buildEgressListener({
           channelName: route.name,
-          peerName: route.peerName,
+          peerName: route.peer.name,
           port: egressPort,
           bindAddress: input.bindAddress,
           protocol: route.protocol,
@@ -515,7 +514,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
     clusters.push(
       buildRemoteCluster({
         channelName: route.name,
-        peerName: route.peerName,
+        peerName: route.peer.name,
         peerAddress,
         peerPort: route.envoyPort,
         protocol: route.protocol,

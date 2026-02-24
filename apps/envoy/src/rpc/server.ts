@@ -14,7 +14,6 @@ import { buildXdsSnapshot } from '../xds/resources.js'
  */
 export const InternalRouteSchema = DataChannelDefinitionSchema.extend({
   peer: z.object({ name: z.string(), envoyAddress: z.string().optional() }),
-  peerName: z.string(),
   nodePath: z.array(z.string()),
 })
 
@@ -120,7 +119,7 @@ export class EnvoyRpcServer extends RpcTarget {
         }
         for (const route of this.config.internal) {
           if (route.envoyPort) {
-            const egressKey = `egress_${route.name}_via_${route.peerName}`
+            const egressKey = `egress_${route.name}_via_${route.peer.name}`
             portAllocations[egressKey] = route.envoyPort
           }
         }
