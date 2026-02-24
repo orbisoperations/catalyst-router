@@ -15,6 +15,13 @@ const CONTAINER_RUNTIME = process.env.CONTAINER_RUNTIME || 'docker'
 export function buildImages(tags: string[], repoRoot?: string): void {
   const root = repoRoot ?? path.resolve(import.meta.dirname, '..')
 
+  // Skip builds if Docker is not available (tests will skip themselves)
+  const probe = spawnSync(CONTAINER_RUNTIME, ['info'], { stdio: 'ignore' })
+  if (probe.status !== 0) {
+    console.warn(`[globalSetup] ${CONTAINER_RUNTIME} is not running — skipping image builds`)
+    return
+  }
+
   for (const tag of tags) {
     const dockerfile = IMAGE_DOCKERFILES[tag]
     if (!dockerfile) {
