@@ -51,27 +51,31 @@ COPY examples examples
 RUN pnpm exec esbuild apps/auth/src/server.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/auth.mjs --format=esm \
-  --packages=external --loader:.cedar=text --loader:.cedarschema=text
+  --external:better-sqlite3 --external:@cedar-policy/cedar-wasm \
+  --loader:.cedar=text --loader:.cedarschema=text \
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 RUN pnpm exec esbuild apps/orchestrator/src/server.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/orchestrator.mjs --format=esm \
-  --packages=external --loader:.cedar=text --loader:.cedarschema=text
+  --external:better-sqlite3 --external:@cedar-policy/cedar-wasm \
+  --loader:.cedar=text --loader:.cedarschema=text \
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 RUN pnpm exec esbuild apps/envoy/src/index.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/envoy.mjs --format=esm \
-  --packages=external
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 RUN pnpm exec esbuild apps/gateway/src/index.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/gateway.mjs --format=esm \
-  --packages=external
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 RUN pnpm exec esbuild examples/books-api/src/index.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/books-api.mjs --format=esm \
-  --packages=external
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 # Deploy production dependencies for each service
 RUN pnpm deploy --filter=@catalyst/auth-service --prod /deploy/auth
