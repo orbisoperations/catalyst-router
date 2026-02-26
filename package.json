@@ -21,7 +21,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --reporter=verbose",
     "test:integration": "vitest run --reporter=verbose",
-    "test:container": "vitest run"
+    "test:container": "turbo run test:container --concurrency=1"
   },
   "pnpm": {
     "overrides": {
