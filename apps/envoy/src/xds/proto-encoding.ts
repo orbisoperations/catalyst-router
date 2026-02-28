@@ -280,27 +280,20 @@ function buildProtoRoot(): protobuf.Root {
   // envoy.config.core.v3.Http2ProtocolOptions (empty — defaults are fine)
   root.define('envoy.config.core.v3').add(new protobuf.Type('Http2ProtocolOptions'))
 
-  // envoy.extensions.upstreams.http.v3.HttpProtocolOptions.ExplicitHttpConfig
-  root
-    .define('envoy.extensions.upstreams.http.v3.HttpProtocolOptions')
-    .add(
-      new protobuf.Type('ExplicitHttpConfig').add(
-        new protobuf.Field('http2_protocol_options', 2, 'envoy.config.core.v3.Http2ProtocolOptions')
-      )
-    )
-
   // envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-  root
-    .define('envoy.extensions.upstreams.http.v3')
-    .add(
-      new protobuf.Type('HttpProtocolOptions').add(
-        new protobuf.Field(
-          'explicit_http_config',
-          3,
-          'envoy.extensions.upstreams.http.v3.HttpProtocolOptions.ExplicitHttpConfig'
-        )
-      )
+  const HttpProtocolOptions = new protobuf.Type('HttpProtocolOptions')
+  const ExplicitHttpConfig = new protobuf.Type('ExplicitHttpConfig').add(
+    new protobuf.Field('http2_protocol_options', 2, 'envoy.config.core.v3.Http2ProtocolOptions')
+  )
+  HttpProtocolOptions.add(ExplicitHttpConfig)
+  HttpProtocolOptions.add(
+    new protobuf.Field(
+      'explicit_http_config',
+      3,
+      'envoy.extensions.upstreams.http.v3.HttpProtocolOptions.ExplicitHttpConfig'
     )
+  )
+  root.define('envoy.extensions.upstreams.http.v3').add(HttpProtocolOptions)
 
   // envoy.config.cluster.v3.Cluster
   root.define('envoy.config.cluster.v3').add(
