@@ -157,7 +157,6 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
         endpoint: 'ws://test-peer:3000/rpc',
         domains: ['example.com'],
         peerToken: systemToken,
-        connectionStatus: 'disconnected',
       })
       expect(createResult.success).toBe(true)
 
@@ -167,6 +166,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
       const createdPeer = afterCreate.find((p) => p.name === 'test-peer.somebiz.local.io')
       expect(createdPeer).toBeDefined()
       expect(createdPeer?.endpoint).toBe('ws://test-peer:3000/rpc')
+      expect(createdPeer?.connectionStatus).toBeDefined()
 
       // Delete peer
       const deleteResult = await netClient.removePeer({ name: 'test-peer.somebiz.local.io' })
