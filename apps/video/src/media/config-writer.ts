@@ -1,3 +1,6 @@
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { VideoConfig } from '@catalyst/config'
 
 export function generateMediaMTXConfig(config: VideoConfig, servicePort: number): string {
@@ -29,4 +32,10 @@ pathDefaults:
   runOnReady: curl -s -X POST -H "Content-Type: application/json" -d '{"path":"$MTX_PATH","sourceType":"$MTX_SOURCE_TYPE"}' http://localhost:${servicePort}/video-stream/hooks/ready
   runOnNotReady: curl -s -X POST -H "Content-Type: application/json" -d '{"path":"$MTX_PATH"}' http://localhost:${servicePort}/video-stream/hooks/not-ready
 `
+}
+
+export function writeMediaMTXConfig(yamlContent: string, filename = 'mediamtx.yaml'): string {
+  const configPath = join(tmpdir(), filename)
+  writeFileSync(configPath, yamlContent, 'utf-8')
+  return configPath
 }
