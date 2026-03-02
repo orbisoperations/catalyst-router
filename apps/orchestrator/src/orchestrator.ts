@@ -139,6 +139,7 @@ export class CatalystNodeBus extends RpcTarget {
   private authClient?: RpcStub<AuthServiceApi>
   private portAllocator?: PortAllocator
   public lastNotificationPromise?: Promise<void>
+  private _syncingVideo = false
 
   constructor(opts: {
     state?: RouteTable
@@ -898,6 +899,83 @@ export class CatalystNodeBus extends RpcTarget {
     }
   }
 
+  private async handleVideoConfiguration(action: Action) {
+    if (this._syncingVideo) return
+    const videoEndpoint = this.config.videoConfig?.endpoint
+    if (!videoEndpoint) return
+
+    // Only react to route-affecting actions
+    const routeActions = [
+      Actions.LocalRouteCreate,
+      Actions.LocalRouteDelete,
+      Actions.InternalProtocolUpdate,
+      Actions.InternalProtocolClose,
+      Actions.InternalProtocolOpen,
+      Actions.InternalProtocolConnected,
+    ]
+    if (!(routeActions as ReadonlyArray<Action['action']>).includes(action.action)) return
+
+    const mediaRoutes = [...this.state.local.routes, ...this.state.internal.routes].filter(
+      (r) => r.protocol === 'media' && r.endpoint != null
+    )
+
+    this._syncingVideo = true
+    try {
+      const stub = this.connectionPool.get(videoEndpoint)
+      if (!stub) return
+
+      // Push known media routes to the video service for relay setup
+      // @ts-expect-error - Video RPC stub typed separately
+      const result = await stub.updateMediaRoutes({
+        routes: mediaRoutes.map((r) => ({
+          name: r.name,
+          endpoint: r.endpoint as string,
+          protocol: r.protocol,
+          tags: r.tags ?? [],
+          peerName: 'peer' in r ? (r as InternalRoute).peer.name : undefined,
+        })),
+      })
+      if (!result.success) {
+        this.logger.error`Video config sync failed: ${result.error}`
+      }
+
+      // Pull local streams from video service and sync to route table
+      // @ts-expect-error - Video RPC stub typed separately
+      const { streams } = await stub.getStreams()
+      if (Array.isArray(streams)) {
+        const localStreams = streams.filter((s: { source: string }) => s.source === 'local')
+        const knownLocalMedia = this.state.local.routes.filter((r) => r.protocol === 'media')
+
+        for (const stream of localStreams) {
+          if (!knownLocalMedia.find((r) => r.name === stream.name)) {
+            await this.dispatch({
+              action: Actions.LocalRouteCreate,
+              data: {
+                name: stream.name,
+                endpoint: stream.protocols?.rtsp,
+                protocol: 'media' as const,
+                tags: stream.tags ?? [],
+              },
+            })
+          }
+        }
+
+        for (const route of knownLocalMedia) {
+          if (!localStreams.find((s: { name: string }) => s.name === route.name)) {
+            await this.dispatch({
+              action: Actions.LocalRouteDelete,
+              data: { name: route.name, protocol: route.protocol },
+            })
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.error`Error syncing to video service: ${e}`
+    } finally {
+      this._syncingVideo = false
+    }
+  }
+
   /**
    * Handle side effects after state changes.
    */
@@ -905,6 +983,7 @@ export class CatalystNodeBus extends RpcTarget {
     await this.handleEnvoyConfiguration(action, _state, prevState)
     await this.handleBGPNotify(action, _state, prevState)
     await this.handleGraphqlConfiguration()
+    await this.handleVideoConfiguration(action)
   }
 
   private async propagateWithdrawalsForPeer(
