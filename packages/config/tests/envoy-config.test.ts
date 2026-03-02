@@ -448,3 +448,98 @@ describe('loadDefaultConfig with envoy env vars', () => {
     }
   })
 })
+
+describe('loadDefaultConfig with video env vars', () => {
+  const originalEnv = { ...process.env }
+
+  const setRequiredEnv = () => {
+    process.env.CATALYST_NODE_ID = 'test-node.somebiz.local.io'
+    process.env.CATALYST_PEERING_ENDPOINT = 'ws://localhost:3000'
+    process.env.CATALYST_DOMAINS = 'somebiz.local.io'
+  }
+
+  const clearEnv = () => {
+    process.env = { ...originalEnv }
+  }
+
+  it('video is undefined when CATALYST_VIDEO_ENABLED is not set', () => {
+    setRequiredEnv()
+    try {
+      const config = loadDefaultConfig()
+      expect(config.video).toBeUndefined()
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('parses video config when CATALYST_VIDEO_ENABLED is true', () => {
+    setRequiredEnv()
+    process.env.CATALYST_VIDEO_ENABLED = 'true'
+    try {
+      const config = loadDefaultConfig()
+      expect(config.video).toBeDefined()
+      expect(config.video!.enabled).toBe(true)
+      // defaults applied by schema
+      expect(config.video!.rtspPort).toBe(8554)
+      expect(config.video!.srtPort).toBe(8890)
+      expect(config.video!.hlsPort).toBe(8888)
+      expect(config.video!.webrtcPort).toBe(8889)
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('parses custom video port env vars', () => {
+    setRequiredEnv()
+    process.env.CATALYST_VIDEO_ENABLED = 'true'
+    process.env.CATALYST_VIDEO_RTSP_PORT = '9554'
+    process.env.CATALYST_VIDEO_SRT_PORT = '9890'
+    process.env.CATALYST_VIDEO_HLS_PORT = '9888'
+    process.env.CATALYST_VIDEO_WEBRTC_PORT = '9889'
+    try {
+      const config = loadDefaultConfig()
+      expect(config.video!.rtspPort).toBe(9554)
+      expect(config.video!.srtPort).toBe(9890)
+      expect(config.video!.hlsPort).toBe(9888)
+      expect(config.video!.webrtcPort).toBe(9889)
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('parses video auth fail env vars', () => {
+    setRequiredEnv()
+    process.env.CATALYST_VIDEO_ENABLED = 'true'
+    process.env.CATALYST_VIDEO_AUTH_FAIL_PUBLISH = 'open'
+    process.env.CATALYST_VIDEO_AUTH_FAIL_SUBSCRIBE = 'open'
+    try {
+      const config = loadDefaultConfig()
+      expect(config.video!.authFailPublish).toBe('open')
+      expect(config.video!.authFailSubscribe).toBe('open')
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('parses CATALYST_VIDEO_ENDPOINT into orchestrator.videoConfig', () => {
+    setRequiredEnv()
+    process.env.CATALYST_VIDEO_ENDPOINT = 'http://localhost:8554'
+    try {
+      const config = loadDefaultConfig()
+      expect(config.orchestrator?.videoConfig).toBeDefined()
+      expect(config.orchestrator!.videoConfig!.endpoint).toBe('http://localhost:8554')
+    } finally {
+      clearEnv()
+    }
+  })
+
+  it('orchestrator.videoConfig is undefined when CATALYST_VIDEO_ENDPOINT is not set', () => {
+    setRequiredEnv()
+    try {
+      const config = loadDefaultConfig()
+      expect(config.orchestrator?.videoConfig).toBeUndefined()
+    } finally {
+      clearEnv()
+    }
+  })
+})
