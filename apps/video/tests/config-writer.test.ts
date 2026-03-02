@@ -15,10 +15,10 @@ const defaultConfig: VideoConfig = {
 describe('generateMediaMTXConfig', () => {
   it('generates valid YAML with default ports', () => {
     const yaml = generateMediaMTXConfig(defaultConfig, 3000)
-    expect(yaml).toContain('rtspAddress: :8554')
-    expect(yaml).toContain('srtAddress: :8890')
-    expect(yaml).toContain('hlsAddress: :8888')
-    expect(yaml).toContain('webrtcAddress: :8889')
+    expect(yaml).toContain('rtspAddress: ":8554"')
+    expect(yaml).toContain('srtAddress: ":8890"')
+    expect(yaml).toContain('hlsAddress: ":8888"')
+    expect(yaml).toContain('webrtcAddress: ":8889"')
   })
 
   it('configures runOnReady hook pointing to service port', () => {
@@ -31,23 +31,24 @@ describe('generateMediaMTXConfig', () => {
     expect(yaml).toContain('http://localhost:4000/video-stream/hooks/not-ready')
   })
 
-  it('restricts publishIPs to localhost only', () => {
+  it('delegates auth to HTTP hook (no publishIPs / authInternalUsers)', () => {
     const yaml = generateMediaMTXConfig(defaultConfig, 3000)
-    expect(yaml).toContain('127.0.0.1')
-    expect(yaml).toContain('::1')
+    expect(yaml).not.toContain('publishIPs')
+    expect(yaml).not.toContain('authInternalUsers')
+    expect(yaml).toContain('authHTTPAddress')
   })
 
   it('enables the API on port 9997', () => {
     const yaml = generateMediaMTXConfig(defaultConfig, 3000)
     expect(yaml).toContain('api: true')
-    expect(yaml).toContain('apiAddress: :9997')
+    expect(yaml).toContain('apiAddress: ":9997"')
   })
 
   it('uses custom ports from config', () => {
     const config: VideoConfig = { ...defaultConfig, rtspPort: 9554, hlsPort: 9888 }
     const yaml = generateMediaMTXConfig(config, 3000)
-    expect(yaml).toContain('rtspAddress: :9554')
-    expect(yaml).toContain('hlsAddress: :9888')
+    expect(yaml).toContain('rtspAddress: ":9554"')
+    expect(yaml).toContain('hlsAddress: ":9888"')
   })
 
   it('configures auth endpoint when provided', () => {
