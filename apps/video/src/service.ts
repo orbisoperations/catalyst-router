@@ -8,6 +8,7 @@ import { createHooksRouter } from './hooks/ready.js'
 import { generateMediaMTXConfig, writeMediaMTXConfig } from './media/config-writer.js'
 import { MediaProcessManager } from './media/manager.js'
 import { MediaMTXProcess } from './media/process.js'
+import { createAuthRouter } from './hooks/auth.js'
 import type { MediaRouteConfig, UpdateResult } from './types.js'
 
 export class VideoService extends CatalystService {
@@ -32,17 +33,26 @@ export class VideoService extends CatalystService {
     const hooksRouter = createHooksRouter({
       nodeName: this.config.node.name,
       rtspPort: this.config.video?.rtspPort ?? 8554,
-      onReady: async ({ name, endpoint }) => {
-        this.streamState.addLocal(name, endpoint)
+      onReady: async (route) => {
+        this.telemetry.logger.info`Stream ready: ${route.name}`
+        this.streamState.addLocal(route.name, route.endpoint, [])
+        // TODO: dispatch LocalRouteCreate to orchestrator
       },
-      onNotReady: async ({ name }) => {
-        this.streamState.removeLocal(name)
+      onNotReady: async (route) => {
+        this.telemetry.logger.info`Stream not ready: ${route.name}`
+        this.streamState.removeLocal(route.name)
+        // TODO: dispatch LocalRouteDelete to orchestrator
       },
+    })
+    const authRouter = createAuthRouter({
+      authFailPublish: this.config.video?.authFailPublish ?? 'closed',
+      authFailSubscribe: this.config.video?.authFailSubscribe ?? 'closed',
     })
 
     this.handler.route('/api', rpcApp)
     this.handler.route('/video-stream', streamsRouter)
     this.handler.route('/video-stream/hooks', hooksRouter)
+    this.handler.route('/video-stream', authRouter)
 
     if (this.config.video?.enabled) {
       const yaml = generateMediaMTXConfig(this.config.video, this.config.port)
