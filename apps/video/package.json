@@ -1,0 +1,32 @@
+{
+  "name": "@catalyst/video-service",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests container integration"
+  },
+  "dependencies": {
+    "@hono/capnweb": "catalog:",
+    "capnweb": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:",
+    "@catalyst/config": "workspace:*",
+    "@catalyst/routing": "workspace:*",
+    "@catalyst/service": "workspace:*",
+    "@catalyst/telemetry": "workspace:*",
+    "@opentelemetry/api": "catalog:"
+  },
+  "devDependencies": {
+    "@hono/node-server": "catalog:",
+    "@hono/node-ws": "catalog:",
+    "@types/node": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:testing"
+  }
+}
