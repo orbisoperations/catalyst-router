@@ -1,5 +1,6 @@
 import { Principal } from '@catalyst/authorization'
 import { DataChannelDefinitionSchema } from '@catalyst/routing'
+import { DataChannelProtocolEnum } from '@catalyst/types'
 import { z } from 'zod'
 
 export type CliResult<T> = { success: true; data?: T } | { success: false; error: string }
@@ -48,9 +49,7 @@ export type ListPeersInput = z.infer<typeof ListPeersInputSchema>
 export const CreateRouteInputSchema = BaseCliConfigSchema.extend({
   name: z.string().min(1),
   endpoint: z.string().url(),
-  protocol: z
-    .enum(['http', 'http:graphql', 'http:gql', 'http:grpc', 'tcp'] as const)
-    .default('http:graphql'),
+  protocol: DataChannelProtocolEnum.default('http:graphql'),
   region: z.string().optional(),
   tags: z.array(z.string()).optional(),
   token: z.string().optional(),

@@ -110,3 +110,19 @@ export function createValidationResultSchema<T extends z.ZodType>(payloadSchema:
  * Generic validation result type inferred from createValidationResultSchema
  */
 export type ValidationResult<T> = { valid: true; payload: T } | { valid: false; error: string }
+
+/**
+ * Canonical protocol enum for data channels.
+ *
+ * Import this (or re-export from `@catalyst/routing`) instead of
+ * hand-writing the literal union in each package.
+ */
+export const DataChannelProtocolEnum = z.enum([
+  'http',
+  'http:graphql',
+  'http:gql',
+  'http:grpc',
+  'tcp',
+  'media',
+] as const)
+export type DataChannelProtocol = z.infer<typeof DataChannelProtocolEnum>
