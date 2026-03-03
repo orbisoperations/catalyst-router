@@ -1,0 +1,1351 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Catalyst Live Topology Constellation</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='20' fill='%23081122'/%3E%3Ccircle cx='36' cy='66' r='12' fill='%2339d98a'/%3E%3Ccircle cx='64' cy='40' r='10' fill='%2353d2ff'/%3E%3Ccircle cx='92' cy='66' r='12' fill='%23ffbe5c'/%3E%3Cpath d='M36 66 L64 40 L92 66' stroke='%23d8eafe' stroke-width='6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='32' fill='%23081122'/%3E%3Ccircle cx='50' cy='96' r='16' fill='%2339d98a'/%3E%3Ccircle cx='90' cy='58' r='14' fill='%2353d2ff'/%3E%3Ccircle cx='130' cy='96' r='16' fill='%23ffbe5c'/%3E%3Cpath d='M50 96 L90 58 L130 96' stroke='%23d8eafe' stroke-width='8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-1: #081122;
+        --bg-2: #111827;
+        --bg-3: #14203b;
+        --panel: rgba(10, 20, 36, 0.62);
+        --line: rgba(158, 210, 255, 0.3);
+        --text-main: #d8eafe;
+        --text-muted: #8ca6bf;
+        --accent: #53d2ff;
+        --good: #39d98a;
+        --warn: #ffbe5c;
+        --crit: #ff5f7a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: radial-gradient(circle at 12% 15%, #22396b 0%, var(--bg-1) 28%),
+          radial-gradient(circle at 84% 20%, #1f2f4d 0%, transparent 40%),
+          linear-gradient(140deg, var(--bg-2), var(--bg-3));
+        color: var(--text-main);
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 36px 36px;
+        mask-image: radial-gradient(circle at center, black 30%, transparent 100%);
+      }
+
+      #app {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      #scene {
+        width: 100%;
+        height: 100%;
+      }
+
+      .hud {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      .topbar {
+        margin: 16px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: linear-gradient(145deg, rgba(16, 31, 53, 0.72), rgba(8, 18, 32, 0.55));
+        backdrop-filter: blur(10px);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        pointer-events: auto;
+      }
+
+      .title {
+        font-family: "Sora", "Segoe UI", sans-serif;
+        font-size: clamp(18px, 2.5vw, 28px);
+        letter-spacing: 0.03em;
+        margin: 0;
+      }
+
+      .subtitle {
+        margin: 4px 0 0;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+
+      .clock {
+        font-size: 12px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .mode-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(132, 201, 255, 0.32);
+        background: rgba(12, 26, 45, 0.66);
+        color: #a7c4df;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 6px 10px;
+      }
+
+      .mode-toggle {
+        border: 1px solid rgba(132, 201, 255, 0.4);
+        background: linear-gradient(135deg, rgba(20, 41, 70, 0.88), rgba(9, 23, 42, 0.82));
+        color: #d9ecff;
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: 12px;
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+      }
+
+      .mode-toggle:hover {
+        transform: translateY(-1px);
+        border-color: rgba(132, 201, 255, 0.72);
+        background: linear-gradient(135deg, rgba(28, 56, 95, 0.9), rgba(11, 28, 50, 0.86));
+      }
+
+      .main {
+        display: grid;
+        grid-template-columns: minmax(230px, 300px) 1fr minmax(230px, 320px);
+        gap: 14px;
+        padding: 0 16px;
+      }
+
+      .panel {
+        pointer-events: auto;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        backdrop-filter: blur(9px);
+        padding: 14px;
+        box-shadow: 0 20px 40px rgba(3, 10, 20, 0.34);
+      }
+
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .kpis {
+        display: grid;
+        gap: 9px;
+      }
+
+      .kpi {
+        border: 1px solid rgba(153, 209, 255, 0.18);
+        border-radius: 12px;
+        padding: 10px;
+        background: rgba(6, 14, 25, 0.48);
+      }
+
+      .kpi .label {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .kpi .value {
+        font-size: 21px;
+        font-weight: 700;
+        margin-top: 2px;
+      }
+
+      .events {
+        margin-top: 10px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .event {
+        font-size: 12px;
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(2, 8, 16, 0.5);
+      }
+
+      .event.warn {
+        border-color: rgba(255, 190, 92, 0.42);
+      }
+
+      .event.crit {
+        border-color: rgba(255, 95, 122, 0.42);
+      }
+
+      .legend-row,
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13px;
+        margin-bottom: 7px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        display: inline-block;
+        margin-right: 7px;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .good {
+        background: var(--good);
+      }
+
+      .warn {
+        background: var(--warn);
+      }
+
+      .crit {
+        background: var(--crit);
+      }
+
+      .detail-title {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 4px 0 12px;
+      }
+
+      .footer {
+        margin: 16px;
+        padding: 12px 16px;
+        border-radius: 14px;
+        background: rgba(7, 16, 29, 0.55);
+        border: 1px solid rgba(158, 210, 255, 0.22);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .status-banner {
+        position: absolute;
+        top: 88px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        max-width: min(920px, calc(100vw - 28px));
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 95, 122, 0.45);
+        background: rgba(44, 9, 19, 0.74);
+        color: #ffd9e1;
+        font-size: 13px;
+        line-height: 1.4;
+        display: none;
+      }
+
+      .status-banner.show {
+        display: block;
+      }
+
+      @media (max-width: 980px) {
+        .topbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .top-actions {
+          width: 100%;
+          flex-wrap: wrap;
+        }
+
+        .main {
+          grid-template-columns: 1fr;
+          grid-auto-rows: auto;
+        }
+
+        .panel {
+          max-height: 30vh;
+          overflow: auto;
+        }
+
+        .footer {
+          margin-top: 8px;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="scene"></div>
+      <div class="status-banner" id="status-banner"></div>
+
+      <div class="hud">
+        <div class="topbar">
+          <div>
+            <h1 class="title">Catalyst Live Topology Constellation</h1>
+            <p class="subtitle" id="subtitle-text">Fake streaming mesh with site-level nodes and nested service components</p>
+          </div>
+          <div class="top-actions">
+            <span class="mode-chip" id="mode-chip">Mode: Infrastructure</span>
+            <button class="mode-toggle" id="mode-toggle" type="button">Switch to Team Personas</button>
+            <div class="clock" id="clock">--:--:-- UTC</div>
+          </div>
+        </div>
+
+        <div class="main">
+          <section class="panel">
+            <h2>Cluster Pulse</h2>
+            <div class="kpis">
+              <div class="kpi"><div class="label" id="kpi-nodes-label">Online Sites</div><div class="value" id="kpi-nodes">0</div></div>
+              <div class="kpi"><div class="label">Active Links</div><div class="value" id="kpi-links">0</div></div>
+              <div class="kpi"><div class="label">Aggregate Throughput</div><div class="value" id="kpi-throughput">0 MB/s</div></div>
+              <div class="kpi"><div class="label">p95 Latency</div><div class="value" id="kpi-latency">0 ms</div></div>
+            </div>
+            <h2 style="margin-top: 16px">Signal Events</h2>
+            <div class="events" id="events"></div>
+          </section>
+
+          <div></div>
+
+          <section class="panel">
+            <h2 id="detail-panel-title">Selected Site</h2>
+            <div class="detail-title" id="detail-name">None selected</div>
+            <div class="detail-row"><span>Role</span><strong id="detail-role">-</strong></div>
+            <div class="detail-row"><span>Health</span><strong id="detail-health">-</strong></div>
+            <div class="detail-row"><span>Latency</span><strong id="detail-latency">-</strong></div>
+            <div class="detail-row"><span>Throughput</span><strong id="detail-throughput">-</strong></div>
+            <div class="detail-row"><span>Jitter</span><strong id="detail-jitter">-</strong></div>
+
+            <h2 style="margin-top: 16px">Legend</h2>
+            <div class="legend-row"><span class="status"><span class="dot good"></span>Healthy</span><span>0.75 - 1.00</span></div>
+            <div class="legend-row"><span class="status"><span class="dot warn"></span>Degraded</span><span>0.45 - 0.74</span></div>
+            <div class="legend-row"><span class="status"><span class="dot crit"></span>Critical</span><span>0.00 - 0.44</span></div>
+          </section>
+        </div>
+
+        <div class="footer">
+          <span id="footer-hint">Drag to orbit, scroll to zoom, hover site/components for focus, click to pin selection.</span>
+          <span id="footer-health">Mesh health: stable</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__topologyReady = false;
+      window.__topologyError = null;
+
+      function showTopologyBanner(message) {
+        const banner = document.getElementById("status-banner");
+        if (!banner) return;
+        banner.classList.add("show");
+        banner.textContent = message;
+      }
+
+      window.addEventListener("error", (event) => {
+        const msg = event?.message ? `Runtime error: ${event.message}` : "Runtime error during topology initialization.";
+        window.__topologyError = msg;
+        showTopologyBanner(msg);
+      });
+
+      window.addEventListener("unhandledrejection", (event) => {
+        const reason = event.reason?.message || String(event.reason || "unknown rejection");
+        const msg = `Unhandled promise rejection: ${reason}`;
+        window.__topologyError = msg;
+        showTopologyBanner(msg);
+      });
+
+      setTimeout(() => {
+        if (window.__topologyReady) return;
+        if (window.__topologyError) return;
+        showTopologyBanner(
+          "Topology scene did not initialize. Check DevTools Console for module/runtime errors and verify local files are served from demo/live-topology-constellation.",
+        );
+      }, 2500);
+    </script>
+    <script type="module">
+      import * as THREE from "./vendor/three/build/three.module.js";
+      import { OrbitControls } from "./vendor/three/addons/controls/OrbitControls.js";
+
+      const HEALTH_COLORS = {
+        good: new THREE.Color("#39d98a"),
+        warn: new THREE.Color("#ffbe5c"),
+        crit: new THREE.Color("#ff5f7a"),
+      };
+
+      const COMPONENT_COLORS = {
+        orchestrator: "#53d2ff",
+        gateway: "#9a9cff",
+        envoy: "#72f1d0",
+        auth: "#ff86c2",
+        telemetry: "#ffd479",
+        routing: "#86e8ff",
+      };
+
+      const root = document.getElementById("scene");
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x091326, 0.026);
+
+      const camera = new THREE.PerspectiveCamera(54, window.innerWidth / window.innerHeight, 0.1, 240);
+      camera.position.set(0, 8.3, 24);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      root.appendChild(renderer.domElement);
+
+      function buildNodeTexture(seed = 1, size = 256) {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+
+        ctx.fillStyle = "#6f8fb3";
+        ctx.fillRect(0, 0, size, size);
+
+        for (let i = 0; i < 220; i += 1) {
+          const x = (Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453) % 1;
+          const y = (Math.sin(i * 93.9898 + seed * 11.233) * 24634.6345) % 1;
+          const px = Math.abs(x) * size;
+          const py = Math.abs(y) * size;
+          const shade = 112 + ((i * 13 + seed * 33) % 80);
+          ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+          ctx.fillRect(px, py, 2, 2);
+        }
+
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 28; i += 1) {
+          const t = (i + seed * 0.7) / 28;
+          const x = t * size;
+          const wobble = Math.sin(t * Math.PI * 6 + seed) * 10;
+          ctx.strokeStyle = `rgba(210,230,255,${0.05 + (i % 6) * 0.015})`;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.quadraticCurveTo(x + wobble, size * 0.5, x - wobble, size);
+          ctx.stroke();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        texture.needsUpdate = true;
+        return texture;
+      }
+
+      function makeRoundedLabelTexture(
+        text,
+        {
+          width = 512,
+          height = 128,
+          radius = 22,
+          bg = "rgba(6, 14, 24, 0.74)",
+          border = "rgba(132, 201, 255, 0.45)",
+          accent = "rgba(83, 210, 255, 0.35)",
+          textColor = "#d9ecff",
+          font = "700 44px 'Space Grotesk', sans-serif",
+        } = {},
+      ) {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const r = radius;
+
+        ctx.fillStyle = bg;
+        ctx.strokeStyle = border;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(r, 8);
+        ctx.lineTo(w - r, 8);
+        ctx.quadraticCurveTo(w - 8, 8, w - 8, r);
+        ctx.lineTo(w - 8, h - r);
+        ctx.quadraticCurveTo(w - 8, h - 8, w - r, h - 8);
+        ctx.lineTo(r, h - 8);
+        ctx.quadraticCurveTo(8, h - 8, 8, h - r);
+        ctx.lineTo(8, r);
+        ctx.quadraticCurveTo(8, 8, r, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = accent;
+        ctx.fillRect(28, h - 26, w - 56, 4);
+
+        ctx.fillStyle = textColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = font;
+        ctx.fillText(text, w / 2, h / 2 + 1);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        texture.needsUpdate = true;
+        return texture;
+      }
+
+      function replaceSpriteTexture(sprite, texture) {
+        const previous = sprite.material.map;
+        sprite.material.map = texture;
+        sprite.material.needsUpdate = true;
+        if (previous) previous.dispose();
+      }
+
+      function createSiteLabelSprite(text) {
+        const texture = makeRoundedLabelTexture(text);
+
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity: 0.76,
+          depthWrite: false,
+          depthTest: false,
+        });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(3.8, 0.95, 1);
+        sprite.position.set(0, 2.55, 0);
+        sprite.renderOrder = 12;
+        return sprite;
+      }
+
+      function createLinkLabelSprite(text) {
+        const texture = makeRoundedLabelTexture(text, {
+          width: 360,
+          height: 92,
+          radius: 16,
+          bg: "rgba(7, 18, 34, 0.62)",
+          border: "rgba(116, 175, 247, 0.34)",
+          accent: "rgba(116, 175, 247, 0.35)",
+          textColor: "#cce6ff",
+          font: "700 30px 'Space Grotesk', sans-serif",
+        });
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 0.0,
+            depthWrite: false,
+            depthTest: false,
+          }),
+        );
+        sprite.scale.set(2.6, 0.66, 1);
+        sprite.renderOrder = 11;
+        return sprite;
+      }
+
+      function createLavaNodeMaterial(baseHex, accentHex) {
+        return new THREE.ShaderMaterial({
+          uniforms: {
+            uTime: { value: 0 },
+            uBase: { value: new THREE.Color(baseHex) },
+            uAccent: { value: new THREE.Color(accentHex) },
+            uHealthTint: { value: new THREE.Color("#53d2ff") },
+            uHealthMix: { value: 0.28 },
+            uEmissiveStrength: { value: 0.7 },
+          },
+          vertexShader: `
+            varying vec3 vNormal;
+            varying vec3 vWorldPos;
+            void main() {
+              vNormal = normalize(normalMatrix * normal);
+              vec4 worldPos = modelMatrix * vec4(position, 1.0);
+              vWorldPos = worldPos.xyz;
+              gl_Position = projectionMatrix * viewMatrix * worldPos;
+            }
+          `,
+          fragmentShader: `
+            uniform float uTime;
+            uniform vec3 uBase;
+            uniform vec3 uAccent;
+            uniform vec3 uHealthTint;
+            uniform float uHealthMix;
+            uniform float uEmissiveStrength;
+            varying vec3 vNormal;
+            varying vec3 vWorldPos;
+
+            float hash(vec3 p) {
+              p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+              p *= 17.0;
+              return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+            }
+
+            float noise(vec3 p) {
+              vec3 i = floor(p);
+              vec3 f = fract(p);
+              f = f * f * (3.0 - 2.0 * f);
+
+              float n000 = hash(i + vec3(0.0, 0.0, 0.0));
+              float n100 = hash(i + vec3(1.0, 0.0, 0.0));
+              float n010 = hash(i + vec3(0.0, 1.0, 0.0));
+              float n110 = hash(i + vec3(1.0, 1.0, 0.0));
+              float n001 = hash(i + vec3(0.0, 0.0, 1.0));
+              float n101 = hash(i + vec3(1.0, 0.0, 1.0));
+              float n011 = hash(i + vec3(0.0, 1.0, 1.0));
+              float n111 = hash(i + vec3(1.0, 1.0, 1.0));
+
+              float nx00 = mix(n000, n100, f.x);
+              float nx10 = mix(n010, n110, f.x);
+              float nx01 = mix(n001, n101, f.x);
+              float nx11 = mix(n011, n111, f.x);
+              float nxy0 = mix(nx00, nx10, f.y);
+              float nxy1 = mix(nx01, nx11, f.y);
+              return mix(nxy0, nxy1, f.z);
+            }
+
+            float fbm(vec3 p) {
+              float value = 0.0;
+              float amp = 0.5;
+              for (int i = 0; i < 5; i++) {
+                value += amp * noise(p);
+                p *= 2.03;
+                amp *= 0.5;
+              }
+              return value;
+            }
+
+            float sineEgg(vec3 p) {
+              return abs(sin(p.x) - cos(p.y) + sin(p.z));
+            }
+
+            void main() {
+              vec3 n = normalize(vNormal);
+              vec3 viewDir = normalize(cameraPosition - vWorldPos);
+              vec3 lightDir = normalize(vec3(0.33, 0.88, 0.37));
+
+              vec3 p = vWorldPos * 0.95;
+              float flowA = fbm(p + vec3(0.0, uTime * 0.16, uTime * 0.08));
+              float flowB = fbm(p * 1.9 - vec3(0.0, uTime * 0.22, uTime * 0.11));
+              float spiral = sin((length(p.xz) * 8.6 - uTime * 1.25) + flowA * 3.2) * 0.5 + 0.5;
+              float rings = sin((p.y + flowA * 1.8 - uTime * 0.9) * 9.5) * 0.5 + 0.5;
+              float cell = smoothstep(0.2, 1.05, 1.2 - sineEgg((p + flowB) * 2.45));
+              float energy = smoothstep(0.24, 0.92, flowA * 0.52 + flowB * 0.38 + spiral * 0.26 + rings * 0.18 + cell * 0.35);
+
+              vec3 orbColor = mix(uBase, uAccent, energy);
+              float diff = max(dot(n, lightDir), 0.0);
+              float rim = pow(1.0 - max(dot(n, viewDir), 0.0), 2.9);
+              float sparkle = pow(max(dot(reflect(-lightDir, n), viewDir), 0.0), 16.0) * 0.25;
+
+              vec3 lit = orbColor * (0.2 + 0.78 * diff);
+              lit += vec3(0.04, 0.1, 0.22) * (0.42 + flowA * 0.25);
+              lit += vec3(0.32, 0.58, 1.0) * rim * 0.7;
+              lit += vec3(0.4, 0.65, 1.0) * smoothstep(0.7, 1.0, rings) * 0.2;
+              lit += sparkle;
+              lit = mix(lit, uHealthTint, uHealthMix * 0.42);
+              lit += uHealthTint * rim * uEmissiveStrength * 0.58;
+
+              gl_FragColor = vec4(lit, 1.0);
+            }
+          `,
+        });
+      }
+
+      const componentDetailTexture = buildNodeTexture(9);
+      componentDetailTexture.repeat.set(3.1, 3.1);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.2;
+      controls.minDistance = 10;
+      controls.maxDistance = 38;
+      controls.maxPolarAngle = Math.PI * 0.49;
+
+      const hemi = new THREE.HemisphereLight(0x8eb8ff, 0x061426, 0.85);
+      scene.add(hemi);
+
+      const keyLight = new THREE.PointLight(0x64d6ff, 1.45, 80, 1.4);
+      keyLight.position.set(10, 13, 8);
+      scene.add(keyLight);
+
+      const rimLight = new THREE.PointLight(0xff8ac7, 0.5, 60, 1.8);
+      rimLight.position.set(-14, 6, -12);
+      scene.add(rimLight);
+
+      const starGeom = new THREE.BufferGeometry();
+      const starCount = 1300;
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i += 1) {
+        const i3 = i * 3;
+        const r = 36 + Math.random() * 50;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        starPos[i3] = r * Math.sin(phi) * Math.cos(theta);
+        starPos[i3 + 1] = r * Math.cos(phi);
+        starPos[i3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      }
+      starGeom.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+      const starMat = new THREE.PointsMaterial({ color: 0x98b8ff, size: 0.09, opacity: 0.58, transparent: true });
+      const stars = new THREE.Points(starGeom, starMat);
+      scene.add(stars);
+
+      const siteSpecs = [
+        {
+          id: "node-west",
+          label: "Node West",
+          type: "edge node",
+          persona: {
+            name: "Jae",
+            codename: "Atlas",
+            title: "Core Systems Navigator",
+            focus: "CI + Runtime",
+          },
+          pos: [-10.2, 0.8, -3.6],
+          components: [
+            { id: "gw-west", label: "Gateway", role: "gateway" },
+            { id: "envoy-west", label: "Envoy", role: "envoy" },
+            { id: "telemetry-west", label: "Telemetry", role: "telemetry" },
+          ],
+        },
+        {
+          id: "node-core",
+          label: "Node Core",
+          type: "control node",
+          persona: {
+            name: "Jesse",
+            codename: "Comet",
+            title: "Mission Control Architect",
+            focus: "Control Plane + Reliability",
+          },
+          pos: [0.1, 1.1, -7.3],
+          components: [
+            { id: "orch-core", label: "Orchestrator", role: "orchestrator" },
+            { id: "auth-core", label: "Auth", role: "auth" },
+            { id: "route-core", label: "Routing", role: "routing" },
+          ],
+        },
+        {
+          id: "node-east",
+          label: "Node East",
+          type: "edge node",
+          persona: {
+            name: "Gabriel",
+            codename: "Orion",
+            title: "Gateway Flight Engineer",
+            focus: "Traffic + APIs",
+          },
+          pos: [10.4, 0.4, -2.7],
+          components: [
+            { id: "gw-east", label: "Gateway", role: "gateway" },
+            { id: "envoy-east", label: "Envoy", role: "envoy" },
+            { id: "telemetry-east", label: "Telemetry", role: "telemetry" },
+          ],
+        },
+        {
+          id: "node-north",
+          label: "Node North",
+          type: "transit node",
+          persona: {
+            name: "Peter",
+            codename: "Vector",
+            title: "Orbit Transit Specialist",
+            focus: "Mesh Peering + Routing",
+          },
+          pos: [-0.8, 0.5, 7.9],
+          components: [
+            { id: "orch-north", label: "Orchestrator", role: "orchestrator" },
+            { id: "envoy-north", label: "Envoy", role: "envoy" },
+            { id: "gw-north", label: "Gateway", role: "gateway" },
+          ],
+        },
+      ];
+
+      const interSiteLinks = [
+        {
+          sourceId: "node-west",
+          targetId: "node-core",
+          technicalLabel: "Control Plane Sync",
+          personaLabel: "Pairing Channel",
+        },
+        {
+          sourceId: "node-east",
+          targetId: "node-core",
+          technicalLabel: "Ingress Strategy Path",
+          personaLabel: "Review Lane",
+        },
+        {
+          sourceId: "node-north",
+          targetId: "node-core",
+          technicalLabel: "Transit Routing Link",
+          personaLabel: "Mission Sync",
+        },
+        {
+          sourceId: "node-west",
+          targetId: "node-north",
+          technicalLabel: "Peering Overlay",
+          personaLabel: "Handoff Relay",
+        },
+        {
+          sourceId: "node-east",
+          targetId: "node-north",
+          technicalLabel: "Observability Transit",
+          personaLabel: "Support Beam",
+        },
+      ];
+
+      const TEAM_STATES = ["In Flow", "Debugging Rift", "Shipping", "On Call", "Reviewing PRs"];
+
+      const siteShaderPalette = {
+        "node-west": { base: "#071428", accent: "#2f5cda" },
+        "node-core": { base: "#081326", accent: "#4972ff" },
+        "node-east": { base: "#08152a", accent: "#3b63e2" },
+        "node-north": { base: "#071429", accent: "#4168f1" },
+      };
+
+      function randomMetric(base, spread, floor = 0) {
+        return Math.max(floor, base + (Math.random() - 0.5) * spread);
+      }
+
+      function healthState(value) {
+        if (value < 0.45) return "critical";
+        if (value < 0.75) return "degraded";
+        return "healthy";
+      }
+
+      function healthColor(value) {
+        if (value < 0.45) return HEALTH_COLORS.crit;
+        if (value < 0.75) return HEALTH_COLORS.warn;
+        return HEALTH_COLORS.good;
+      }
+
+      function buildArcCurve(start, end) {
+        const mid = start.clone().lerp(end, 0.5);
+        mid.y += 1.2 + start.distanceTo(end) * 0.08;
+        return new THREE.QuadraticBezierCurve3(start.clone(), mid, end.clone());
+      }
+
+      const siteMap = new Map();
+      const sites = [];
+      const selectable = [];
+      const pickSiteByObject = new Map();
+      const pickComponentByObject = new Map();
+
+      siteSpecs.forEach((spec) => {
+        const group = new THREE.Group();
+        group.position.set(...spec.pos);
+        const palette = siteShaderPalette[spec.id] ?? { base: "#071427", accent: "#3f69ef" };
+        const coreMaterial = createLavaNodeMaterial(palette.base, palette.accent);
+
+        const core = new THREE.Mesh(
+          new THREE.SphereGeometry(0.62, 28, 28),
+          coreMaterial,
+        );
+
+        const shell = new THREE.Mesh(
+          new THREE.SphereGeometry(1.24, 24, 24),
+          new THREE.MeshBasicMaterial({ color: "#53d2ff", transparent: true, opacity: 0.12 }),
+        );
+
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(1.95, 0.03, 10, 70),
+          new THREE.MeshBasicMaterial({ color: "#6aa9ff", transparent: true, opacity: 0.52 }),
+        );
+        ring.rotation.x = Math.PI / 2.5;
+        const labelSprite = createSiteLabelSprite(spec.label);
+
+        group.add(shell);
+        group.add(ring);
+        group.add(core);
+        group.add(labelSprite);
+        scene.add(group);
+
+        const site = {
+          ...spec,
+          technicalLabel: spec.label,
+          personaLabel: `${spec.persona.codename} · ${spec.persona.name}`,
+          group,
+          core,
+          shell,
+          ring,
+          labelSprite,
+          coreMaterial,
+          phase: Math.random() * 10,
+          health: randomMetric(0.84, 0.12, 0.52),
+          latency: randomMetric(22, 9, 5),
+          throughput: randomMetric(142, 36, 20),
+          jitter: randomMetric(3.2, 1.8, 0.2),
+          crewState: TEAM_STATES[Math.floor(Math.random() * TEAM_STATES.length)],
+          components: [],
+        };
+
+        spec.components.forEach((componentSpec, index) => {
+          const color = COMPONENT_COLORS[componentSpec.role] ?? "#a8c4ff";
+          const mesh = new THREE.Mesh(
+            new THREE.SphereGeometry(0.2, 18, 18),
+            new THREE.MeshStandardMaterial({
+              color,
+              emissive: color,
+              emissiveIntensity: 0.5,
+              map: componentDetailTexture,
+              bumpMap: componentDetailTexture,
+              bumpScale: 0.05,
+              metalness: 0.14,
+              roughness: 0.42,
+            }),
+          );
+
+          const tetherGeom = new THREE.BufferGeometry();
+          const tetherAttr = new THREE.BufferAttribute(new Float32Array(6), 3);
+          tetherGeom.setAttribute("position", tetherAttr);
+          const tether = new THREE.Line(
+            tetherGeom,
+            new THREE.LineBasicMaterial({ color: 0x88baf8, transparent: true, opacity: 0.28 }),
+          );
+
+          group.add(tether);
+          group.add(mesh);
+
+          const component = {
+            ...componentSpec,
+            site,
+            mesh,
+            tether,
+            tetherAttr,
+            baseAngle: (Math.PI * 2 * index) / spec.components.length + Math.random() * 0.4,
+            orbitRadius: 1.45 + (index % 2) * 0.28 + Math.random() * 0.12,
+            orbitSpeed: 0.28 + Math.random() * 0.25,
+            phase: Math.random() * 10,
+            health: randomMetric(0.82, 0.2, 0.35),
+            latency: randomMetric(26, 11, 6),
+            throughput: randomMetric(46, 18, 4),
+            jitter: randomMetric(2.7, 1.5, 0.2),
+          };
+
+          site.components.push(component);
+          selectable.push(mesh);
+          pickSiteByObject.set(mesh, site);
+          pickComponentByObject.set(mesh, component);
+        });
+
+        selectable.push(core);
+        pickSiteByObject.set(core, site);
+        siteMap.set(site.id, site);
+        sites.push(site);
+      });
+
+      function updateComponentOrbit(component, time) {
+        const angle = component.baseAngle + time * component.orbitSpeed;
+        const y = Math.sin(time * 1.45 + component.phase) * 0.23;
+        const x = Math.cos(angle) * component.orbitRadius;
+        const z = Math.sin(angle) * component.orbitRadius;
+
+        component.mesh.position.set(x, y, z);
+
+        const arr = component.tetherAttr.array;
+        arr[0] = 0;
+        arr[1] = 0;
+        arr[2] = 0;
+        arr[3] = x;
+        arr[4] = y;
+        arr[5] = z;
+        component.tetherAttr.needsUpdate = true;
+      }
+
+      function recomputeSiteMetrics(site) {
+        const count = site.components.length;
+        site.health = site.components.reduce((sum, c) => sum + c.health, 0) / count;
+        site.latency = site.components.reduce((sum, c) => sum + c.latency, 0) / count;
+        site.throughput = site.components.reduce((sum, c) => sum + c.throughput, 0);
+        site.jitter = site.components.reduce((sum, c) => sum + c.jitter, 0) / count;
+
+        const hc = healthColor(site.health);
+        site.coreMaterial.uniforms.uHealthTint.value.copy(hc);
+        site.coreMaterial.uniforms.uHealthMix.value = 0.24 + (1 - site.health) * 0.58;
+        site.coreMaterial.uniforms.uEmissiveStrength.value = 0.42 + site.health * 0.74;
+        site.shell.material.color.copy(hc);
+        site.shell.material.opacity = 0.1 + (1 - site.health) * 0.22;
+        site.ring.material.color.copy(hc);
+        site.labelSprite.material.color.copy(hc).lerp(new THREE.Color("#b8d9ff"), 0.68);
+      }
+
+      const links = interSiteLinks.map((spec) => {
+        const { sourceId, targetId } = spec;
+        const source = siteMap.get(sourceId);
+        const target = siteMap.get(targetId);
+        const curve = buildArcCurve(source.group.position, target.group.position);
+        const points = curve.getPoints(56);
+
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          new THREE.LineBasicMaterial({ color: 0x7cc7ff, transparent: true, opacity: 0.4 }),
+        );
+
+        const pulse = new THREE.Mesh(
+          new THREE.SphereGeometry(0.11, 12, 12),
+          new THREE.MeshBasicMaterial({ color: 0xa3f3ff, transparent: true, opacity: 0.8 }),
+        );
+        const labelSprite = createLinkLabelSprite(spec.technicalLabel);
+        const labelPoint = curve.getPointAt(0.5);
+        labelPoint.y += 0.55;
+        labelSprite.position.copy(labelPoint);
+
+        scene.add(line);
+        scene.add(pulse);
+        scene.add(labelSprite);
+
+        return {
+          source,
+          target,
+          technicalLabel: spec.technicalLabel,
+          personaLabel: spec.personaLabel,
+          curve,
+          line,
+          pulse,
+          labelSprite,
+          traffic: randomMetric(0.56, 0.32, 0.06),
+          phase: Math.random(),
+        };
+      });
+
+      sites.forEach((site) => recomputeSiteMetrics(site));
+
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2(1000, 1000);
+      let hoveredSite = null;
+      let hoveredComponent = null;
+      let selectedSite = null;
+
+      const clockEl = document.getElementById("clock");
+      const subtitleText = document.getElementById("subtitle-text");
+      const modeChip = document.getElementById("mode-chip");
+      const modeToggle = document.getElementById("mode-toggle");
+      const detailPanelTitle = document.getElementById("detail-panel-title");
+      const kpiNodesLabel = document.getElementById("kpi-nodes-label");
+      const footerHint = document.getElementById("footer-hint");
+      const detailFields = {
+        name: document.getElementById("detail-name"),
+        role: document.getElementById("detail-role"),
+        health: document.getElementById("detail-health"),
+        latency: document.getElementById("detail-latency"),
+        throughput: document.getElementById("detail-throughput"),
+        jitter: document.getElementById("detail-jitter"),
+      };
+
+      const eventsEl = document.getElementById("events");
+      const footerHealth = document.getElementById("footer-health");
+      const kpiNodes = document.getElementById("kpi-nodes");
+      const kpiLinks = document.getElementById("kpi-links");
+      const kpiThroughput = document.getElementById("kpi-throughput");
+      const kpiLatency = document.getElementById("kpi-latency");
+      const eventBuffer = [];
+      let displayMode = "technical";
+
+      function isPersonaMode() {
+        return displayMode === "persona";
+      }
+
+      function applyDisplayMode() {
+        const persona = isPersonaMode();
+        subtitleText.textContent = persona
+          ? "Space crew mode: team personas projected onto live constellation signals"
+          : "Fake streaming mesh with site-level nodes and nested service components";
+        modeChip.textContent = persona ? "Mode: Team Personas" : "Mode: Infrastructure";
+        modeToggle.textContent = persona ? "Switch to Infrastructure View" : "Switch to Team Personas";
+        detailPanelTitle.textContent = persona ? "Selected Crew Node" : "Selected Site";
+        kpiNodesLabel.textContent = persona ? "Online Crew" : "Online Sites";
+        footerHint.textContent = persona
+          ? "Drag to orbit, scroll to zoom, hover crew/components for focus, click to pin selection."
+          : "Drag to orbit, scroll to zoom, hover site/components for focus, click to pin selection.";
+
+        sites.forEach((site) => {
+          replaceSpriteTexture(site.labelSprite, makeRoundedLabelTexture(persona ? site.personaLabel : site.technicalLabel));
+        });
+
+        links.forEach((link) => {
+          replaceSpriteTexture(
+            link.labelSprite,
+            makeRoundedLabelTexture(persona ? link.personaLabel : link.technicalLabel, {
+              width: 360,
+              height: 92,
+              radius: 16,
+              bg: "rgba(7, 18, 34, 0.62)",
+              border: "rgba(116, 175, 247, 0.34)",
+              accent: "rgba(116, 175, 247, 0.35)",
+              textColor: "#cce6ff",
+              font: "700 30px 'Space Grotesk', sans-serif",
+            }),
+          );
+          link.labelSprite.visible = persona;
+          link.labelSprite.material.opacity = persona ? 0.68 : 0;
+        });
+      }
+
+      function pushEvent(text, level = "info") {
+        eventBuffer.unshift({ text, level });
+        if (eventBuffer.length > 6) eventBuffer.pop();
+
+        eventsEl.innerHTML = "";
+        eventBuffer.forEach((e) => {
+          const row = document.createElement("div");
+          row.className = `event ${e.level === "warn" ? "warn" : e.level === "crit" ? "crit" : ""}`;
+          row.textContent = e.text;
+          eventsEl.appendChild(row);
+        });
+      }
+
+      function setDetail(site) {
+        if (!site) {
+          detailFields.name.textContent = "None selected";
+          detailFields.role.textContent = "-";
+          detailFields.health.textContent = "-";
+          detailFields.latency.textContent = "-";
+          detailFields.throughput.textContent = "-";
+          detailFields.jitter.textContent = "-";
+          return;
+        }
+
+        if (isPersonaMode()) {
+          detailFields.name.textContent = site.personaLabel;
+          detailFields.role.textContent = `${site.persona.title} · ${site.persona.focus} · ${site.crewState}`;
+        } else {
+          detailFields.name.textContent = site.technicalLabel;
+          detailFields.role.textContent = `${site.type} (${site.components.length} services)`;
+        }
+        detailFields.health.textContent = `${(site.health * 100).toFixed(0)}% (${healthState(site.health)})`;
+        detailFields.latency.textContent = `${site.latency.toFixed(1)} ms`;
+        detailFields.throughput.textContent = `${site.throughput.toFixed(1)} MB/s`;
+        detailFields.jitter.textContent = `${site.jitter.toFixed(1)} ms`;
+      }
+
+      function updateMetricsTick() {
+        sites.forEach((site) => {
+          site.components.forEach((component) => {
+            component.health = THREE.MathUtils.clamp(component.health + (Math.random() - 0.5) * 0.11, 0.22, 1);
+            component.latency = THREE.MathUtils.clamp(component.latency + (Math.random() - 0.5) * 9.2, 5, 140);
+            component.throughput = THREE.MathUtils.clamp(component.throughput + (Math.random() - 0.5) * 17, 3, 130);
+            component.jitter = THREE.MathUtils.clamp(component.jitter + (Math.random() - 0.5) * 2.5, 0.2, 30);
+
+            const base = new THREE.Color(COMPONENT_COLORS[component.role] ?? "#a8c4ff");
+            const hc = healthColor(component.health);
+            component.mesh.material.color.copy(base).lerp(hc, 0.32);
+            component.mesh.material.emissive.copy(hc);
+            component.mesh.material.emissiveIntensity = 0.24 + component.health * 0.55;
+            component.tether.material.color.copy(hc);
+            component.tether.material.opacity = 0.16 + (1 - component.health) * 0.35;
+          });
+
+          recomputeSiteMetrics(site);
+          if (Math.random() > 0.88) {
+            site.crewState = TEAM_STATES[Math.floor(Math.random() * TEAM_STATES.length)];
+          }
+        });
+
+        links.forEach((link) => {
+          link.traffic = THREE.MathUtils.clamp(link.traffic + (Math.random() - 0.5) * 0.22, 0.05, 1);
+          const combinedHealth = (link.source.health + link.target.health) / 2;
+          link.line.material.color.copy(healthColor(combinedHealth));
+          link.line.material.opacity = 0.2 + link.traffic * 0.54;
+        });
+
+        const allComponents = sites.flatMap((site) => site.components);
+        const worst = allComponents.reduce((acc, c) => (c.health < acc.health ? c : acc), allComponents[0]);
+
+        if (worst.health < 0.45 && Math.random() > 0.42) {
+          if (isPersonaMode()) {
+            pushEvent(
+              `${worst.site.personaLabel}: ${worst.site.crewState} · ${worst.label} at ${(worst.health * 100).toFixed(0)}%`,
+              "crit",
+            );
+          } else {
+            pushEvent(
+              `Service degraded: ${worst.site.technicalLabel}/${worst.label} (${(worst.health * 100).toFixed(0)}% health)`,
+              "crit",
+            );
+          }
+        } else if (Math.random() > 0.72) {
+          const busyLink = links[Math.floor(Math.random() * links.length)];
+          if (isPersonaMode()) {
+            pushEvent(
+              `${busyLink.personaLabel}: ${busyLink.source.persona.codename} ↔ ${busyLink.target.persona.codename} (${(busyLink.traffic * 100).toFixed(0)}% load)`,
+              "warn",
+            );
+          } else {
+            pushEvent(
+              `Inter-site surge: ${busyLink.source.id} -> ${busyLink.target.id} (${(busyLink.traffic * 100).toFixed(0)}% load)`,
+              "warn",
+            );
+          }
+        } else {
+          const site = sites[Math.floor(Math.random() * sites.length)];
+          pushEvent(
+            isPersonaMode() ? `${site.personaLabel} is ${site.crewState}` : `${site.technicalLabel} component sync complete`,
+            "info",
+          );
+        }
+
+        const avgHealth = sites.reduce((acc, site) => acc + site.health, 0) / sites.length;
+        const totalThroughput = sites.reduce((acc, site) => acc + site.throughput, 0);
+        const latencies = sites.map((s) => s.latency).sort((a, b) => a - b);
+        const p95Index = Math.max(0, Math.floor(latencies.length * 0.95) - 1);
+        const p95Latency = latencies[p95Index] ?? 0;
+
+        kpiNodes.textContent = `${sites.filter((site) => site.health > 0.32).length}/${sites.length}`;
+        kpiLinks.textContent = `${links.length}`;
+        kpiThroughput.textContent = `${totalThroughput.toFixed(0)} MB/s`;
+        kpiLatency.textContent = `${p95Latency.toFixed(1)} ms`;
+        footerHealth.textContent =
+          avgHealth > 0.8 ? "Mesh health: stable" : avgHealth > 0.6 ? "Mesh health: watch state" : "Mesh health: degraded";
+
+        if (selectedSite) setDetail(selectedSite);
+      }
+
+      function onPointerMove(event) {
+        pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      }
+
+      function onClick() {
+        if (hoveredSite) {
+          selectedSite = hoveredSite;
+          setDetail(selectedSite);
+        }
+      }
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("click", onClick);
+      modeToggle.addEventListener("click", () => {
+        displayMode = isPersonaMode() ? "technical" : "persona";
+        applyDisplayMode();
+        if (selectedSite) setDetail(selectedSite);
+      });
+
+      setDetail(null);
+      applyDisplayMode();
+      pushEvent("Constellation stream initialized with hierarchical sites", "info");
+      updateMetricsTick();
+      setInterval(updateMetricsTick, 1100);
+
+      function animate(timeMs) {
+        const time = timeMs * 0.001;
+
+        sites.forEach((site) => {
+          site.coreMaterial.uniforms.uTime.value = time + site.phase;
+          site.shell.scale.setScalar(1 + Math.sin(time * 1.3 + site.phase) * 0.08);
+          site.ring.rotation.x = time * 0.22 + site.phase;
+          site.ring.rotation.z = time * 0.14 + site.phase * 0.6;
+
+          site.components.forEach((component) => {
+            updateComponentOrbit(component, time);
+          });
+        });
+
+        links.forEach((link) => {
+          const t = (time * (0.12 + link.traffic * 0.17) + link.phase) % 1;
+          const p = link.curve.getPointAt(t);
+          link.pulse.position.copy(p);
+          link.pulse.scale.setScalar(0.75 + link.traffic * 1.2);
+          link.pulse.material.opacity = 0.4 + link.traffic * 0.55;
+          if (link.labelSprite.visible) {
+            const labelOpacityTarget = 0.44 + link.traffic * 0.28;
+            link.labelSprite.material.opacity = THREE.MathUtils.lerp(
+              link.labelSprite.material.opacity,
+              labelOpacityTarget,
+              0.16,
+            );
+          }
+        });
+
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObjects(selectable, false)[0];
+        const hitObject = hit ? hit.object : null;
+        const nextHoveredSite = hitObject ? pickSiteByObject.get(hitObject) : null;
+        const nextHoveredComponent = hitObject ? pickComponentByObject.get(hitObject) : null;
+
+        hoveredSite = nextHoveredSite ?? null;
+        hoveredComponent = nextHoveredComponent ?? null;
+
+        sites.forEach((site) => {
+          const targetScale = site === selectedSite ? 1.34 : site === hoveredSite ? 1.2 : 1;
+          const nextScale = THREE.MathUtils.lerp(site.core.scale.x, targetScale, 0.2);
+          site.core.scale.setScalar(nextScale);
+
+          const ringScaleTarget = site === selectedSite ? 1.08 : site === hoveredSite ? 1.05 : 1;
+          const ringScale = THREE.MathUtils.lerp(site.ring.scale.x, ringScaleTarget, 0.16);
+          site.ring.scale.setScalar(ringScale);
+
+          const labelOpacityTarget = site === selectedSite ? 0.98 : site === hoveredSite ? 0.9 : 0.74;
+          site.labelSprite.material.opacity = THREE.MathUtils.lerp(
+            site.labelSprite.material.opacity,
+            labelOpacityTarget,
+            0.2,
+          );
+          const labelScaleTarget = site === selectedSite ? 1.08 : site === hoveredSite ? 1.03 : 1;
+          const nextLabelX = THREE.MathUtils.lerp(site.labelSprite.scale.x, 3.8 * labelScaleTarget, 0.17);
+          const nextLabelY = THREE.MathUtils.lerp(site.labelSprite.scale.y, 0.95 * labelScaleTarget, 0.17);
+          site.labelSprite.scale.set(nextLabelX, nextLabelY, 1);
+
+          site.components.forEach((component) => {
+            const componentTarget =
+              component === hoveredComponent ? 1.45 : site === selectedSite && component.role === "gateway" ? 1.18 : 1;
+            const componentScale = THREE.MathUtils.lerp(component.mesh.scale.x, componentTarget, 0.25);
+            component.mesh.scale.setScalar(componentScale);
+          });
+        });
+
+        stars.rotation.y += 0.00035;
+        controls.update();
+        clockEl.textContent = `${new Date().toISOString().slice(11, 19)} UTC`;
+
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+
+      requestAnimationFrame(animate);
+      window.__topologyReady = true;
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+  </body>
+</html>
