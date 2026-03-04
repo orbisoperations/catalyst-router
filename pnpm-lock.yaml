@@ -451,6 +451,9 @@ importers:
       '@catalyst/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
+      '@cedar-policy/cedar-wasm':
+        specifier: 'catalog:'
+        version: 4.9.0
       '@hono/capnweb':
         specifier: 'catalog:'
         version: 0.1.0(capnweb@0.4.0)(hono@4.12.0)
