@@ -8,6 +8,7 @@ import {
   buildTcpProxyIngressListener,
   buildTcpProxyEgressListener,
   isTcpProxyListener,
+  type XdsListener,
 } from '../src/xds/resources.js'
 
 // ---------------------------------------------------------------------------
@@ -20,7 +21,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     expect(listener.name).toBe('ingress_books-api')
   })
@@ -30,7 +30,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const addr = listener.address.socket_address
     expect(addr.address).toBe('0.0.0.0')
@@ -42,7 +41,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const hcm = listener.filter_chains[0].filters[0].typed_config
     const route = hcm.route_config.virtual_hosts[0].routes[0].route
@@ -54,7 +52,6 @@ describe('buildIngressListener', () => {
       channelName: 'movies-api',
       port: 9001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const hcm = listener.filter_chains[0].filters[0].typed_config
     expect(hcm.stat_prefix).toBe('ingress_movies-api')
@@ -65,7 +62,6 @@ describe('buildIngressListener', () => {
       channelName: 'books-api',
       port: 8001,
       bindAddress: '0.0.0.0',
-      version: '1',
     })
     const filter = listener.filter_chains[0].filters[0]
     expect(filter.name).toBe('envoy.filters.network.http_connection_manager')
@@ -424,7 +420,6 @@ describe('buildXdsSnapshot', () => {
           endpoint: 'http://peer-node:8081/graphql',
           envoyPort: 8002,
           peer: { name: 'node-a', envoyAddress: 'node-a.example.local.io' },
-          peerName: 'node-a',
           nodePath: ['local-node', 'node-a'],
         },
       ],
@@ -457,7 +452,6 @@ describe('buildXdsSnapshot', () => {
           endpoint: 'http://peer-node:8081/graphql',
           envoyPort: 8002,
           peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
-          peerName: 'node-a',
           nodePath: ['local-node', 'node-a'],
         },
       ],
@@ -509,7 +503,6 @@ describe('buildXdsSnapshot', () => {
           endpoint: 'http://peer-node:8081',
           envoyPort: 8002,
           peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
-          peerName: 'node-a',
           nodePath: ['local', 'node-a'],
         },
       ],
@@ -533,7 +526,6 @@ describe('buildXdsSnapshot', () => {
           endpoint: 'http://peer-node:8081',
           envoyPort: 8002,
           peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
-          peerName: 'node-a',
           nodePath: ['local', 'node-a'],
         },
       ],
@@ -577,7 +569,6 @@ describe('buildXdsSnapshot', () => {
           endpoint: 'http://peer-node:8081',
           // no envoyPort
           peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
-          peerName: 'node-a',
           nodePath: ['local', 'node-a'],
         },
       ],
@@ -777,9 +768,10 @@ describe('buildXdsSnapshot protocol-aware', () => {
     })
 
     // Listener: route timeout disabled
+    const listener = snapshot.listeners[0] as XdsListener
     const route =
-      snapshot.listeners[0].filter_chains[0].filters[0].typed_config.route_config.virtual_hosts[0]
-        .routes[0].route
+      listener.filter_chains[0].filters[0].typed_config.route_config.virtual_hosts[0].routes[0]
+        .route
     expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
 
     // Cluster: HTTP/2 upstream enabled
@@ -796,7 +788,6 @@ describe('buildXdsSnapshot protocol-aware', () => {
           endpoint: 'http://peer:4000/graphql',
           envoyPort: 8002,
           peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
-          peerName: 'node-a',
           nodePath: ['local', 'node-a'],
         },
       ],
@@ -806,7 +797,8 @@ describe('buildXdsSnapshot protocol-aware', () => {
     })
 
     // Listener: WebSocket upgrade + timeout disabled
-    const hcm = snapshot.listeners[0].filter_chains[0].filters[0].typed_config
+    const listener = snapshot.listeners[0] as XdsListener
+    const hcm = listener.filter_chains[0].filters[0].typed_config
     expect(hcm.upgrade_configs).toEqual([{ upgrade_type: 'websocket' }])
     const route = hcm.route_config.virtual_hosts[0].routes[0].route
     expect(route.timeout).toEqual({ seconds: 0, nanos: 0 })
@@ -975,7 +967,6 @@ describe('buildXdsSnapshot with TCP protocol', () => {
           endpoint: 'http://peer-node:6379',
           envoyPort: 6379,
           peer: { name: 'node-b', envoyAddress: '10.0.0.10' },
-          peerName: 'node-b',
           nodePath: ['local-node', 'node-b'],
         },
       ],
@@ -1184,7 +1175,6 @@ describe('buildXdsSnapshot with TCP protocol', () => {
           endpoint: 'http://peer:7447',
           envoyPort: 7447,
           peer: { name: 'node-a', envoyAddress: '10.0.0.5' },
-          peerName: 'node-a',
           nodePath: ['local', 'node-a'],
         },
       ],

@@ -13,14 +13,13 @@
     "test:integration": "vitest run --passWithNoTests container integration"
   },
   "dependencies": {
-    "@catalyst/auth-service": "workspace:*",
     "@catalyst/authorization": "workspace:*",
+    "@cedar-policy/cedar-wasm": "catalog:",
     "@catalyst/config": "workspace:*",
     "@catalyst/envoy-service": "workspace:*",
     "@catalyst/routing": "workspace:*",
     "@catalyst/service": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
-    "@cedar-policy/cedar-wasm": "catalog:",
     "@hono/capnweb": "catalog:",
     "better-sqlite3": "catalog:",
     "capnweb": "catalog:",

@@ -433,9 +433,6 @@ importers:
 
   apps/orchestrator:
     dependencies:
-      '@catalyst/auth-service':
-        specifier: workspace:*
-        version: link:../auth
       '@catalyst/authorization':
         specifier: workspace:*
         version: link:../../packages/authorization

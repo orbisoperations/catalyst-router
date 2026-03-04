@@ -11,6 +11,7 @@ import {
   type StartedNetwork,
 } from 'testcontainers'
 import type { PublicApi, NetworkClient } from '../../orchestrator/src/orchestrator.js'
+import type { DataChannelProtocol } from '@catalyst/routing'
 import {
   startAuthService,
   type AuthServiceContext,
@@ -228,7 +229,7 @@ interface ThreeNodeCluster {
  * Peering: A <-> B, B <-> C (linear chain, B is transit)
  * Traffic: C -> B -> A -> books-api
  */
-async function setupThreeNodeCluster(protocol: string): Promise<ThreeNodeCluster> {
+async function setupThreeNodeCluster(protocol: DataChannelProtocol): Promise<ThreeNodeCluster> {
   // ── 1. Build images ────────────────────────────────────────────
   await buildImageIfNeeded(AUTH_IMAGE, 'apps/auth/Dockerfile')
   await buildImageIfNeeded(ORCH_IMAGE, 'apps/orchestrator/Dockerfile')

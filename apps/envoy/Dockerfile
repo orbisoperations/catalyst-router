@@ -36,7 +36,7 @@ COPY packages/telemetry packages/telemetry
 
 # Bundle with esbuild — all code inlined.
 # Banner provides CJS compatibility (require, __dirname) for bundled npm packages.
-RUN pnpm exec esbuild apps/envoy/src/index.ts \
+RUN pnpm exec esbuild apps/envoy/src/server.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/server.mjs --format=esm \
   --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { serve } from '@hono/node-server'
 import * as grpc from '@grpc/grpc-js'
 import { CatalystConfigSchema } from '@catalyst/config'
-import { AuthService } from '@catalyst/authorization'
+import { AuthService, Principal } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
 import { OrchestratorService } from '../../orchestrator/src/service.js'
@@ -124,7 +124,7 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     // ── 5. Mint CLI token ──────────────────────────────────────────
     const mintResult = await mintTokenHandler({
       subject: 'test-cli',
-      principal: 'CATALYST::ADMIN',
+      principal: Principal.ADMIN,
       name: 'Test CLI',
       type: 'service',
       authUrl: `ws://localhost:${ports.auth}/rpc`,
@@ -151,6 +151,7 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
       protocol: 'http:graphql',
       orchestratorUrl: `ws://localhost:${ports.orchestrator}/rpc`,
       token: cliToken,
+      logLevel: 'info',
     })
     expect(result.success).toBe(true)
 
