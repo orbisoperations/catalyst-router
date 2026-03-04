@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
+    "@hono/node-server": "^1.19.10",
     "graphql": "^16.9.0",
     "graphql-yoga": "^5.10.6",
     "hono": "^4.6.14"
