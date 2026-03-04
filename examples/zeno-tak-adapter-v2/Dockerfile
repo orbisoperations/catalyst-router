@@ -1,9 +1,34 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
+RUN corepack enable
+
+# Copy workspace manifests for dependency caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/auth/package.json apps/auth/
+COPY apps/cli/package.json apps/cli/
+COPY apps/envoy/package.json apps/envoy/
+COPY apps/gateway/package.json apps/gateway/
+COPY apps/node/package.json apps/node/
+COPY apps/orchestrator/package.json apps/orchestrator/
+COPY apps/rpi-config/package.json apps/rpi-config/
+COPY packages/authorization/package.json packages/authorization/
+COPY packages/config/package.json packages/config/
+COPY packages/routing/package.json packages/routing/
+COPY packages/sdk/package.json packages/sdk/
+COPY packages/telemetry/package.json packages/telemetry/
+COPY packages/types/package.json packages/types/
+COPY packages/service/package.json packages/service/
+COPY examples/books-api/package.json examples/books-api/
+COPY examples/movies-api/package.json examples/movies-api/
+COPY examples/orders-api/package.json examples/orders-api/
+COPY examples/product-api/package.json examples/product-api/
+COPY examples/zeno-tak-adapter-v2/package.json examples/zeno-tak-adapter-v2/
+COPY examples/zenoh-radar-publisher/package.json examples/zenoh-radar-publisher/
+COPY examples/zenoh-tak-adapter/package.json examples/zenoh-tak-adapter/
+
 # Install dependencies
-COPY package.json ./
-RUN corepack enable && pnpm install
+RUN pnpm install
 
 # Copy source, build script, and Zenoh configs
 COPY src ./src

@@ -502,7 +502,7 @@ export class CatalystNodeBus extends RpcTarget {
           .map((r) => {
             let route = r as DataChannelDefinition
             if (this.config.envoyConfig && this.portAllocator) {
-              const egressKey = `egress_${r.name}_via_${r.peerName}`
+              const egressKey = `egress_${r.name}_via_${r.peer.name}`
               const localPort = this.portAllocator.getPort(egressKey)
               if (localPort) {
                 route = { ...r, envoyPort: localPort }

@@ -12,6 +12,7 @@ COPY apps/envoy/package.json apps/envoy/
 COPY apps/gateway/package.json apps/gateway/
 COPY apps/node/package.json apps/node/
 COPY apps/orchestrator/package.json apps/orchestrator/
+COPY apps/rpi-config/package.json apps/rpi-config/
 COPY packages/authorization/package.json packages/authorization/
 COPY packages/config/package.json packages/config/
 COPY packages/routing/package.json packages/routing/
@@ -23,6 +24,9 @@ COPY examples/books-api/package.json examples/books-api/
 COPY examples/movies-api/package.json examples/movies-api/
 COPY examples/orders-api/package.json examples/orders-api/
 COPY examples/product-api/package.json examples/product-api/
+COPY examples/zeno-tak-adapter-v2/package.json examples/zeno-tak-adapter-v2/
+COPY examples/zenoh-radar-publisher/package.json examples/zenoh-radar-publisher/
+COPY examples/zenoh-tak-adapter/package.json examples/zenoh-tak-adapter/
 
 # Install all dependencies
 RUN pnpm install --frozen-lockfile
