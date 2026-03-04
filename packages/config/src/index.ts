@@ -61,6 +61,11 @@ export const OrchestratorConfigSchema = z.object({
       portRange: z.array(PortEntrySchema).min(1),
     })
     .optional(),
+  videoConfig: z
+    .object({
+      endpoint: z.string(),
+    })
+    .optional(),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -93,6 +98,21 @@ export const AuthConfigSchema = z.object({
 export type AuthConfig = z.infer<typeof AuthConfigSchema>
 
 /**
+ * Video streaming sidecar configuration.
+ */
+export const VideoConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  rtspPort: PortNumberSchema.default(8554),
+  srtPort: PortNumberSchema.default(8890),
+  hlsPort: PortNumberSchema.default(8888),
+  webrtcPort: PortNumberSchema.default(8889),
+  authFailPublish: z.enum(['open', 'closed']).default('closed'),
+  authFailSubscribe: z.enum(['open', 'closed']).default('closed'),
+})
+
+export type VideoConfig = z.infer<typeof VideoConfigSchema>
+
+/**
  * Top-level Catalyst System Configuration
  */
 export const CatalystConfigSchema = z.object({
@@ -100,12 +120,13 @@ export const CatalystConfigSchema = z.object({
   orchestrator: OrchestratorConfigSchema.optional(),
   auth: AuthConfigSchema.optional(),
   envoy: EnvoyConfigSchema.optional(),
+  video: VideoConfigSchema.optional(),
   port: z.number().default(3000),
 })
 
 export type CatalystConfig = z.infer<typeof CatalystConfigSchema>
 
-type ServiceType = 'gateway' | 'orchestrator' | 'auth' | 'envoy'
+type ServiceType = 'gateway' | 'orchestrator' | 'auth' | 'envoy' | 'video'
 
 /**
  * Configuration load options
@@ -170,6 +191,27 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
         }
       : undefined
 
+  const video =
+    process.env.CATALYST_VIDEO_ENABLED === 'true'
+      ? {
+          enabled: true,
+          rtspPort: process.env.CATALYST_VIDEO_RTSP_PORT
+            ? Number(process.env.CATALYST_VIDEO_RTSP_PORT)
+            : undefined,
+          srtPort: process.env.CATALYST_VIDEO_SRT_PORT
+            ? Number(process.env.CATALYST_VIDEO_SRT_PORT)
+            : undefined,
+          hlsPort: process.env.CATALYST_VIDEO_HLS_PORT
+            ? Number(process.env.CATALYST_VIDEO_HLS_PORT)
+            : undefined,
+          webrtcPort: process.env.CATALYST_VIDEO_WEBRTC_PORT
+            ? Number(process.env.CATALYST_VIDEO_WEBRTC_PORT)
+            : undefined,
+          authFailPublish: process.env.CATALYST_VIDEO_AUTH_FAIL_PUBLISH || undefined,
+          authFailSubscribe: process.env.CATALYST_VIDEO_AUTH_FAIL_SUBSCRIBE || undefined,
+        }
+      : undefined
+
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
     node: {
@@ -179,6 +221,7 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       envoyAddress: process.env.CATALYST_ENVOY_ADDRESS || undefined,
     },
     envoy,
+    video,
     orchestrator: {
       gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
         ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
@@ -191,6 +234,9 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
             }
           : undefined,
       envoyConfig,
+      videoConfig: process.env.CATALYST_VIDEO_ENDPOINT
+        ? { endpoint: process.env.CATALYST_VIDEO_ENDPOINT }
+        : undefined,
     },
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,
