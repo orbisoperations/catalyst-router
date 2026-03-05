@@ -14,6 +14,7 @@ COPY apps/envoy/package.json apps/envoy/
 COPY apps/gateway/package.json apps/gateway/
 COPY apps/node/package.json apps/node/
 COPY apps/orchestrator/package.json apps/orchestrator/
+COPY apps/status-page/package.json apps/status-page/
 COPY packages/authorization/package.json packages/authorization/
 COPY packages/config/package.json packages/config/
 COPY packages/routing/package.json packages/routing/
