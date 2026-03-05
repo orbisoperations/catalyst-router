@@ -7,7 +7,11 @@ import type {
   UpdateMessageSchema,
 } from '@catalyst/routing/v2'
 import type { z } from 'zod'
+import { decodeJwt } from 'jose'
+import { getLogger } from '@catalyst/telemetry'
 import type { OrchestratorBus } from './bus.js'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'rpc'])
 
 // ---------------------------------------------------------------------------
 // Token validation
@@ -146,6 +150,34 @@ export async function createDataChannelClient(
   }
 }
 
+/**
+ * Extracts the node identity (sub claim) from a peer JWT token.
+ * The token has already been verified upstream — this only decodes the payload
+ * to bind the iBGP session to the authenticated identity.
+ */
+function extractPeerIdentity(
+  token: string
+): { success: true; identity: string } | { success: false; error: string } {
+  try {
+    const { sub } = decodeJwt(token)
+    if (typeof sub !== 'string' || sub.length === 0) {
+      return { success: false, error: 'JWT missing sub claim' }
+    }
+    return { success: true, identity: sub }
+  } catch {
+    return { success: false, error: 'Failed to decode peer JWT' }
+  }
+}
+
+/**
+ * Creates an iBGP client that binds the session to the authenticated peer
+ * identity extracted from the JWT token. Every iBGP method verifies that
+ * peerInfo.name matches the JWT sub claim. For update(), additionally
+ * verifies that all nodePath[0] entries match the sender identity.
+ *
+ * This prevents a compromised or malicious peer from impersonating another
+ * node by sending messages with a spoofed peerInfo.name or nodePath.
+ */
 export async function createIBGPClient(
   bus: OrchestratorBus,
   token: string,
@@ -156,25 +188,67 @@ export async function createIBGPClient(
     return { success: false, error: validation.error }
   }
 
+  const identity = extractPeerIdentity(token)
+  if (!identity.success) {
+    return { success: false, error: identity.error }
+  }
+
+  const peerIdentity = identity.identity
+
+  function verifyPeerName(
+    peerInfo: PeerInfo
+  ): { success: true } | { success: false; error: string } {
+    if (peerInfo.name !== peerIdentity) {
+      logger.warn`iBGP identity mismatch: JWT sub=${peerIdentity} but peerInfo.name=${peerInfo.name}`
+      return {
+        success: false,
+        error: 'Peer identity mismatch: peerInfo.name does not match authenticated identity',
+      }
+    }
+    return { success: true }
+  }
+
   return {
     success: true,
     client: {
       async open(data) {
+        const check = verifyPeerName(data.peerInfo)
+        if (!check.success) return check
         const result = await bus.dispatch({ action: Actions.InternalProtocolOpen, data })
         return result.success ? { success: true } : { success: false, error: result.error }
       },
 
       async close(data) {
+        const check = verifyPeerName(data.peerInfo)
+        if (!check.success) return check
         const result = await bus.dispatch({ action: Actions.InternalProtocolClose, data })
         return result.success ? { success: true } : { success: false, error: result.error }
       },
 
       async update(data) {
+        const check = verifyPeerName(data.peerInfo)
+        if (!check.success) return check
+
+        // Verify that all route updates have nodePath[0] matching the sender.
+        // In single-hop iBGP, the first entry in nodePath must be the originating
+        // peer. This prevents route injection with forged origin attribution.
+        for (const entry of data.update.updates) {
+          if (entry.nodePath.length > 0 && entry.nodePath[0] !== peerIdentity) {
+            logger.warn`iBGP nodePath[0] mismatch: JWT sub=${peerIdentity} but nodePath[0]=${entry.nodePath[0]}`
+            return {
+              success: false,
+              error: 'Route origin mismatch: nodePath[0] does not match authenticated identity',
+            }
+          }
+        }
+
         const result = await bus.dispatch({ action: Actions.InternalProtocolUpdate, data })
         return result.success ? { success: true } : { success: false, error: result.error }
       },
 
       async keepalive(data) {
+        const check = verifyPeerName(data.peerInfo)
+        if (!check.success) return check
         const result = await bus.dispatch({ action: Actions.InternalProtocolKeepalive, data })
         return result.success ? { success: true } : { success: false, error: result.error }
       },
