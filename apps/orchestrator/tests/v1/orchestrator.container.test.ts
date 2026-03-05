@@ -12,7 +12,7 @@ import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { PublicApi, PeerInfo } from '../../src/v1/orchestrator'
-import { Actions } from '@catalyst/routing'
+import { Actions } from '@catalyst/routing/v1'
 
 import type { PeerInfo as _PeerInfo, PublicApi as _PublicApi } from '../../src/v1/orchestrator'
 import { CatalystNodeBus, ConnectionPool } from '../../src/v1/orchestrator'

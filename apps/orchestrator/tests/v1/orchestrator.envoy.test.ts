@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { Actions, type PeerInfo } from '@catalyst/routing'
+import { Actions, type PeerInfo } from '@catalyst/routing/v1'
 import { CatalystNodeBus, ConnectionPool, type PublicApi } from '../../src/v1/orchestrator.js'
 import type { OrchestratorConfig } from '../../src/v1/types.js'
 import type { RpcStub } from 'capnweb'

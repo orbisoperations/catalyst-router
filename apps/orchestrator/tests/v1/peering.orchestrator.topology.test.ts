@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { CatalystNodeBus, type NetworkClient, type DataChannel } from '../../src/v1/orchestrator.js'
-import { newRouteTable, type RouteTable } from '@catalyst/routing'
+import { newRouteTable, type RouteTable } from '@catalyst/routing/v1'
 import type { OrchestratorConfig } from '../../src/v1/types.js'
 import { MockConnectionPool } from './mock-connection-pool.js'
 

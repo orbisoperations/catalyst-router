@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect } from 'vitest'
 import { TickMessageSchema } from '../../src/v1/system/actions.js'
 import { ActionSchema } from '../../src/v1/schema.js'
 import { Actions } from '../../src/v1/action-types.js'
