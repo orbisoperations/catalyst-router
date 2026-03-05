@@ -5,7 +5,7 @@ import type { ActionLog, ActionLogEntry } from './action-log.js'
 const CREATE_TABLE = `
 CREATE TABLE IF NOT EXISTS action_log (
   seq       INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),
+  recorded_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),
   action    TEXT    NOT NULL,
   data      TEXT    NOT NULL,
   node_id   TEXT    NOT NULL
@@ -29,13 +29,15 @@ export class SqliteActionLog implements ActionLog {
   constructor(db: Database.Database) {
     this.db = db
     this.db.pragma('journal_mode = WAL')
+    this.db.pragma('foreign_keys = ON')
+    this.db.pragma('busy_timeout = 5000')
     this.db.exec(CREATE_TABLE)
 
     this.insertStmt = this.db.prepare(
       'INSERT INTO action_log (action, data, node_id) VALUES (?, ?, ?)'
     )
     this.replayStmt = this.db.prepare(
-      'SELECT seq, timestamp, action, data, node_id FROM action_log WHERE seq > ? ORDER BY seq ASC'
+      'SELECT seq, recorded_at, action, data, node_id FROM action_log WHERE seq > ? ORDER BY seq ASC'
     )
     this.lastSeqStmt = this.db.prepare('SELECT MAX(seq) as max_seq FROM action_log')
   }
@@ -48,7 +50,7 @@ export class SqliteActionLog implements ActionLog {
   replay(afterSeq = 0): ActionLogEntry[] {
     const rows = this.replayStmt.all(afterSeq) as Array<{
       seq: number
-      timestamp: string
+      recorded_at: string
       action: string
       data: string
       node_id: string
@@ -57,7 +59,7 @@ export class SqliteActionLog implements ActionLog {
       seq: row.seq,
       action: JSON.parse(row.data) as Action,
       nodeId: row.node_id,
-      timestamp: row.timestamp,
+      recorded_at: row.recorded_at,
     }))
   }
 

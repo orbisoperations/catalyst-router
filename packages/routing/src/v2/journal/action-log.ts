@@ -4,7 +4,7 @@ export type ActionLogEntry = {
   seq: number
   action: Action
   nodeId: string
-  timestamp: string
+  recorded_at: string
 }
 
 /**

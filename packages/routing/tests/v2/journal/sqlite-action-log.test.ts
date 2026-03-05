@@ -96,11 +96,11 @@ describe('SqliteActionLog', () => {
     expect(entries[1].action.action).toBe(Actions.Tick)
   })
 
-  it('has timestamp on entries', () => {
+  it('has recorded_at on entries', () => {
     log.append(makeAction('svc'), 'node-1')
     const [entry] = log.replay()
-    expect(entry.timestamp).toBeTruthy()
+    expect(entry.recorded_at).toBeTruthy()
     // Should be ISO-ish format from SQLite
-    expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}/)
+    expect(entry.recorded_at).toMatch(/^\d{4}-\d{2}-\d{2}/)
   })
 })

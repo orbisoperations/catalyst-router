@@ -15,7 +15,7 @@ export class InMemoryActionLog implements ActionLog {
       seq,
       action,
       nodeId,
-      timestamp: new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     })
     return seq
   }
