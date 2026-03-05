@@ -76,7 +76,7 @@ Simulate multi-node orchestration using mocks. These validate routing and synchr
 
 ```bash
 # Example: Run topology tests for the orchestrator
-pnpm exec vitest apps/orchestrator/src/next/*.topology.test.ts
+pnpm exec vitest apps/orchestrator/tests/v2/*.topology.test.ts
 ```
 
 #### 3. Container Integration Tests

@@ -103,124 +103,80 @@ sequenceDiagram
 
 ---
 
-## Implementation Design
+## Implementation Design (v2)
 
-### The `Peer` Class
+### Architecture Overview
 
-To handle the complexity of bidirectional RPC, we will encapsulate the logic in a `Peer` class (or `PeerClient`). This class represents a connection to a remote node.
+The v2 implementation replaces the `Peer` class and plugin pipeline with a layered architecture:
 
-**Responsibilities:**
-
-1.  **Transport**: Manages the underlying Cap'n Proto RPC connection.
-2.  **Pipelined Auth**: Handles the `authenticate` -> `open` flow transparently.
-3.  **Bidurational Handling**:
-    - Implements the "Client Stub" interface to receive calls from the remote peer.
-    - Holds the "Remote Stub" (the `AuthorizedPeer`) to make calls to the remote peer.
+- **`RoutingInformationBase` (RIB)**: Pure state machine with `plan()` / `commit()` cycle.
+- **`OrchestratorBus`**: Serializes actions through an `ActionQueue`, delegates to the RIB, and executes async post-commit side effects.
+- **`PeerTransport`**: Abstraction over peer-to-peer WebSocket RPC (`WebSocketPeerTransport` in production, `MockPeerTransport` in tests).
+- **`ReconnectManager`**: Exponential-backoff retry logic for failed transport connections.
+- **`TickManager`**: Drives periodic keepalive dispatch and hold-timer expiration checks.
 
 ### RPC Interfaces
 
+Each orchestrator node exposes three RPC entry points via capnweb WebSocket sessions, gated by JWT-based `TokenValidator`:
+
 ```typescript
-// Public Interface exposed by every node
-interface PeerPublicApi {
-  authenticate(secret: string): AuthorizedPeer
+// Public API exposed at /rpc
+interface PublicApi {
+  getNetworkClient(token: string): NetworkClient | { error: string }
+  getDataChannelClient(token: string): DataChannel | { error: string }
+  getIBGPClient(token: string): IBGPClient | { error: string }
 }
 
-// Privileged Interface returned after authentication
-interface AuthorizedPeer {
-  open(info: PeerInfo, clientStub: PeerClient): PeerSessionState
-  keepAlive(): void
-  updateRoute(msg: UpdateMessage): void
-}
-
-// Interface implemented by the Initiator (Client) to receive callbacks
-interface PeerClient {
-  keepAlive(): void
-  updateRoute(msg: UpdateMessage): void
+// iBGP session management
+interface IBGPClient {
+  open(data: { peerInfo: PeerInfo; holdTime?: number }): Result
+  close(data: { peerInfo: PeerInfo; code: number; reason?: string }): Result
+  update(data: { peerInfo: PeerInfo; update: UpdateMessage }): Result
+  keepalive(data: { peerInfo: PeerInfo }): Result
 }
 ```
 
-### Peer Implementation
+### Transport Layer
+
+The `WebSocketPeerTransport` maintains a pool of capnweb RPC stubs keyed by endpoint URL. Each outbound call obtains an iBGP client from the remote peer's `PublicApi`, authenticated with the local node's JWT.
 
 ```typescript
-class Peer {
-  private connection: RpcConnection
-  private authorizedRemote: AuthorizedPeer // The privileged stub
-
-  constructor(info: PeerInfo) {}
-
-  /**
-   * Called when THIS node wants to connect to a remote node.
-   */
-  async connect(targetAddress: string, secret: string) {
-    // 1. Establish TCP/RPC connection
-    this.connection = new RpcConnection(targetAddress)
-    const publicApi = await this.connection.getService<PeerPublicApi>()
-
-    // 2. Create local callback handler (stub)
-    const localStub = new PeerHandler(this)
-
-    // 3. Pipeline: Authenticate -> Open
-    // We get the authorized stub promise
-    this.authorizedRemote = publicApi.authenticate(secret)
-
-    // We immediately call open on it (Pipelining)
-    const responsePromise = this.authorizedRemote.open(this.localInfo, localStub)
-
-    // 4. Await the final result
-    const response = await responsePromise
-
-    // 5. Process Response
-    this.syncPeers(response.peers)
-    this.updateJwks(response.jwks)
-  }
-
-  /**
-   * Interface exposed to the remote peer (The "Client Stub")
-   */
-  async onUpdate(msg: UpdateMessage) {
-    // Handle incoming route updates
-    GlobalRouteTable.processUpdate(msg)
-  }
-
-  async onKeepAlive() {
-    this.resetHoldTimer()
-  }
+interface PeerTransport {
+  openPeer(peer: PeerRecord, token: string): Promise<void>
+  sendUpdate(peer: PeerRecord, message: UpdateMessage): Promise<void>
+  sendKeepalive(peer: PeerRecord): Promise<void>
+  closePeer(peer: PeerRecord, code: number, reason?: string): Promise<void>
 }
 ```
 
 ### Workflow: Adding a New Peer
 
-We will use the existing Action/Plugin system to trigger the connection of new peers. This allows runtime configuration changes via the CLI.
-
 **Step 1: Administrator Action**
 The user runs a CLI command to add a peer.
 
 ```bash
-catalyst peer add --address 10.0.0.5 --secret mysecret
+catalyst peer add --name remote-node --endpoint ws://10.0.0.5:3001/rpc --domains example.com
 ```
 
 **Step 2: Action Dispatch**
-This generates a `CREATE_PEER` action in the orchestrator.
+The CLI sends an `AddPeer` action via the `NetworkClient` RPC interface.
 
-**Step 3: Internal Peering Plugin**
-A specific plugin, `InternalPeeringPlugin`, listens for `CREATE_PEER` actions.
+**Step 3: RIB Processing**
+The `OrchestratorBus` dispatches the action through the deterministic cycle:
 
-```typescript
-class InternalPeeringPlugin extends BasePlugin {
-  async apply(ctx: PluginContext) {
-    if (ctx.action.type === 'PEER' && ctx.action.op === 'CREATE') {
-      const { address, secret } = ctx.action.data
-
-      // Initiate connection
-      const newPeer = new Peer(address)
-      await newPeer.connect(address, secret)
-
-      // Store in global peer manager
-      PeerManager.addPeer(newPeer)
-    }
-  }
-}
+```
+plan(AddPeer, state) → new PeerRecord in peers map
+commit(plan)         → state updated, journal appended
+handlePostCommit()   → transport.openPeer() called, initial route table sent
 ```
 
-**Step 4: Connection & Sync**
-The `Peer` instance connects, exchanges OPEN messages, and synchronizes the initial state. The node is now part of the internal mesh.
+**Step 4: Session Establishment**
+The remote node receives the `open()` call on its iBGP RPC endpoint, dispatches an `OpenPeer` action locally, and both nodes exchange their current route tables via `update()` messages.
+
+### Identity Verification
+
+Every iBGP RPC call validates the caller's JWT:
+
+1. **Token validation**: The `TokenValidator` checks the token against the auth service for the `IBGP_CONNECT` action.
+2. **Identity binding**: The JWT `sub` claim is extracted and compared against `peerInfo.name` on every method call.
+3. **Path origin verification**: On `update()` calls, `nodePath[0]` must match the authenticated peer identity.

@@ -87,11 +87,12 @@ The core logic of the Orchestrator is split into two phases to ensure state cons
 
 ## Implementation
 
-The implementation is centered in `apps/orchestrator/src/orchestrator.ts`:
+The v2 implementation is centered in `apps/orchestrator/src/v2/`:
 
-- `dispatch()`: Entry point that coordinates `handleAction` followed by `handleNotify`.
-- `handleAction()`: Contains the switch/case for all state transitions.
-- `handleNotify()`: Orchestrates side effects like `handleBGPNotify()` and `handleGraphqlConfiguration()`.
+- `bus.ts` (`OrchestratorBus`): Entry point via `dispatch()` — serializes actions through `ActionQueue`, delegates to the RIB, and runs post-commit side effects.
+- `service.ts` (`OrchestratorServiceV2`): Composes the bus, tick manager, reconnect manager, and action journal.
+- `catalyst-service.ts` (`OrchestratorService`): `CatalystService` wrapper that wires auth, RPC, and transport for production use.
+- `rpc.ts`: Factory functions (`createNetworkClient`, `createDataChannelClient`, `createIBGPClient`) that bridge RPC calls to bus dispatch.
 
 ## Related Decisions
 
