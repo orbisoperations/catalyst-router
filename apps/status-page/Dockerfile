@@ -34,6 +34,9 @@ COPY packages/telemetry packages/telemetry
 COPY packages/service packages/service
 COPY packages/config packages/config
 
+# Build frontend
+RUN cd apps/status-page && pnpm exec vite build --config frontend/vite.config.ts
+
 # Bundle with esbuild
 RUN pnpm exec esbuild apps/status-page/src/index.ts \
   --bundle --platform=node --target=node22 \
@@ -49,8 +52,10 @@ WORKDIR /app
 
 COPY --from=build /deploy/node_modules ./node_modules
 COPY --from=build /app/dist/server.mjs ./server.mjs
+COPY --from=build /app/apps/status-page/dist/frontend ./frontend
 
 ENV PORT=4040
+ENV FRONTEND_DIR=/app/frontend
 EXPOSE 4040
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

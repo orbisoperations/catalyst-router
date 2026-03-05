@@ -1,4 +1,6 @@
+import path from 'node:path'
 import { Hono } from 'hono'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
 import { createMetricsRoutes } from './routes/metrics.js'
@@ -30,8 +32,6 @@ export class StatusPageService extends CatalystService {
   }
 
   protected async onInitialize(): Promise<void> {
-    this.handler.get('/', (c) => c.text('Catalyst Status Page'))
-
     this.handler.get('/api/status', (c) =>
       c.json({
         backends: {
@@ -45,6 +45,12 @@ export class StatusPageService extends CatalystService {
     this.handler.route('/api/metrics', createMetricsRoutes(this.backends.prometheusUrl))
     this.handler.route('/api/traces', createTracesRoutes(this.backends.jaegerUrl))
     this.handler.route('/api/logs', createLogsRoutes(this.backends.influxdbUrl))
+
+    // Serve frontend static files (built by Vite)
+    const frontendDir = process.env.FRONTEND_DIR ?? path.join(process.cwd(), 'frontend')
+    this.handler.use('/*', serveStatic({ root: frontendDir }))
+    // SPA fallback — serve index.html for all unmatched routes
+    this.handler.get('/*', serveStatic({ root: frontendDir, path: 'index.html' }))
 
     this.telemetry.logger.info`StatusPageService initialized`
   }
