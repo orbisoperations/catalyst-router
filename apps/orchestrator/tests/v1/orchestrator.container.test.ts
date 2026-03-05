@@ -11,12 +11,12 @@ import { spawnSync } from 'node:child_process'
 import path from 'path'
 import type { Readable } from 'node:stream'
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import type { PublicApi, PeerInfo } from '../src/orchestrator'
+import type { PublicApi, PeerInfo } from '../../src/v1/orchestrator'
 import { Actions } from '@catalyst/routing'
 
-import type { PeerInfo as _PeerInfo, PublicApi as _PublicApi } from '../src/orchestrator'
-import { CatalystNodeBus, ConnectionPool } from '../src/orchestrator'
-import type { OrchestratorConfig } from '../src/types.js'
+import type { PeerInfo as _PeerInfo, PublicApi as _PublicApi } from '../../src/v1/orchestrator'
+import { CatalystNodeBus, ConnectionPool } from '../../src/v1/orchestrator'
+import type { OrchestratorConfig } from '../../src/v1/types.js'
 
 const isDockerRunning = () => {
   try {
@@ -46,7 +46,7 @@ describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
   const authImage = 'catalyst-auth:next-topology-e2e'
 
   beforeAll(async () => {
-    const repoRoot = path.resolve(__dirname, '../../../')
+    const repoRoot = path.resolve(__dirname, '../../../../')
 
     const buildImage = (dockerfilePath: string, imageName: string) => {
       console.log(`Building ${imageName} image for Container tests...`)
