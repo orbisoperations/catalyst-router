@@ -9,7 +9,7 @@ import {
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers'
-import type { DataChannel, NetworkClient, PublicApi } from '../src/orchestrator.js'
+import type { DataChannel, NetworkClient, PublicApi } from '../../src/v1/orchestrator.js'
 import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
 
 const isDockerRunning = () => {
