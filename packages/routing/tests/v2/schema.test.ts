@@ -3,6 +3,7 @@ import { ActionSchema } from '../../src/v2/schema.js'
 import {
   UpdateMessageSchema,
   InternalProtocolKeepaliveMessageSchema,
+  MAX_UPDATES_PER_MESSAGE,
 } from '../../src/v2/internal/actions.js'
 import { Actions } from '../../src/v2/action-types.js'
 
@@ -42,6 +43,28 @@ describe('UpdateMessageSchema v2', () => {
       updates: [{ action: 'add', route: { name: 'svc', protocol: 'http' }, nodePath: ['node-a'] }],
     })
     expect(result.success).toBe(false)
+  })
+
+  it(`rejects updates array exceeding ${MAX_UPDATES_PER_MESSAGE} entries`, () => {
+    const oversized = Array.from({ length: MAX_UPDATES_PER_MESSAGE + 1 }, (_, i) => ({
+      action: 'add' as const,
+      route: { name: `svc-${i}`, protocol: 'http' as const },
+      nodePath: ['node-a'],
+      originNode: 'node-a',
+    }))
+    const result = UpdateMessageSchema.safeParse({ updates: oversized })
+    expect(result.success).toBe(false)
+  })
+
+  it(`accepts updates array at exactly ${MAX_UPDATES_PER_MESSAGE} entries`, () => {
+    const maxSized = Array.from({ length: MAX_UPDATES_PER_MESSAGE }, (_, i) => ({
+      action: 'add' as const,
+      route: { name: `svc-${i}`, protocol: 'http' as const },
+      nodePath: ['node-a'],
+      originNode: 'node-a',
+    }))
+    const result = UpdateMessageSchema.safeParse({ updates: maxSized })
+    expect(result.success).toBe(true)
   })
 })
 
