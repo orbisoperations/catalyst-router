@@ -1,7 +1,10 @@
 import type { PeerRecord } from '@catalyst/routing/v2'
 import type { Action } from '@catalyst/routing/v2'
 import { Actions } from '@catalyst/routing/v2'
+import { getLogger } from '@catalyst/telemetry'
 import type { PeerTransport } from './transport.js'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'reconnect'])
 
 /**
  * Manages automatic reconnection with exponential backoff.
@@ -47,8 +50,12 @@ export class ReconnectManager {
 
     const timer = setTimeout(async () => {
       this.timers.delete(peer.name)
+      if (this.nodeToken === undefined) {
+        logger.warn`Skipping reconnect to ${peer.name}: no node token available`
+        return
+      }
       try {
-        await this.transport.openPeer(peer, this.nodeToken ?? '')
+        await this.transport.openPeer(peer, this.nodeToken)
         // Success — dispatch InternalProtocolConnected to trigger full route sync
         await this.dispatchFn({
           action: Actions.InternalProtocolConnected,
