@@ -9,7 +9,7 @@ import {
   type PeerRecord,
   type RouteTable,
   type UpdateMessageSchema,
-} from '@catalyst/routing'
+} from '@catalyst/routing/v1'
 export type { PeerInfo, InternalRoute }
 import { getLogger } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
@@ -962,7 +962,7 @@ export class CatalystNodeBus extends RpcTarget {
               return this.dispatch({ action: Actions.LocalPeerDelete, data: peer })
             },
             listPeers: async () => {
-              return this.state.internal.peers
+              return this.state.internal.peers.map(({ peerToken: _, ...rest }) => rest)
             },
           },
         }
@@ -988,7 +988,10 @@ export class CatalystNodeBus extends RpcTarget {
             listRoutes: async () => {
               return {
                 local: this.state.local.routes,
-                internal: this.state.internal.routes,
+                internal: this.state.internal.routes.map((r) => {
+                  const { peerToken: _, ...safePeer } = r.peer
+                  return { ...r, peer: safePeer }
+                }),
               }
             },
           },
