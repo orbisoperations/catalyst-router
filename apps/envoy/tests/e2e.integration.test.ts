@@ -5,7 +5,7 @@ import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService, Principal } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
 import { EnvoyService } from '../src/service.js'
-import { OrchestratorService } from '../../orchestrator/src/service.js'
+import { OrchestratorService } from '../../orchestrator/src/v1/service.js'
 import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
 import {
   createRouteHandler,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DataChannelDefinitionSchema } from '../src/datachannel.js'
+import { DataChannelDefinitionSchema } from '../../src/v1/datachannel.js'
 
 describe('DataChannelDefinitionSchema', () => {
   describe('existing fields (backward compatibility)', () => {

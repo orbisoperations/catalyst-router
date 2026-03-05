@@ -10,7 +10,7 @@ import {
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers'
-import type { PublicApi } from '../src/orchestrator.js'
+import type { PublicApi } from '../../src/v1/orchestrator.js'
 import { mintPeerToken, startAuthService, type AuthServiceContext } from './auth-test-helpers.js'
 
 const isDockerRunning = () => {
@@ -33,7 +33,7 @@ describe.skipIf(skipTests)('Orchestrator Gateway Container Tests', () => {
   const authImage = 'catalyst-auth:next-topology-e2e'
   const gatewayImage = 'catalyst-gateway:test'
   const booksImage = 'catalyst-example-books:test'
-  const repoRoot = path.resolve(__dirname, '../../../')
+  const repoRoot = path.resolve(__dirname, '../../../../')
 
   const buildImages = () => {
     console.log('Building Gateway image...')
