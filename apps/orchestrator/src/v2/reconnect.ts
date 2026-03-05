@@ -49,9 +49,9 @@ export class ReconnectManager {
       this.timers.delete(peer.name)
       try {
         await this.transport.openPeer(peer, this.nodeToken ?? '')
-        // Success — dispatch InternalProtocolOpen to trigger sync
+        // Success — dispatch InternalProtocolConnected to trigger full route sync
         await this.dispatchFn({
-          action: Actions.InternalProtocolOpen,
+          action: Actions.InternalProtocolConnected,
           data: { peerInfo: { name: peer.name, domains: peer.domains } },
         })
         this.attempts.delete(peer.name) // reset attempt counter on success

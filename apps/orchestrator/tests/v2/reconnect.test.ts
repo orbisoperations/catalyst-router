@@ -73,13 +73,13 @@ describe('ReconnectManager', () => {
     expect(call.token).toBe('test-token')
   })
 
-  it('successful reconnect dispatches InternalProtocolOpen', async () => {
+  it('successful reconnect dispatches InternalProtocolConnected to trigger full route sync', async () => {
     manager.scheduleReconnect(peerRecord)
 
     await vi.runAllTimersAsync()
 
     expect(dispatch).toHaveBeenCalledTimes(1)
-    expect(dispatch.mock.calls[0][0].action).toBe(Actions.InternalProtocolOpen)
+    expect(dispatch.mock.calls[0][0].action).toBe(Actions.InternalProtocolConnected)
     expect(dispatch.mock.calls[0][0].data.peerInfo.name).toBe('node-b')
   })
 
