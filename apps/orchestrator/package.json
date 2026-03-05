@@ -24,6 +24,7 @@
     "better-sqlite3": "catalog:",
     "capnweb": "catalog:",
     "hono": "catalog:",
+    "jose": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
