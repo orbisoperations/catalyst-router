@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useHealth } from './hooks/useHealth'
+import { ServiceCard } from './components/ServiceCard'
 
 type Tab = 'nodes' | 'adapters'
 
@@ -28,10 +30,16 @@ export function App() {
 }
 
 function NodesTab() {
+  const { services, loading } = useHealth()
+
+  if (loading) return <p>Loading...</p>
+
   return (
     <div>
       <h2>Node Services</h2>
-      <p>Health, logs, metrics, and traces for each Catalyst service.</p>
+      {services.map((s) => (
+        <ServiceCard key={s.name} service={s} />
+      ))}
     </div>
   )
 }

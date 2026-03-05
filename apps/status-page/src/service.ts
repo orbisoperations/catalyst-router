@@ -6,6 +6,7 @@ import type { CatalystServiceOptions } from '@catalyst/service'
 import { createMetricsRoutes } from './routes/metrics.js'
 import { createTracesRoutes } from './routes/traces.js'
 import { createLogsRoutes } from './routes/logs.js'
+import { createHealthRoutes } from './routes/health.js'
 
 export interface StatusPageConfig {
   prometheusUrl: string
@@ -45,6 +46,7 @@ export class StatusPageService extends CatalystService {
     this.handler.route('/api/metrics', createMetricsRoutes(this.backends.prometheusUrl))
     this.handler.route('/api/traces', createTracesRoutes(this.backends.jaegerUrl))
     this.handler.route('/api/logs', createLogsRoutes(this.backends.influxdbUrl))
+    this.handler.route('/api/services', createHealthRoutes())
 
     // Serve frontend static files (built by Vite)
     const frontendDir = process.env.FRONTEND_DIR ?? path.join(process.cwd(), 'frontend')
