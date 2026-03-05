@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { SignJWT } from 'jose'
 import { OrchestratorBus } from '../../src/v2/bus.js'
 import { MockPeerTransport } from '../../src/v2/transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from '../../src/v2/rpc.js'
@@ -33,6 +34,12 @@ const routeAlpha = {
 
 const VALID_TOKEN = 'valid-test-token'
 const INVALID_TOKEN = 'invalid-token'
+
+const TEST_SECRET = new TextEncoder().encode('test-secret-for-jwt-signing')
+
+async function makeJwt(sub: string): Promise<string> {
+  return new SignJWT({ sub }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().sign(TEST_SECRET)
+}
 
 // ---------------------------------------------------------------------------
 // Mock validators
@@ -368,14 +375,16 @@ describe('createDataChannelClient', () => {
 
 describe('createIBGPClient', () => {
   let bus: OrchestratorBus
+  let peerJwt: string
 
   beforeEach(async () => {
     bus = makeBus()
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
+    peerJwt = await makeJwt('node-b')
   })
 
   it('open dispatches InternalProtocolOpen and marks peer connected', async () => {
-    const result = await createIBGPClient(bus, VALID_TOKEN, allowAllValidator)
+    const result = await createIBGPClient(bus, peerJwt, allowAllValidator)
     if (!result.success) return
 
     const openResult = await result.client.open({ peerInfo })
@@ -386,7 +395,7 @@ describe('createIBGPClient', () => {
   })
 
   it('open accepts optional holdTime', async () => {
-    const result = await createIBGPClient(bus, VALID_TOKEN, allowAllValidator)
+    const result = await createIBGPClient(bus, peerJwt, allowAllValidator)
     if (!result.success) return
 
     const openResult = await result.client.open({ peerInfo, holdTime: 30_000 })
@@ -394,7 +403,8 @@ describe('createIBGPClient', () => {
   })
 
   it('open returns error when peer is not pre-configured', async () => {
-    const result = await createIBGPClient(bus, VALID_TOKEN, allowAllValidator)
+    const unknownJwt = await makeJwt('unknown')
+    const result = await createIBGPClient(bus, unknownJwt, allowAllValidator)
     if (!result.success) return
 
     const unknownPeer: PeerInfo = { name: 'unknown', endpoint: 'ws://x:4000', domains: [] }
@@ -407,7 +417,7 @@ describe('createIBGPClient', () => {
   })
 
   it('close dispatches InternalProtocolClose', async () => {
-    const result = await createIBGPClient(bus, VALID_TOKEN, allowAllValidator)
+    const result = await createIBGPClient(bus, peerJwt, allowAllValidator)
     if (!result.success) return
 
     await result.client.open({ peerInfo })
@@ -416,7 +426,7 @@ describe('createIBGPClient', () => {
   })
 
   it('update dispatches InternalProtocolUpdate', async () => {
-    const result = await createIBGPClient(bus, VALID_TOKEN, allowAllValidator)
+    const result = await createIBGPClient(bus, peerJwt, allowAllValidator)
     if (!result.success) return
 
     await result.client.open({ peerInfo })
@@ -439,11 +449,133 @@ describe('createIBGPClient', () => {
   })
 
   it('keepalive dispatches InternalProtocolKeepalive', async () => {
-    const result = await createIBGPClient(bus, VALID_TOKEN, allowAllValidator)
+    const result = await createIBGPClient(bus, peerJwt, allowAllValidator)
     if (!result.success) return
 
     await result.client.open({ peerInfo })
     const keepaliveResult = await result.client.keepalive({ peerInfo })
     expect(keepaliveResult.success).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// IBGPClient — peer identity validation
+// ---------------------------------------------------------------------------
+
+describe('createIBGPClient identity validation', () => {
+  let bus: OrchestratorBus
+
+  beforeEach(async () => {
+    bus = makeBus()
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
+  })
+
+  it('rejects token without sub claim', async () => {
+    const noSubToken = `${btoa('{"alg":"none"}')}.${btoa('{}')}.`
+    const result = await createIBGPClient(bus, noSubToken, allowAllValidator)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toContain('sub')
+    }
+  })
+
+  it('rejects malformed token', async () => {
+    const result = await createIBGPClient(bus, 'not-a-jwt', allowAllValidator)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toContain('decode')
+    }
+  })
+
+  it('rejects open when peerInfo.name does not match JWT sub', async () => {
+    const wrongJwt = await makeJwt('node-c')
+    const result = await createIBGPClient(bus, wrongJwt, allowAllValidator)
+    if (!result.success) throw new Error('unexpected')
+
+    const openResult = await result.client.open({ peerInfo })
+
+    expect(openResult.success).toBe(false)
+    if (!openResult.success) {
+      expect(openResult.error).toContain('identity mismatch')
+    }
+  })
+
+  it('rejects close when peerInfo.name does not match JWT sub', async () => {
+    const wrongJwt = await makeJwt('node-c')
+    const result = await createIBGPClient(bus, wrongJwt, allowAllValidator)
+    if (!result.success) throw new Error('unexpected')
+
+    const closeResult = await result.client.close({ peerInfo, code: 1000 })
+
+    expect(closeResult.success).toBe(false)
+    if (!closeResult.success) {
+      expect(closeResult.error).toContain('identity mismatch')
+    }
+  })
+
+  it('rejects keepalive when peerInfo.name does not match JWT sub', async () => {
+    const wrongJwt = await makeJwt('node-c')
+    const result = await createIBGPClient(bus, wrongJwt, allowAllValidator)
+    if (!result.success) throw new Error('unexpected')
+
+    const keepaliveResult = await result.client.keepalive({ peerInfo })
+
+    expect(keepaliveResult.success).toBe(false)
+    if (!keepaliveResult.success) {
+      expect(keepaliveResult.error).toContain('identity mismatch')
+    }
+  })
+
+  it('rejects update when nodePath[0] does not match JWT sub', async () => {
+    const peerJwt = await makeJwt('node-b')
+    const result = await createIBGPClient(bus, peerJwt, allowAllValidator)
+    if (!result.success) throw new Error('unexpected')
+
+    await result.client.open({ peerInfo })
+
+    const updateResult = await result.client.update({
+      peerInfo,
+      update: {
+        updates: [
+          {
+            action: 'add',
+            route: routeAlpha,
+            nodePath: ['node-evil', 'node-b'],
+            originNode: 'node-evil',
+          },
+        ],
+      },
+    })
+
+    expect(updateResult.success).toBe(false)
+    if (!updateResult.success) {
+      expect(updateResult.error).toContain('nodePath')
+    }
+  })
+
+  it('allows update when nodePath[0] matches JWT sub', async () => {
+    const peerJwt = await makeJwt('node-b')
+    const result = await createIBGPClient(bus, peerJwt, allowAllValidator)
+    if (!result.success) throw new Error('unexpected')
+
+    await result.client.open({ peerInfo })
+
+    const updateResult = await result.client.update({
+      peerInfo,
+      update: {
+        updates: [
+          {
+            action: 'add',
+            route: routeAlpha,
+            nodePath: ['node-b'],
+            originNode: 'node-b',
+          },
+        ],
+      },
+    })
+
+    expect(updateResult.success).toBe(true)
   })
 })
