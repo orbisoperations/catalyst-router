@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "build:frontend": "vite build --config frontend/vite.config.ts",
+    "dev:frontend": "vite --config frontend/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
@@ -16,13 +18,19 @@
     "@catalyst/config": "workspace:*",
     "@catalyst/service": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
-    "@opentelemetry/api": "catalog:"
+    "@opentelemetry/api": "catalog:",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@hono/node-server": "catalog:",
     "@hono/node-ws": "catalog:",
     "@types/node": "catalog:dev",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
     "typescript": "catalog:dev",
+    "vite": "^6.0.0",
     "vitest": "catalog:testing"
   }
 }
