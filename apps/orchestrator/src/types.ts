@@ -19,6 +19,11 @@ export const OrchestratorConfigSchema = z.object({
       portRange: z.array(PortEntrySchema).min(1),
     })
     .optional(),
+  videoConfig: z
+    .object({
+      endpoint: z.string(),
+    })
+    .optional(),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
