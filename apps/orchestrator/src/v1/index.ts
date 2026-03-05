@@ -10,7 +10,9 @@ export {
   type PeerInfo,
   type InternalRoute,
 } from './orchestrator.js'
+
 export { OrchestratorService } from './service.js'
+
 export {
   OrchestratorConfigSchema,
   type OrchestratorConfig,
@@ -22,4 +24,4 @@ export {
 export {
   DataChannelDefinitionSchema as ServiceDefinitionSchema,
   type DataChannelDefinition,
-} from '@catalyst/routing'
+} from '@catalyst/routing/v1'

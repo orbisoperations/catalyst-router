@@ -1,4 +1,4 @@
-import type { Action, RouteTable } from '@catalyst/routing'
+import type { Action, RouteTable } from '@catalyst/routing/v1'
 import { z } from 'zod'
 
 import { NodeConfigSchema, PortEntrySchema } from '@catalyst/config'
