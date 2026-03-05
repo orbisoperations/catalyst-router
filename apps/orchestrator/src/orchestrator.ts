@@ -4,7 +4,6 @@ import {
   type DataChannelDefinition,
   type InternalRoute,
   type PeerInfo,
-  type PeerRecord,
   type RouteTable,
 } from '@catalyst/routing'
 export type { PeerInfo, InternalRoute }
@@ -270,7 +269,7 @@ export class CatalystNodeBus extends RpcTarget {
     if (!envoyEndpoint || !this.portAllocator) return
 
     // Only react to route-affecting actions
-    const routeActions = [
+    const routeActions: ReadonlyArray<Action['action']> = [
       Actions.LocalRouteCreate,
       Actions.LocalRouteDelete,
       Actions.InternalProtocolUpdate,
