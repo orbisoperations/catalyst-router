@@ -9,6 +9,8 @@ import { generateMediaMTXConfig, writeMediaMTXConfig } from './media/config-writ
 import { MediaProcessManager } from './media/manager.js'
 import { MediaMTXProcess } from './media/process.js'
 import { createAuthRouter } from './hooks/auth.js'
+import { HttpMediaServerClient } from './media/client.js'
+import { RelayManager } from './relay/relay-manager.js'
 import type { MediaRouteConfig, UpdateResult } from './types.js'
 
 export class VideoService extends CatalystService {
@@ -16,6 +18,7 @@ export class VideoService extends CatalystService {
   readonly handler = new Hono()
   private streamState = new StreamState()
   private processManager: MediaProcessManager | null = null
+  private relayManager: RelayManager | null = null
 
   constructor(options: CatalystServiceOptions) {
     super(options)
@@ -61,12 +64,20 @@ export class VideoService extends CatalystService {
       this.processManager = new MediaProcessManager(process)
       await this.processManager.start()
       this.telemetry.logger.info`MediaMTX started with config at ${configPath}`
+
+      const mediaClient = new HttpMediaServerClient('http://localhost:9997')
+      this.relayManager = new RelayManager(mediaClient)
     }
   }
 
   private async handleMediaRouteUpdate(config: MediaRouteConfig): Promise<UpdateResult> {
     this.telemetry.logger.info`Received ${config.routes.length} remote media routes`
     this.streamState.setRemote(config.routes)
+
+    if (this.relayManager) {
+      await this.relayManager.reconcile(config.routes)
+    }
+
     return { success: true }
   }
 
