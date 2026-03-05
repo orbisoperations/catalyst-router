@@ -11,10 +11,8 @@ services:
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:13133']
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      disable: true
+    restart: unless-stopped
 
   # --- Shared auth ---
 
@@ -22,20 +20,26 @@ services:
     build:
       context: ..
       dockerfile: apps/auth/Dockerfile
+    user: root
     ports:
       - '4020:4020'
     environment:
       - PORT=4020
+      - CATALYST_NODE_ID=auth.somebiz.local.io
+      - CATALYST_AUTH_KEYS_DB=/data/keys.db
+      - CATALYST_AUTH_TOKENS_DB=/data/tokens.db
       - OTEL_SERVICE_NAME=auth
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    volumes:
+      - auth-data:/data
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4020/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4020/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
 
   # --- Node A: gateway-a + books ---
 
@@ -47,16 +51,17 @@ services:
       - '4000:4000'
     environment:
       - PORT=4000
+      - CATALYST_NODE_ID=gateway-a.somebiz.local.io
       - OTEL_SERVICE_NAME=gateway-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
       books-service:
         condition: service_healthy
 
@@ -69,7 +74,7 @@ services:
     environment:
       - PORT=8080
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -92,7 +97,7 @@ services:
       - OTEL_SERVICE_NAME=orchestrator-node-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -118,16 +123,17 @@ services:
       - '4001:4000'
     environment:
       - PORT=4000
+      - CATALYST_NODE_ID=gateway-b.somebiz.local.io
       - OTEL_SERVICE_NAME=gateway-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
       movies-service:
         condition: service_healthy
 
@@ -140,7 +146,7 @@ services:
     environment:
       - PORT=8080
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -163,7 +169,7 @@ services:
       - OTEL_SERVICE_NAME=orchestrator-node-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -196,13 +202,13 @@ services:
       - OTEL_SERVICE_NAME=envoy-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
 
   envoy-proxy:
     image: envoyproxy/envoy:v1.32-latest
@@ -220,7 +226,7 @@ services:
           '--no-verbose',
           '--tries=1',
           '--spider',
-          'http://localhost:9901/server_info',
+          'http://127.0.0.1:9901/server_info',
         ]
       interval: 10s
       timeout: 5s
@@ -228,3 +234,49 @@ services:
     depends_on:
       envoy-service:
         condition: service_healthy
+
+  # --- Observability backends ---
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-remote-write-receiver'
+      - '--storage.tsdb.retention.time=7d'
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  jaeger:
+    image: jaegertracing/jaeger:2.5.0
+    ports:
+      - '16686:16686'
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    ports:
+      - '8086:8086'
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=catalyst-dev
+      - DOCKER_INFLUXDB_INIT_ORG=catalyst
+      - DOCKER_INFLUXDB_INIT_BUCKET=logs
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=catalyst-dev-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+
+volumes:
+  auth-data:
+  prometheus-data:
+  influxdb-data:
