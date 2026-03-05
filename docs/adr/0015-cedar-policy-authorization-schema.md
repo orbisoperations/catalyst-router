@@ -1,4 +1,4 @@
-# ADR-0011: Cedar Policy Authorization Schema and Enforcement
+# ADR-0015: Cedar Policy Authorization Schema and Enforcement
 
 **Status:** Pending Approval
 

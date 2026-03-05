@@ -29,6 +29,7 @@ An ADR is a document that captures an important architectural decision made alon
 | [0012](./0012-sqlite-on-nodejs.md)                    | SQLite Storage Backend on Node.js            | Accepted   | 2026-02-18 |
 | [0013](./0013-test-runner-selection.md)               | Test Runner Selection (Vitest)               | Accepted   | 2026-02-18 |
 | [0014](./0014-package-manager-selection.md)           | Package Manager Selection (pnpm)             | Accepted   | 2026-02-18 |
+| [0015](./0015-cedar-policy-authorization-schema.md)   | Cedar Policy Authorization Schema            | Pending    | 2026-02-11 |
 
 ## Statuses
 
