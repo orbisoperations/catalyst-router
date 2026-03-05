@@ -21,7 +21,7 @@ export class MediaMTXProcess implements ProcessManager {
     if (this.child) return
 
     this.child = spawn(this.binaryPath, [this.configPath], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'inherit', 'inherit'],
     })
 
     // Wait briefly for the process to either stabilize or fail immediately
