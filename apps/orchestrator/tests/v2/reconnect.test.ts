@@ -137,6 +137,7 @@ describe('ReconnectManager', () => {
     const smallManager = new ReconnectManager({
       transport,
       dispatchFn: dispatch,
+      nodeToken: 'test-token',
       maxBackoffMs,
     })
 
@@ -226,6 +227,52 @@ describe('ReconnectManager', () => {
     await vi.runAllTimersAsync()
 
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('skips reconnect when nodeToken is undefined', async () => {
+    const noTokenManager = new ReconnectManager({
+      transport,
+      dispatchFn: dispatch,
+      // no nodeToken
+    })
+
+    noTokenManager.scheduleReconnect(peerRecord)
+
+    await vi.runAllTimersAsync()
+
+    // openPeer should never have been called
+    expect(transport.getCallsFor('openPeer')).toHaveLength(0)
+    expect(dispatch).not.toHaveBeenCalled()
+    // Timer completed without rescheduling
+    expect(noTokenManager.pendingCount).toBe(0)
+
+    noTokenManager.stopAll()
+  })
+
+  it('resumes reconnect after setNodeToken provides a token', async () => {
+    const noTokenManager = new ReconnectManager({
+      transport,
+      dispatchFn: dispatch,
+      // no nodeToken initially
+    })
+
+    noTokenManager.scheduleReconnect(peerRecord)
+    await vi.runAllTimersAsync()
+
+    // First attempt skipped — no openPeer calls
+    expect(transport.getCallsFor('openPeer')).toHaveLength(0)
+
+    // Now provide a token and schedule again
+    noTokenManager.setNodeToken('late-token')
+    noTokenManager.scheduleReconnect(peerRecord)
+    await vi.runAllTimersAsync()
+
+    const openCalls = transport.getCallsFor('openPeer')
+    expect(openCalls).toHaveLength(1)
+    if (openCalls[0].method !== 'openPeer') throw new Error('unexpected')
+    expect(openCalls[0].token).toBe('late-token')
+
+    noTokenManager.stopAll()
   })
 
   it('setNodeToken is used on subsequent reconnect attempts', async () => {
