@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { ConnectionPool } from '../src/orchestrator.js'
 
 function endpointFor(type: 'http' | 'ws'): string {

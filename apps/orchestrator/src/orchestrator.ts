@@ -816,6 +816,7 @@ export class CatalystNodeBus extends RpcTarget {
 
   publicApi(): PublicApi {
     return {
+      dispatch: (action: Action) => this.dispatch(action),
       getNetworkClient: async (
         token: string
       ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> => {
