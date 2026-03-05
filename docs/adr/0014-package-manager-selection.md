@@ -303,7 +303,7 @@ Replace `bun run` with `pnpm run` and `bunx` with `pnpm exec` throughout workflo
 
 Update root `package.json` scripts that use `bun run` as a script runner (e.g., `"compile:all:docker": "bun run compile:auth:docker && ..."` → `"pnpm run compile:auth:docker && ..."`).
 
-Update `CONTRIBUTING.md`, `docker-compose/DEMO.md`, and other developer-facing documentation to reference `pnpm install` and `pnpm run` instead of `bun install` and `bun run`.
+Update `CONTRIBUTING.md`, `docs/guides/demos/three-stack.md`, and other developer-facing documentation to reference `pnpm install` and `pnpm run` instead of `bun install` and `bun run`.
 
 ## Risks and Mitigations
 
