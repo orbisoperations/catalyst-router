@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
+import { createMetricsRoutes } from './routes/metrics.js'
+import { createTracesRoutes } from './routes/traces.js'
+import { createLogsRoutes } from './routes/logs.js'
 
 export interface StatusPageConfig {
   prometheusUrl: string
@@ -38,6 +41,10 @@ export class StatusPageService extends CatalystService {
         },
       })
     )
+
+    this.handler.route('/api/metrics', createMetricsRoutes(this.backends.prometheusUrl))
+    this.handler.route('/api/traces', createTracesRoutes(this.backends.jaegerUrl))
+    this.handler.route('/api/logs', createLogsRoutes(this.backends.influxdbUrl))
 
     this.telemetry.logger.info`StatusPageService initialized`
   }
