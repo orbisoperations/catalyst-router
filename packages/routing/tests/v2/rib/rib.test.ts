@@ -772,12 +772,12 @@ describe('Tick', () => {
     expect(plan.prevState).toBe(plan.newState)
   })
 
-  it('Tick ignores peers that are not in connected status', () => {
+  it('Tick ignores closed peers with no stale routes (normal close)', () => {
     const baseNow = 1_700_000_000_000
     vi.spyOn(Date, 'now').mockReturnValue(baseNow)
 
     const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
-    // Close the peer normally
+    // Close the peer normally — routes are removed, not stale
     apply(rib, makeProtocolClose(peer, CloseCodes.NORMAL))
     expect(rib.state.internal.peers.find((p) => p.name === 'peer-b')!.connectionStatus).toBe(
       'closed'
@@ -785,9 +785,71 @@ describe('Tick', () => {
 
     vi.restoreAllMocks()
 
-    // Tick should not do anything to a closed peer
+    // Tick should not do anything — no stale routes to purge
     const plan = rib.plan(makeTick(baseNow + 999_999_999), rib.state)
     expect(plan.prevState).toBe(plan.newState)
+  })
+
+  it('Tick purges stale routes from closed peers after holdTime grace period', () => {
+    const baseNow = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+
+    const rib = new RoutingInformationBase({ nodeId: 'node-a' })
+    const peer = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peer))
+    apply(rib, makeProtocolOpen(peer, 10_000))
+
+    const route = makeRoute('svc-1')
+    apply(
+      rib,
+      makeProtocolUpdate(peer, [
+        { action: 'add', route, nodePath: ['peer-b'], originNode: 'peer-b' },
+      ])
+    )
+
+    // Transport error — routes become stale, peer set to closed
+    apply(rib, makeProtocolClose(peer, CloseCodes.TRANSPORT_ERROR))
+    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')?.isStale).toBe(true)
+    expect(rib.state.internal.peers.find((p) => p.name === 'peer-b')!.connectionStatus).toBe(
+      'closed'
+    )
+
+    vi.restoreAllMocks()
+
+    // Tick before holdTime elapses — stale routes should survive (grace period)
+    const earlyPlan = rib.plan(makeTick(baseNow + 9_000), rib.state)
+    expect(earlyPlan.prevState).toBe(earlyPlan.newState)
+
+    // Tick after holdTime elapses — stale routes should be purged
+    const plan = apply(rib, makeTick(baseNow + 11_000))
+    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')).toBeUndefined()
+    expect(plan.routeChanges).toHaveLength(1)
+    expect(plan.routeChanges[0].type).toBe('removed')
+  })
+
+  it('Tick releases envoy ports when purging stale routes', () => {
+    const baseNow = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+
+    const rib = new RoutingInformationBase({ nodeId: 'node-a' })
+    const peer = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peer))
+    apply(rib, makeProtocolOpen(peer, 10_000))
+
+    const route = makeRoute('svc-1', { envoyPort: 9005 })
+    apply(
+      rib,
+      makeProtocolUpdate(peer, [
+        { action: 'add', route, nodePath: ['peer-b'], originNode: 'peer-b' },
+      ])
+    )
+
+    apply(rib, makeProtocolClose(peer, CloseCodes.TRANSPORT_ERROR))
+    vi.restoreAllMocks()
+
+    const plan = apply(rib, makeTick(baseNow + 11_000))
+    expect(plan.portOps).toHaveLength(1)
+    expect(plan.portOps[0]).toEqual({ type: 'release', routeKey: 'svc-1', port: 9005 })
   })
 })
 

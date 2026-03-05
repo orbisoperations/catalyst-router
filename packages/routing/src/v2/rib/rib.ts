@@ -324,7 +324,8 @@ export class RoutingInformationBase {
 
     if (isTransportError) {
       // Graceful-restart behaviour: mark routes stale rather than withdrawing
-      // them immediately. They will be replaced on reconnect or expired on Tick.
+      // them immediately. They will be replaced on reconnect or purged by Tick
+      // once the peer's holdTime grace period elapses without reconnection.
       routes = state.internal.routes.map((r) =>
         r.peer.name === data.peerInfo.name ? { ...r, isStale: true } : r
       )
@@ -450,7 +451,7 @@ export class RoutingInformationBase {
   // -------------------------------------------------------------------------
 
   private planTick(data: TickData, state: RouteTable): PlanResult {
-    // Find peers whose hold timer has expired
+    // Find connected peers whose hold timer has expired
     const expiredPeerNames = new Set<string>()
     const peers = state.internal.peers.map((p) => {
       const timerActive = p.connectionStatus === 'connected' && p.holdTime > 0 && p.lastReceived > 0
@@ -461,10 +462,29 @@ export class RoutingInformationBase {
       return p
     })
 
-    if (expiredPeerNames.size === 0) return noChange(state)
+    // Find closed peers whose stale routes have exceeded the hold timer grace
+    // period. After a transport-error close, routes are marked stale to allow
+    // reconnect. Once holdTime elapses without reconnect, purge them.
+    const stalePeerNames = new Set<string>()
+    for (const p of peers) {
+      if (
+        p.connectionStatus === 'closed' &&
+        p.holdTime > 0 &&
+        p.lastReceived > 0 &&
+        data.now - p.lastReceived > p.holdTime
+      ) {
+        const hasStaleRoutes = state.internal.routes.some(
+          (r) => r.peer.name === p.name && r.isStale === true
+        )
+        if (hasStaleRoutes) stalePeerNames.add(p.name)
+      }
+    }
 
-    const removedRoutes = state.internal.routes.filter((r) => expiredPeerNames.has(r.peer.name))
-    const routes = state.internal.routes.filter((r) => !expiredPeerNames.has(r.peer.name))
+    const purgedPeerNames = new Set([...expiredPeerNames, ...stalePeerNames])
+    if (purgedPeerNames.size === 0) return noChange(state)
+
+    const removedRoutes = state.internal.routes.filter((r) => purgedPeerNames.has(r.peer.name))
+    const routes = state.internal.routes.filter((r) => !purgedPeerNames.has(r.peer.name))
 
     const portOps: PortOperation[] = removedRoutes
       .filter((r) => r.envoyPort != null)
