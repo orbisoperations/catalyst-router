@@ -30,7 +30,7 @@ describe.skipIf(skipTests)('Orchestrator Peering Container Tests', () => {
   const TIMEOUT = 600000 // 10 minutes
   const orchestratorImage = 'catalyst-node:next-topology-e2e'
   const authImage = 'catalyst-auth:next-topology-e2e'
-  const repoRoot = path.resolve(__dirname, '../../../')
+  const repoRoot = path.resolve(__dirname, '../../../../')
 
   const buildImages = async () => {
     const checkImage = (imageName: string) =>
