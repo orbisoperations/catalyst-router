@@ -168,7 +168,7 @@ export class OrchestratorBus {
 
       updates.push({
         action: 'add',
-        route: toDataChannel(route),
+        route: BusTransforms.toDataChannel(route),
         nodePath: [this.config.node.name, ...route.nodePath],
         originNode: route.originNode,
       })
@@ -227,7 +227,7 @@ export class OrchestratorBus {
       const route = change.route
 
       // Determine whether this is an internal route (has peer attribution).
-      const isInternal = isInternalRoute(route)
+      const isInternal = BusGuards.isInternalRoute(route)
 
       if (isInternal) {
         // Don't send back to the source peer.
@@ -243,7 +243,7 @@ export class OrchestratorBus {
 
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: toDataChannel(route),
+          route: BusTransforms.toDataChannel(route),
           nodePath: [this.config.node.name, ...route.nodePath],
           originNode: route.originNode,
         })
@@ -251,7 +251,7 @@ export class OrchestratorBus {
         // Local route change — no loop-detection needed.
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: toDataChannel(route),
+          route: BusTransforms.toDataChannel(route),
           nodePath: [this.config.node.name],
           originNode: this.config.node.name,
         })
@@ -263,22 +263,28 @@ export class OrchestratorBus {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers — grouped for discoverability
 // ---------------------------------------------------------------------------
 
-/** Narrows a RouteChange route to InternalRoute (has peer + nodePath). */
-function isInternalRoute(route: DataChannelDefinition | InternalRoute): route is InternalRoute {
-  return 'peer' in route && 'nodePath' in route && 'originNode' in route
+/** Type guards for route discrimination. */
+export const BusGuards = {
+  /** Narrows a RouteChange route to InternalRoute (has peer + nodePath). */
+  isInternalRoute(route: DataChannelDefinition | InternalRoute): route is InternalRoute {
+    return 'peer' in route && 'nodePath' in route && 'originNode' in route
+  },
 }
 
-/** Strips InternalRoute-only fields, returning only the DataChannelDefinition shape. */
-function toDataChannel(route: DataChannelDefinition | InternalRoute): DataChannelDefinition {
-  return {
-    name: route.name,
-    protocol: route.protocol,
-    endpoint: route.endpoint,
-    region: route.region,
-    tags: route.tags,
-    envoyPort: route.envoyPort,
-  }
+/** Data transforms for route serialization. */
+export const BusTransforms = {
+  /** Strips InternalRoute-only fields, returning only the DataChannelDefinition shape. */
+  toDataChannel(route: DataChannelDefinition | InternalRoute): DataChannelDefinition {
+    return {
+      name: route.name,
+      protocol: route.protocol,
+      endpoint: route.endpoint,
+      region: route.region,
+      tags: route.tags,
+      envoyPort: route.envoyPort,
+    }
+  },
 }
