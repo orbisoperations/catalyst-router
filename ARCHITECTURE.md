@@ -111,34 +111,36 @@ sequenceDiagram
     end
 ```
 
-### 2. Plugin Interfaces
+### 2. V2 Dispatch Architecture
 
-The system is extensible via three primary interfaces.
+The v2 orchestrator replaces the plugin pipeline with a deterministic **dispatch → plan → commit → post-commit** cycle built around a Routing Information Base (RIB).
 
-#### A. Route Table Updater (`IRouteTablePlugin`)
+#### Core Components
 
-- **Responsibility**: Decides how the routing table changes given an input.
-- **Inputs**: Incoming Peer Message, Ticker (for expiration).
-- **Outputs**: Updated Route Entries (Add/Remove routes).
-- **Example**: "Received 'Add Service X' from Peer A -> Add Entry X via Peer A to Table."
+- **`RoutingInformationBase` (RIB)**: Immutable-snapshot state machine. `plan()` is pure and synchronous; `commit()` applies the plan and appends to the action journal.
+- **`OrchestratorBus`**: Serializes actions through an `ActionQueue`, delegates to the RIB, and executes async post-commit side effects (transport calls, gateway sync).
+- **`ActionLog`**: Append-only journal (SQLite or in-memory) enabling state replay on restart.
+- **`PeerTransport`**: Abstraction over peer-to-peer communication (WebSocket RPC in production, `MockPeerTransport` in tests).
 
-#### B. Service Registry & Configurator (`IServicePlugin`)
+#### Action Flow
 
-- **Responsibility**: Manages the registry of known services.
-- **Inputs**:
-  - **Local Registration**: Services registering via Config (`catalyst.json`) or Admin API.
-  - **Health Checks**: Periodic liveness probes.
-- **Actions**:
-  - **Federation Update**: Triggers an RPC call to the **GraphQL Gateway** to federate the new service endpoint.
-  - **Envoy Config**: Updates xDS (CDS/RDS) to allow traffic to/from the service.
-- **Example**: "API registers 'Inventory Service' on port 5001 -> Orchestrator updates GraphQL Gateway to stitch `http://localhost:5001/graphql`."
+```
+dispatch(action)
+  → queue.enqueue()
+    → plan(action, currentState)   // pure, sync — returns PlanResult
+    → commit(plan, action)         // mutates state, appends to journal
+    → handlePostCommit(plan)       // async I/O: transport calls, gateway config
+```
 
-#### C. Propagation Configurator (`IPropagationPlugin`)
+#### Key Action Types
 
-- **Responsibility**: Decides what to tell neighbors.
-- **Inputs**: State Changes, Periodic Tickers.
-- **Outputs**: Outbound RPC Messages.
-- **Example**: "Route Table changed -> Send standard Route Update to all Peers."
+| Action                                 | Description                                         |
+| :------------------------------------- | :-------------------------------------------------- |
+| `AddPeer` / `RemovePeer`               | Manage iBGP peer configuration                      |
+| `OpenPeer` / `ClosePeer`               | Session lifecycle (OPEN / NOTIFICATION)             |
+| `PeerUpdate`                           | Inbound route advertisements from a peer            |
+| `AddDataChannel` / `RemoveDataChannel` | Local service registration                          |
+| `Tick`                                 | Periodic keepalive and hold-timer expiration checks |
 
 ## Data Plane Integration (xDS)
 
