@@ -1,26 +1,26 @@
 # v2 Routing System — Test Catalog
 
 Comprehensive catalog of all tests covering the v2 BGP-inspired routing system.
-**232 tests** across 18 test files in two packages.
+**234 tests** across 18 test files in two packages.
 
 ## Summary
 
 | Layer                    | Package             | Files  | Tests   |
 | ------------------------ | ------------------- | ------ | ------- |
-| Routing primitives       | `packages/routing`  | 8      | 102     |
+| Routing primitives       | `packages/routing`  | 8      | 104     |
 | Orchestrator integration | `apps/orchestrator` | 10     | 130     |
-| **Total**                |                     | **18** | **232** |
+| **Total**                |                     | **18** | **234** |
 
 ---
 
-## packages/routing (102 tests)
+## packages/routing (104 tests)
 
-### RIB Core — `tests/v2/rib/rib.test.ts` (86 tests)
+### RIB Core — `tests/v2/rib/rib.test.ts` (66 tests)
 
 The RIB (Routing Information Base) is the pure-function state machine at the heart of
 the routing system. All tests use `plan()` directly — no I/O, no timers, fully deterministic.
 
-#### Peer lifecycle (8 tests)
+#### Peer lifecycle (9 tests)
 
 | Test                                                                                     | Validates                    |
 | ---------------------------------------------------------------------------------------- | ---------------------------- |
@@ -46,7 +46,7 @@ the routing system. All tests use `plan()` directly — no I/O, no timers, fully
 | LocalRouteDelete does not generate portOps when no envoyPort      | No spurious port ops    |
 | LocalRouteDelete with unknown route → no state change             | Unknown route rejection |
 
-#### BGP propagation via InternalProtocolUpdate (10 tests)
+#### BGP propagation via InternalProtocolUpdate (11 tests)
 
 | Test                                                              | Validates                         |
 | ----------------------------------------------------------------- | --------------------------------- |
@@ -62,7 +62,7 @@ the routing system. All tests use `plan()` directly — no I/O, no timers, fully
 | batch update skips looped routes while processing valid ones      | Selective loop filtering in batch |
 | 'add' replaces stale route regardless of path length              | Stale route replacement           |
 
-#### Peer connection (13 tests)
+#### Peer connection (14 tests)
 
 | Test                                                                             | Validates                             |
 | -------------------------------------------------------------------------------- | ------------------------------------- |
@@ -81,16 +81,18 @@ the routing system. All tests use `plan()` directly — no I/O, no timers, fully
 | InternalProtocolClose with TRANSPORT_ERROR does NOT generate port ops            | No port ops for stale routes          |
 | InternalProtocolClose with unknown peer → no state change                        | Unknown peer guard                    |
 
-#### Tick / hold timer (6 tests)
+#### Tick / hold timer (8 tests)
 
-| Test                                                                   | Validates                |
-| ---------------------------------------------------------------------- | ------------------------ |
-| Tick with no expired peers → prevState === newState (reference equal)  | No-op tick optimization  |
-| Tick expires peer past holdTime → removes routes and marks peer closed | Hold timer expiry        |
-| Tick generates port release ops for expired peer routes                | Port cleanup on expiry   |
-| Tick ignores peers with holdTime === 0                                 | Disabled hold timer      |
-| Tick ignores peers with lastReceived === 0 (never received anything)   | Pre-connection peer skip |
-| Tick ignores peers that are not in connected status                    | Disconnected peer skip   |
+| Test                                                                   | Validates                      |
+| ---------------------------------------------------------------------- | ------------------------------ |
+| Tick with no expired peers → prevState === newState (reference equal)  | No-op tick optimization        |
+| Tick expires peer past holdTime → removes routes and marks peer closed | Hold timer expiry              |
+| Tick generates port release ops for expired peer routes                | Port cleanup on expiry         |
+| Tick ignores peers with holdTime === 0                                 | Disabled hold timer            |
+| Tick ignores peers with lastReceived === 0 (never received anything)   | Pre-connection peer skip       |
+| Tick ignores closed peers with no stale routes (normal close)          | Disconnected peer skip         |
+| Tick purges stale routes from closed peers after holdTime grace period | Stale route expiry after grace |
+| Tick releases envoy ports when purging stale routes                    | Port cleanup on stale purge    |
 
 #### Keepalive (3 tests)
 
@@ -142,7 +144,7 @@ the routing system. All tests use `plan()` directly — no I/O, no timers, fully
 | propagates errors to caller without blocking queue | Error isolation           |
 | returns values from enqueued operations            | Return value pass-through |
 
-### Schema — `tests/v2/schema.test.ts` (10 tests)
+### Schema — `tests/v2/schema.test.ts` (12 tests)
 
 | Test                                          | Validates                   |
 | --------------------------------------------- | --------------------------- |
@@ -213,7 +215,7 @@ the routing system. All tests use `plan()` directly — no I/O, no timers, fully
 
 ## apps/orchestrator (130 tests)
 
-### OrchestratorBus — `tests/v2/bus.test.ts` (15 tests)
+### OrchestratorBus — `tests/v2/bus.test.ts` (6 tests)
 
 The bus wires RIB dispatch to journal, post-commit hooks, and peer transport.
 
@@ -235,7 +237,7 @@ The bus wires RIB dispatch to journal, post-commit hooks, and peer transport.
 | replays journal on construction                          | Journal replay on startup |
 | handles plan with portOps                                | Port operation forwarding |
 
-### Tick Manager — `tests/v2/tick-manager.test.ts` (8 tests)
+### Tick Manager — `tests/v2/tick-manager.test.ts` (15 tests)
 
 | Test                                                       | Validates           |
 | ---------------------------------------------------------- | ------------------- |
@@ -248,7 +250,7 @@ The bus wires RIB dispatch to journal, post-commit hooks, and peer transport.
 | does not throw if dispatch rejects                         | Error resilience    |
 | tick continues after dispatch error                        | Fault tolerance     |
 
-### Journal Replay — `tests/v2/journal-replay.test.ts` (7 tests)
+### Journal Replay — `tests/v2/journal-replay.test.ts` (8 tests)
 
 | Test                                   | Validates           |
 | -------------------------------------- | ------------------- |
@@ -260,7 +262,7 @@ The bus wires RIB dispatch to journal, post-commit hooks, and peer transport.
 | replay matches live dispatch state     | Fidelity guarantee  |
 | replays from specific sequence number  | Partial replay      |
 
-### Graceful Restart — `tests/v2/graceful-restart.test.ts` (10 tests)
+### Graceful Restart — `tests/v2/graceful-restart.topology.test.ts` (6 tests)
 
 | Test                                                              | Validates            |
 | ----------------------------------------------------------------- | -------------------- |
@@ -275,7 +277,7 @@ The bus wires RIB dispatch to journal, post-commit hooks, and peer transport.
 | NORMAL close removes routes immediately (no stale)                | Clean close contrast |
 | ADMIN_SHUTDOWN removes routes immediately (no stale)              | Admin close contrast |
 
-### Keepalive — `tests/v2/keepalive.test.ts` (9 tests)
+### Keepalive — `tests/v2/keepalive.topology.test.ts` (12 tests)
 
 | Test                                         | Validates             |
 | -------------------------------------------- | --------------------- |
@@ -289,7 +291,7 @@ The bus wires RIB dispatch to journal, post-commit hooks, and peer transport.
 | disconnected peer not expired by tick        | Disconnected skip     |
 | keepalive only updates target peer           | Peer isolation        |
 
-### Post-Commit Hooks — `tests/v2/post-commit.test.ts` (14 tests)
+### Post-Commit Hooks — `tests/v2/post-commit.test.ts` (16 tests)
 
 | Test                                            | Validates                |
 | ----------------------------------------------- | ------------------------ |
@@ -308,7 +310,7 @@ The bus wires RIB dispatch to journal, post-commit hooks, and peer transport.
 | handles empty peer list                         | Empty peer guard         |
 | executes portOps from plan                      | Port operation execution |
 
-### Orchestrator Topology — `tests/v2/orchestrator.topology.test.ts` (16 tests)
+### Orchestrator Topology — `tests/v2/orchestrator.topology.test.ts` (11 tests)
 
 Multi-node topology tests exercising the full dispatch pipeline with MockPeerTransport.
 
@@ -331,7 +333,7 @@ Multi-node topology tests exercising the full dispatch pipeline with MockPeerTra
 | best-path selection prefers shorter path           | Shortest-path preference    |
 | split-horizon prevents sending back to source      | Split-horizon enforcement   |
 
-### Service Integration — `tests/v2/service.test.ts` (12 tests)
+### Service Integration — `tests/v2/service.test.ts` (8 tests)
 
 Tests the OrchestratorService wiring (bus + tick manager + RPC lifecycle).
 
@@ -350,7 +352,7 @@ Tests the OrchestratorService wiring (bus + tick manager + RPC lifecycle).
 | tick manager stops on service stop        | Timer auto-stop    |
 | getState returns current routing state    | State accessor     |
 
-### Reconnection — `tests/v2/reconnect.test.ts` (18 tests)
+### Reconnection — `tests/v2/reconnect.test.ts` (16 tests)
 
 | Test                                         | Validates             |
 | -------------------------------------------- | --------------------- |
@@ -373,7 +375,7 @@ Tests the OrchestratorService wiring (bus + tick manager + RPC lifecycle).
 | respects jitter in backoff                   | Jitter randomization  |
 | custom shouldReconnect predicate             | Custom policy         |
 
-### RPC — `tests/v2/rpc.test.ts` (21 tests)
+### RPC — `tests/v2/rpc.test.ts` (32 tests)
 
 Tests the capnweb RPC interface (PublicApi + IBGPClient factories).
 
