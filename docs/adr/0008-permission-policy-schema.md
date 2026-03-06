@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by [ADR-0011](./0011-cedar-policy-authorization-schema.md) — The Cerbos-based architecture described in this ADR was never implemented. The system uses [Cedar Policy](https://www.cedarpolicy.com/) (via `@cedar-policy/cedar-wasm`) with principal-based JWT tokens. See `packages/authorization/` for the actual implementation and ADR-0011 for the authoritative Cedar policy schema and enforcement decisions.
+Superseded by [ADR-0015](./0015-cedar-policy-authorization-schema.md) — The Cerbos-based architecture described in this ADR was never implemented. The system uses [Cedar Policy](https://www.cedarpolicy.com/) (via `@cedar-policy/cedar-wasm`) with principal-based JWT tokens. See `packages/authorization/` for the actual implementation and ADR-0015 for the authoritative Cedar policy schema and enforcement decisions.
 
 ## Date
 
