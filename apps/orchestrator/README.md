@@ -46,31 +46,24 @@ The integration requires specific configuration to locate the Gateway's RPC endp
 
 ### How it Works
 
-1.  **Service Registration**: A service registers itself via the Orchestrator (e.g., via `addDataChannel` action).
-2.  **State Update**: The `RouteTablePlugin` updates the internal state.
-3.  **Sync Trigger**: The `GatewayIntegrationPlugin` detects the change.
-4.  **RPC Push**: The plugin converts the `RouteTable` into a `GatewayConfig` and pushes it via WebSocket to the Gateway.
+1.  **Service Registration**: A data channel is registered via `dispatch(AddDataChannel)`.
+2.  **State Update**: The RIB plans and commits the route addition.
+3.  **Post-commit Sync**: The bus detects `tcp:graphql` routes in the committed state and pushes a `GatewayConfig` to the Gateway via RPC.
 
 ```mermaid
 sequenceDiagram
     participant S as Service
-    participant O as Orchestrator
+    participant Bus as OrchestratorBus
+    participant RIB as RoutingInformationBase
     participant G as Gateway
 
-    S->>O: Connect & Register (Action: create)
-    O->>O: Run Plugins (Auth -> RouteTable)
-    O->>O: Update State (Add Route)
-    O->>G: RPC: updateConfig(services)
-    G->>G: Stitch Schemas
-    G->>G: Hot Reload
-    G-->>O: Success
-    O-->>S: Registration Complete
+    S->>Bus: dispatch(AddDataChannel)
+    Bus->>RIB: plan() → commit()
+    Bus->>G: Post-commit: RPC updateConfig(services)
+    G->>G: Stitch Schemas & Hot Reload
+    G-->>Bus: Success
+    Bus-->>S: Registration Complete
 ```
-
-### Components
-
-- **`GatewayIntegrationPlugin`**: Listens for state changes and pushes config to the Gateway.
-- **`DirectProxyRouteTablePlugin`**: Manages routes that should be exposed via the Gateway (protocol `tcp:graphql`).
 
 ## 🚀 Getting Started
 
