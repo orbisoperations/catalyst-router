@@ -2,24 +2,37 @@
 
 This document outlines the step-by-step implementation strategy for **Catalyst Router**, consolidated from the architectural vision and the roll-out strategy.
 
+> **Last reviewed**: 2026-03-05. Updated to reflect completed milestones and v2 routing system.
+
 > **Note on Configuration**: For all phases below, configuration is considered **a priori** (static at startup). We must verify that the node can be fully configured via both **JSON config file** and **CLI arguments/flags**. Dynamic configuration is out of scope for these initial phases.
+
+## Status Overview
+
+| Milestone | Name                    | Status         |
+| --------- | ----------------------- | -------------- |
+| M0        | Single Gateway          | **Done**       |
+| M1        | Identity (Auth Core)    | **Done**       |
+| M2        | Internal Peering (iBGP) | **Done**       |
+| M3        | External Peering (eBGP) | Planned        |
+| M4        | Data Plane (Envoy)      | In progress    |
+| M5        | Observability & Policy  | Partially done |
 
 ## Feature Crosswalk (Legacy vs New)
 
-This table maps legacy `catalyst` capabilities to the specific Milestone that delivers them in `catalyst-router`.
+This table maps legacy `catalyst` capabilities to the specific Milestone that delivers them in `catalyst-router`. See [crosswalk.md](./crosswalk.md) for the full detailed mapping.
 
-| Legacy Capability    | New Objective                  | Fulfillment Milestone              |
-| :------------------- | :----------------------------- | :--------------------------------- |
-| **Organization**     | **Organization** (Root Tenant) | **Milestone 0** (Single Gateway)   |
-| **Data Channel**     | **Service in Mesh**            | **Milestone 0** (Local)            |
-| **Token Minting**    | **Identity / Token Issue**     | **Milestone 1** (Identity)         |
-| **Internal Routing** | **Internal Peering**           | **Milestone 2** (Internal Trust)   |
-| **Partnership**      | **External Peering**           | **Milestone 3** (External Trust)   |
-| **Traffic Mgmt**     | **Advanced Proxy / mTLS**      | **Milestone 4** (Envoy Data Plane) |
+| Legacy Capability    | New Objective                  | Fulfillment Milestone     | Status      |
+| :------------------- | :----------------------------- | :------------------------ | :---------- |
+| **Organization**     | **Organization** (Root Tenant) | **M0** (Single Gateway)   | Done        |
+| **Data Channel**     | **Service in Mesh**            | **M0** (Local)            | Done        |
+| **Token Minting**    | **Identity / Token Issue**     | **M1** (Identity)         | Done        |
+| **Internal Routing** | **Internal Peering (iBGP)**    | **M2** (Internal Trust)   | Done        |
+| **Partnership**      | **External Peering (eBGP)**    | **M3** (External Trust)   | Planned     |
+| **Traffic Mgmt**     | **Advanced Proxy / mTLS**      | **M4** (Envoy Data Plane) | In progress |
 
 ---
 
-# Milestone 0: Single Gateway
+# Milestone 0: Single Gateway — Done
 
 **Goal**: A standalone GraphQL Gateway capable of federating local services, managed by an Orchestrator. No Envoy, no complex Auth, no Peering.
 
@@ -105,62 +118,40 @@ This table maps legacy `catalyst` capabilities to the specific Milestone that de
 
 ---
 
-# Milestone 1: Identity (Auth Core)
+# Milestone 1: Identity (Auth Core) — Done
 
 **Goal**: Integrate the **Auth Service** to support Identity issuance and verification. No Envoy yet—Orchestrator manages signature requests directly.
 
-## Subphase 1: Auth Service (Sidecar)
+### What was built
 
-**Goal**: A standalone service capable of signing and verifying JWTs.
-
-### Implementation Goals
-
-- **Container**: TypeScript container (or Rust/Go if needed later, TS for now).
-- **Key Management**: Generate/Load ECDSA keys (ES384).
-- **RPC Server**: Expose methods to `Sign(payload)` and `Verify(token)`.
-
-## Subphase 2: Orchestrator Integration
-
-**Goal**: Orchestrator uses Auth Service to issue tokens.
-
-### Implementation Goals
-
-- **RPC Client**: Orchestrator connects to Auth Service.
-- **CLI**: `catalyst service-token` command generates a signed JWT via the Auth Service.
-- **Gateway**: Gateway can be configured to validate Authorization headers using the local Public Key (passed via Config).
-
-### Architecture Reference (Stage 1B: Milestone 1)
-
-Adds the `Auth Service` sidecar to the Core Pod.
+- **Auth Service** (`apps/auth`): Standalone sidecar with ECDSA key management (ES384), JWT issuance/verification via RPC.
+- **Authorization Package** (`packages/authorization`): Cedar policy engine, JWT token manager, key manager with rotation.
+- **Certificate-bound access tokens** (ADR-0007): JWTs bound to client TLS certificates for iBGP session auth.
+- **CLI integration** (`apps/cli`): `catalyst service-token` command generates signed JWTs via the Auth Service.
 
 ---
 
-# Milestone 2: Internal Peering (HTTP)
+# Milestone 2: Internal Peering (iBGP) — Done
 
 **Goal**: Connect two nodes from the **same Organization** to share services. This establishes the "Data Channel" parity.
 
-## Subphase 1: Orchestrator Peering (RPC)
+### What was built
 
-**Goal**: Orchestrators discover and exchange routes.
+The v2 routing system (`packages/routing` + `apps/orchestrator`) implements BGP-inspired iBGP:
 
-### Implementation Goals
-
-- **Peering RPC**: Node A connects to Node B.
-- **Route Exchange**: Share routes with `protocol: "graphql-http"`.
-- **Registry**: Orchestrator A registers "Remote Service B" into its Gateway config with a remote URL (`http://node-b-gateway/graphql`).
-
-## Subphase 2: Direct Gateway Federation
-
-**Goal**: Query federation across nodes.
-
-### Implementation Goals
-
-- **Path**: Client -> Gateway A -> (Federation HTTP) -> Gateway B.
-- **Auth**: Gateway A includes an "Internal Trust" token (signed by shared key) in the request to B. (Since it's Internal Peering, they share the Root Trust).
+- **RIB** (Routing Information Base): Pure-function `plan()`/`commit()` state machine. All state transitions are deterministic and testable.
+- **OrchestratorBus**: Wires RIB dispatch to journal, post-commit hooks, and peer transport.
+- **Cap'n Proto RPC**: `PublicApi` (service registration) and `IBGPClient` (peer-to-peer route exchange) interfaces over WebSocket.
+- **Path-vector loop detection**: Routes carry `nodePath` — reject if local `nodeId` is already in the path.
+- **Best-path selection**: Shortest `nodePath` wins.
+- **Hold timer keepalive**: Peers negotiate `holdTime = min(local, remote)`. `Tick` actions expire stale peers.
+- **Graceful restart**: `TRANSPORT_ERROR` marks routes `isStale` instead of removing, allowing reconnection.
+- **Journal replay**: `InMemoryActionLog` (tests) and `SqliteActionLog` (production) for durable action replay.
+- **232 tests** across 18 files. See [Test Catalog](./test-catalog.md).
 
 ---
 
-# Milestone 3: External Peering (HTTP)
+# Milestone 3: External Peering (eBGP) — Planned
 
 **Goal**: Connect two nodes from **different Organizations** (Partnership).
 
@@ -172,6 +163,7 @@ Adds the `Auth Service` sidecar to the Core Pod.
 
 - **Policy**: Mark services as `export: true/false`.
 - **Exchange**: Only send exported routes to External Peers.
+- The `RoutePolicy` interface in `@catalyst/routing` is the extensibility point.
 
 ## Subphase 2: Peer JWKS Trust
 
@@ -185,20 +177,21 @@ Adds the `Auth Service` sidecar to the Core Pod.
 
 ---
 
-# Milestone 4: Data Plane (Envoy)
+# Milestone 4: Data Plane (Envoy) — In Progress
 
 **Goal**: **Upgrade** the networking layer by introducing Envoy as the universal ingest/egress proxy.
 
-## Subphase 1: xDS & Envoy Boot
+## Subphase 1: xDS & Envoy Boot — Done
 
 **Goal**: Orchestrator configures Envoy.
 
-### Implementation Goals
+### What was built
 
-- **xDS Server**: Orchestrator serves LDS/CDS/RDS.
-- **Envoy**: Starts and connects to Orchestrator.
+- **xDS Server** (`apps/envoy`): Orchestrator serves LDS/CDS/RDS to Envoy.
+- **PortOperation**: Declarative `allocate`/`release` port ops from the RIB drive Envoy listener configuration.
+- **Dynamic port allocation**: Routes carry `envoyPort` for sidecar-managed egress listeners.
 
-## Subphase 2: Traffic Migration
+## Subphase 2: Traffic Migration — In Progress
 
 **Goal**: Move traffic from direct Gateway ports to Envoy ports.
 
@@ -208,7 +201,7 @@ Adds the `Auth Service` sidecar to the Core Pod.
 - **Egress**: Gateway -> Envoy (Egress Listener) -> Peer.
 - **Result**: All inter-node traffic now flows over TCP/HTTP managed by Envoy.
 
-## Subphase 3: mTLS Preparation
+## Subphase 3: mTLS Preparation — Planned
 
 **Goal**: Use Envoy for transport security.
 
@@ -216,8 +209,8 @@ Adds the `Auth Service` sidecar to the Core Pod.
 
 ---
 
-# Milestone 5: Observability & Policy
+# Milestone 5: Observability & Policy — Partially Done
 
-- **Metrics**: OTEL collector, Prometheus scraping.
-- **Advanced Policy**: OPA/Rego or internal policy engine.
-- **Offline Mode**: Durable policy bundles.
+- **Metrics**: OpenTelemetry SDK (`packages/telemetry`) with traces, logs, and metrics. Done.
+- **Advanced Policy**: Cedar policy engine (`packages/authorization`). Done.
+- **Offline Mode**: Durable policy bundles. Planned.
