@@ -10,7 +10,7 @@ export type PeerConnectionStatus = z.infer<typeof PeerConnectionStatusEnum>
 
 export const PeerRecordSchema = PeerInfoSchema.extend({
   connectionStatus: PeerConnectionStatusEnum,
-  lastConnected: z.date().optional(),
+  lastConnected: z.number().default(0),
   holdTime: z.number().default(90_000),
   lastSent: z.number().default(0),
   lastReceived: z.number().default(0),
@@ -22,12 +22,6 @@ export type InternalRoute = DataChannelDefinition & {
   nodePath: string[]
   originNode: string
   isStale?: boolean
-}
-
-export type LocRibEntry = {
-  route: InternalRoute
-  alternatives: InternalRoute[]
-  isStale: boolean
 }
 
 export type RouteTable = {

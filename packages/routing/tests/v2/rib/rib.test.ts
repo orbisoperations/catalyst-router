@@ -650,8 +650,34 @@ describe('Peer connection', () => {
 
     const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
     expect(found.connectionStatus).toBe('connected')
-    expect(found.lastConnected).toBeInstanceOf(Date)
+    expect(found.lastConnected).toBe(fixedNow)
     expect(found.lastReceived).toBe(fixedNow)
+
+    vi.restoreAllMocks()
+  })
+
+  it('InternalProtocolConnected resets holdTime and lastSent for re-negotiation', () => {
+    const fixedNow = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(fixedNow)
+
+    const rib = new RoutingInformationBase({ nodeId: 'node-a' })
+    const peer = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peer))
+    // Negotiate holdTime down to 30s via Open
+    apply(rib, makeProtocolOpen(peer, 30_000))
+
+    const afterOpen = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    expect(afterOpen.holdTime).toBe(30_000)
+
+    // Simulate disconnect + reconnect
+    apply(rib, makeProtocolClose(peer, CloseCodes.TRANSPORT_ERROR))
+    apply(rib, makeProtocolConnected(peer))
+
+    const afterReconnect = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    // holdTime should be reset to default so it can be re-negotiated
+    expect(afterReconnect.holdTime).toBe(90_000)
+    expect(afterReconnect.lastSent).toBe(0)
+    expect(afterReconnect.lastConnected).toBe(fixedNow)
 
     vi.restoreAllMocks()
   })

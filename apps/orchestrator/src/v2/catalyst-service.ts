@@ -76,8 +76,8 @@ export class OrchestratorService extends CatalystService {
 
   private _v2!: OrchestratorServiceV2
   private _nodeToken: string | undefined
-  private _tokenIssuedAt: Date | undefined
-  private _tokenExpiresAt: Date | undefined
+  private _tokenIssuedAt: number | undefined
+  private _tokenExpiresAt: number | undefined
   private _refreshInterval: ReturnType<typeof setInterval> | undefined
   private _authClient: ReturnType<typeof newWebSocketRpcSession<AuthServiceApi>> | undefined
 
@@ -99,7 +99,8 @@ export class OrchestratorService extends CatalystService {
         () => this.refreshNodeTokenIfNeeded(),
         REFRESH_CHECK_INTERVAL
       )
-      this.telemetry.logger.info`Token refresh check enabled (every hour)`
+      this.telemetry.logger
+        .info`Token refresh check enabled (every ${REFRESH_CHECK_INTERVAL / 60_000} min)`
     }
 
     // Set up auth client for token validation
@@ -249,11 +250,12 @@ export class OrchestratorService extends CatalystService {
         expiresIn: '7d',
       })
 
-      this._tokenIssuedAt = new Date()
-      this._tokenExpiresAt = new Date(Date.now() + TOKEN_TTL_MS)
+      const now = Date.now()
+      this._tokenIssuedAt = now
+      this._tokenExpiresAt = now + TOKEN_TTL_MS
 
       this.telemetry.logger
-        .info`Node token minted for ${this.config.node.name} (expires ${this._tokenExpiresAt.toISOString()})`
+        .info`Node token minted for ${this.config.node.name} (expires ${new Date(this._tokenExpiresAt).toISOString()})`
 
       // Propagate token to the v2 service if already initialized
       if (this._v2) {
@@ -271,10 +273,8 @@ export class OrchestratorService extends CatalystService {
     }
 
     const now = Date.now()
-    const issuedTime = this._tokenIssuedAt.getTime()
-    const expiryTime = this._tokenExpiresAt.getTime()
-    const totalLifetime = expiryTime - issuedTime
-    const refreshTime = issuedTime + totalLifetime * REFRESH_THRESHOLD
+    const totalLifetime = this._tokenExpiresAt - this._tokenIssuedAt
+    const refreshTime = this._tokenIssuedAt + totalLifetime * REFRESH_THRESHOLD
 
     if (now >= refreshTime) {
       this.telemetry.logger.info`Node token approaching expiration, refreshing...`
