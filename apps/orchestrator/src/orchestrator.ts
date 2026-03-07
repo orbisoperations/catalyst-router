@@ -172,9 +172,6 @@ export class CatalystNodeBus extends RpcTarget {
 
   private validateNodeConfig() {
     const { name, domains } = this.config.node
-    if (!name.endsWith('.somebiz.local.io')) {
-      throw new Error(`Invalid node name: ${name}. Must end with .somebiz.local.io`)
-    }
     const domainMatch = domains.some((d) => name.endsWith(`.${d}`))
     if (!domainMatch && domains.length > 0) {
       throw new Error(
