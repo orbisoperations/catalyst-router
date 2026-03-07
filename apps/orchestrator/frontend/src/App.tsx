@@ -3,10 +3,10 @@ import { Sidebar } from './components/Sidebar'
 import { NodesTab } from './components/NodesTab'
 import { AdaptersTab } from './components/AdaptersTab'
 
-type Tab = 'nodes' | 'adapters'
+type Tab = 'services' | 'adapters'
 
 export function App() {
-  const [tab, setTab] = useState<Tab>('nodes')
+  const [tab, setTab] = useState<Tab>('services')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -22,7 +22,7 @@ export function App() {
         <PageHeader />
         <TabBar tab={tab} onTabChange={setTab} />
         <div style={{ animation: 'fadeInUp 0.5s ease both', animationDelay: '0.15s' }}>
-          {tab === 'nodes' ? <NodesTab /> : <AdaptersTab />}
+          {tab === 'services' ? <NodesTab /> : <AdaptersTab />}
         </div>
       </main>
     </div>
@@ -67,7 +67,7 @@ function PageHeader() {
 
 function TabBar({ tab, onTabChange }: { tab: Tab; onTabChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'nodes', label: 'Nodes' },
+    { key: 'services', label: 'Services' },
     { key: 'adapters', label: 'Adapters' },
   ]
 
