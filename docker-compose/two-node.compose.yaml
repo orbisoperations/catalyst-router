@@ -89,8 +89,11 @@ services:
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-a:4000/api
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[10000, [10001, 10050]]
+      - CATALYST_AUTH_ENDPOINT=ws://auth:4020/rpc
       - OTEL_SERVICE_NAME=orchestrator-node-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - >-
+        CATALYST_DASHBOARD_LINKS={"metrics":"http://localhost:3050/d/catalyst-services?var-service={service}","traces":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D","logs":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"}
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
       interval: 10s
@@ -160,8 +163,11 @@ services:
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-b:4000/api
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[[10051, 10100]]
+      - CATALYST_AUTH_ENDPOINT=ws://auth:4020/rpc
       - OTEL_SERVICE_NAME=orchestrator-node-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - >-
+        CATALYST_DASHBOARD_LINKS={"metrics":"http://localhost:3050/d/catalyst-services?var-service={service}","traces":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D","logs":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"}
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
       interval: 10s
@@ -228,3 +234,68 @@ services:
     depends_on:
       envoy-service:
         condition: service_healthy
+
+  # --- Observability backends ---
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-remote-write-receiver'
+      - '--storage.tsdb.retention.time=7d'
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  jaeger:
+    image: jaegertracing/jaeger:2.5.0
+    ports:
+      - '16686:16686'
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  loki:
+    image: grafana/loki:3.4.2
+    ports:
+      - '3100:3100'
+    command: ['-config.file=/etc/loki/loki.yaml']
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana-oss:11.5.2
+    ports:
+      - '3050:3000'
+    environment:
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_USERS_VIEWERS_CAN_EDIT=true
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+      jaeger:
+        condition: service_started
+      loki:
+        condition: service_started
+
+volumes:
+  auth-data:
+  prometheus-data:
+  loki-data:
+  grafana-data:

@@ -1,0 +1,131 @@
+:root {
+  /* Surface palette — light theme */
+  --bg-root: #f6faff;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f6faff;
+  --bg-hover: #edf3fc;
+  --bg-active: #dce8ff;
+
+  /* Primary */
+  --primary: #4168b1;
+  --primary-dark: #062766;
+  --primary-light: #dce8ff;
+  --link: #1848a3;
+
+  /* Border */
+  --border-subtle: #ebf2fb;
+  --border-default: #d8e2ef;
+  --border-strong: #bbc5d6;
+
+  /* Text */
+  --text-primary: #0a0a0a;
+  --text-secondary: #2e2e2e;
+  --text-tertiary: #4e4e4e;
+  --text-inverse: #ffffff;
+
+  /* Accent — now blue primary */
+  --accent: #4168b1;
+  --accent-dim: rgba(65, 104, 177, 0.1);
+  --accent-glow: rgba(65, 104, 177, 0.25);
+
+  /* Status */
+  --status-up: #026117;
+  --status-up-bg: #e2ffe9;
+  --status-up-border: #a4ecb4;
+  --status-up-dim: #e2ffe9;
+  --status-up-glow: rgba(2, 97, 23, 0.2);
+  --status-down: #710909;
+  --status-down-bg: #ffe2e2;
+  --status-down-border: #ecb4b4;
+  --status-down-dim: #ffe2e2;
+  --status-down-glow: rgba(113, 9, 9, 0.2);
+  --status-unknown: #64748b;
+
+  /* Shadow */
+  --shadow: 0px 1px 4px 0px rgba(18, 59, 137, 0.14);
+
+  /* Fonts */
+  --font-display: 'Inter', 'Open Sans', sans-serif;
+  --font-mono: 'DM Mono', 'SF Mono', monospace;
+
+  /* Sizing */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 17px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--bg-root);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 800px;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

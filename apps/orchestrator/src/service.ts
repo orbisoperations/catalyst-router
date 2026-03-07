@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { newRpcResponse } from '@hono/capnweb'
 import { newWebSocketRpcSession } from 'capnweb'
 import { Principal } from '@catalyst/authorization'
@@ -5,7 +6,9 @@ import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { CatalystNodeBus } from './orchestrator.js'
+import { createDashboardRoutes } from './routes/dashboard.js'
 
 /**
  * Auth Service RPC API for token minting.
@@ -97,6 +100,28 @@ export class OrchestratorService extends CatalystService {
         upgradeWebSocket: getUpgradeWebSocket(c),
       })
     })
+
+    // Mount dashboard API routes
+    this.handler.route('/dashboard/api', createDashboardRoutes(this._bus, this.config))
+
+    // Serve dashboard frontend static files (built by Vite)
+    const frontendDir = process.env.FRONTEND_DIR ?? path.join(process.cwd(), 'frontend')
+    this.handler.use(
+      '/dashboard/*',
+      serveStatic({
+        root: frontendDir,
+        rewriteRequestPath: (p) => p.replace('/dashboard', ''),
+      })
+    )
+    // SPA fallback — serve index.html for all unmatched dashboard routes
+    this.handler.get(
+      '/dashboard/*',
+      serveStatic({
+        root: frontendDir,
+        path: 'index.html',
+        rewriteRequestPath: (p) => p.replace('/dashboard', ''),
+      })
+    )
 
     this.telemetry.logger.info`Orchestrator running as ${this.config.node.name}`
   }
