@@ -23,10 +23,16 @@ processors:
     check_interval: 5s
     limit_mib: 256
 
-# Output destinations. TODO: Replace or extend with production backends
+# Output destinations for telemetry data
 exporters:
   debug:
     verbosity: detailed
+  otlphttp/jaeger:
+    endpoint: http://jaeger:4318
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
 
 # All three signal types use the same receiver -> processor -> exporter chain
 service:
@@ -35,12 +41,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [debug, otlphttp/jaeger]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [debug, prometheusremotewrite]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [debug, otlphttp/loki]
