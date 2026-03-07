@@ -90,6 +90,7 @@ async function checkHealth(service: ServiceDef): Promise<ServiceHealth> {
   }
 }
 
+// TODO: Add authentication middleware — dashboard API is currently unauthenticated
 export function createDashboardRoutes(bus: CatalystNodeBus, config: CatalystConfig): Hono {
   const app = new Hono()
   const serviceGroups = deriveServiceGroups(config)

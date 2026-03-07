@@ -94,7 +94,7 @@ export type AuthConfig = z.infer<typeof AuthConfigSchema>
 
 /**
  * Dashboard configuration — operator-configurable observability links.
- * URL templates may use `{service}` and `{node}` placeholders.
+ * URL templates may use `{service}` as a placeholder for the OTEL service name.
  */
 export const DashboardConfigSchema = z.object({
   links: z.record(z.string(), z.string()).optional(),
@@ -182,9 +182,16 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       : undefined
 
   const dashboardLinks = process.env.CATALYST_DASHBOARD_LINKS
-  const dashboard = dashboardLinks
-    ? { links: JSON.parse(dashboardLinks) as Record<string, string> }
-    : undefined
+  let dashboard: { links: Record<string, string> } | undefined
+  if (dashboardLinks) {
+    try {
+      dashboard = { links: JSON.parse(dashboardLinks) as Record<string, string> }
+    } catch (err) {
+      throw new Error(
+        `CATALYST_DASHBOARD_LINKS is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+      )
+    }
+  }
 
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
