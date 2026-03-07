@@ -95,6 +95,7 @@ services:
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[10000, [10001, 10050]]
       - CATALYST_AUTH_ENDPOINT=ws://auth:4020/rpc
+      - CATALYST_SYSTEM_TOKEN=dev-system-token
       - OTEL_SERVICE_NAME=orchestrator-node-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - >-
@@ -170,6 +171,7 @@ services:
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[[10051, 10100]]
       - CATALYST_AUTH_ENDPOINT=ws://auth:4020/rpc
+      - CATALYST_SYSTEM_TOKEN=dev-system-token
       - OTEL_SERVICE_NAME=orchestrator-node-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - >-
