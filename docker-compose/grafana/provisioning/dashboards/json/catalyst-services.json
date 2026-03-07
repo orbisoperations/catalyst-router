@@ -1,0 +1,124 @@
+{
+  "uid": "catalyst-services",
+  "title": "Catalyst Services",
+  "tags": ["catalyst"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(http_server_request_duration_seconds_count, job)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{job=~\"$service\"}[5m])) by (job)",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Error Rate (5xx)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{job=~\"$service\",http_response_status_code=~\"5..\"}[5m])) by (job)",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2 },
+          "color": { "mode": "fixed", "fixedColor": "red" }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Latency p95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{job=~\"$service\"}[5m])) by (le, job))",
+          "legendFormat": "{{job}} p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Latency p50",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(http_server_request_duration_seconds_bucket{job=~\"$service\"}[5m])) by (le, job))",
+          "legendFormat": "{{job}} p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Logs",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{service_name=~\"$service\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "schemaVersion": 39
+}
