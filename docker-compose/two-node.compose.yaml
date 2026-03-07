@@ -25,7 +25,7 @@ services:
       - '4020:4020'
     environment:
       - PORT=4020
-      - CATALYST_NODE_ID=auth.somebiz.local.io
+      - CATALYST_NODE_ID=auth.dev.catalyst.local
       - CATALYST_AUTH_KEYS_DB=/data/keys.db
       - CATALYST_AUTH_TOKENS_DB=/data/tokens.db
       - OTEL_SERVICE_NAME=auth
@@ -51,7 +51,7 @@ services:
       - '4000:4000'
     environment:
       - PORT=4000
-      - CATALYST_NODE_ID=gateway-a.somebiz.local.io
+      - CATALYST_NODE_ID=gateway-a.dev.catalyst.local
       - OTEL_SERVICE_NAME=gateway-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
@@ -87,9 +87,9 @@ services:
       - '3001:3000'
     environment:
       - PORT=3000
-      - CATALYST_NODE_ID=node-a.somebiz.local.io
+      - CATALYST_NODE_ID=node-a.dev.catalyst.local
       - CATALYST_PEERING_ENDPOINT=ws://node-a:3000/rpc
-      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_DOMAINS=dev.catalyst.local
       - CATALYST_PEERING_SECRET=valid-secret
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-a:4000/api
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
@@ -125,7 +125,7 @@ services:
       - '4001:4000'
     environment:
       - PORT=4000
-      - CATALYST_NODE_ID=gateway-b.somebiz.local.io
+      - CATALYST_NODE_ID=gateway-b.dev.catalyst.local
       - OTEL_SERVICE_NAME=gateway-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
@@ -161,9 +161,9 @@ services:
       - '3002:3000'
     environment:
       - PORT=3000
-      - CATALYST_NODE_ID=node-b.somebiz.local.io
+      - CATALYST_NODE_ID=node-b.dev.catalyst.local
       - CATALYST_PEERING_ENDPOINT=ws://node-b:3000/rpc
-      - CATALYST_DOMAINS=somebiz.local.io
+      - CATALYST_DOMAINS=dev.catalyst.local
       - CATALYST_PEERING_SECRET=valid-secret
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway-b:4000/api
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
