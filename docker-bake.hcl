@@ -25,3 +25,4 @@ target "envoy" {
   dockerfile = "apps/envoy/Dockerfile"
   tags       = ["catalyst-envoy:local"]
 }
+
