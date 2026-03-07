@@ -11,10 +11,8 @@ services:
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:13133']
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      disable: true
+    restart: unless-stopped
 
   # --- Shared auth ---
 
@@ -22,20 +20,26 @@ services:
     build:
       context: ..
       dockerfile: apps/auth/Dockerfile
+    user: root
     ports:
       - '4020:4020'
     environment:
       - PORT=4020
+      - CATALYST_NODE_ID=auth.somebiz.local.io
+      - CATALYST_AUTH_KEYS_DB=/data/keys.db
+      - CATALYST_AUTH_TOKENS_DB=/data/tokens.db
       - OTEL_SERVICE_NAME=auth
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    volumes:
+      - auth-data:/data
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4020/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4020/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
 
   # --- Node A: gateway-a + books ---
 
@@ -47,16 +51,17 @@ services:
       - '4000:4000'
     environment:
       - PORT=4000
+      - CATALYST_NODE_ID=gateway-a.somebiz.local.io
       - OTEL_SERVICE_NAME=gateway-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
       books-service:
         condition: service_healthy
 
@@ -69,7 +74,7 @@ services:
     environment:
       - PORT=8080
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -95,7 +100,7 @@ services:
       - >-
         CATALYST_DASHBOARD_LINKS={"metrics":"http://localhost:3050/d/catalyst-services?var-service={service}","traces":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D","logs":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"}
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -121,16 +126,17 @@ services:
       - '4001:4000'
     environment:
       - PORT=4000
+      - CATALYST_NODE_ID=gateway-b.somebiz.local.io
       - OTEL_SERVICE_NAME=gateway-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
       movies-service:
         condition: service_healthy
 
@@ -143,7 +149,7 @@ services:
     environment:
       - PORT=8080
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -169,7 +175,7 @@ services:
       - >-
         CATALYST_DASHBOARD_LINKS={"metrics":"http://localhost:3050/d/catalyst-services?var-service={service}","traces":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D","logs":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"}
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -202,13 +208,13 @@ services:
       - OTEL_SERVICE_NAME=envoy-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       otel-collector:
-        condition: service_healthy
+        condition: service_started
 
   envoy-proxy:
     image: envoyproxy/envoy:v1.32-latest
@@ -226,7 +232,7 @@ services:
           '--no-verbose',
           '--tries=1',
           '--spider',
-          'http://localhost:9901/server_info',
+          'http://127.0.0.1:9901/server_info',
         ]
       interval: 10s
       timeout: 5s
