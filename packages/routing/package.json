@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@catalyst/config": "workspace:*",
+    "@catalyst/types": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

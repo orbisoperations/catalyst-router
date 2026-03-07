@@ -12,6 +12,7 @@ describe('Model-Agnostic Usage Integration', () => {
     'http:gql',
     'http:grpc',
     'tcp',
+    'media',
   ] as const)
   const MockDataChannelDefinitionSchema = z.object({
     name: z.string(),

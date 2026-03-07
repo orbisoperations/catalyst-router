@@ -24,7 +24,8 @@
     "zod": "catalog:",
     "@catalyst/orchestrator-service": "workspace:*",
     "@catalyst/routing": "workspace:*",
-    "@catalyst/authorization": "workspace:*"
+    "@catalyst/authorization": "workspace:*",
+    "@catalyst/types": "workspace:*"
   },
   "devDependencies": {
     "@types/inquirer": "catalog:dev",

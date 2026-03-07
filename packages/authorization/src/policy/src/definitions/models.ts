@@ -22,9 +22,11 @@ export type PeerEntity = {
   lastUpdateError?: string
 }
 
+import type { DataChannelProtocol } from '@catalyst/types'
+
 export type RouteEntity = {
   name: string
-  protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc' | 'tcp'
+  protocol: DataChannelProtocol
   endpoint?: string | undefined
   region?: string | undefined
   tags?: string[] | undefined

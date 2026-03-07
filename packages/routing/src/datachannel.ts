@@ -1,13 +1,5 @@
 import { z } from 'zod'
-// Local re-definition to decouple from V1
-export const DataChannelProtocolEnum = z.enum([
-  'http',
-  'http:graphql',
-  'http:gql',
-  'http:grpc',
-  'tcp',
-] as const)
-export type DataChannelProtocol = z.infer<typeof DataChannelProtocolEnum>
+import { DataChannelProtocolEnum } from '@catalyst/types'
 
 export const DataChannelDefinitionSchema = z.object({
   name: z

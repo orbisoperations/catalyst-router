@@ -32,7 +32,7 @@ describe('DataChannelDefinitionSchema', () => {
     })
 
     it('parses all valid protocol types', () => {
-      for (const protocol of ['http', 'http:graphql', 'http:gql', 'http:grpc', 'tcp']) {
+      for (const protocol of ['http', 'http:graphql', 'http:gql', 'http:grpc', 'tcp', 'media']) {
         const result = DataChannelDefinitionSchema.safeParse({
           name: 'test',
           protocol,
