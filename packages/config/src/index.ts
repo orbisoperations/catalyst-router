@@ -93,6 +93,16 @@ export const AuthConfigSchema = z.object({
 export type AuthConfig = z.infer<typeof AuthConfigSchema>
 
 /**
+ * Dashboard configuration — operator-configurable observability links.
+ * URL templates may use `{service}` and `{node}` placeholders.
+ */
+export const DashboardConfigSchema = z.object({
+  links: z.record(z.string(), z.string()).optional(),
+})
+
+export type DashboardConfig = z.infer<typeof DashboardConfigSchema>
+
+/**
  * Top-level Catalyst System Configuration
  */
 export const CatalystConfigSchema = z.object({
@@ -100,6 +110,7 @@ export const CatalystConfigSchema = z.object({
   orchestrator: OrchestratorConfigSchema.optional(),
   auth: AuthConfigSchema.optional(),
   envoy: EnvoyConfigSchema.optional(),
+  dashboard: DashboardConfigSchema.optional(),
   port: z.number().default(3000),
 })
 
@@ -170,8 +181,14 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
         }
       : undefined
 
+  const dashboardLinks = process.env.CATALYST_DASHBOARD_LINKS
+  const dashboard = dashboardLinks
+    ? { links: JSON.parse(dashboardLinks) as Record<string, string> }
+    : undefined
+
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
+    dashboard,
     node: {
       name: nodeName,
       endpoint: peeringEndpoint,
