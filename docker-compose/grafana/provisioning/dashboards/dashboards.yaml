@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: catalyst
+    orgId: 1
+    folder: Catalyst
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
