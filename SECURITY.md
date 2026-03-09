@@ -61,7 +61,7 @@ Verified during the exchange of the `OPEN` message.
 
 ## 3. JWT Signing Strategies
 
-We support three models for Identity and JWT signing. **Strategy 2 (Root Authority)** is the current implementation for Milestones 1 & 2.
+We support three models for Identity and JWT signing. **Strategy 2 (Root Authority)** is the current implementation.
 
 ### Strategy 2: Root Node Authority (Current Implementation)
 

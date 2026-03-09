@@ -458,6 +458,99 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     expect(plan.routeChanges).toHaveLength(0)
   })
 
+  it('handles batch update with many routes in a single message', () => {
+    const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
+
+    // Build a batch of 15 route advertisements in a single update
+    const updates = Array.from({ length: 15 }, (_, i) => ({
+      action: 'add' as const,
+      route: makeRoute(`batch-svc-${i}`),
+      nodePath: ['peer-b'],
+      originNode: 'peer-b',
+    }))
+
+    const plan = apply(rib, makeProtocolUpdate(peer, updates))
+
+    // All 15 routes should be installed
+    const installed = rib.state.internal.routes.filter((r) => r.name.startsWith('batch-svc-'))
+    expect(installed).toHaveLength(15)
+    expect(plan.routeChanges).toHaveLength(15)
+    expect(plan.routeChanges.every((c) => c.type === 'added')).toBe(true)
+  })
+
+  it('batch update with mixed adds and removes processes all operations', () => {
+    const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
+
+    // Pre-install 5 routes
+    const seedRoutes = Array.from({ length: 5 }, (_, i) => ({
+      action: 'add' as const,
+      route: makeRoute(`existing-${i}`),
+      nodePath: ['peer-b'],
+      originNode: 'peer-b',
+    }))
+    apply(rib, makeProtocolUpdate(peer, seedRoutes))
+    expect(rib.state.internal.routes).toHaveLength(5)
+
+    // Single batch: remove 3 existing + add 7 new
+    const batchUpdates = [
+      ...Array.from({ length: 3 }, (_, i) => ({
+        action: 'remove' as const,
+        route: makeRoute(`existing-${i}`),
+        nodePath: ['peer-b'],
+        originNode: 'peer-b',
+      })),
+      ...Array.from({ length: 7 }, (_, i) => ({
+        action: 'add' as const,
+        route: makeRoute(`new-${i}`),
+        nodePath: ['peer-b'],
+        originNode: 'peer-b',
+      })),
+    ]
+
+    const plan = apply(rib, makeProtocolUpdate(peer, batchUpdates))
+
+    // 5 existing - 3 removed + 7 new = 9 routes
+    expect(rib.state.internal.routes).toHaveLength(9)
+    expect(plan.routeChanges).toHaveLength(10) // 3 removed + 7 added
+
+    const removals = plan.routeChanges.filter((c) => c.type === 'removed')
+    const additions = plan.routeChanges.filter((c) => c.type === 'added')
+    expect(removals).toHaveLength(3)
+    expect(additions).toHaveLength(7)
+  })
+
+  it('batch update skips looped routes while processing valid ones', () => {
+    const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
+
+    const batchUpdates = [
+      {
+        action: 'add' as const,
+        route: makeRoute('valid-1'),
+        nodePath: ['peer-b'],
+        originNode: 'peer-b',
+      },
+      {
+        action: 'add' as const,
+        route: makeRoute('looped'),
+        nodePath: ['node-a', 'peer-b'],
+        originNode: 'peer-b',
+      },
+      {
+        action: 'add' as const,
+        route: makeRoute('valid-2'),
+        nodePath: ['peer-b'],
+        originNode: 'peer-b',
+      },
+    ]
+
+    const plan = apply(rib, makeProtocolUpdate(peer, batchUpdates))
+
+    // Only 2 valid routes installed, looped one skipped
+    expect(rib.state.internal.routes).toHaveLength(2)
+    expect(rib.state.internal.routes.map((r) => r.name).sort()).toEqual(['valid-1', 'valid-2'])
+    expect(plan.routeChanges).toHaveLength(2)
+  })
+
   it("'add' replaces stale route regardless of path length", () => {
     const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
     const route = makeRoute('svc-1')
