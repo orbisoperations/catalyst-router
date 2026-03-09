@@ -1,5 +1,5 @@
 group "core" {
-  targets = ["gateway", "orchestrator", "auth", "envoy"]
+  targets = ["gateway", "orchestrator", "auth", "envoy", "video"]
 }
 
 target "gateway" {
@@ -24,4 +24,10 @@ target "envoy" {
   context    = "."
   dockerfile = "apps/envoy/Dockerfile"
   tags       = ["catalyst-envoy:local"]
+}
+
+target "video" {
+  context    = "."
+  dockerfile = "apps/video/Dockerfile"
+  tags       = ["catalyst-video:local"]
 }

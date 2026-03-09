@@ -27,6 +27,7 @@ COPY apps/envoy/package.json apps/envoy/
 COPY apps/gateway/package.json apps/gateway/
 COPY apps/node/package.json apps/node/
 COPY apps/orchestrator/package.json apps/orchestrator/
+COPY apps/video/package.json apps/video/
 COPY packages/authorization/package.json packages/authorization/
 COPY packages/config/package.json packages/config/
 COPY packages/routing/package.json packages/routing/
@@ -72,6 +73,13 @@ RUN pnpm exec esbuild apps/gateway/src/index.ts \
   --outfile=dist/gateway.mjs --format=esm \
   --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
+RUN pnpm exec esbuild apps/video/src/index.ts \
+  --bundle --platform=node --target=node22 \
+  --outfile=dist/video.mjs --format=esm \
+  --external:@cedar-policy/cedar-wasm \
+  --loader:.cedar=text --loader:.cedarschema=text \
+  --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
+
 RUN pnpm exec esbuild examples/books-api/src/index.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/books-api.mjs --format=esm \
@@ -82,6 +90,7 @@ RUN pnpm deploy --filter=@catalyst/auth-service --prod /deploy/auth
 RUN pnpm deploy --filter=@catalyst/orchestrator-service --prod /deploy/orchestrator
 RUN pnpm deploy --filter=@catalyst/envoy-service --prod /deploy/envoy
 RUN pnpm deploy --filter=@catalyst/gateway-service --prod /deploy/gateway
+RUN pnpm deploy --filter=@catalyst/video-service --prod /deploy/video
 RUN pnpm deploy --filter=@catalyst-examples/books-api --prod /deploy/books-api
 
 # ── Service targets ──────────────────────────────────────────────────
@@ -123,6 +132,16 @@ COPY --from=base /app/dist/gateway.mjs ./server.mjs
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV PORT=4000
 EXPOSE 4000
+USER appuser
+CMD ["node", "server.mjs"]
+
+FROM node:22-alpine AS video
+WORKDIR /app
+COPY --from=base /deploy/video/node_modules ./node_modules
+COPY --from=base /app/dist/video.mjs ./server.mjs
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+ENV PORT=4001
+EXPOSE 4001
 USER appuser
 CMD ["node", "server.mjs"]
 

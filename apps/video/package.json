@@ -21,6 +21,7 @@
     "@catalyst/routing": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
     "@catalyst/authorization": "workspace:*",
+    "@cedar-policy/cedar-wasm": "catalog:",
     "@opentelemetry/api": "catalog:"
   },
   "devDependencies": {
