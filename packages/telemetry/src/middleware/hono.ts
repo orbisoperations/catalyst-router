@@ -138,3 +138,10 @@ export function telemetryMiddleware(
     })
   }
 }
+
+// ---------------------------------------------------------------------------
+// Wide-event middleware — re-exported from the same hono subpath to avoid
+// requiring hono for consumers that only need logs/metrics/tracing.
+// ---------------------------------------------------------------------------
+export { wideEventMiddleware } from './wide-event.js'
+export type { WideEventMiddlewareOptions, WideEventVariables } from './wide-event.js'
