@@ -1,6 +1,7 @@
 import { Command } from 'commander'
 import { nodeCommands } from './commands/node/index.js'
 import { authCommands } from './commands/auth/index.js'
+import { videoCommands } from './commands/video/index.js'
 
 const program = new Command()
 
@@ -20,8 +21,14 @@ program
   )
   .option('--token <token>', 'Auth token', process.env.CATALYST_AUTH_TOKEN)
   .option('--log-level <level>', 'Log level', 'info')
+  .option(
+    '--video-url <url>',
+    'Video service URL',
+    process.env.CATALYST_VIDEO_URL || 'http://localhost:8100'
+  )
 
 program.addCommand(nodeCommands())
 program.addCommand(authCommands())
+program.addCommand(videoCommands())
 
 program.parse(process.argv)

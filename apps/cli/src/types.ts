@@ -111,6 +111,53 @@ export const ListTokensInputSchema = z.object({
 })
 export type ListTokensInput = z.infer<typeof ListTokensInputSchema>
 
+// Video CLI Schemas
+export const VideoCliConfigSchema = z.object({
+  videoUrl: z
+    .string()
+    .url()
+    .default(process.env.CATALYST_VIDEO_URL || 'http://localhost:8100'),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error'] as const).default('info'),
+})
+export type VideoCliConfig = z.infer<typeof VideoCliConfigSchema>
+
+export const ListStreamsInputSchema = VideoCliConfigSchema.extend({
+  scope: z.enum(['all', 'local', 'remote'] as const).optional(),
+  sourceNode: z.string().optional(),
+  protocol: z.string().optional(),
+  token: z.string().optional(),
+})
+export type ListStreamsInput = z.infer<typeof ListStreamsInputSchema>
+
+export const GetStreamInputSchema = VideoCliConfigSchema.extend({
+  name: z.string().min(1),
+  token: z.string().optional(),
+})
+export type GetStreamInput = z.infer<typeof GetStreamInputSchema>
+
+export const SubscribeStreamInputSchema = VideoCliConfigSchema.extend({
+  name: z.string().min(1),
+  token: z.string().min(1, 'Authentication required — provide --token or set CATALYST_AUTH_TOKEN'),
+})
+export type SubscribeStreamInput = z.infer<typeof SubscribeStreamInputSchema>
+
+export const WatchStreamsInputSchema = VideoCliConfigSchema.extend({
+  scope: z.enum(['all', 'local', 'remote'] as const).optional(),
+  sourceNode: z.string().optional(),
+  protocol: z.string().optional(),
+  token: z.string().optional(),
+  interval: z.number().int().min(1000).default(5000),
+})
+export type WatchStreamsInput = z.infer<typeof WatchStreamsInputSchema>
+
+export const HealthCheckInputSchema = VideoCliConfigSchema
+export type HealthCheckInput = z.infer<typeof HealthCheckInputSchema>
+
+export const ListRelaysInputSchema = VideoCliConfigSchema.extend({
+  token: z.string().optional(),
+})
+export type ListRelaysInput = z.infer<typeof ListRelaysInputSchema>
+
 // GraphQL IDE Schemas
 export const GraphqlIdeInputSchema = z.object({
   port: z.number().int().min(1).max(65535).default(5173),
