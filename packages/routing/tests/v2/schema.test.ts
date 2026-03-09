@@ -4,7 +4,10 @@ import {
   UpdateMessageSchema,
   InternalProtocolKeepaliveMessageSchema,
   MAX_UPDATES_PER_MESSAGE,
+  MAX_NODE_PATH_HOPS,
+  MAX_NODE_ID_LENGTH,
 } from '../../src/v2/internal/actions.js'
+import { DataChannelDefinitionSchema, MAX_TAGS_PER_CHANNEL } from '../../src/v2/datachannel.js'
 import { Actions } from '../../src/v2/action-types.js'
 
 describe('UpdateMessageSchema v2', () => {
@@ -64,6 +67,93 @@ describe('UpdateMessageSchema v2', () => {
       originNode: 'node-a',
     }))
     const result = UpdateMessageSchema.safeParse({ updates: maxSized })
+    expect(result.success).toBe(true)
+  })
+
+  it(`rejects nodePath exceeding ${MAX_NODE_PATH_HOPS} hops`, () => {
+    const longPath = Array.from({ length: MAX_NODE_PATH_HOPS + 1 }, (_, i) => `node-${i}`)
+    const result = UpdateMessageSchema.safeParse({
+      updates: [
+        {
+          action: 'add',
+          route: { name: 'svc', protocol: 'http' },
+          nodePath: longPath,
+          originNode: 'node-0',
+        },
+      ],
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it(`accepts nodePath at exactly ${MAX_NODE_PATH_HOPS} hops`, () => {
+    const maxPath = Array.from({ length: MAX_NODE_PATH_HOPS }, (_, i) => `node-${i}`)
+    const result = UpdateMessageSchema.safeParse({
+      updates: [
+        {
+          action: 'add',
+          route: { name: 'svc', protocol: 'http' },
+          nodePath: maxPath,
+          originNode: 'node-0',
+        },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it(`rejects originNode longer than ${MAX_NODE_ID_LENGTH} characters`, () => {
+    const longId = 'a'.repeat(MAX_NODE_ID_LENGTH + 1)
+    const result = UpdateMessageSchema.safeParse({
+      updates: [
+        {
+          action: 'add',
+          route: { name: 'svc', protocol: 'http' },
+          nodePath: ['node-a'],
+          originNode: longId,
+        },
+      ],
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it(`rejects individual nodePath hop longer than ${MAX_NODE_ID_LENGTH} characters`, () => {
+    const longHop = 'a'.repeat(MAX_NODE_ID_LENGTH + 1)
+    const result = UpdateMessageSchema.safeParse({
+      updates: [
+        {
+          action: 'add',
+          route: { name: 'svc', protocol: 'http' },
+          nodePath: [longHop],
+          originNode: 'node-a',
+        },
+      ],
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('DataChannelDefinitionSchema field bounds', () => {
+  it(`rejects tags array exceeding ${MAX_TAGS_PER_CHANNEL} entries`, () => {
+    const oversizedTags = Array.from({ length: MAX_TAGS_PER_CHANNEL + 1 }, (_, i) => `tag-${i}`)
+    const result = DataChannelDefinitionSchema.safeParse({
+      name: 'svc',
+      protocol: 'http',
+      tags: oversizedTags,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it(`accepts tags array at exactly ${MAX_TAGS_PER_CHANNEL} entries`, () => {
+    const maxTags = Array.from({ length: MAX_TAGS_PER_CHANNEL }, (_, i) => `tag-${i}`)
+    const result = DataChannelDefinitionSchema.safeParse({
+      name: 'svc',
+      protocol: 'http',
+      tags: maxTags,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts channel with no tags (optional)', () => {
+    const result = DataChannelDefinitionSchema.safeParse({ name: 'svc', protocol: 'http' })
     expect(result.success).toBe(true)
   })
 })
