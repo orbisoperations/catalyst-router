@@ -5,7 +5,12 @@ export interface RoutePolicy {
   canSend(peer: PeerRecord, routes: InternalRoute[]): InternalRoute[]
 }
 
-/** Pass-through policy — sends all routes to all peers. Stub for future Cedar integration. */
+/**
+ * Pass-through policy — sends all routes to all peers.
+ * For M3 (External Peering), this will be backed by Cedar policy evaluation to filter
+ * route exports between nodes of different organizations. See ADR-0015 and
+ * docs/reference/milestones.md §Milestone 3.
+ */
 export class ConfigurableRoutePolicy implements RoutePolicy {
   canSend(_peer: PeerRecord, routes: InternalRoute[]): InternalRoute[] {
     return routes
