@@ -3,7 +3,7 @@ import { createYoga, createSchema } from 'graphql-yoga'
 import { stitchSchemas } from '@graphql-tools/stitch'
 import { context, propagation, SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import type { Counter, Histogram, UpDownCounter } from '@opentelemetry/api'
-import { TelemetryBuilder } from '@catalyst/telemetry'
+import { TelemetryBuilder, WideEvent } from '@catalyst/telemetry'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 
 import type { AsyncExecutor, Executor } from '@graphql-tools/utils'
@@ -57,7 +57,13 @@ export class GatewayGraphqlServer {
   async reload(
     config: GatewayConfig
   ): Promise<{ success: true } | { success: false; error: string }> {
-    this.logger.info`Reloading with ${config.services.length} services`
+    const event = new WideEvent('gateway.reload', this.logger)
+    event.set('gateway.service_count', config.services.length)
+    this.logger.info('Reloading gateway with {serviceCount} services', {
+      'event.name': 'gateway.reload.started',
+      'gateway.service_count': config.services.length,
+      serviceCount: config.services.length,
+    })
     const startTime = performance.now()
 
     try {
@@ -76,7 +82,9 @@ export class GatewayGraphqlServer {
       )
 
       if (subschemas.length === 0) {
-        this.logger.warn`No services configured, using default schema`
+        this.logger.warn('No services configured, using default schema', {
+          'event.name': 'gateway.reload.empty',
+        })
         this.createYogaInstance([
           {
             typeDefs: 'type Query { status: String }',
@@ -91,6 +99,7 @@ export class GatewayGraphqlServer {
         const newCount = 0
         this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
         this.currentSubgraphCount = newCount
+        event.emit()
         return { success: true }
       }
 
@@ -108,7 +117,16 @@ export class GatewayGraphqlServer {
       this.currentSubgraphCount = newCount
 
       const durationMs = Math.round(durationS * 1000)
-      this.logger.info`Reloaded successfully in ${durationMs}ms`
+      this.logger.info('Gateway reloaded successfully in {durationMs}ms', {
+        'event.name': 'gateway.reloaded',
+        'gateway.duration_ms': durationMs,
+        durationMs,
+      })
+      event.set({
+        'gateway.duration_ms': durationMs,
+        'gateway.subgraph_count': subschemas.length,
+      })
+      event.emit()
       return { success: true }
     } catch (error: unknown) {
       const durationS = (performance.now() - startTime) / 1000
@@ -116,7 +134,13 @@ export class GatewayGraphqlServer {
       this.reloadDuration.record(durationS)
 
       const message = error instanceof Error ? error.message : String(error)
-      this.logger.error`Reload failed: ${message}`
+      this.logger.error('Gateway reload failed: {errorMessage}', {
+        'event.name': 'gateway.reload.failed',
+        'error.message': message,
+        errorMessage: message,
+      })
+      event.setError(error)
+      event.emit()
       // We do NOT update the yoga instance here, effectively keeping the last known good config.
       return { success: false, error: message }
     }

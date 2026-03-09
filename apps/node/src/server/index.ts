@@ -3,4 +3,4 @@ import { CatalystRpcServer } from './rpc.js'
 
 const logger = getLogger(['catalyst', 'node'])
 const _rpcServer = new CatalystRpcServer()
-logger.info`RPC server initialized`
+logger.info('RPC server initialized', { 'event.name': 'node.rpc.initialized' })

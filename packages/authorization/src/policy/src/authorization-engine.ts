@@ -66,13 +66,22 @@ export class AuthorizationEngine<
 
     const logger = getLogger(['catalyst', 'authorization'])
     if (hasError) {
-      logger.error`Validation errors: ${JSON.stringify(validationAnswer.validationErrors, null, 2)}`
+      logger.error('Validation errors: {errors}', {
+        'event.name': 'auth.policy.validation_errors',
+        errors: JSON.stringify(validationAnswer.validationErrors, null, 2),
+      })
     }
     if (hasWarning) {
-      logger.warn`Validation warnings: ${JSON.stringify(validationAnswer.validationWarnings, null, 2)}`
+      logger.warn('Validation warnings: {warnings}', {
+        'event.name': 'auth.policy.validation_warnings',
+        warnings: JSON.stringify(validationAnswer.validationWarnings, null, 2),
+      })
     }
     if (hasOtherWarnings) {
-      logger.warn`Other warnings: ${JSON.stringify(validationAnswer.otherWarnings, null, 2)}`
+      logger.warn('Other warnings: {warnings}', {
+        'event.name': 'auth.policy.other_warnings',
+        warnings: JSON.stringify(validationAnswer.otherWarnings, null, 2),
+      })
     }
     if (hasWarning || hasOtherWarnings) {
       throw new Error(

@@ -43,10 +43,14 @@ export class GatewayRpcServer extends RpcTarget {
 
   // The method exposed to RPC clients
   async updateConfig(config: unknown): Promise<GatewayUpdateResult> {
-    this.logger.info`Config update received via RPC`
+    this.logger.info('Config update received via RPC', {
+      'event.name': 'gateway.config.received',
+    })
     const result = GatewayConfigSchema.safeParse(config)
     if (!result.success) {
-      this.logger.error`Invalid config received`
+      this.logger.error('Invalid config received', {
+        'event.name': 'gateway.config.invalid',
+      })
       return {
         success: false,
         error: 'Malformed configuration received and unable to parse',
@@ -57,7 +61,11 @@ export class GatewayRpcServer extends RpcTarget {
       return await this.updateCallback(result.data)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
-      this.logger.error`Config update failed: ${message}`
+      this.logger.error('Config update failed: {errorMessage}', {
+        'event.name': 'gateway.config.failed',
+        'error.message': message,
+        errorMessage: message,
+      })
       return {
         success: false,
         error: `Failed to apply configuration: ${message}`,

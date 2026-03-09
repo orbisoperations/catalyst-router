@@ -47,7 +47,9 @@ export class AuthService extends CatalystService {
     })
     await this._tokenFactory.initialize()
 
-    void logger.info`JWTTokenFactory initialized`
+    logger.info('JWTTokenFactory initialized', {
+      'event.name': 'auth.token_factory.initialized',
+    })
 
     // Initialize the policy authorization engine using the standard Catalyst domain
     const policyService = new AuthorizationEngine<CatalystPolicyDomain>(
@@ -56,7 +58,9 @@ export class AuthService extends CatalystService {
     )
     const validationResult = policyService.validatePolicies()
     if (!validationResult) {
-      void logger.error`Invalid policies - policy validation failed`
+      logger.error('Invalid policies - policy validation failed', {
+        'event.name': 'auth.policy.validation_failed',
+      })
       process.exit(1)
     }
 
@@ -74,7 +78,10 @@ export class AuthService extends CatalystService {
       expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
     })
 
-    void logger.info`System Admin Token minted: ${this._systemToken}`
+    logger.info('System Admin Token minted: {tokenPreview}', {
+      'event.name': 'auth.system_token.minted',
+      tokenPreview: this._systemToken.slice(0, 12) + '...[redacted]',
+    })
 
     // Build RPC server
     this._rpcServer = new AuthRpcServer(
