@@ -109,7 +109,11 @@ export abstract class CatalystService implements ICatalystService {
       await this.onInitialize()
 
       this._state = 'ready'
-      this.telemetry.logger.info`${this.info.name} v${this.info.version} initialized`
+      this.telemetry.logger.info('{name} v{version} initialized', {
+        'event.name': 'service.initialized',
+        name: this.info.name,
+        version: this.info.version,
+      })
     } catch (err) {
       this._state = 'stopped'
       throw err
@@ -127,7 +131,10 @@ export abstract class CatalystService implements ICatalystService {
     this._state = 'shutting_down'
 
     try {
-      this.telemetry.logger.info`${this.info.name} shutting down`
+      this.telemetry.logger.info('{name} shutting down', {
+        'event.name': 'service.shutting_down',
+        name: this.info.name,
+      })
       await this.onShutdown()
     } finally {
       // Only shut down telemetry if we built it (not pre-built / shared)
