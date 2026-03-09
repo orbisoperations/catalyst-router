@@ -16,15 +16,20 @@ export const internalProtocolKeepaliveAction = z.literal(Actions.InternalProtoco
  * V2: nodePath is REQUIRED (min 1) and originNode is a new required field.
  * This enforces that every route advertisement carries full path attribution.
  */
+/** Maximum number of route updates in a single iBGP message. */
+export const MAX_UPDATES_PER_MESSAGE = 1000
+
 export const UpdateMessageSchema = z.object({
-  updates: z.array(
-    z.object({
-      action: z.enum(['add', 'remove'] as const),
-      route: DataChannelDefinitionSchema,
-      nodePath: z.array(z.string()).min(1),
-      originNode: z.string(),
-    })
-  ),
+  updates: z
+    .array(
+      z.object({
+        action: z.enum(['add', 'remove'] as const),
+        route: DataChannelDefinitionSchema,
+        nodePath: z.array(z.string()).min(1),
+        originNode: z.string(),
+      })
+    )
+    .max(MAX_UPDATES_PER_MESSAGE),
 })
 
 /**
