@@ -18,6 +18,10 @@ export const internalProtocolKeepaliveAction = z.literal(Actions.InternalProtoco
  */
 /** Maximum number of route updates in a single iBGP message. */
 export const MAX_UPDATES_PER_MESSAGE = 1000
+/** Maximum number of hops in a route path (loop protection). */
+export const MAX_NODE_PATH_HOPS = 64
+/** Maximum length of a node identifier string. */
+export const MAX_NODE_ID_LENGTH = 253
 
 export const UpdateMessageSchema = z.object({
   updates: z
@@ -25,8 +29,8 @@ export const UpdateMessageSchema = z.object({
       z.object({
         action: z.enum(['add', 'remove'] as const),
         route: DataChannelDefinitionSchema,
-        nodePath: z.array(z.string()).min(1),
-        originNode: z.string(),
+        nodePath: z.array(z.string().max(MAX_NODE_ID_LENGTH)).min(1).max(MAX_NODE_PATH_HOPS),
+        originNode: z.string().max(MAX_NODE_ID_LENGTH),
       })
     )
     .max(MAX_UPDATES_PER_MESSAGE),
