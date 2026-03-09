@@ -83,10 +83,21 @@ export class XdsControlPlane {
           }
           this.started = true
           if (this.bindAddress !== '127.0.0.1' && this.bindAddress !== '::1') {
-            this.logger
-              .warn`xDS ADS server using insecure credentials on ${this.bindAddress}:${boundPort} — xDS traffic is unencrypted`
+            this.logger.warn('xDS ADS server using insecure credentials on {address}:{port}', {
+              'event.name': 'xds.server.insecure',
+              'xds.bind_address': this.bindAddress,
+              'xds.port': boundPort,
+              address: this.bindAddress,
+              port: boundPort,
+            })
           }
-          this.logger.info`xDS ADS server listening on ${this.bindAddress}:${boundPort}`
+          this.logger.info('xDS ADS server listening on {address}:{port}', {
+            'event.name': 'xds.server.started',
+            'xds.bind_address': this.bindAddress,
+            'xds.port': boundPort,
+            address: this.bindAddress,
+            port: boundPort,
+          })
           resolve()
         }
       )
@@ -107,7 +118,9 @@ export class XdsControlPlane {
       const timer = setTimeout(() => {
         if (settled) return
         settled = true
-        this.logger.warn`xDS ADS server graceful shutdown timed out, forcing`
+        this.logger.warn('xDS ADS server graceful shutdown timed out, forcing', {
+          'event.name': 'xds.server.shutdown_timeout',
+        })
         this.server.forceShutdown()
         this.started = false
         resolve()
@@ -118,7 +131,7 @@ export class XdsControlPlane {
         settled = true
         clearTimeout(timer)
         this.started = false
-        this.logger.info`xDS ADS server stopped`
+        this.logger.info('xDS ADS server stopped', { 'event.name': 'xds.server.stopped' })
         resolve()
       })
     })
@@ -136,7 +149,7 @@ export class XdsControlPlane {
    * This ensures Envoy doesn't discard unsolicited responses.
    */
   private handleStream(call: grpc.ServerDuplexStream<Buffer, Buffer>): void {
-    this.logger.info`New ADS stream connected`
+    this.logger.info('New ADS stream connected', { 'event.name': 'xds.client.connected' })
 
     // Track subscribed types and sent versions per-stream
     const subscribedTypes = new Set<string>()
@@ -178,24 +191,45 @@ export class XdsControlPlane {
 
         if (!request.version_info && !request.response_nonce) {
           // Initial subscribe — no version yet, send current snapshot
-          this.logger.info`Subscribe request for ${typeUrl}`
+          this.logger.info('Subscribe request for {typeUrl}', {
+            'event.name': 'xds.client.subscribed',
+            'xds.resource_type': typeUrl,
+            typeUrl,
+          })
           sendSubscribed()
         } else if (request.error_detail && request.error_detail.code !== 0) {
           // NACK — client rejected the response (error_detail present with non-zero code)
-          this.logger
-            .warn`NACK received for ${typeUrl} nonce=${request.response_nonce} error=${request.error_detail.message}`
+          this.logger.warn('NACK received for {typeUrl} nonce={nonce} error={errorMessage}', {
+            'event.name': 'xds.client.nacked',
+            'xds.resource_type': typeUrl,
+            'xds.nonce': request.response_nonce,
+            'error.message': request.error_detail.message,
+            typeUrl,
+            nonce: request.response_nonce,
+            errorMessage: request.error_detail.message,
+          })
         } else {
           // ACK — client confirmed it applied this version
-          this.logger.info`ACK received for ${typeUrl} v${request.version_info}`
+          this.logger.info('ACK received for {typeUrl} v{version}', {
+            'event.name': 'xds.client.acked',
+            'xds.resource_type': typeUrl,
+            'xds.version': request.version_info,
+            typeUrl,
+            version: request.version_info,
+          })
         }
       } catch (err) {
-        this.logger.error`Failed to decode DiscoveryRequest: ${err}`
+        this.logger.error('Failed to decode DiscoveryRequest: {error}', {
+          'event.name': 'xds.request.decode_failed',
+          'error.message': String(err),
+          error: String(err),
+        })
       }
     })
 
     call.on('end', () => {
       streamClosed = true
-      this.logger.info`ADS stream disconnected`
+      this.logger.info('ADS stream disconnected', { 'event.name': 'xds.client.disconnected' })
       unwatch()
       call.end()
     })
@@ -204,7 +238,11 @@ export class XdsControlPlane {
       streamClosed = true
       // CANCELLED is normal when Envoy disconnects
       if ((err as grpc.ServiceError).code !== grpc.status.CANCELLED) {
-        this.logger.error`ADS stream error: ${err}`
+        this.logger.error('ADS stream error: {error}', {
+          'event.name': 'xds.stream.error',
+          'error.message': String(err),
+          error: String(err),
+        })
       }
       unwatch()
     })
@@ -235,7 +273,13 @@ export class XdsControlPlane {
       })
       call.write(cdsResponse)
       sentVersions.set(CLUSTER_TYPE_URL, snapshot.version)
-      this.logger.info`Sent CDS v${snapshot.version} (${snapshot.clusters.length} clusters)`
+      this.logger.info('Sent CDS v{version} ({clusterCount} clusters)', {
+        'event.name': 'xds.snapshot.cds_sent',
+        'xds.version': snapshot.version,
+        'xds.cluster_count': snapshot.clusters.length,
+        version: snapshot.version,
+        clusterCount: snapshot.clusters.length,
+      })
     }
 
     // Then LDS (only if subscribed and not already sent at this version)
@@ -254,7 +298,13 @@ export class XdsControlPlane {
       })
       call.write(ldsResponse)
       sentVersions.set(LISTENER_TYPE_URL, snapshot.version)
-      this.logger.info`Sent LDS v${snapshot.version} (${snapshot.listeners.length} listeners)`
+      this.logger.info('Sent LDS v{version} ({listenerCount} listeners)', {
+        'event.name': 'xds.snapshot.lds_sent',
+        'xds.version': snapshot.version,
+        'xds.listener_count': snapshot.listeners.length,
+        version: snapshot.version,
+        listenerCount: snapshot.listeners.length,
+      })
     }
   }
 }

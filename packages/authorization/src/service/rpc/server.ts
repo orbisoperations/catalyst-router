@@ -97,12 +97,21 @@ export class AuthRpcServer extends RpcTarget {
       context: {},
     })
     if (autorizedResult?.type === 'failure') {
-      void logger.error`Policy service error: ${autorizedResult.errors}`
+      logger.error('Policy service error: {errors}', {
+        'event.name': 'auth.policy.error',
+        errors: autorizedResult.errors,
+      })
       return { error: 'Error authorizing request' }
     }
 
     if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
-      void logger.warn`Permission denied: decision=${autorizedResult.decision}, reasons=${autorizedResult.reasons}`
+      logger.warn('Permission denied: decision={decision}, reasons={reasons}', {
+        'event.name': 'auth.permission.denied',
+        'auth.decision': autorizedResult.decision,
+        'auth.reasons': autorizedResult.reasons,
+        decision: autorizedResult.decision,
+        reasons: autorizedResult.reasons,
+      })
       return { error: 'Permission denied: ADMIN principal required' }
     }
 
@@ -220,12 +229,18 @@ export class AuthRpcServer extends RpcTarget {
     // Verify the token
     const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
-      void logger.warn`Token verification failed: ${auth.error}`
+      logger.warn('Token verification failed: {error}', {
+        'event.name': 'auth.token.verification_failed',
+        'error.message': auth.error,
+        error: auth.error,
+      })
       return { error: 'Invalid token' }
     }
 
     if (!this.policyService) {
-      void logger.error`Policy service not configured`
+      logger.error('Policy service not configured', {
+        'event.name': 'auth.policy.not_configured',
+      })
       return { error: 'Policy service not configured' }
     }
 
@@ -256,11 +271,20 @@ export class AuthRpcServer extends RpcTarget {
           context: {},
         })
 
-        void logger.info`Authorization check - action: ${request.action}, allowed: ${result.type === 'evaluated' && result.allowed}`
+        logger.info('Authorization check - action: {action}, allowed: {allowed}', {
+          'event.name': 'auth.authorization.checked',
+          'auth.action': request.action,
+          'auth.allowed': result.type === 'evaluated' && result.allowed,
+          action: request.action,
+          allowed: result.type === 'evaluated' && result.allowed,
+        })
 
         // Handle authorization result
         if (result.type === 'failure') {
-          void logger.error`Authorization system error: ${result.errors.join(', ')}`
+          logger.error('Authorization system error: {errors}', {
+            'event.name': 'auth.authorization.error',
+            errors: result.errors.join(', '),
+          })
           return {
             success: false,
             errorType: 'system_error',
@@ -269,7 +293,13 @@ export class AuthRpcServer extends RpcTarget {
         }
 
         if (result.type === 'evaluated' && !result.allowed) {
-          void logger.warn`Permission denied for action: ${request.action}, reasons: ${result.reasons.join(', ')}`
+          logger.warn('Permission denied for action: {action}, reasons: {reasons}', {
+            'event.name': 'auth.authorization.denied',
+            'auth.action': request.action,
+            'auth.reasons': result.reasons.join(', '),
+            action: request.action,
+            reasons: result.reasons.join(', '),
+          })
           return {
             success: false,
             errorType: 'permission_denied',

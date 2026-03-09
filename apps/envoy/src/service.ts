@@ -27,8 +27,10 @@ export class EnvoyService extends CatalystService {
     const rpcApp = createRpcHandler(instrumentedRpc)
 
     this.handler.get('/', (c) => c.text('Catalyst Envoy Service is running.'))
-    this.telemetry.logger
-      .warn`RPC endpoint /api has no authentication — restrict network access in production`
+    this.telemetry.logger.warn(
+      'RPC endpoint /api has no authentication — restrict network access in production',
+      { 'event.name': 'envoy.security.no_auth' }
+    )
     this.handler.route('/api', rpcApp)
 
     // Start the xDS gRPC ADS server if an xDS port is configured

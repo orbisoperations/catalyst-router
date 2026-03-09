@@ -32,7 +32,7 @@ export class CatalystRpcServer implements CatalystRpc {
 
   async shutdown(): Promise<void> {
     const logger = getLogger(['catalyst', 'node'])
-    logger.info`Shutdown requested via RPC`
+    logger.info('Shutdown requested via RPC', { 'event.name': 'node.shutdown.requested' })
     process.exit(0)
   }
 }
