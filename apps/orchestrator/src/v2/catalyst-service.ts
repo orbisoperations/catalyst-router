@@ -62,6 +62,11 @@ const REFRESH_THRESHOLD = 0.8
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 const REFRESH_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
 
+// mintNodeToken retry parameters
+const MINT_TOKEN_MAX_ATTEMPTS = 5
+const MINT_TOKEN_BASE_DELAY_MS = 1_000
+const MINT_TOKEN_MAX_DELAY_MS = 30_000
+
 /**
  * V2 orchestrator service, wrapped in CatalystService for Hono server integration.
  *
@@ -244,7 +249,10 @@ export class OrchestratorService extends CatalystService {
     }
   }
 
-  private async mintNodeToken(): Promise<void> {
+  private async mintNodeToken(
+    maxAttempts = MINT_TOKEN_MAX_ATTEMPTS,
+    baseDelayMs = MINT_TOKEN_BASE_DELAY_MS
+  ): Promise<void> {
     if (!this.config.orchestrator?.auth) {
       this.telemetry.logger.info('No auth service configured -- skipping node token mint', {
         'event.name': 'node.token.mint_skipped',
@@ -258,31 +266,33 @@ export class OrchestratorService extends CatalystService {
       'catalyst.orchestrator.auth.endpoint': endpoint,
     })
 
-    try {
-      const authClient = newWebSocketRpcSession<AuthRpcApi>(endpoint)
-      const tokensApi = await authClient.tokens(systemToken)
+    let lastError: unknown
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const authClient = newWebSocketRpcSession<AuthRpcApi>(endpoint)
+        const tokensApi = await authClient.tokens(systemToken)
 
-      if ('error' in tokensApi) {
-        throw new Error(`Failed to access tokens API: ${tokensApi.error}`)
-      }
+        if ('error' in tokensApi) {
+          throw new Error(`Failed to access tokens API: ${tokensApi.error}`)
+        }
 
-      this._nodeToken = await tokensApi.create({
-        subject: this.config.node.name,
-        entity: {
-          id: this.config.node.name,
-          name: this.config.node.name,
-          type: 'service',
-          nodeId: this.config.node.name,
-          trustedNodes: [],
-          trustedDomains: this.config.node.domains,
-        },
-        principal: Principal.NODE,
-        expiresIn: '7d',
-      })
+        this._nodeToken = await tokensApi.create({
+          subject: this.config.node.name,
+          entity: {
+            id: this.config.node.name,
+            name: this.config.node.name,
+            type: 'service',
+            nodeId: this.config.node.name,
+            trustedNodes: [],
+            trustedDomains: this.config.node.domains,
+          },
+          principal: Principal.NODE,
+          expiresIn: '7d',
+        })
 
-      const now = Date.now()
-      this._tokenIssuedAt = now
-      this._tokenExpiresAt = now + TOKEN_TTL_MS
+        const now = Date.now()
+        this._tokenIssuedAt = now
+        this._tokenExpiresAt = now + TOKEN_TTL_MS
 
       this.telemetry.logger.info('Node token minted for {nodeName} (expires {expiresAt})', {
         'event.name': 'node.token.minted',
