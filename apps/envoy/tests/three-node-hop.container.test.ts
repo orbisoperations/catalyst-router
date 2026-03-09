@@ -10,12 +10,12 @@ import {
   type StartedTestContainer,
   type StartedNetwork,
 } from 'testcontainers'
-import type { PublicApi, NetworkClient } from '../../orchestrator/src/orchestrator.js'
+import type { PublicApi, NetworkClient } from '../../orchestrator/src/v1/orchestrator.js'
 import type { DataChannelProtocol } from '@catalyst/routing'
 import {
   startAuthService,
   type AuthServiceContext,
-} from '../../orchestrator/tests/auth-test-helpers.js'
+} from '../../orchestrator/tests/v1/auth-test-helpers.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
