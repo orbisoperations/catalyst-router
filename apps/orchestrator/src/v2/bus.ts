@@ -57,6 +57,7 @@ export interface EnvoyClient {
 export interface BusPortAllocator {
   allocate(channelName: string): { success: true; port: number } | { success: false; error: string }
   release(channelName: string): void
+  getPort(channelName: string): number | undefined
   getAllocations(): ReadonlyMap<string, number>
 }
 
@@ -381,11 +382,13 @@ export class OrchestratorBus {
   private async syncRoutesToPeer(peer: PeerRecord, state: RouteTable): Promise<void> {
     const updates: UpdateMessage['updates'] = []
 
+    const localEnvoyAddress = this.config.node.envoyAddress
+
     // Advertise all local routes to the new peer.
     for (const route of state.local.routes) {
       updates.push({
         action: 'add',
-        route,
+        route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
         nodePath: [this.config.node.name],
         originNode: this.config.node.name,
       })
@@ -406,9 +409,17 @@ export class OrchestratorBus {
         if (allowed.length === 0) continue
       }
 
+      // Multi-hop: rewrite envoyPort to local egress port and envoyAddress
+      // to this node's envoy address so the downstream peer routes through us.
+      const egressKey = `egress_${route.name}_via_${route.peer.name}`
+      const egressPort = this.resolveEgressPort(egressKey)
+
       updates.push({
         action: 'add',
-        route: BusTransforms.toDataChannel(route),
+        route: BusTransforms.toDataChannel(route, {
+          envoyAddress: localEnvoyAddress,
+          envoyPort: egressPort,
+        }),
         nodePath: [this.config.node.name, ...route.nodePath],
         originNode: route.originNode,
       })
@@ -438,6 +449,23 @@ export class OrchestratorBus {
       // Fire-and-forget: failed initial sync is not fatal; the peer can
       // request a refresh on reconnect.
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Egress port resolution (eagerly allocates if needed)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Look up or eagerly allocate an egress port for a given key.
+   * Called from route propagation paths which may fire before handleEnvoySync.
+   * allocate() is idempotent so double-allocation is safe.
+   */
+  private resolveEgressPort(egressKey: string): number | undefined {
+    if (this.portAllocator === undefined) return undefined
+    const existing = this.portAllocator.getPort(egressKey)
+    if (existing !== undefined) return existing
+    const result = this.portAllocator.allocate(egressKey)
+    return result.success ? result.port : undefined
   }
 
   // ---------------------------------------------------------------------------
@@ -482,6 +510,7 @@ export class OrchestratorBus {
     _state: RouteTable
   ): UpdateMessage['updates'] {
     const updates: UpdateMessage['updates'] = []
+    const localEnvoyAddress = this.config.node.envoyAddress
 
     for (const change of plan.routeChanges) {
       const route = change.route
@@ -501,9 +530,17 @@ export class OrchestratorBus {
           if (allowed.length === 0) continue
         }
 
+        // Multi-hop: rewrite envoyPort to local egress port and envoyAddress
+        // to this node's envoy address so the downstream peer routes through us.
+        const egressKey = `egress_${route.name}_via_${route.peer.name}`
+        const egressPort = this.resolveEgressPort(egressKey)
+
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: BusTransforms.toDataChannel(route),
+          route: BusTransforms.toDataChannel(route, {
+            envoyAddress: localEnvoyAddress,
+            envoyPort: egressPort,
+          }),
           nodePath: [this.config.node.name, ...route.nodePath],
           originNode: route.originNode,
         })
@@ -511,7 +548,7 @@ export class OrchestratorBus {
         // Local route change — no loop-detection needed.
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: BusTransforms.toDataChannel(route),
+          route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
           nodePath: [this.config.node.name],
           originNode: this.config.node.name,
         })
@@ -536,8 +573,23 @@ export const BusGuards = {
 
 /** Data transforms for route serialization. */
 export const BusTransforms = {
-  /** Strips InternalRoute-only fields, returning only the DataChannelDefinition shape. */
-  toDataChannel(route: DataChannelDefinition | InternalRoute): DataChannelDefinition {
-    return new InternalRouteView(route as InternalRoute).toDataChannel()
+  /**
+   * Strips InternalRoute-only fields, returning only the DataChannelDefinition shape.
+   * Optional overrides allow multi-hop rewriting of envoyPort/envoyAddress so
+   * downstream peers route traffic through this transit node's envoy.
+   */
+  toDataChannel(
+    route: DataChannelDefinition | InternalRoute,
+    overrides?: { envoyAddress?: string; envoyPort?: number }
+  ): DataChannelDefinition {
+    return {
+      name: route.name,
+      protocol: route.protocol,
+      endpoint: route.endpoint,
+      region: route.region,
+      tags: route.tags,
+      envoyPort: overrides?.envoyPort ?? route.envoyPort,
+      envoyAddress: overrides?.envoyAddress ?? route.envoyAddress,
+    }
   },
 }
