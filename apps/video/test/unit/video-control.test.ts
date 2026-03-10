@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import type { Meter } from '@opentelemetry/api'
 import { createVideoHooks, queryStreamCatalog, type StreamEntry } from '../../src/video-control.js'
 
 // ---------------------------------------------------------------------------
@@ -517,5 +518,95 @@ describe('MediaMTX restart - onReady idempotency', () => {
     const first = creates[0].data as { metadata: { sourceType: string } }
     const second = creates[1].data as { metadata: { sourceType: string } }
     expect(first.metadata.sourceType).toBe(second.metadata.sourceType)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Webhook counter metrics (US4)
+// ---------------------------------------------------------------------------
+
+function createSpyMeter() {
+  const instruments: Record<string, { add: ReturnType<typeof vi.fn> }> = {}
+  const createCounterSpy = vi.fn((name: string) => {
+    const spy = { add: vi.fn() }
+    instruments[name] = spy
+    return spy
+  })
+  const meter = {
+    createCounter: createCounterSpy,
+    createHistogram: vi.fn(() => ({ record: vi.fn() })),
+    createUpDownCounter: vi.fn(() => ({ add: vi.fn() })),
+    createObservableCounter: vi.fn(() => ({})),
+    createObservableGauge: vi.fn(() => ({})),
+    createObservableUpDownCounter: vi.fn(() => ({})),
+    createGauge: vi.fn(() => ({})),
+  } as unknown as Meter
+  return { meter, instruments, createCounterSpy }
+}
+
+describe('video-control webhook counter metrics', () => {
+  let dispatch: DispatchFn
+
+  beforeEach(() => {
+    dispatch = vi.fn(async () => ({ success: true }))
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('creates video.webhook.received counter when meter is provided', () => {
+    const { meter } = createSpyMeter()
+    createVideoHooks({ dispatch, nodeId, isReady: () => true, meter })
+
+    expect(
+      (meter as unknown as { createCounter: ReturnType<typeof vi.fn> }).createCounter
+    ).toHaveBeenCalledWith('video.webhook.received', expect.objectContaining({ unit: '{event}' }))
+  })
+
+  it.each([
+    ['ready', '/hooks/ready', 'ready'],
+    ['not-ready', '/hooks/not-ready', 'not-ready'],
+  ])('records counter on valid %s webhook', async (_label, path, type) => {
+    const { meter, instruments } = createSpyMeter()
+    const hooks = createVideoHooks({ dispatch, nodeId, isReady: () => true, meter })
+
+    const response = await hooks.handler.request(
+      new Request(`http://localhost${path}`, {
+        method: 'POST',
+        body: JSON.stringify({ path: 'node-a/cam-front', sourceType: 'rtspSource', query: '' }),
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+
+    await vi.advanceTimersByTimeAsync(600)
+    expect(response.status).toBe(200)
+
+    const counter = instruments['video.webhook.received']
+    expect(counter).toBeDefined()
+    expect(counter.add).toHaveBeenCalledWith(1, { 'video.webhook.type': type })
+  })
+
+  it('records counter with error.type on validation failure', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const hooks = createVideoHooks({ dispatch, nodeId, isReady: () => true, meter })
+
+    const response = await hooks.handler.request(
+      new Request('http://localhost/hooks/ready', {
+        method: 'POST',
+        body: JSON.stringify({ path: '', sourceType: 'rtspSource' }),
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+
+    expect(response.status).toBe(400)
+
+    const counter = instruments['video.webhook.received']
+    expect(counter).toBeDefined()
+    expect(counter.add).toHaveBeenCalledWith(1, {
+      'video.webhook.type': 'ready',
+      'error.type': 'ValidationError',
+    })
   })
 })
