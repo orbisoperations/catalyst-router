@@ -1,0 +1,31 @@
+{
+  "name": "@catalyst/web-ui",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "build:frontend": "vite build --config frontend/vite.config.ts",
+    "dev:frontend": "vite --config frontend/vite.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests container integration"
+  },
+  "dependencies": {
+    "hono": "catalog:",
+    "@hono/node-server": "catalog:",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:dev",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "catalog:dev",
+    "vite": "^6.0.0",
+    "vitest": "catalog:testing"
+  }
+}
