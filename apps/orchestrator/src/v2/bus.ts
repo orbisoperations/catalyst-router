@@ -29,6 +29,33 @@ export interface GatewayClient {
   }): Promise<GatewayUpdateResult>
 }
 
+// ---------------------------------------------------------------------------
+// Envoy client interface (for Envoy config sync)
+// ---------------------------------------------------------------------------
+
+export interface EnvoyUpdateResult {
+  success: boolean
+  error?: string
+}
+
+export interface EnvoyClient {
+  updateRoutes(config: {
+    local: DataChannelDefinition[]
+    internal: InternalRoute[]
+    portAllocations?: Record<string, number>
+  }): Promise<EnvoyUpdateResult>
+}
+
+/**
+ * Port allocator interface — matches @catalyst/envoy-service's PortAllocator.
+ * Defined here to avoid a hard dependency on the envoy package from the bus.
+ */
+export interface BusPortAllocator {
+  allocate(channelName: string): { success: true; port: number } | { success: false; error: string }
+  release(channelName: string): void
+  getAllocations(): ReadonlyMap<string, number>
+}
+
 // v2-specific StateResult — uses v2 RouteTable (no `external` field)
 export type StateResult =
   | { success: true; state: RouteTable; action: Action }
@@ -42,6 +69,8 @@ export class OrchestratorBus {
   private readonly config: OrchestratorConfig
   private nodeToken: string | undefined
   private readonly gatewayClient: GatewayClient | undefined
+  private readonly envoyClient: EnvoyClient | undefined
+  private readonly portAllocator: BusPortAllocator | undefined
   /**
    * Tracks the last time a keepalive was successfully sent to each peer.
    * Ephemeral (not persisted/journaled) — resets to 0 on restart.
@@ -57,12 +86,16 @@ export class OrchestratorBus {
     nodeToken?: string
     initialState?: RouteTable
     gatewayClient?: GatewayClient
+    envoyClient?: EnvoyClient
+    portAllocator?: BusPortAllocator
   }) {
     this.config = opts.config
     this.transport = opts.transport
     this.routePolicy = opts.routePolicy
     this.nodeToken = opts.nodeToken
     this.gatewayClient = opts.gatewayClient
+    this.envoyClient = opts.envoyClient
+    this.portAllocator = opts.portAllocator
     this.queue = new ActionQueue()
     this.rib = new RoutingInformationBase({
       nodeId: opts.config.node.name,
@@ -112,6 +145,10 @@ export class OrchestratorBus {
     // Sync GraphQL route list to gateway after route changes propagate.
     if (plan.routeChanges.length > 0) {
       await this.handleGraphqlGatewaySync(committedState)
+    }
+    // Execute port operations and push config to envoy.
+    if (plan.routeChanges.length > 0 || plan.portOps.length > 0) {
+      await this.handleEnvoySync(plan, committedState)
     }
     // After BGP propagation, handle keepalive sends for Tick actions.
     // (The no-state-change Tick path in dispatch() handles the common case;
@@ -181,6 +218,71 @@ export class OrchestratorBus {
       })
     } catch {
       // Fire-and-forget: gateway sync failure must not disrupt the bus.
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Envoy config sync (port allocation + push to envoy service)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Execute port operations from the plan, allocate ports for new routes,
+   * and push the full route config to the envoy service.
+   *
+   * Port lifecycle:
+   * - Local routes: allocated by route name
+   * - Internal routes: allocated by egress key (`egress_{name}_via_{peer}`)
+   * - Releases: driven by portOps from the RIB plan (route deletion / peer close)
+   *
+   * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
+   */
+  private async handleEnvoySync(plan: PlanResult, state: RouteTable): Promise<void> {
+    if (this.envoyClient === undefined || this.portAllocator === undefined) return
+
+    // 1. Release ports for removed routes.
+    //    Port releases are driven by route changes rather than portOps from the RIB,
+    //    because envoyPort is not stamped on routes in the RIB state (ports are
+    //    managed externally by the bus's port allocator).
+    for (const change of plan.routeChanges) {
+      if (change.type !== 'removed') continue
+      const route = change.route
+      // Release local route port
+      this.portAllocator.release(route.name)
+      // Release egress port if it was an internal route
+      if (BusGuards.isInternalRoute(route)) {
+        this.portAllocator.release(`egress_${route.name}_via_${route.peer.name}`)
+      }
+    }
+
+    // 2. Also release ports based on RIB portOps (for routes that DO have envoyPort stamped).
+    for (const op of plan.portOps) {
+      if (op.type === 'release') {
+        this.portAllocator.release(op.routeKey)
+      }
+    }
+
+    // 3. Allocate ports for local routes that don't have one
+    for (const route of state.local.routes) {
+      if (!route.envoyPort) {
+        this.portAllocator.allocate(route.name)
+      }
+    }
+
+    // 4. Allocate egress ports for internal routes
+    for (const route of state.internal.routes) {
+      const egressKey = `egress_${route.name}_via_${route.peer.name}`
+      this.portAllocator.allocate(egressKey)
+    }
+
+    // 5. Push complete config to envoy service
+    try {
+      await this.envoyClient.updateRoutes({
+        local: state.local.routes,
+        internal: state.internal.routes,
+        portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
+      })
+    } catch {
+      // Fire-and-forget: envoy sync failure must not disrupt the bus.
     }
   }
 
