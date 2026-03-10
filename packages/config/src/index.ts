@@ -54,11 +54,44 @@ export const OrchestratorConfigSchema = z.object({
       systemToken: z.string(),
     })
     .optional(),
-  envoyConfig: z.object({
-    endpoint: z.string(),
-    envoyAddress: z.string().optional(),
-    portRange: z.array(PortEntrySchema).min(1),
-  }),
+  envoyConfig: z
+    .object({
+      endpoint: z.string(),
+      envoyAddress: z.string().optional(),
+      portRange: z.array(PortEntrySchema).min(1),
+    })
+    .optional(),
+  /**
+   * When true, allow all operations when no auth service is configured.
+   * Defaults to false (fail-closed). Only use in development/testing.
+   */
+  allowNoAuth: z.boolean().default(false),
+  /**
+   * Journal configuration for action log persistence and compaction.
+   *
+   * Modes:
+   * - "memory" (default): In-memory journal, no persistence. For dev/testing.
+   * - "sqlite": SQLite-backed journal with periodic snapshot + truncate compaction.
+   *
+   * Example (production):
+   * ```json
+   * { "mode": "sqlite", "path": "/data/journal.db" }
+   * ```
+   */
+  journal: z
+    .object({
+      /** "sqlite" for persistent storage, "memory" for ephemeral (default). */
+      mode: z.enum(['sqlite', 'memory']).default('memory'),
+      /** SQLite file path. Required when mode is "sqlite". */
+      path: z.string().optional(),
+      /** Compaction interval in milliseconds. Default: 24 hours. 0 disables compaction. */
+      compactionIntervalMs: z.number().min(0).default(86_400_000),
+      /** Minimum journal entries accumulated before compaction triggers. Default: 1000. */
+      minEntries: z.number().min(0).default(1000),
+      /** Number of entries to retain after snapshot for debugging. Default: 100. */
+      tailSize: z.number().min(0).default(100),
+    })
+    .default({}),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -213,6 +246,19 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
             }
           : undefined,
       envoyConfig,
+      journal: {
+        mode: process.env.CATALYST_JOURNAL_MODE || undefined,
+        path: process.env.CATALYST_JOURNAL_PATH || undefined,
+        compactionIntervalMs: process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS
+          ? Number(process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS)
+          : undefined,
+        minEntries: process.env.CATALYST_JOURNAL_MIN_ENTRIES
+          ? Number(process.env.CATALYST_JOURNAL_MIN_ENTRIES)
+          : undefined,
+        tailSize: process.env.CATALYST_JOURNAL_TAIL_SIZE
+          ? Number(process.env.CATALYST_JOURNAL_TAIL_SIZE)
+          : undefined,
+      },
     },
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,

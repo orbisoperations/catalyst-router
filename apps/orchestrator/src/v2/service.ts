@@ -10,6 +10,7 @@ import { OrchestratorBus } from './bus.js'
 import type { GatewayClient, EnvoyClient, BusPortAllocator } from './bus.js'
 import { TickManager } from './tick-manager.js'
 import { ReconnectManager } from './reconnect.js'
+import { CompactionManager } from './compaction.js'
 import { createGatewayClient } from './gateway-client.js'
 import { createEnvoyClient } from './envoy-client.js'
 import { createPortAllocator } from '@catalyst/envoy-service'
@@ -17,12 +18,27 @@ import type { PeerTransport } from './transport.js'
 import type { PeerRecord } from '@catalyst/routing/v2'
 import type { OrchestratorConfig } from '../v1/types.js'
 
+export interface JournalConfig {
+  /** "sqlite" for persistent storage, "memory" for ephemeral. Default: "memory". */
+  mode?: 'sqlite' | 'memory'
+  /** SQLite file path. Required when mode is "sqlite". */
+  path?: string
+  /** Compaction interval in milliseconds. 0 disables. Default: 86_400_000 (24h). */
+  compactionIntervalMs?: number
+  /** Minimum entries before compaction triggers. Default: 1000. */
+  minEntries?: number
+  /** Entries to retain after snapshot. Default: 100. */
+  tailSize?: number
+}
+
 export interface OrchestratorServiceV2Options {
   config: OrchestratorConfig
   transport: PeerTransport
   nodeToken?: string
   /** File path for a SQLite-backed journal. Omit for an in-memory journal (tests/dev). */
   journalPath?: string
+  /** Journal configuration (overrides journalPath if provided). */
+  journal?: JournalConfig
   /** Optional gateway client override (for testing). Auto-created from config if omitted. */
   gatewayClient?: GatewayClient
   /** Optional envoy client override (for testing). Auto-created from config if omitted. */
@@ -48,6 +64,7 @@ export class OrchestratorServiceV2 {
   readonly bus: OrchestratorBus
   readonly tickManager: TickManager
   readonly reconnectManager: ReconnectManager
+  readonly compactionManager: CompactionManager
   private readonly journal: ActionLog
   private readonly transport: PeerTransport
   private nodeToken: string | undefined
@@ -56,18 +73,36 @@ export class OrchestratorServiceV2 {
     this.transport = opts.transport
     this.nodeToken = opts.nodeToken
 
+    // Resolve journal config: new journal option takes precedence over legacy journalPath.
+    const journalConfig: JournalConfig = opts.journal ?? {
+      mode: opts.journalPath !== undefined ? 'sqlite' : 'memory',
+      path: opts.journalPath,
+    }
+
     // 1. Create the journal (SQLite on disk or in-memory).
-    if (opts.journalPath !== undefined) {
-      const db = new Database(opts.journalPath)
+    if (journalConfig.mode === 'sqlite') {
+      if (!journalConfig.path) {
+        throw new Error('journal.path is required when journal.mode is "sqlite"')
+      }
+      const db = new Database(journalConfig.path)
       this.journal = new SqliteActionLog(db)
     } else {
       this.journal = new InMemoryActionLog()
     }
 
-    // 2. Replay journal entries to reconstruct the last-known route table.
-    //    We use a temporary RIB (no journal) so we don't double-append on replay.
+    // 2. Recover state: snapshot-first, then replay only the tail.
+    //    Uses a temporary RIB (no journal) so we don't double-append on replay.
     const tempRib = new RoutingInformationBase({ nodeId: opts.config.node.name })
-    for (const entry of this.journal.replay()) {
+    const snapshot = this.journal.getSnapshot()
+    let replayAfterSeq = 0
+
+    if (snapshot) {
+      // Restore from snapshot — apply snapshot state to the temp RIB.
+      Object.assign(tempRib.state, snapshot.state)
+      replayAfterSeq = snapshot.atSeq
+    }
+
+    for (const entry of this.journal.replay(replayAfterSeq)) {
       const plan = tempRib.plan(entry.action, tempRib.state)
       if (tempRib.stateChanged(plan)) {
         tempRib.commit(plan, entry.action)
@@ -101,12 +136,21 @@ export class OrchestratorServiceV2 {
       portAllocator,
     })
 
-    // 4. Create the tick manager — drives hold-timer checks on a periodic interval.
+    // 4. Create the compaction manager — periodic snapshot + truncate.
+    this.compactionManager = new CompactionManager({
+      journal: this.journal,
+      getState: () => this.bus.state,
+      intervalMs: journalConfig.compactionIntervalMs,
+      minEntries: journalConfig.minEntries,
+      tailSize: journalConfig.tailSize,
+    })
+
+    // 5. Create the tick manager — drives hold-timer checks on a periodic interval.
     this.tickManager = new TickManager({
       dispatchFn: (action) => this.bus.dispatch(action),
     })
 
-    // 5b. Recalculate tick interval after peer connection events so keepalive
+    // 6b. Recalculate tick interval after peer connection events so keepalive
     //     frequency tracks the minimum negotiated holdTime (BGP: keepalive = holdTime / 3).
     const peerActions = new Set([Actions.InternalProtocolOpen, Actions.InternalProtocolConnected])
     const originalDispatch = this.bus.dispatch.bind(this.bus)
@@ -125,7 +169,7 @@ export class OrchestratorServiceV2 {
       return result
     }
 
-    // 5. Create the reconnect manager — schedules retries on transport errors.
+    // 7. Create the reconnect manager — schedules retries on transport errors.
     this.reconnectManager = new ReconnectManager({
       transport: opts.transport,
       dispatchFn: (action) => this.bus.dispatch(action),
@@ -133,10 +177,11 @@ export class OrchestratorServiceV2 {
     })
   }
 
-  /** Start periodic tick dispatch (idempotent). */
+  /** Start periodic tick dispatch and compaction (idempotent). */
   start(): void {
     this.recalculateTickInterval()
     this.tickManager.start()
+    this.compactionManager.start()
   }
 
   /**
@@ -152,6 +197,7 @@ export class OrchestratorServiceV2 {
   /** Stop all timers and cancel pending reconnects. */
   async stop(): Promise<void> {
     this.tickManager.stop()
+    this.compactionManager.stop()
     this.reconnectManager.stopAll()
   }
 
