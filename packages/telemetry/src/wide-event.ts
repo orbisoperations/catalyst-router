@@ -9,8 +9,8 @@ import type { Logger } from '@logtape/logtape'
  * Usage:
  * ```typescript
  * const ev = new WideEvent('http.request', logger)
- * ev.set('http.method', 'GET')
- * ev.set({ 'http.path': '/api/health', 'http.status': 200 })
+ * ev.set('http.request.method', 'GET')
+ * ev.set({ 'url.path': '/api/health', 'http.response.status_code': 200 })
  * ev.emit()
  * ```
  */
@@ -41,19 +41,21 @@ export class WideEvent {
 
   /**
    * Capture error information and mark the event outcome as failure.
-   * Handles both Error instances and arbitrary thrown values.
+   * Uses OTel semantic convention attributes for exceptions:
+   * @see https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/
    */
   setError(error: unknown): this {
     if (error instanceof Error) {
       this.set({
-        'error.type': error.constructor.name,
-        'error.message': error.message,
+        'exception.type': error.constructor.name,
+        'exception.message': error.message,
+        ...(error.stack ? { 'exception.stacktrace': error.stack } : {}),
         'event.outcome': 'failure',
       })
     } else {
       this.set({
-        'error.type': typeof error,
-        'error.message': String(error),
+        'exception.type': typeof error,
+        'exception.message': String(error),
         'event.outcome': 'failure',
       })
     }
@@ -69,7 +71,7 @@ export class WideEvent {
     if (this.emitted) return
     this.emitted = true
     this.fields['event.duration_ms'] = Math.round(performance.now() - this.startTime)
-    if (!this.fields['event.outcome']) {
+    if (!('event.outcome' in this.fields)) {
       this.fields['event.outcome'] = 'success'
     }
     const eventName = this.fields['event.name'] as string

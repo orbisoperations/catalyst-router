@@ -68,8 +68,8 @@ describe('WideEvent', () => {
 
   it('emits a single log record with all accumulated fields', () => {
     const ev = new WideEvent('http.request', logger)
-    ev.set('http.method', 'GET')
-    ev.set('http.path', '/api/health')
+    ev.set('http.request.method', 'GET')
+    ev.set('url.path', '/api/health')
     ev.emit()
 
     expect(infoSpy).toHaveBeenCalledOnce()
@@ -81,8 +81,8 @@ describe('WideEvent', () => {
     expect(record.message).toBe('http.request completed')
     expect(record.properties).toMatchObject({
       'event.name': 'http.request',
-      'http.method': 'GET',
-      'http.path': '/api/health',
+      'http.request.method': 'GET',
+      'url.path': '/api/health',
       'event.outcome': 'success',
     })
     expect(record.properties['event.duration_ms']).toBeTypeOf('number')
@@ -165,10 +165,12 @@ describe('WideEvent', () => {
     expect(infoSpy).not.toHaveBeenCalled()
     expect(calls[0].level).toBe('error')
     expect(calls[0].properties).toMatchObject({
-      'error.type': 'TypeError',
-      'error.message': 'bad input',
+      'exception.type': 'TypeError',
+      'exception.message': 'bad input',
       'event.outcome': 'failure',
     })
+    expect(calls[0].properties['exception.stacktrace']).toBeTypeOf('string')
+    expect(calls[0].properties['exception.stacktrace']).toContain('TypeError')
   })
 
   it('setError handles non-Error values', () => {
@@ -178,8 +180,8 @@ describe('WideEvent', () => {
 
     expect(calls[0].level).toBe('error')
     expect(calls[0].properties).toMatchObject({
-      'error.type': 'string',
-      'error.message': 'string error',
+      'exception.type': 'string',
+      'exception.message': 'string error',
       'event.outcome': 'failure',
     })
   })
@@ -191,8 +193,8 @@ describe('WideEvent', () => {
 
     expect(calls[0].level).toBe('error')
     expect(calls[0].properties).toMatchObject({
-      'error.type': 'number',
-      'error.message': '42',
+      'exception.type': 'number',
+      'exception.message': '42',
       'event.outcome': 'failure',
     })
   })
