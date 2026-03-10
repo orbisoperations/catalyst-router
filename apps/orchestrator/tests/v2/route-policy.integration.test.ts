@@ -45,10 +45,13 @@ const routeAlpha = {
 // Policy implementations
 // ---------------------------------------------------------------------------
 
-/** Blocks all routes from being sent. */
+/** Blocks all routes from being sent. Accepts all inbound. */
 const denyAllPolicy: RoutePolicy = {
   canSend(_peer: PeerRecord, _routes: InternalRoute[]): InternalRoute[] {
     return []
+  },
+  canReceive(_peer, routes) {
+    return routes
   },
 }
 
