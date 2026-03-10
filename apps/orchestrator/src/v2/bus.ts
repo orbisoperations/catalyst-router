@@ -79,16 +79,17 @@ export class OrchestratorBus {
       const committed = this.rib.commit(plan, action)
 
       if (plan.routeChanges.length > 0) {
-        const added = plan.routeChanges.filter((c) => c.type === 'added').length
-        const removed = plan.routeChanges.filter((c) => c.type === 'removed').length
-        const modified = plan.routeChanges.filter(
-          (c) => c.type !== 'added' && c.type !== 'removed'
-        ).length
+        const counts = { added: 0, removed: 0, modified: 0 }
+        for (const c of plan.routeChanges) {
+          if (c.type === 'added') counts.added++
+          else if (c.type === 'removed') counts.removed++
+          else counts.modified++
+        }
         logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
           'event.name': 'route.table.changed',
-          'route.added': added,
-          'route.removed': removed,
-          'route.modified': modified,
+          'route.added': counts.added,
+          'route.removed': counts.removed,
+          'route.modified': counts.modified,
           'route.trigger': action.action,
           'route.total': committed.local.routes.length + committed.internal.routes.length,
         })
