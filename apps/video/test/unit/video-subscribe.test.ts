@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import type { Meter } from '@opentelemetry/api'
 import { Action } from '@catalyst/authorization'
 import { createVideoSubscribe } from '../../src/video-subscribe.js'
 import { StreamRelayManager } from '../../src/stream-relay-manager.js'
@@ -627,5 +628,111 @@ describe('Auth service outage - fail-closed behavior', () => {
     )
 
     expect(response.status).toBeGreaterThanOrEqual(400)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Auth evaluation metrics
+// ---------------------------------------------------------------------------
+
+function createSpyMeter() {
+  const instruments: Record<
+    string,
+    { add?: ReturnType<typeof vi.fn>; record?: ReturnType<typeof vi.fn> }
+  > = {}
+  const createCounterSpy = vi.fn((name: string) => {
+    const spy = { add: vi.fn() }
+    instruments[name] = spy
+    return spy
+  })
+  const createHistogramSpy = vi.fn((name: string) => {
+    const spy = { record: vi.fn() }
+    instruments[name] = spy
+    return spy
+  })
+  const meter = {
+    createCounter: createCounterSpy,
+    createHistogram: createHistogramSpy,
+    createUpDownCounter: vi.fn(() => ({ add: vi.fn() })),
+    createObservableCounter: vi.fn(() => ({})),
+    createObservableGauge: vi.fn(() => ({})),
+    createObservableUpDownCounter: vi.fn(() => ({})),
+    createGauge: vi.fn(() => ({})),
+  } as unknown as Meter
+  return { meter, instruments, createCounterSpy, createHistogramSpy }
+}
+
+describe('POST /subscribe/:streamName - auth evaluation metrics', () => {
+  it('creates video.auth.evaluations counter and video.auth.duration histogram when meter provided', () => {
+    const { meter, createCounterSpy, createHistogramSpy } = createSpyMeter()
+    const deps = makeDeps({ meter } as any)
+
+    createVideoSubscribe(deps)
+
+    expect(createCounterSpy).toHaveBeenCalledWith(
+      'video.auth.evaluations',
+      expect.objectContaining({ unit: '{evaluation}' })
+    )
+    expect(createHistogramSpy).toHaveBeenCalledWith(
+      'video.auth.duration',
+      expect.objectContaining({ unit: 's' })
+    )
+  })
+
+  it.each([
+    ['allowed', { success: true, allowed: true } as AuthResult, 'allowed'],
+    [
+      'denied',
+      { success: false, errorType: 'AUTHZ_DENY', reason: 'not allowed' } as AuthResult,
+      'denied',
+    ],
+  ])('records %s evaluation and duration', async (_label, authResult, expectedResult) => {
+    const { meter, instruments } = createSpyMeter()
+    const auth = makeAuthService(authResult)
+    const deps = makeDeps({ auth, meter } as any)
+
+    const handler = createVideoSubscribe(deps)
+
+    await handler.request(
+      new Request(`http://localhost/subscribe/${STREAM_NAME}`, {
+        method: 'POST',
+        headers: { Authorization: VALID_TOKEN },
+      })
+    )
+
+    const evaluations = instruments['video.auth.evaluations']
+    const duration = instruments['video.auth.duration']
+
+    expect(evaluations?.add).toHaveBeenCalledWith(1, { 'video.auth.result': expectedResult })
+    expect(duration?.record).toHaveBeenCalledWith(expect.any(Number))
+  })
+
+  it('records error evaluation with error.type when auth throws', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const auth: AuthService = {
+      evaluate: vi.fn(async () => {
+        throw new Error('auth service down')
+      }),
+    }
+    const deps = makeDeps({ auth, meter } as any)
+
+    const handler = createVideoSubscribe(deps)
+
+    await handler.request(
+      new Request(`http://localhost/subscribe/${STREAM_NAME}`, {
+        method: 'POST',
+        headers: { Authorization: VALID_TOKEN },
+      })
+    )
+
+    const evaluations = instruments['video.auth.evaluations']
+    const duration = instruments['video.auth.duration']
+
+    expect(evaluations?.add).toHaveBeenCalledWith(1, {
+      'video.auth.result': 'error',
+      'error.type': 'Error',
+    })
+    expect(duration?.record).toHaveBeenCalledWith(expect.any(Number))
+    expect(duration?.record?.mock.calls[0][0]).toBeGreaterThan(0)
   })
 })
