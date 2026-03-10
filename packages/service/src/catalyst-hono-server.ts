@@ -198,7 +198,7 @@ export class CatalystHonoServer {
     const startTime = Date.now()
     const serviceCount = this._options.services?.length ?? 0
 
-    this._logger.info('server shutdown started with {service.count} service(s)', {
+    this._logger.info('Server shutdown started (services={serviceCount})', {
       'event.name': 'server.shutdown.started',
       'service.count': serviceCount,
     })
@@ -214,11 +214,6 @@ export class CatalystHonoServer {
       })
     }
 
-    // Shut down all registered services (flushes telemetry etc.)
-    if (this._options.services) {
-      await Promise.allSettled(this._options.services.map((s) => s.shutdown()))
-    }
-
     // Remove signal handlers to avoid duplicate calls
     for (const handler of this._shutdownHandlers) {
       process.removeListener('SIGTERM', handler)
@@ -226,11 +221,17 @@ export class CatalystHonoServer {
     }
     this._shutdownHandlers = []
 
-    this._logger.info('server shutdown completed', {
+    // Log completion before service shutdown — services may tear down telemetry
+    this._logger.info('server shutdown completed in {durationMs}ms', {
       'event.name': 'server.shutdown.completed',
       'event.duration_ms': Date.now() - startTime,
       'service.count': serviceCount,
     })
+
+    // Shut down all registered services (flushes telemetry etc.)
+    if (this._options.services) {
+      await Promise.allSettled(this._options.services.map((s) => s.shutdown()))
+    }
   }
 }
 
