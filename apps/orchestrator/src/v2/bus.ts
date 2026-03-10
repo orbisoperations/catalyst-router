@@ -6,6 +6,7 @@ import {
   type Action,
   type RouteTable,
   type PlanResult,
+  type PortOperation,
   type RoutePolicy,
   type InternalRoute,
   type PeerRecord,
@@ -54,6 +55,7 @@ export interface EnvoyClient {
 export interface BusPortAllocator {
   allocate(channelName: string): { success: true; port: number } | { success: false; error: string }
   release(channelName: string): void
+  getPort(channelName: string): number | undefined
   getAllocations(): ReadonlyMap<string, number>
 }
 
@@ -115,14 +117,15 @@ export class OrchestratorBus {
 
   async dispatch(action: Action): Promise<StateResult> {
     return this.queue.enqueue(async () => {
-      // Validate peerToken on LocalPeerCreate
+      // Step 1: Validate — reject invalid actions before planning.
       if (action.action === Actions.LocalPeerCreate && !action.data.peerToken) {
         return { success: false, error: 'peerToken is required when creating a peer' }
       }
 
-      const plan = this.rib.plan(action, this.rib.state)
+      // Step 2: Plan — pure state transition, no side effects.
+      const ribPlan = this.rib.plan(action, this.rib.state)
 
-      if (!this.rib.stateChanged(plan)) {
+      if (!this.rib.stateChanged(ribPlan)) {
         // Tick with no expired peers: keepalives still need to fire.
         if (action.action === Actions.Tick) {
           await this.handleKeepalives(this.rib.state, action.data.now)
@@ -130,7 +133,14 @@ export class OrchestratorBus {
         return { success: false, error: 'No state change' }
       }
 
+      // Step 3: Port allocation — release/allocate ports, stamp on newState.
+      //         Runs between plan and commit so committed state has ports.
+      const plan = this.planPortAllocations(ribPlan)
+
+      // Step 4: Commit — apply state + journal.
       const committed = this.rib.commit(plan, action)
+
+      // Step 5: Notify — propagate to peers, push to envoy/gateway.
       await this.handlePostCommit(action, plan, committed)
 
       return { success: true, state: committed, action }
@@ -242,64 +252,136 @@ export class OrchestratorBus {
   }
 
   // ---------------------------------------------------------------------------
-  // Envoy config sync (port allocation + push to envoy service)
+  // Port allocation planning (runs between plan and commit)
   // ---------------------------------------------------------------------------
 
   /**
-   * Execute port operations from the plan, allocate ports for new routes,
-   * and push the full route config to the envoy service.
+   * Enrich a RIB plan with port allocations. Returns a new PlanResult whose
+   * newState has envoyPort stamped on every route and whose portOps contain
+   * the full audit trail of allocations and releases.
    *
-   * Port lifecycle:
-   * - Local routes: allocated by route name
-   * - Internal routes: allocated by egress key (`egress_{name}_via_{peer}`)
-   * - Releases: driven by portOps from the RIB plan (route deletion / peer close)
+   * Phases (each clearly separated for traceability):
+   *   Phase 1 — Release: free ports for removed routes and RIB release ops
+   *   Phase 2 — Allocate local: assign ingress ports to local routes
+   *   Phase 3 — Allocate egress: assign egress ports to internal routes
+   *   Phase 4 — Stamp: build new state with ports applied
    *
-   * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
+   * No-ops gracefully when no port allocator is configured.
    */
-  private async handleEnvoySync(plan: PlanResult, state: RouteTable): Promise<void> {
-    if (this.envoyClient === undefined || this.portAllocator === undefined) return
+  private planPortAllocations(plan: PlanResult): PlanResult {
+    if (this.portAllocator === undefined) return plan
 
-    // 1. Release ports for removed routes.
-    //    Port releases are driven by route changes rather than portOps from the RIB,
-    //    because envoyPort is not stamped on routes in the RIB state (ports are
-    //    managed externally by the bus's port allocator).
+    const portOps: PortOperation[] = []
+
+    // Phase 1 — Release: free ports for removed routes.
     for (const change of plan.routeChanges) {
       if (change.type !== 'removed') continue
       const route = change.route
-      // Release local route port
-      this.portAllocator.release(route.name)
-      // Release egress port if it was an internal route
+
+      // Release local route port.
+      const localPort = this.portAllocator.getPort(route.name)
+      if (localPort !== undefined) {
+        this.portAllocator.release(route.name)
+        portOps.push({ type: 'release', routeKey: route.name, port: localPort })
+      }
+
+      // Release egress port if it was an internal route.
       if (BusGuards.isInternalRoute(route)) {
-        this.portAllocator.release(`egress_${route.name}_via_${route.peer.name}`)
+        const egressKey = `egress_${route.name}_via_${route.peer.name}`
+        const egressPort = this.portAllocator.getPort(egressKey)
+        if (egressPort !== undefined) {
+          this.portAllocator.release(egressKey)
+          portOps.push({ type: 'release', routeKey: egressKey, port: egressPort })
+        }
       }
     }
 
-    // 2. Also release ports based on RIB portOps (for routes that DO have envoyPort stamped).
+    // Also honour RIB-generated release ops (routes with envoyPort already stamped).
     for (const op of plan.portOps) {
       if (op.type === 'release') {
         this.portAllocator.release(op.routeKey)
+        portOps.push(op)
       }
     }
 
-    // 3. Allocate ports for local routes that don't have one
-    for (const route of state.local.routes) {
-      if (!route.envoyPort) {
-        this.portAllocator.allocate(route.name)
-      }
-    }
+    // Phase 2 — Allocate local: assign ingress ports to local routes.
+    //          Builds a lookup map for Phase 5 (routeChange stamping).
+    const localPortMap = new Map<string, number>()
+    const localRoutes = plan.newState.local.routes.map((route) => {
+      if (route.envoyPort) return route
+      const result = this.portAllocator!.allocate(route.name)
+      if (!result.success) return route
+      portOps.push({ type: 'allocate', routeKey: route.name, port: result.port })
+      localPortMap.set(route.name, result.port)
+      return { ...route, envoyPort: result.port }
+    })
 
-    // 4. Allocate egress ports for internal routes
-    for (const route of state.internal.routes) {
+    // Phase 3 — Allocate egress: assign egress ports to internal routes.
+    const egressPortMap = new Map<string, number>()
+    const internalRoutes = plan.newState.internal.routes.map((route) => {
       const egressKey = `egress_${route.name}_via_${route.peer.name}`
-      this.portAllocator.allocate(egressKey)
+      const result = this.portAllocator!.allocate(egressKey)
+      if (!result.success) return route
+      if (route.envoyPort !== result.port) {
+        portOps.push({ type: 'allocate', routeKey: egressKey, port: result.port })
+      }
+      egressPortMap.set(egressKey, result.port)
+      return { ...route, envoyPort: result.port }
+    })
+
+    // Phase 4 — Stamp: build enriched state with ports applied.
+    const newState: RouteTable = {
+      local: { routes: localRoutes },
+      internal: {
+        ...plan.newState.internal,
+        routes: internalRoutes,
+      },
     }
 
-    // 5. Push complete config to envoy service
+    // Phase 5 — Sync routeChanges: stamp ports on added/updated route changes
+    //           so downstream consumers (buildUpdatesForPeer) see correct ports.
+    const routeChanges = plan.routeChanges.map((change) => {
+      if (change.type === 'removed') return change
+      const route = change.route
+      if (BusGuards.isInternalRoute(route)) {
+        const egressKey = `egress_${route.name}_via_${route.peer.name}`
+        const port = egressPortMap.get(egressKey)
+        if (port !== undefined && route.envoyPort !== port) {
+          return { ...change, route: { ...route, envoyPort: port } }
+        }
+      } else {
+        const port = localPortMap.get(route.name)
+        if (port !== undefined && !route.envoyPort) {
+          return { ...change, route: { ...route, envoyPort: port } }
+        }
+      }
+      return change
+    })
+
+    return { ...plan, newState, portOps, routeChanges }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Envoy config sync (pushes committed state to envoy service)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Push the full route config to the envoy service.
+   * Port allocation is already done in planPortAllocations — this method
+   * only pushes the committed (port-stamped) state.
+   *
+   * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
+   */
+  private async handleEnvoySync(_plan: PlanResult, state: RouteTable): Promise<void> {
+    if (this.envoyClient === undefined) return
+
     try {
       await this.envoyClient.updateRoutes({
         local: state.local.routes,
         internal: state.internal.routes,
-        portAllocations: Object.fromEntries(this.portAllocator.getAllocations()),
+        portAllocations: this.portAllocator
+          ? Object.fromEntries(this.portAllocator.getAllocations())
+          : undefined,
       })
     } catch {
       // Fire-and-forget: envoy sync failure must not disrupt the bus.
@@ -313,11 +395,13 @@ export class OrchestratorBus {
   private async syncRoutesToPeer(peer: PeerRecord, state: RouteTable): Promise<void> {
     const updates: UpdateMessage['updates'] = []
 
+    const localEnvoyAddress = this.config.node.envoyAddress
+
     // Advertise all local routes to the new peer.
     for (const route of state.local.routes) {
       updates.push({
         action: 'add',
-        route,
+        route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
         nodePath: [this.config.node.name],
         originNode: this.config.node.name,
       })
@@ -338,9 +422,11 @@ export class OrchestratorBus {
         if (allowed.length === 0) continue
       }
 
+      // Multi-hop: envoyPort is already stamped by planPortAllocations.
+      // Rewrite envoyAddress to this node's envoy so downstream peers route through us.
       updates.push({
         action: 'add',
-        route: BusTransforms.toDataChannel(route),
+        route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
         nodePath: [this.config.node.name, ...route.nodePath],
         originNode: route.originNode,
       })
@@ -394,6 +480,7 @@ export class OrchestratorBus {
     _state: RouteTable
   ): UpdateMessage['updates'] {
     const updates: UpdateMessage['updates'] = []
+    const localEnvoyAddress = this.config.node.envoyAddress
 
     for (const change of plan.routeChanges) {
       const route = change.route
@@ -413,9 +500,11 @@ export class OrchestratorBus {
           if (allowed.length === 0) continue
         }
 
+        // Multi-hop: envoyPort is already stamped by planPortAllocations.
+        // Rewrite envoyAddress to this node's envoy so downstream peers route through us.
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: BusTransforms.toDataChannel(route),
+          route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
           nodePath: [this.config.node.name, ...route.nodePath],
           originNode: route.originNode,
         })
@@ -423,7 +512,7 @@ export class OrchestratorBus {
         // Local route change — no loop-detection needed.
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: BusTransforms.toDataChannel(route),
+          route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
           nodePath: [this.config.node.name],
           originNode: this.config.node.name,
         })
@@ -448,8 +537,15 @@ export const BusGuards = {
 
 /** Data transforms for route serialization. */
 export const BusTransforms = {
-  /** Strips InternalRoute-only fields, returning only the DataChannelDefinition shape. */
-  toDataChannel(route: DataChannelDefinition | InternalRoute): DataChannelDefinition {
+  /**
+   * Strips InternalRoute-only fields, returning only the DataChannelDefinition shape.
+   * envoyPort comes from the route (stamped by planPortAllocations).
+   * envoyAddress can be overridden to this node's address for multi-hop forwarding.
+   */
+  toDataChannel(
+    route: DataChannelDefinition | InternalRoute,
+    overrides?: { envoyAddress?: string }
+  ): DataChannelDefinition {
     return {
       name: route.name,
       protocol: route.protocol,
@@ -457,6 +553,7 @@ export const BusTransforms = {
       region: route.region,
       tags: route.tags,
       envoyPort: route.envoyPort,
+      envoyAddress: overrides?.envoyAddress ?? route.envoyAddress,
     }
   },
 }
