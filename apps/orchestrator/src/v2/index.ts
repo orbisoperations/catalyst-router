@@ -1,5 +1,7 @@
 export { MockPeerTransport } from './transport.js'
 export type { PeerTransport, UpdateMessage, TransportCall } from './transport.js'
+export { WebSocketPeerTransport } from './ws-transport.js'
+export { HttpPeerTransport } from './http-transport.js'
 export { OrchestratorBus } from './bus.js'
 export type {
   StateResult,
