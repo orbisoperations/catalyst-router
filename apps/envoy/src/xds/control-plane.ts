@@ -245,6 +245,7 @@ export class XdsControlPlane {
 
     call.on('end', () => {
       streamClosed = true
+      this.clientNackCounts.delete(clientId)
       this.logger.info('ADS stream disconnected', { 'event.name': 'xds.client.disconnected' })
       unwatch()
       call.end()
@@ -252,6 +253,7 @@ export class XdsControlPlane {
 
     call.on('error', (err) => {
       streamClosed = true
+      this.clientNackCounts.delete(clientId)
       // CANCELLED is normal when Envoy disconnects
       if ((err as grpc.ServiceError).code !== grpc.status.CANCELLED) {
         this.logger.error('ADS stream error: {error}', {
