@@ -91,10 +91,10 @@ describe('wideEventMiddleware', () => {
       'http.request.method': 'GET',
       'url.path': '/ok',
       'http.response.status_code': 200,
-      'event.outcome': 'success',
+      'catalyst.event.outcome': 'success',
     })
-    expect(record.properties['event.duration_ms']).toBeTypeOf('number')
-    expect(record.properties['event.duration_ms'] as number).toBeGreaterThanOrEqual(0)
+    expect(record.properties['catalyst.event.duration_ms']).toBeTypeOf('number')
+    expect(record.properties['catalyst.event.duration_ms'] as number).toBeGreaterThanOrEqual(0)
   })
 
   it('captures POST method correctly', async () => {
@@ -106,7 +106,7 @@ describe('wideEventMiddleware', () => {
     expect(captured[0].properties).toMatchObject({
       'http.request.method': 'POST',
       'http.response.status_code': 201,
-      'event.outcome': 'success',
+      'catalyst.event.outcome': 'success',
     })
   })
 
@@ -122,7 +122,7 @@ describe('wideEventMiddleware', () => {
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
       'http.response.status_code': 404,
-      'event.outcome': 'failure',
+      'catalyst.event.outcome': 'failure',
     })
   })
 
@@ -134,7 +134,7 @@ describe('wideEventMiddleware', () => {
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
       'http.response.status_code': 500,
-      'event.outcome': 'failure',
+      'catalyst.event.outcome': 'failure',
     })
   })
 
@@ -152,7 +152,7 @@ describe('wideEventMiddleware', () => {
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
       'http.response.status_code': 500,
-      'event.outcome': 'failure',
+      'catalyst.event.outcome': 'failure',
     })
   })
 
@@ -180,7 +180,7 @@ describe('wideEventMiddleware', () => {
     expect(captured[0].properties).toMatchObject({
       'exception.type': 'Error',
       'exception.message': 'something broke',
-      'event.outcome': 'failure',
+      'catalyst.event.outcome': 'failure',
     })
   })
 
@@ -202,7 +202,7 @@ describe('wideEventMiddleware', () => {
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
       'custom.field': 'hello',
-      'event.outcome': 'success',
+      'catalyst.event.outcome': 'success',
     })
   })
 

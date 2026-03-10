@@ -50,13 +50,13 @@ export class WideEvent {
         'exception.type': error.constructor.name,
         'exception.message': error.message,
         ...(error.stack ? { 'exception.stacktrace': error.stack } : {}),
-        'event.outcome': 'failure',
+        'catalyst.event.outcome': 'failure',
       })
     } else {
       this.set({
         'exception.type': typeof error,
         'exception.message': String(error),
-        'event.outcome': 'failure',
+        'catalyst.event.outcome': 'failure',
       })
     }
     return this
@@ -64,18 +64,18 @@ export class WideEvent {
 
   /**
    * Emit the wide event as a single structured log record.
-   * Computes `event.duration_ms` and defaults `event.outcome` to `'success'`.
+   * Computes `catalyst.event.duration_ms` and defaults `catalyst.event.outcome` to `'success'`.
    * Subsequent calls are no-ops (idempotent).
    */
   emit(): void {
     if (this.emitted) return
     this.emitted = true
-    this.fields['event.duration_ms'] = Math.round(performance.now() - this.startTime)
-    if (!('event.outcome' in this.fields)) {
-      this.fields['event.outcome'] = 'success'
+    this.fields['catalyst.event.duration_ms'] = Math.round(performance.now() - this.startTime)
+    if (!('catalyst.event.outcome' in this.fields)) {
+      this.fields['catalyst.event.outcome'] = 'success'
     }
     const eventName = this.fields['event.name'] as string
-    const level = this.fields['event.outcome'] === 'failure' ? 'error' : 'info'
+    const level = this.fields['catalyst.event.outcome'] === 'failure' ? 'error' : 'info'
     this.logger[level](eventName + ' completed', this.fields)
   }
 }

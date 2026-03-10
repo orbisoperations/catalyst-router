@@ -38,7 +38,7 @@ export function wideEventMiddleware(options?: WideEventMiddlewareOptions): Middl
       await next()
       event.set('http.response.status_code', c.res.status)
       if (c.res.status >= 400) {
-        event.set('event.outcome', 'failure')
+        event.set('catalyst.event.outcome', 'failure')
       }
     } catch (err) {
       event.setError(err)
