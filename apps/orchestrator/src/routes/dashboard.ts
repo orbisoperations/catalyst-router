@@ -5,8 +5,16 @@ import type { CatalystConfig } from '@catalyst/config'
 export interface DashboardStateProvider {
   getState(): {
     local: { routes: unknown[] }
-    internal: { peers: unknown[]; routes: unknown[] }
+    internal: { peers: Record<string, unknown>[]; routes: Record<string, unknown>[] }
   }
+}
+
+/** Strip peerToken from a record (credential — must not be exposed via API). */
+function stripPeerToken({
+  peerToken: _,
+  ...rest
+}: Record<string, unknown>): Record<string, unknown> {
+  return rest
 }
 
 interface ServiceDef {
@@ -108,9 +116,14 @@ export function createDashboardRoutes(bus: DashboardStateProvider, config: Catal
     return c.json({
       routes: {
         local: state.local.routes,
-        internal: state.internal.routes,
+        internal: state.internal.routes.map((r) => {
+          if (r.peer && typeof r.peer === 'object') {
+            return { ...r, peer: stripPeerToken(r.peer as Record<string, unknown>) }
+          }
+          return r
+        }),
       },
-      peers: state.internal.peers,
+      peers: state.internal.peers.map(stripPeerToken),
     })
   })
 
