@@ -222,8 +222,8 @@ describe('Video service wiring (OrchestratorService)', () => {
   })
 
   // T309 ----------------------------------------------------------------
-  describe('T309: token refresh propagates to video client', () => {
-    it('calls refreshToken on video client when mintNodeToken runs', async () => {
+  describe('T309: token refresh propagates to video connection manager', () => {
+    it('calls setNodeToken on video connection manager when mintNodeToken runs', async () => {
       const config = makeConfig({
         videoEndpoint: 'ws://video:4001/api',
         auth: {
@@ -235,35 +235,23 @@ describe('Video service wiring (OrchestratorService)', () => {
 
       await svc.initialize()
 
-      // After initialization, the video client should be connected and
-      // mintNodeToken was already called once during onInitialize.
-      // The initial mintNodeToken happens BEFORE connectVideoService,
-      // so refreshToken is NOT called during initialization.
-      // We need to trigger a second token refresh to see refreshToken called.
-      mockRefreshToken.mockClear()
-
-      // Access the private refreshNodeTokenIfNeeded method indirectly:
-      // We can force a refresh by manipulating the token expiry timing.
-      // Since the token TTL is 7 days and refresh threshold is 80%,
-      // we can call mintNodeToken again by accessing it through the
-      // private method. Since we can't easily do that, we test via
-      // the internal _videoClient state: after init, _videoClient should exist.
-
-      // Verify _videoClient was set (it's private, but we can check via behavior)
-      // The most reliable way: call mintNodeToken again via the refresh mechanism.
-      // We'll directly test this by accessing the private method.
       const service = svc as unknown as {
         mintNodeToken(): Promise<void>
-        _videoClient: { refreshToken: (token: string) => Promise<void> } | undefined
+        _videoConnection: { status: string; setNodeToken: (t: string) => void } | undefined
       }
 
-      // _videoClient should be set after initialize
-      expect(service._videoClient).toBeDefined()
+      // _videoConnection should be set after initialize
+      expect(service._videoConnection).toBeDefined()
+      expect(service._videoConnection!.status).toBe('connected')
+
+      // Clear mocks to isolate the refresh call
+      mockRefreshToken.mockClear()
 
       // Trigger another mintNodeToken (simulates token refresh)
       await service.mintNodeToken()
 
-      // refreshToken should have been called with the new token
+      // mintNodeToken calls _videoConnection.setNodeToken() which, while
+      // connected, fires refreshToken on the underlying client
       expect(mockRefreshToken).toHaveBeenCalledOnce()
       expect(mockRefreshToken).toHaveBeenCalledWith('minted-node-token')
 
@@ -273,23 +261,24 @@ describe('Video service wiring (OrchestratorService)', () => {
 
   // T310 ----------------------------------------------------------------
   describe('T310: onShutdown cleans up video state', () => {
-    it('clears _videoClient and video notifier on shutdown', async () => {
+    it('stops video connection manager and clears it on shutdown', async () => {
       const config = makeConfig({ videoEndpoint: 'ws://video:4001/api' })
       const svc = new OrchestratorService({ config, telemetry: makeTelemetry() })
 
       await svc.initialize()
 
       const service = svc as unknown as {
-        _videoClient: unknown
+        _videoConnection: { status: string } | undefined
       }
 
-      // Before shutdown, video client should be set
-      expect(service._videoClient).toBeDefined()
+      // Before shutdown, video connection should be set and connected
+      expect(service._videoConnection).toBeDefined()
+      expect(service._videoConnection!.status).toBe('connected')
 
       await svc.shutdown()
 
-      // After shutdown, video client should be cleared
-      expect(service._videoClient).toBeUndefined()
+      // After shutdown, video connection should be cleared
+      expect(service._videoConnection).toBeUndefined()
     })
 
     it('media route dispatch does not push catalog after shutdown', async () => {
