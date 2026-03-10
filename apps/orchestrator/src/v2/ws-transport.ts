@@ -83,6 +83,7 @@ export class WebSocketPeerTransport implements PeerTransport {
     logger.info('Opened connection to {peerName}', {
       'event.name': 'peer.session.opened',
       'peer.name': peer.name,
+      'peer.endpoint': peer.endpoint,
     })
   }
 

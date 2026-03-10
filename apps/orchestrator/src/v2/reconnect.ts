@@ -54,6 +54,7 @@ export class ReconnectManager {
         logger.warn('Skipping reconnect to {peerName}: no node token available', {
           'event.name': 'peer.reconnect.skipped',
           'peer.name': peer.name,
+          reason: 'no_token',
         })
         return
       }
