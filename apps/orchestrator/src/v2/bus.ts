@@ -77,6 +77,23 @@ export class OrchestratorBus {
       }
 
       const committed = this.rib.commit(plan, action)
+
+      if (plan.routeChanges.length > 0) {
+        const added = plan.routeChanges.filter((c) => c.type === 'added').length
+        const removed = plan.routeChanges.filter((c) => c.type === 'removed').length
+        const modified = plan.routeChanges.filter(
+          (c) => c.type !== 'added' && c.type !== 'removed'
+        ).length
+        logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
+          'event.name': 'route.table.changed',
+          'route.added': added,
+          'route.removed': removed,
+          'route.modified': modified,
+          'route.trigger': action.action,
+          'route.total': committed.local.routes.length + committed.internal.routes.length,
+        })
+      }
+
       await this.handlePostCommit(action, plan, committed)
 
       return { success: true, state: committed, action }
@@ -186,10 +203,21 @@ export class OrchestratorBus {
       })
     }
 
-    if (updates.length === 0) return
+    if (updates.length === 0) {
+      logger.info('No routes to sync to peer {peerName}', {
+        'event.name': 'route.sync.empty',
+        'peer.name': peer.name,
+      })
+      return
+    }
 
     try {
       await this.transport.sendUpdate(peer, { updates })
+      logger.info('Synced {count} route(s) to peer {peerName}', {
+        'event.name': 'route.sync.completed',
+        'peer.name': peer.name,
+        'route.count': updates.length,
+      })
     } catch (error) {
       logger.warn('Initial route sync to {peerName} failed', {
         'event.name': 'peer.sync.initial_failed',
