@@ -32,6 +32,7 @@ const peerInfo: PeerInfo = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['security.local'],
+  peerToken: 'token-b',
 }
 
 const routeAlpha = {

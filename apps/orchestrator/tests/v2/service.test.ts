@@ -121,6 +121,7 @@ describe('OrchestratorServiceV2', () => {
       name: 'node-b',
       endpoint: 'ws://node-b:4000',
       domains: ['example.local'],
+      peerToken: 'token-b',
     }
     await svc.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
     // Bus holds the token internally — we can't directly inspect it, but the

@@ -24,7 +24,12 @@ function makeConfig(name: string): OrchestratorConfig {
 }
 
 function makePeerInfo(name: string): PeerInfo {
-  return { name, endpoint: `ws://${name}:4000`, domains: ['topo.local'] }
+  return {
+    name,
+    endpoint: `ws://${name}:4000`,
+    domains: ['topo.local'],
+    peerToken: `token-${name}`,
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ const peerB: PeerInfo = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['tick.local'],
+  peerToken: 'token-b',
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,7 @@ describe('Tick interval recalculation via OrchestratorServiceV2', () => {
       name: 'node-c',
       endpoint: 'ws://node-c:4000',
       domains: ['tick.local'],
+      peerToken: 'token-c',
     }
 
     // Add two peers with different holdTimes

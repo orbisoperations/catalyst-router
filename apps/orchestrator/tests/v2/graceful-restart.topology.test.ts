@@ -23,7 +23,7 @@ function makeConfig(name: string): OrchestratorConfig {
 }
 
 function makePeer(name: string): PeerInfo {
-  return { name, endpoint: `ws://${name}:4000`, domains: ['gr.local'] }
+  return { name, endpoint: `ws://${name}:4000`, domains: ['gr.local'], peerToken: `token-${name}` }
 }
 
 const routeX = { name: 'service-x', protocol: 'http' as const, endpoint: 'http://svc-x:8080' }
