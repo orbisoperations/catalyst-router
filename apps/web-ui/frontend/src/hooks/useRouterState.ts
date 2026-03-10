@@ -38,7 +38,7 @@ export function useRouterState(pollIntervalMs = 10000) {
     let active = true
     const fetchState = async () => {
       try {
-        const res = await fetch('/dashboard/api/state')
+        const res = await fetch('/api/state')
         const data = await res.json()
         if (active) {
           setState(data)
