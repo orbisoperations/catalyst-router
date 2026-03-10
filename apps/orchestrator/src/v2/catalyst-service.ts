@@ -143,7 +143,7 @@ export class OrchestratorService extends CatalystService {
     })
 
     // Build the token validator
-    const validator = this.buildTokenValidator()
+    const validator = this.buildValidator()
 
     // Mount RPC route — exposes the same PublicApi shape as v1
     this.handler.all('/rpc', (c) => {
@@ -185,68 +185,13 @@ export class OrchestratorService extends CatalystService {
     await this._v2.stop()
   }
 
-  private buildTokenValidator(): TokenValidator {
-    const authClient = this._authClient
-    const config = this.config
-    const logger = this.telemetry.logger
-
-    if (!authClient) {
-      // No auth configured — reject all tokens (fail-closed)
-      return {
-        async validateToken() {
-          return { valid: false, error: 'Auth not configured' }
-        },
-      }
-    }
-
-    return {
-      async validateToken(
-        token: string,
-        action: string
-      ): Promise<{ valid: true } | { valid: false; error: string }> {
-        try {
-          const permissionsApi = await authClient.permissions(token)
-          if ('error' in permissionsApi) {
-            logger.warn('Token validation failed for action {action}: {error}', {
-              'event.name': 'auth.token.validation_failed',
-              action,
-              error: permissionsApi.error,
-            })
-            return { valid: false, error: 'Authorization failed' }
-          }
-
-          const result = await permissionsApi.authorizeAction({
-            action,
-            nodeContext: {
-              nodeId: config.node.name,
-              domains: config.node.domains,
-            },
-          })
-
-          if (!result.success) {
-            logger.warn('Authorization denied for action {action}: {errorType}', {
-              'event.name': 'auth.authorization.denied',
-              action,
-              'error.type': result.errorType,
-            })
-            return { valid: false, error: 'Authorization failed' }
-          }
-
-          if (!result.allowed) {
-            return { valid: false, error: 'Authorization failed' }
-          }
-
-          return { valid: true }
-        } catch (error) {
-          logger.error('Token validation error for action {action}: {error}', {
-            'event.name': 'auth.token.validation_error',
-            action,
-            error,
-          })
-          return { valid: false, error: 'Authorization failed' }
-        }
-      },
-    }
+  private buildValidator(): TokenValidator {
+    return buildTokenValidator({
+      authClient: this._authClient,
+      allowNoAuth: this.config.orchestrator?.allowNoAuth ?? false,
+      config: this.config,
+      logger: this.telemetry.logger,
+    })
   }
 
   private async mintNodeToken(
@@ -332,11 +277,82 @@ export class OrchestratorService extends CatalystService {
           'event.name': 'node.token.refreshed',
         })
       } catch (error) {
-        this.telemetry.logger.error('Failed to refresh node token: {error}', {
-          'event.name': 'node.token.refresh_failed',
-          error,
-        })
+        this.telemetry.logger.error`Failed to refresh node token: ${error}`
       }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Standalone token validator factory — exported for testing
+// ---------------------------------------------------------------------------
+
+interface BuildTokenValidatorOptions {
+  authClient: ReturnType<typeof newWebSocketRpcSession<AuthServiceApi>> | undefined
+  allowNoAuth: boolean
+  config: { node: { name: string; domains: string[] } }
+  logger: {
+    warn: (t: TemplateStringsArray, ...v: unknown[]) => void
+    error: (t: TemplateStringsArray, ...v: unknown[]) => void
+  }
+}
+
+export function buildTokenValidator({
+  authClient,
+  allowNoAuth,
+  config,
+  logger,
+}: BuildTokenValidatorOptions): TokenValidator {
+  if (!authClient) {
+    if (allowNoAuth) {
+      return {
+        async validateToken() {
+          return { valid: true }
+        },
+      }
+    }
+    // No auth configured — reject all tokens (fail-closed)
+    return {
+      async validateToken() {
+        return { valid: false, error: 'Auth not configured' }
+      },
+    }
+  }
+
+  return {
+    async validateToken(
+      token: string,
+      action: string
+    ): Promise<{ valid: true } | { valid: false; error: string }> {
+      try {
+        const permissionsApi = await authClient.permissions(token)
+        if ('error' in permissionsApi) {
+          logger.warn`Token validation failed for action ${action}: ${permissionsApi.error}`
+          return { valid: false, error: 'Authorization failed' }
+        }
+
+        const result = await permissionsApi.authorizeAction({
+          action,
+          nodeContext: {
+            nodeId: config.node.name,
+            domains: config.node.domains,
+          },
+        })
+
+        if (!result.success) {
+          logger.warn`Authorization denied for action ${action}: ${result.errorType}`
+          return { valid: false, error: 'Authorization failed' }
+        }
+
+        if (!result.allowed) {
+          return { valid: false, error: 'Authorization failed' }
+        }
+
+        return { valid: true }
+      } catch (error) {
+        logger.error`Token validation error for action ${action}: ${error}`
+        return { valid: false, error: 'Authorization failed' }
+      }
+    },
   }
 }
