@@ -6,6 +6,7 @@ export const DataChannelProtocolEnum = z.enum([
   'http:gql',
   'http:grpc',
   'tcp',
+  'media',
 ] as const)
 export type DataChannelProtocol = z.infer<typeof DataChannelProtocolEnum>
 
