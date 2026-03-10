@@ -67,9 +67,6 @@ export class LocalTokenManager implements TokenManager {
       'token.principal': options.principal,
       'token.entity_type': options.entity.type,
       'token.expires_at': new Date(decoded.exp * 1000).toISOString(),
-      jti: decoded.jti,
-      subject: options.subject,
-      principal: options.principal,
     })
 
     return token
@@ -82,7 +79,6 @@ export class LocalTokenManager implements TokenManager {
         'event.name': 'auth.token.revoked',
         'token.jti': options.jti,
         'revoke.method': 'jti',
-        jti: options.jti,
       })
     }
     if (options.san) {
@@ -91,7 +87,6 @@ export class LocalTokenManager implements TokenManager {
         'event.name': 'auth.token.revoked',
         'token.san': options.san,
         'revoke.method': 'san',
-        san: options.san,
       })
     }
   }
@@ -112,7 +107,6 @@ export class LocalTokenManager implements TokenManager {
         'event.name': 'auth.token.rejected',
         'token.jti': jti,
         reason: 'revoked',
-        jti,
       })
       return { valid: false, error: 'Token is revoked' }
     }

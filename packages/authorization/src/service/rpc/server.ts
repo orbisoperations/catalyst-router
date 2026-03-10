@@ -277,8 +277,6 @@ export class AuthRpcServer extends RpcTarget {
           'auth.allowed': result.type === 'evaluated' && result.allowed,
           'auth.decision': result.type === 'evaluated' ? result.decision : 'error',
           'auth.reasons': result.type === 'evaluated' ? result.reasons : [],
-          action: request.action,
-          allowed: result.type === 'evaluated' && result.allowed,
         })
 
         // Handle authorization result
