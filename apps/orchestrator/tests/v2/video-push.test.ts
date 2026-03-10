@@ -144,6 +144,45 @@ describe('Video push — post-commit notification', () => {
     expect(result.success).toBe(true)
   })
 
+  it('pushes catalog once per dispatch even under rapid succession', async () => {
+    await Promise.all([
+      bus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'cam-front', protocol: 'media' },
+      }),
+      bus.dispatch({
+        action: Actions.LocalRouteCreate,
+        data: { name: 'cam-rear', protocol: 'media' },
+      }),
+    ])
+
+    expect(notifier.pushCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT push catalog for peer HTTP-only route update', async () => {
+    await connectPeer(bus, peerBInfo)
+    notifier.pushCatalog.mockClear()
+
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerBInfo,
+        update: {
+          updates: [
+            {
+              action: 'add',
+              route: { name: 'api', protocol: 'http', endpoint: 'http://node-b:8080' },
+              nodePath: ['node-b'],
+              originNode: 'node-b',
+            },
+          ],
+        },
+      },
+    })
+
+    expect(notifier.pushCatalog).not.toHaveBeenCalled()
+  })
+
   it('does NOT push for Tick with no media route changes', async () => {
     await bus.dispatch({
       action: Actions.Tick,
@@ -228,6 +267,18 @@ describe('Video push — pushCurrentCatalog()', () => {
       'cam-front',
       'cam-rear',
     ])
+  })
+
+  it('pushes { streams: [] } when no media routes exist', async () => {
+    const transport = new MockPeerTransport()
+    const notifier = makeMockNotifier()
+    const bus = new OrchestratorBus({ config: configA, transport })
+
+    bus.setVideoNotifier(notifier)
+    await bus.pushCurrentCatalog()
+
+    expect(notifier.pushCatalog).toHaveBeenCalledOnce()
+    expect(notifier.pushCatalog).toHaveBeenCalledWith({ streams: [] })
   })
 
   it('does not throw when no notifier is set', async () => {
