@@ -200,45 +200,6 @@ describe('video-control HTTP handlers', () => {
     const response = await responsePromise
     expect(response.status).toBe(200)
   })
-
-  it('GET /streams returns empty array when getCatalog not provided (FR-010)', async () => {
-    const hooks = createVideoHooks({ dispatch, nodeId })
-
-    const response = await hooks.handler.request(
-      new Request('http://localhost/streams', { method: 'GET' })
-    )
-
-    expect(response.status).toBe(200)
-    const body = await response.json()
-    expect(body.streams).toEqual([])
-  })
-
-  it('GET /streams returns streams from catalog', async () => {
-    const catalog = {
-      streams: [
-        {
-          name: 'node-a/cam-front',
-          protocol: 'media',
-          source: 'local' as const,
-          sourceNode: 'node-a',
-        },
-      ],
-    }
-    const hooks = createVideoHooks({
-      dispatch,
-      nodeId,
-      getCatalog: () => catalog,
-    })
-
-    const response = await hooks.handler.request(
-      new Request('http://localhost/streams', { method: 'GET' })
-    )
-
-    expect(response.status).toBe(200)
-    const body = await response.json()
-    expect(body.streams).toHaveLength(1)
-    expect(body.streams[0].name).toBe('node-a/cam-front')
-  })
 })
 
 // ---------------------------------------------------------------------------

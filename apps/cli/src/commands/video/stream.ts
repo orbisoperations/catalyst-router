@@ -3,13 +3,11 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import {
   ListStreamsInputSchema,
-  GetStreamInputSchema,
   SubscribeStreamInputSchema,
   PlayStreamInputSchema,
 } from '../../types.js'
 import {
   listStreamsHandler,
-  getStreamHandler,
   subscribeStreamHandler,
   playStreamHandler,
 } from '../../handlers/video-stream-handlers.js'
@@ -62,57 +60,6 @@ export function streamCommands(): Command {
           process.exit(0)
         } else {
           console.error(chalk.red(`[error] Failed to list streams: ${result.error}`))
-          process.exit(1)
-        }
-      } catch (error) {
-        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
-        process.exit(1)
-      }
-    })
-
-  stream
-    .command('get')
-    .description('Get details of a specific stream')
-    .argument('<name>', 'Stream name')
-    .option('--token <token>', 'Auth token')
-    .action(async (name, options, cmd) => {
-      const globals = cmd.optsWithGlobals()
-      const validation = GetStreamInputSchema.safeParse({
-        name,
-        token: options.token || globals.token || process.env.CATALYST_AUTH_TOKEN,
-        videoUrl: globals.videoUrl,
-      })
-
-      if (!validation.success) {
-        console.error(chalk.red('Invalid input:'))
-        validation.error.issues.forEach((issue) => {
-          console.error(chalk.yellow(`- ${issue.path.join('.')}: ${issue.message}`))
-        })
-        process.exit(1)
-      }
-
-      try {
-        const result = await getStreamHandler(validation.data)
-
-        if (result.success) {
-          const s = result.data.stream
-          console.log(`${chalk.cyan('Name:')}        ${s.name}`)
-          console.log(`${chalk.cyan('Protocol:')}    ${s.protocol}`)
-          console.log(`${chalk.cyan('Endpoint:')}    ${s.endpoint || 'N/A'}`)
-          console.log(`${chalk.cyan('Source:')}      ${s.source}`)
-          console.log(`${chalk.cyan('Source Node:')} ${s.sourceNode}`)
-          if (s.metadata && Object.keys(s.metadata).length > 0) {
-            console.log(`${chalk.cyan('Metadata:')}`)
-            for (const [key, value] of Object.entries(s.metadata)) {
-              console.log(`  ${key}: ${value}`)
-            }
-          }
-          if (s.nodePath && s.nodePath.length > 0) {
-            console.log(`${chalk.cyan('Node Path:')}   ${s.nodePath.join(' -> ')}`)
-          }
-          process.exit(0)
-        } else {
-          console.error(chalk.red(`[error] ${result.error}`))
           process.exit(1)
         }
       } catch (error) {

@@ -140,6 +140,16 @@ namespace CATALYST {
         resource: [Gateway, AdminPanel]
     };
 
+    action STREAM_DISCOVER appliesTo {
+        principal: [ADMIN, DATA_CUSTODIAN],
+        resource: [Route, AdminPanel]
+    };
+
+    action STREAM_SUBSCRIBE appliesTo {
+        principal: [ADMIN, DATA_CUSTODIAN, USER],
+        resource: [Route, AdminPanel]
+    };
+
     action MANAGE appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
         resource: AdminPanel

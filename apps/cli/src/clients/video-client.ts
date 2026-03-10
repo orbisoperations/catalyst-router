@@ -29,7 +29,7 @@ export interface SubscribeResponse {
 export interface VideoServiceApi {
   listStreams(
     query?: { scope?: string; sourceNode?: string; protocol?: string },
-    token?: string
+    token: string
   ): Promise<{ streams: StreamEntry[] }>
   subscribe(streamName: string, token: string): Promise<SubscribeResponse>
   health(): Promise<{ status: string }>
@@ -62,19 +62,9 @@ export function createVideoClient(url?: string): VideoServiceApi {
       if (query?.sourceNode) params.set('sourceNode', query.sourceNode)
       if (query?.protocol) params.set('protocol', query.protocol)
       const qs = params.toString()
-
-      if (token) {
-        const endpoint = `${baseUrl}/video-stream/streams${qs ? `?${qs}` : ''}`
-        const res = await fetch(endpoint, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(10000),
-        })
-        if (!res.ok) throw await httpError(res)
-        return res.json()
-      }
-
       const endpoint = `${baseUrl}/streams${qs ? `?${qs}` : ''}`
       const res = await fetch(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(10000),
       })
       if (!res.ok) throw await httpError(res)

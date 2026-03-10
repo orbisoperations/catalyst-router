@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { Hono } from 'hono'
 import { SpanStatusCode } from '@opentelemetry/api'
 import type { Tracer } from '@opentelemetry/api'
-import { Action as AuthAction } from '@catalyst/authorization'
 import { getLogger } from '@catalyst/telemetry'
 import type { StreamEntry } from './bus-client.js'
 
@@ -86,18 +85,6 @@ interface VideoAction {
 }
 
 // ---------------------------------------------------------------------------
-// Auth service interface
-// ---------------------------------------------------------------------------
-
-interface AuthService {
-  evaluate(request: {
-    token: string
-    action: string
-    nodeContext: { nodeId: string; domains: string[] }
-  }): Promise<{ success: boolean; allowed?: boolean }>
-}
-
-// ---------------------------------------------------------------------------
 // Deps interface
 // ---------------------------------------------------------------------------
 
@@ -105,8 +92,6 @@ interface VideoHooksDeps {
   dispatch: (action: VideoAction) => Promise<{ success: boolean }>
   getCatalog?: () => { streams: StreamEntry[] }
   nodeId: string
-  domains?: string[]
-  auth?: AuthService
   debounceMs?: number
   isReady?: () => boolean
   tracer?: Tracer
@@ -117,16 +102,7 @@ interface VideoHooksDeps {
 // ---------------------------------------------------------------------------
 
 export function createVideoHooks(deps: VideoHooksDeps) {
-  const {
-    dispatch,
-    getCatalog,
-    nodeId,
-    domains = [],
-    auth,
-    debounceMs = 500,
-    isReady,
-    tracer,
-  } = deps
+  const { dispatch, getCatalog, nodeId, debounceMs = 500, isReady, tracer } = deps
 
   const trackedPaths = new Set<string>()
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -353,46 +329,6 @@ export function createVideoHooks(deps: VideoHooksDeps) {
       return c.json({ error: 'Internal error' }, 500)
     }
     return c.json({ ok: true })
-  })
-
-  // T034: /streams uses getCatalog instead of getState
-  // FR-010: Returns empty array (not error) when catalog not available
-  handler.get('/streams', async (c) => {
-    if (auth) {
-      const authHeader = c.req.header('Authorization')
-      if (!authHeader) {
-        return c.json({ error: 'Authorization header required' }, 401)
-      }
-      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
-      try {
-        const result = await auth.evaluate({
-          token,
-          action: AuthAction.STREAM_DISCOVER,
-          nodeContext: { nodeId, domains },
-        })
-        if (!result.success || !result.allowed) {
-          return c.json({ error: 'Forbidden' }, 403)
-        }
-      } catch {
-        return c.json({ error: 'Forbidden' }, 403)
-      }
-    }
-
-    const scope = c.req.query('scope')
-    const sourceNode = c.req.query('sourceNode')
-    const protocol = c.req.query('protocol')
-
-    const validScopes = ['all', 'local', 'remote']
-    const resolvedScope =
-      scope && validScopes.includes(scope) ? (scope as CatalogQuery['scope']) : 'all'
-
-    const catalog = getCatalog ? getCatalog() : { streams: [] }
-    const streams = queryStreamCatalog(catalog.streams, {
-      scope: resolvedScope,
-      sourceNode: sourceNode || undefined,
-      protocol: protocol || undefined,
-    })
-    return c.json({ streams })
   })
 
   function cleanup(): void {

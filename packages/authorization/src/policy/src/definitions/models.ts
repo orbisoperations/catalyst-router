@@ -87,6 +87,8 @@ export enum Action {
   ROUTE_LIST = 'ROUTE_LIST',
   IBGP_LIST = 'IBGP_LIST',
   GATEWAY_CONFIG_UPDATE = 'GATEWAY_CONFIG_UPDATE',
+  STREAM_DISCOVER = 'STREAM_DISCOVER',
+  STREAM_SUBSCRIBE = 'STREAM_SUBSCRIBE',
 }
 
 /**
@@ -112,6 +114,12 @@ export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     Action.PEER_LIST,
     Action.IBGP_LIST,
   ],
-  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE, Action.ROUTE_LIST],
-  [Role.USER]: [Action.LOGIN, Action.PEER_LIST, Action.ROUTE_LIST],
+  [Role.DATA_CUSTODIAN]: [
+    Action.ROUTE_CREATE,
+    Action.ROUTE_DELETE,
+    Action.ROUTE_LIST,
+    Action.STREAM_DISCOVER,
+    Action.STREAM_SUBSCRIBE,
+  ],
+  [Role.USER]: [Action.LOGIN, Action.PEER_LIST, Action.ROUTE_LIST, Action.STREAM_SUBSCRIBE],
 }
