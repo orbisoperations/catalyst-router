@@ -7,10 +7,12 @@ import {
 } from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
 import { OrchestratorBus } from './bus.js'
-import type { GatewayClient } from './bus.js'
+import type { GatewayClient, EnvoyClient, BusPortAllocator } from './bus.js'
 import { TickManager } from './tick-manager.js'
 import { ReconnectManager } from './reconnect.js'
 import { createGatewayClient } from './gateway-client.js'
+import { createEnvoyClient } from './envoy-client.js'
+import { createPortAllocator } from '@catalyst/envoy-service'
 import type { PeerTransport } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
 
@@ -22,6 +24,10 @@ export interface OrchestratorServiceV2Options {
   journalPath?: string
   /** Optional gateway client override (for testing). Auto-created from config if omitted. */
   gatewayClient?: GatewayClient
+  /** Optional envoy client override (for testing). Auto-created from config if omitted. */
+  envoyClient?: EnvoyClient
+  /** Optional port allocator override (for testing). Auto-created from config if omitted. */
+  portAllocator?: BusPortAllocator
 }
 
 /**
@@ -70,6 +76,14 @@ export class OrchestratorServiceV2 {
         ? createGatewayClient(opts.config.gqlGatewayConfig.endpoint)
         : undefined)
 
+    const envoyConfig = opts.config.envoyConfig
+    const envoyClient =
+      opts.envoyClient ??
+      (envoyConfig?.endpoint ? createEnvoyClient(envoyConfig.endpoint) : undefined)
+    const portAllocator =
+      opts.portAllocator ??
+      (envoyConfig?.portRange ? createPortAllocator(envoyConfig.portRange) : undefined)
+
     this.bus = new OrchestratorBus({
       config: opts.config,
       transport: opts.transport,
@@ -77,6 +91,8 @@ export class OrchestratorServiceV2 {
       nodeToken: opts.nodeToken,
       initialState: tempRib.state,
       gatewayClient,
+      envoyClient,
+      portAllocator,
     })
 
     // 4. Create the tick manager — drives hold-timer checks on a periodic interval.
