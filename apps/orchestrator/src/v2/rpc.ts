@@ -201,8 +201,8 @@ export async function createIBGPClient(
     if (peerInfo.name !== peerIdentity) {
       logger.warn('iBGP identity mismatch: JWT sub={jwtSub} but peerInfo.name={peerName}', {
         'event.name': 'peer.auth.identity_mismatch',
-        'jwt.sub': peerIdentity,
-        'peer.name': peerInfo.name,
+        'catalyst.orchestrator.jwt.sub': peerIdentity,
+        'catalyst.orchestrator.peer.name': peerInfo.name,
       })
       return {
         success: false,
@@ -240,7 +240,7 @@ export async function createIBGPClient(
           if (entry.nodePath.length > 0 && entry.nodePath[0] !== peerIdentity) {
             logger.warn('iBGP nodePath[0] mismatch: JWT sub={jwtSub} but nodePath[0]={nodePath0}', {
               'event.name': 'peer.auth.nodepath_mismatch',
-              'jwt.sub': peerIdentity,
+              'catalyst.orchestrator.jwt.sub': peerIdentity,
               'route.nodepath_0': entry.nodePath[0],
             })
             return {

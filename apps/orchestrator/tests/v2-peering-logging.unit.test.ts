@@ -21,14 +21,14 @@ describe('V2 peering & reconnection logging', () => {
     it('should log peer.reconnect.scheduled with reconnect.attempt and reconnect.delay_ms', () => {
       const src = readSource('reconnect.ts')
       expect(src).toContain("'event.name': 'peer.reconnect.scheduled'")
-      expect(src).toContain("'reconnect.attempt':")
-      expect(src).toContain("'reconnect.delay_ms':")
+      expect(src).toContain("'catalyst.orchestrator.reconnect.attempt':")
+      expect(src).toContain("'catalyst.orchestrator.reconnect.delay_ms':")
     })
 
     it('should log peer.reconnect.succeeded with reconnect.attempt', () => {
       const src = readSource('reconnect.ts')
       expect(src).toContain("'event.name': 'peer.reconnect.succeeded'")
-      expect(src).toContain("'reconnect.attempt':")
+      expect(src).toContain("'catalyst.orchestrator.reconnect.attempt':")
     })
 
     it('should log peer.reconnect.failed with reconnect.attempt', () => {
@@ -39,7 +39,7 @@ describe('V2 peering & reconnection logging', () => {
         src.indexOf('peer.reconnect.failed'),
         src.indexOf('peer.reconnect.failed') + 200
       )
-      expect(failedBlock).toContain("'reconnect.attempt':")
+      expect(failedBlock).toContain("'catalyst.orchestrator.reconnect.attempt':")
     })
   })
 

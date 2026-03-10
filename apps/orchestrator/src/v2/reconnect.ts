@@ -50,9 +50,9 @@ export class ReconnectManager {
 
     logger.info('Scheduling reconnect to {peerName} (attempt {attempt}, delay {delayMs}ms)', {
       'event.name': 'peer.reconnect.scheduled',
-      'peer.name': peer.name,
-      'reconnect.attempt': attempt,
-      'reconnect.delay_ms': delay,
+      'catalyst.orchestrator.peer.name': peer.name,
+      'catalyst.orchestrator.reconnect.attempt': attempt,
+      'catalyst.orchestrator.reconnect.delay_ms': delay,
     })
 
     const timer = setTimeout(async () => {
@@ -60,7 +60,7 @@ export class ReconnectManager {
       if (this.nodeToken === undefined) {
         logger.warn('Skipping reconnect to {peerName}: no node token available', {
           'event.name': 'peer.reconnect.skipped',
-          'peer.name': peer.name,
+          'catalyst.orchestrator.peer.name': peer.name,
           reason: 'no_token',
         })
         return
@@ -69,8 +69,8 @@ export class ReconnectManager {
         await this.transport.openPeer(peer, this.nodeToken)
         logger.info('Reconnected to {peerName} after {attempt} attempt(s)', {
           'event.name': 'peer.reconnect.succeeded',
-          'peer.name': peer.name,
-          'reconnect.attempt': attempt,
+          'catalyst.orchestrator.peer.name': peer.name,
+          'catalyst.orchestrator.reconnect.attempt': attempt,
         })
         // Success — dispatch InternalProtocolConnected to trigger full route sync
         await this.dispatchFn({
@@ -81,8 +81,8 @@ export class ReconnectManager {
       } catch (error) {
         logger.warn('Reconnect to {peerName} failed (attempt {attempt}), will retry', {
           'event.name': 'peer.reconnect.failed',
-          'peer.name': peer.name,
-          'reconnect.attempt': attempt,
+          'catalyst.orchestrator.peer.name': peer.name,
+          'catalyst.orchestrator.reconnect.attempt': attempt,
           error,
         })
         // Failed — schedule next attempt

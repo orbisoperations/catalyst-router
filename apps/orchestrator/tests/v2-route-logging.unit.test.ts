@@ -21,11 +21,11 @@ describe('V2 route exchange & convergence logging', () => {
     it('should log route.table.changed with route.added, route.removed, route.modified, route.trigger, route.total', () => {
       const src = readSource('bus.ts')
       expect(src).toContain("'event.name': 'route.table.changed'")
-      expect(src).toContain("'route.added':")
-      expect(src).toContain("'route.removed':")
-      expect(src).toContain("'route.modified':")
-      expect(src).toContain("'route.trigger':")
-      expect(src).toContain("'route.total':")
+      expect(src).toContain("'catalyst.orchestrator.route.added':")
+      expect(src).toContain("'catalyst.orchestrator.route.removed':")
+      expect(src).toContain("'catalyst.orchestrator.route.modified':")
+      expect(src).toContain("'catalyst.orchestrator.route.trigger':")
+      expect(src).toContain("'catalyst.orchestrator.route.total':")
     })
   })
 
@@ -42,7 +42,7 @@ describe('V2 route exchange & convergence logging', () => {
         src.indexOf('route.sync.empty'),
         src.indexOf('route.sync.empty') + 200
       )
-      expect(emptyBlock).toContain("'peer.name':")
+      expect(emptyBlock).toContain("'catalyst.orchestrator.peer.name':")
     })
   })
 
@@ -59,8 +59,8 @@ describe('V2 route exchange & convergence logging', () => {
         src.indexOf('route.sync.completed'),
         src.indexOf('route.sync.completed') + 200
       )
-      expect(completedBlock).toContain("'peer.name':")
-      expect(completedBlock).toContain("'route.count':")
+      expect(completedBlock).toContain("'catalyst.orchestrator.peer.name':")
+      expect(completedBlock).toContain("'catalyst.orchestrator.route.count':")
     })
   })
 })

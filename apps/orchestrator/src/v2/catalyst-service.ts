@@ -168,7 +168,7 @@ export class OrchestratorService extends CatalystService {
 
     this.telemetry.logger.info('Orchestrator v2 running as {nodeName}', {
       'event.name': 'orchestrator.started',
-      'node.name': this.config.node.name,
+      'catalyst.orchestrator.node.name': this.config.node.name,
     })
   }
 
@@ -255,7 +255,7 @@ export class OrchestratorService extends CatalystService {
     const { endpoint, systemToken } = this.config.orchestrator.auth
     this.telemetry.logger.info('Connecting to auth service at {endpoint}', {
       'event.name': 'node.token.mint_connecting',
-      'auth.endpoint': endpoint,
+      'catalyst.orchestrator.auth.endpoint': endpoint,
     })
 
     try {
@@ -285,7 +285,7 @@ export class OrchestratorService extends CatalystService {
 
       this.telemetry.logger.info('Node token minted for {nodeName} (expires {expiresAt})', {
         'event.name': 'node.token.minted',
-        'node.name': this.config.node.name,
+        'catalyst.orchestrator.node.name': this.config.node.name,
         'token.expires_at': this._tokenExpiresAt.toISOString(),
       })
 
