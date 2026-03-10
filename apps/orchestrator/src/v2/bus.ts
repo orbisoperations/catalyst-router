@@ -11,8 +11,11 @@ import {
   type DataChannelDefinition,
 } from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
+import { getLogger } from '@catalyst/telemetry'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'bus'])
 
 // v2-specific StateResult — uses v2 RouteTable (no `external` field)
 export type StateResult =
@@ -112,6 +115,10 @@ export class OrchestratorBus {
       const peerName = action.data.peerInfo.name
       const peer = connectedPeers.find((p) => p.name === peerName)
       if (peer !== undefined) {
+        logger.info('Peer {peerName} connected, syncing full route table', {
+          'event.name': 'peer.sync.started',
+          'peer.name': peerName,
+        })
         await this.syncRoutesToPeer(peer, state)
       }
       return
@@ -127,6 +134,10 @@ export class OrchestratorBus {
           await this.transport.sendUpdate(peer, { updates })
         }
       } catch {
+        logger.warn('Failed to send route updates to {peerName}', {
+          'event.name': 'peer.sync.failed',
+          'peer.name': peer.name,
+        })
         // Fire-and-forget: one peer failure must not affect others.
       }
     })
@@ -204,6 +215,10 @@ export class OrchestratorBus {
         try {
           await this.transport.sendKeepalive(peer)
           this.lastKeepaliveSent.set(peer.name, now)
+          logger.debug('Keepalive sent to {peerName}', {
+            'event.name': 'peer.keepalive.sent',
+            'peer.name': peer.name,
+          })
         } catch {
           // Fire-and-forget: keepalive failure is not fatal.
         }
