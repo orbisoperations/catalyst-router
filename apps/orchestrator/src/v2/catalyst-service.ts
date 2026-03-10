@@ -284,12 +284,18 @@ export class OrchestratorService extends CatalystService {
       }
 
       const result = await videoSession.getVideoClient(dispatchCapability)
+      if (!result.success) {
+        this.telemetry.logger.warn`Video service capability exchange failed`
+        return
+      }
       this._videoClient = result.client
 
       // Build concrete VideoNotifier wrapping the RPC capability
       const notifier: VideoNotifier = {
         pushCatalog: async (catalog) => {
-          await this._videoClient!.updateStreamCatalog(catalog)
+          const client = this._videoClient
+          if (!client) return
+          await client.updateStreamCatalog(catalog)
         },
       }
 
