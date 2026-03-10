@@ -6,7 +6,7 @@ import type { CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { CatalystNodeBus } from './orchestrator.js'
-import { createDashboardRoutes } from './routes/dashboard.js'
+import { createDashboardRoutes } from '../routes/dashboard.js'
 
 /**
  * Auth Service RPC API for token minting.
