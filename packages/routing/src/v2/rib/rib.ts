@@ -294,11 +294,16 @@ export class RoutingInformationBase {
     if (idx === -1) return noChange(state)
 
     const existing = state.internal.peers[idx]
+    // Reset holdTime to default on reconnect so it can be re-negotiated
+    // via the subsequent InternalProtocolOpen exchange.
+    const now = Date.now()
     const updated: PeerRecord = {
       ...existing,
       connectionStatus: 'connected',
-      lastConnected: new Date(),
-      lastReceived: Date.now(),
+      lastConnected: now,
+      lastReceived: now,
+      holdTime: 90_000,
+      lastSent: 0,
     }
     const peers = state.internal.peers.map((p, i) => (i === idx ? updated : p))
     const newState: RouteTable = {
