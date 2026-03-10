@@ -61,6 +61,11 @@ export const OrchestratorConfigSchema = z.object({
       portRange: z.array(PortEntrySchema).min(1),
     })
     .optional(),
+  /**
+   * When true, allow all operations when no auth service is configured.
+   * Defaults to false (fail-closed). Only use in development/testing.
+   */
+  allowNoAuth: z.boolean().default(false),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
