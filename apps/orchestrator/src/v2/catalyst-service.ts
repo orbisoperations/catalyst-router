@@ -7,6 +7,8 @@ import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { OrchestratorServiceV2 } from './service.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
+import { HttpPeerTransport } from './http-transport.js'
+import type { PeerTransport } from './transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
 import { createDashboardRoutes } from '../routes/dashboard.js'
@@ -118,13 +120,17 @@ export class OrchestratorService extends CatalystService {
       )
     }
 
-    // Build the transport and v2 service
-    const transport = new WebSocketPeerTransport({
-      localNodeInfo: {
-        name: this.config.node.name,
-        domains: this.config.node.domains,
-      },
-    })
+    // Build the transport and v2 service.
+    // Default to WebSocket; HTTP available for environments without persistent connections.
+    const transportType = process.env.CATALYST_TRANSPORT_TYPE === 'http' ? 'http' : 'ws'
+    const localNodeInfo = {
+      name: this.config.node.name,
+      domains: this.config.node.domains,
+    }
+    const transport: PeerTransport =
+      transportType === 'http'
+        ? new HttpPeerTransport({ localNodeInfo })
+        : new WebSocketPeerTransport({ localNodeInfo })
 
     const orchestratorConfig = {
       node: {
@@ -138,8 +144,7 @@ export class OrchestratorService extends CatalystService {
       config: orchestratorConfig,
       transport,
       nodeToken: this._nodeToken,
-      // TODO: add journalPath to OrchestratorConfigSchema for persistent journal
-      // journalPath: undefined → uses in-memory journal
+      journal: this.config.orchestrator?.journal,
     })
 
     // Build the token validator
