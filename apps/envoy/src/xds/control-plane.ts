@@ -205,7 +205,7 @@ export class XdsControlPlane {
             'event.name': 'xds.client.nacked',
             'xds.resource_type': typeUrl,
             'xds.nonce': request.response_nonce,
-            'error.message': request.error_detail.message,
+            'exception.message': request.error_detail.message,
             typeUrl,
             nonce: request.response_nonce,
             errorMessage: request.error_detail.message,
@@ -237,7 +237,7 @@ export class XdsControlPlane {
       } catch (err) {
         this.logger.error('Failed to decode DiscoveryRequest: {error}', {
           'event.name': 'xds.request.decode_failed',
-          'error.message': String(err),
+          'exception.message': String(err),
           error: String(err),
         })
       }
@@ -258,7 +258,7 @@ export class XdsControlPlane {
       if ((err as grpc.ServiceError).code !== grpc.status.CANCELLED) {
         this.logger.error('ADS stream error: {error}', {
           'event.name': 'xds.stream.error',
-          'error.message': String(err),
+          'exception.message': String(err),
           error: String(err),
         })
       }

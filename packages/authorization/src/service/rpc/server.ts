@@ -105,12 +105,10 @@ export class AuthRpcServer extends RpcTarget {
     }
 
     if (autorizedResult?.type === 'evaluated' && !autorizedResult.allowed) {
-      logger.warn('Permission denied: decision={decision}, reasons={reasons}', {
+      logger.warn('Permission denied: decision={auth.decision}, reasons={auth.reasons}', {
         'event.name': 'auth.permission.denied',
         'auth.decision': autorizedResult.decision,
         'auth.reasons': autorizedResult.reasons,
-        decision: autorizedResult.decision,
-        reasons: autorizedResult.reasons,
       })
       return { error: 'Permission denied: ADMIN principal required' }
     }
@@ -229,10 +227,9 @@ export class AuthRpcServer extends RpcTarget {
     // Verify the token
     const auth = await this.tokenFactory.verify(token)
     if (!auth.valid) {
-      logger.warn('Token verification failed: {error}', {
+      logger.warn('Token verification failed: {exception.message}', {
         'event.name': 'auth.token.verification_failed',
-        'error.message': auth.error,
-        error: auth.error,
+        'exception.message': auth.error,
       })
       return { error: 'Invalid token' }
     }
@@ -271,7 +268,7 @@ export class AuthRpcServer extends RpcTarget {
           context: {},
         })
 
-        logger.info('Authorization check: action={action} allowed={allowed}', {
+        logger.info('Authorization check: action={auth.action} allowed={auth.allowed}', {
           'event.name': 'auth.policy.evaluated',
           'auth.action': request.action,
           'auth.allowed': result.type === 'evaluated' && result.allowed,
@@ -293,12 +290,10 @@ export class AuthRpcServer extends RpcTarget {
         }
 
         if (result.type === 'evaluated' && !result.allowed) {
-          logger.warn('Permission denied for action: {action}, reasons: {reasons}', {
+          logger.warn('Permission denied for action: {auth.action}, reasons: {auth.reasons}', {
             'event.name': 'auth.authorization.denied',
             'auth.action': request.action,
             'auth.reasons': result.reasons.join(', '),
-            action: request.action,
-            reasons: result.reasons.join(', '),
           })
           return {
             success: false,

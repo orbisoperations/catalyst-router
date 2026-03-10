@@ -63,7 +63,7 @@ export class GatewayRpcServer extends RpcTarget {
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error('Config update failed: {errorMessage}', {
         'event.name': 'gateway.config.failed',
-        'error.message': message,
+        'exception.message': message,
         errorMessage: message,
       })
       return {

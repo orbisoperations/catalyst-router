@@ -43,7 +43,7 @@ describe('Gateway federation logging', () => {
       const surroundingFailure = src.slice(Math.max(0, failureIdx - 200), failureIdx + 200)
       expect(surroundingFailure).toContain("'event.name': 'gateway.subgraph.sdl_validated'")
       expect(surroundingFailure).toContain("'subgraph.name':")
-      expect(surroundingFailure).toContain("'error.message':")
+      expect(surroundingFailure).toContain("'exception.message':")
     })
 
     it('should have both success and failure paths for sdl_validated', () => {
