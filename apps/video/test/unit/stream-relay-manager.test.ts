@@ -1,3 +1,4 @@
+import type { Meter } from '@opentelemetry/api'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { StreamRelayManager } from '../../src/stream-relay-manager.js'
 
@@ -496,5 +497,264 @@ describe('StreamRelayManager - startGracePeriod', () => {
 
     vi.advanceTimersByTime(DEFAULT_GRACE_PERIOD_MS + 1)
     expect(callbacks.onRelayTeardown).toHaveBeenCalledWith(ROUTE_KEY)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Telemetry metrics
+// ---------------------------------------------------------------------------
+
+function createSpyMeter() {
+  const instruments: Record<
+    string,
+    { add: ReturnType<typeof vi.fn>; record: ReturnType<typeof vi.fn> }
+  > = {}
+
+  const createCounterSpy = vi.fn((name: string) => {
+    const spy = { add: vi.fn() }
+    instruments[name] = { add: spy.add, record: vi.fn() }
+    return spy
+  })
+
+  const createHistogramSpy = vi.fn((name: string) => {
+    const spy = { record: vi.fn() }
+    instruments[name] = { add: vi.fn(), record: spy.record }
+    return spy
+  })
+
+  const createUpDownCounterSpy = vi.fn((name: string) => {
+    const spy = { add: vi.fn() }
+    instruments[name] = { add: spy.add, record: vi.fn() }
+    return spy
+  })
+
+  const meter = {
+    createCounter: createCounterSpy,
+    createHistogram: createHistogramSpy,
+    createUpDownCounter: createUpDownCounterSpy,
+    createObservableCounter: vi.fn(() => ({})),
+    createObservableGauge: vi.fn(() => ({})),
+    createObservableUpDownCounter: vi.fn(() => ({})),
+    createGauge: vi.fn(() => ({})),
+  } as unknown as Meter
+
+  return { meter, instruments, createCounterSpy, createHistogramSpy, createUpDownCounterSpy }
+}
+
+describe('StreamRelayManager - telemetry metrics', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('creates all 5 instruments when meter is provided', () => {
+    const { meter, createCounterSpy, createHistogramSpy, createUpDownCounterSpy } = createSpyMeter()
+    new StreamRelayManager({ relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS }, makeCallbacks(), meter)
+
+    expect(createUpDownCounterSpy).toHaveBeenCalledWith(
+      'video.relay.active_sessions',
+      expect.objectContaining({ unit: '{session}' })
+    )
+    expect(createUpDownCounterSpy).toHaveBeenCalledWith(
+      'video.relay.active_viewers',
+      expect.objectContaining({ unit: '{viewer}' })
+    )
+    expect(createCounterSpy).toHaveBeenCalledWith(
+      'video.relay.starts',
+      expect.objectContaining({ unit: '{start}' })
+    )
+    expect(createCounterSpy).toHaveBeenCalledWith(
+      'video.relay.teardowns',
+      expect.objectContaining({ unit: '{teardown}' })
+    )
+    expect(createHistogramSpy).toHaveBeenCalledWith(
+      'video.relay.session.duration',
+      expect.objectContaining({ unit: 's' })
+    )
+  })
+
+  it('addViewer new session records active_sessions +1, active_viewers +1, starts +1 with route_key', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    await manager.addViewer(ROUTE_KEY)
+
+    expect(instruments['video.relay.active_sessions'].add).toHaveBeenCalledWith(1)
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(1)
+    expect(instruments['video.relay.starts'].add).toHaveBeenCalledWith(1, {
+      'video.relay.route_key': ROUTE_KEY,
+    })
+  })
+
+  it('addViewer existing session records only active_viewers +1', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    await manager.addViewer(ROUTE_KEY)
+    // reset spies after the first call
+    instruments['video.relay.active_sessions'].add.mockClear()
+    instruments['video.relay.active_viewers'].add.mockClear()
+    instruments['video.relay.starts'].add.mockClear()
+
+    await manager.addViewer(ROUTE_KEY)
+
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(1)
+    expect(instruments['video.relay.active_sessions'].add).not.toHaveBeenCalled()
+    expect(instruments['video.relay.starts'].add).not.toHaveBeenCalled()
+  })
+
+  it('removeViewer records active_viewers -1', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    await manager.addViewer(ROUTE_KEY)
+    await manager.addViewer(ROUTE_KEY)
+    instruments['video.relay.active_viewers'].add.mockClear()
+
+    manager.removeViewer(ROUTE_KEY)
+
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(-1)
+  })
+
+  it('grace period teardown records active_sessions -1, teardowns +1, session.duration', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    await manager.addViewer(ROUTE_KEY)
+    manager.removeViewer(ROUTE_KEY)
+
+    instruments['video.relay.active_sessions'].add.mockClear()
+    instruments['video.relay.teardowns'].add.mockClear()
+
+    vi.advanceTimersByTime(DEFAULT_GRACE_PERIOD_MS + 1)
+
+    expect(instruments['video.relay.active_sessions'].add).toHaveBeenCalledWith(-1)
+    expect(instruments['video.relay.teardowns'].add).toHaveBeenCalledWith(1)
+    expect(instruments['video.relay.session.duration'].record).toHaveBeenCalledWith(
+      expect.any(Number)
+    )
+  })
+
+  it('onRouteWithdrawn records teardown metrics including active_viewers decrement', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    await manager.addViewer(ROUTE_KEY)
+    await manager.addViewer(ROUTE_KEY)
+    instruments['video.relay.active_sessions'].add.mockClear()
+    instruments['video.relay.active_viewers'].add.mockClear()
+    instruments['video.relay.teardowns'].add.mockClear()
+
+    await manager.onRouteWithdrawn(ROUTE_KEY)
+
+    expect(instruments['video.relay.active_sessions'].add).toHaveBeenCalledWith(-1)
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(-2)
+    expect(instruments['video.relay.teardowns'].add).toHaveBeenCalledWith(1)
+    expect(instruments['video.relay.session.duration'].record).toHaveBeenCalledWith(
+      expect.any(Number)
+    )
+  })
+
+  it('adopt new session records active_sessions +1, active_viewers +viewerCount, starts +1', () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    manager.adopt('node-b/cam-front', 3)
+
+    expect(instruments['video.relay.active_sessions'].add).toHaveBeenCalledWith(1)
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(3)
+    expect(instruments['video.relay.starts'].add).toHaveBeenCalledWith(1, {
+      'video.relay.route_key': 'node-b/cam-front',
+    })
+  })
+
+  it('adopt existing session records only active_viewers delta', () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    manager.adopt('node-b/cam-front', 2)
+    instruments['video.relay.active_sessions'].add.mockClear()
+    instruments['video.relay.active_viewers'].add.mockClear()
+    instruments['video.relay.starts'].add.mockClear()
+
+    manager.adopt('node-b/cam-front', 5)
+
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(3) // 5 - 2 = 3
+    expect(instruments['video.relay.active_sessions'].add).not.toHaveBeenCalled()
+    expect(instruments['video.relay.starts'].add).not.toHaveBeenCalled()
+  })
+
+  it('teardownAll records per-session teardown metrics including active_viewers', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    await manager.addViewer('node-a/cam-front')
+    await manager.addViewer('node-a/cam-front') // 2 viewers on first
+    await manager.addViewer('node-b/cam-rear') // 1 viewer on second
+    instruments['video.relay.active_sessions'].add.mockClear()
+    instruments['video.relay.active_viewers'].add.mockClear()
+    instruments['video.relay.teardowns'].add.mockClear()
+
+    await manager.teardownAll()
+
+    expect(instruments['video.relay.active_sessions'].add).toHaveBeenCalledTimes(2)
+    expect(instruments['video.relay.active_sessions'].add).toHaveBeenCalledWith(-1)
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(-2)
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(-1)
+    expect(instruments['video.relay.teardowns'].add).toHaveBeenCalledTimes(2)
+    expect(instruments['video.relay.session.duration'].record).toHaveBeenCalledTimes(2)
+  })
+
+  it('startGracePeriod decrements active_viewers to zero', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const manager = new StreamRelayManager(
+      { relayGracePeriodMs: DEFAULT_GRACE_PERIOD_MS },
+      makeCallbacks(),
+      meter
+    )
+
+    await manager.addViewer(ROUTE_KEY)
+    await manager.addViewer(ROUTE_KEY)
+    await manager.addViewer(ROUTE_KEY) // 3 viewers
+    instruments['video.relay.active_viewers'].add.mockClear()
+
+    manager.startGracePeriod(ROUTE_KEY)
+
+    expect(instruments['video.relay.active_viewers'].add).toHaveBeenCalledWith(-3)
   })
 })
