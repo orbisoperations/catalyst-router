@@ -274,9 +274,23 @@ export class GatewayGraphqlServer {
             throw new Error('Service returned empty or invalid SDL')
           }
 
+          this.logger.info('SDL validated for {serviceName}', {
+            'event.name': 'gateway.subgraph.sdl_validated',
+            'subgraph.name': url,
+            valid: true,
+            serviceName: url,
+          })
           span.end()
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error)
+          this.logger.warn('SDL validation failed for {serviceName}: {error}', {
+            'event.name': 'gateway.subgraph.sdl_validated',
+            'subgraph.name': url,
+            valid: false,
+            'error.message': message,
+            serviceName: url,
+            error: message,
+          })
           span.recordException(error as Error)
           span.setStatus({
             code: SpanStatusCode.ERROR,
