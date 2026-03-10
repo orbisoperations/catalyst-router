@@ -163,9 +163,9 @@ encounter throughout this document.
 
 This section walks through the process of bringing an organization onto
 Catalyst, from initial workspace provisioning through to live data flowing
-between sites. We'll use a concrete example throughout: a defense
-organization deploying Catalyst to connect sensor feeds across three
-locations.
+between sites. We'll use a concrete example throughout: an organization
+deploying Catalyst to connect sensor feeds across three globally
+distributed data centers.
 
 == Step 1: Provisioning a Workspace
 
@@ -240,9 +240,8 @@ and no peers. It's a router with nothing to route.
 == Step 3: Connecting a Sensor (Registering a Data Channel)
 
 Now the organization connects its first data source. In our example, this
-is a Zenoh router that aggregates sensor feeds — military unit positions
-in NATO 2525C format (Cursor on Target), published by field emulators at
-locations like Wiesbaden and Virginia.
+is a Zenoh router that aggregates sensor feeds published by devices at
+globally distributed data centers.
 
 The Zenoh router runs alongside Node A and publishes data on TCP port
 7447. To make this data available through the Catalyst mesh, the operator
@@ -411,8 +410,8 @@ the proxies treat it as raw TCP, preserving every byte.
 
 From the TAK adapter consumer's perspective, it's connecting to a Zenoh
 router at `tcp/envoy-proxy-c:10000`. It has no knowledge of Node A or
-Node B. It receives NATO 2525C CoT events — infantry positions from
-Wiesbaden, armor movements from Virginia — as if the sensor were on its
+Node B. It receives sensor events from globally distributed data
+centers — as if the sensor were on its
 local network.
 
 This is the core value proposition: *the mesh makes remote data channels
@@ -525,7 +524,7 @@ planned that will give organizations finer-grained control over their data.
 Today, when two nodes peer, all data channels are shared between them.
 In a future release, administrators will be able to define *export
 policies* per peer — for example, "share the `zenoh-router` data channel
-with Node B, but not the `classified-feed` channel." This will use the
+with Node B, but not the `internal-feed` channel." This will use the
 same Cedar policy engine, extending it from operation-level authorization
 to route-level filtering.
 
@@ -553,8 +552,8 @@ A planned enhancement to the data channel schema will support
 *classification labels* — metadata tags that describe the sensitivity or
 handling requirements of a data channel. Combined with per-peer route
 policies, this will enable rules like "never export data channels labeled
-`SECRET` to external partners" or "only route `CUI` data through nodes
-in approved regions."
+`RESTRICTED` to external partners" or "only route `SENSITIVE` data
+through nodes in approved regions."
 
 == SDK Integration
 
