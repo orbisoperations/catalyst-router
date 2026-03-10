@@ -11,8 +11,13 @@ import {
   type DataChannelDefinition,
 } from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
+import { getLogger } from '@catalyst/telemetry'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
+import type { VideoNotifier } from './video-notifier.js'
+import { buildStreamCatalog, hasMediaRouteChanges } from './video-notifier.js'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'bus'])
 
 // v2-specific StateResult — uses v2 RouteTable (no `external` field)
 export type StateResult =
@@ -26,6 +31,7 @@ export class OrchestratorBus {
   private readonly routePolicy: RoutePolicy | undefined
   private readonly config: OrchestratorConfig
   private nodeToken: string | undefined
+  private videoNotifier: VideoNotifier | undefined
   /**
    * Tracks the last time a keepalive was successfully sent to each peer.
    * Ephemeral (not persisted/journaled) — resets to 0 on restart.
@@ -40,11 +46,13 @@ export class OrchestratorBus {
     routePolicy?: RoutePolicy
     nodeToken?: string
     initialState?: RouteTable
+    videoNotifier?: VideoNotifier
   }) {
     this.config = opts.config
     this.transport = opts.transport
     this.routePolicy = opts.routePolicy
     this.nodeToken = opts.nodeToken
+    this.videoNotifier = opts.videoNotifier
     this.queue = new ActionQueue()
     this.rib = new RoutingInformationBase({
       nodeId: opts.config.node.name,
@@ -59,6 +67,22 @@ export class OrchestratorBus {
 
   setNodeToken(token: string): void {
     this.nodeToken = token
+  }
+
+  setVideoNotifier(notifier: VideoNotifier | undefined): void {
+    this.videoNotifier = notifier
+  }
+
+  async pushCurrentCatalog(): Promise<void> {
+    return this.queue.enqueue(async () => {
+      if (this.videoNotifier === undefined) return
+      const catalog = buildStreamCatalog(this.config.node.name, this.rib.state)
+      try {
+        await this.videoNotifier.pushCatalog(catalog)
+      } catch (error) {
+        logger.warn`Video catalog push failed (initial sync): ${error}`
+      }
+    })
   }
 
   async dispatch(action: Action): Promise<StateResult> {
@@ -91,11 +115,24 @@ export class OrchestratorBus {
   ): Promise<void> {
     // Use committedState snapshot — NEVER this.rib.state
     await this.handleBGPNotify(action, plan, committedState)
+    await this.handleVideoNotify(plan, committedState)
     // After BGP propagation, handle keepalive sends for Tick actions.
     // (The no-state-change Tick path in dispatch() handles the common case;
     // this handles Ticks that also caused peer expiry.)
     if (action.action === Actions.Tick) {
       await this.handleKeepalives(committedState, action.data.now)
+    }
+  }
+
+  private async handleVideoNotify(plan: PlanResult, committedState: RouteTable): Promise<void> {
+    if (this.videoNotifier === undefined) return
+    if (!hasMediaRouteChanges(plan.routeChanges)) return
+
+    const catalog = buildStreamCatalog(this.config.node.name, committedState)
+    try {
+      await this.videoNotifier.pushCatalog(catalog)
+    } catch (error) {
+      logger.warn`Video catalog push failed: ${error}`
     }
   }
 
