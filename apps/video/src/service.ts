@@ -9,7 +9,8 @@ import { VideoRpcServer } from './rpc-server.js'
 import { createVideoRpcHandler } from './rpc-handler.js'
 import { createReconciler, type ReconcileController } from './reconcile.js'
 import { StreamRelayManager } from './stream-relay-manager.js'
-import { createVideoHooks } from './video-control.js'
+import { createVideoHooks, queryStreamCatalog } from './video-control.js'
+import { Action as AuthAction } from '@catalyst/authorization'
 import { createVideoSubscribe } from './video-subscribe.js'
 import { createVideoAuthService, type VideoAuthService } from './video-auth.js'
 
@@ -149,8 +150,6 @@ export class VideoStreamService extends CatalystService {
       dispatch: (action) => this.busClient.dispatch(action),
       getCatalog: () => this.busClient.catalog,
       nodeId,
-      domains,
-      auth: authDelegate,
       debounceMs: videoConfig.debounceDurationMs,
       isReady: () => this.catalogReady,
       tracer: this.telemetry.tracer,
@@ -166,9 +165,40 @@ export class VideoStreamService extends CatalystService {
       }
       return c.json({ ready: false, catalog: false }, 503)
     })
-    this.handler.get('/streams', (c) => {
+    this.handler.get('/streams', async (c) => {
+      if (!this.catalogReady) {
+        return c.json({ error: 'Service not ready' }, 503)
+      }
+
+      const authHeader = c.req.header('Authorization')
+      if (!authHeader) {
+        return c.json({ error: 'Authorization header required' }, 401)
+      }
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
+      try {
+        const result = await authDelegate.evaluate({
+          token,
+          action: AuthAction.STREAM_DISCOVER,
+          nodeContext: { nodeId, domains },
+        })
+        if (!result.success || !result.allowed) {
+          return c.json({ error: 'Forbidden' }, 403)
+        }
+      } catch {
+        return c.json({ error: 'Forbidden' }, 403)
+      }
+
+      const scope = c.req.query('scope')
+      const sourceNode = c.req.query('sourceNode')
+      const protocol = c.req.query('protocol')
+
       const catalog = this.busClient.catalog
-      return c.json({ streams: catalog.streams })
+      const streams = queryStreamCatalog(catalog.streams, {
+        scope: scope || undefined,
+        sourceNode: sourceNode || undefined,
+        protocol: protocol || undefined,
+      })
+      return c.json({ streams })
     })
 
     // 9. Create and mount videoSubscribe (has catch-all pattern, must be last)

@@ -86,11 +86,9 @@ describe('VideoStreamService lifecycle integration', () => {
     expect(body.status).toBe('ok')
   })
 
-  it('/streams returns empty array before catalog', async () => {
+  it('/streams returns 503 before catalog', async () => {
     const res = await fetch(`http://localhost:${port}/streams`)
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.streams).toEqual([])
+    expect(res.status).toBe(503)
   })
 
   it('webhook /video-stream/hooks/ready returns 503 before orchestrator connection', async () => {
@@ -120,10 +118,11 @@ describe('VideoStreamService lifecycle integration', () => {
     const body = await res.json()
     expect(body.ready).toBe(true)
 
-    // /streams should return the catalog
-    const streamsRes = await fetch(`http://localhost:${port}/streams`)
-    const streamsBody = await streamsRes.json()
-    expect(streamsBody.streams).toHaveLength(2)
+    // /streams requires auth — verify it's gated (no auth client in test)
+    const streamsRes = await fetch(`http://localhost:${port}/streams`, {
+      headers: { Authorization: 'Bearer test-token' },
+    })
+    expect(streamsRes.status).toBe(403)
 
     ws.close()
     await new Promise((r) => setTimeout(r, 200))

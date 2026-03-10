@@ -1,13 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  ListStreamsInput,
-  GetStreamInput,
-  SubscribeStreamInput,
-  PlayStreamInput,
-} from '../types.js'
+import type { ListStreamsInput, SubscribeStreamInput, PlayStreamInput } from '../types.js'
 import {
   listStreamsHandler,
-  getStreamHandler,
   subscribeStreamHandler,
   playStreamHandler,
 } from './video-stream-handlers.js'
@@ -18,8 +12,10 @@ describe('Video Stream Handlers', () => {
       const input: ListStreamsInput = {
         videoUrl: 'http://localhost:8100',
         logLevel: 'info',
+        token: 'test-token',
       }
       expect(input.videoUrl).toBe('http://localhost:8100')
+      expect(input.token).toBe('test-token')
     })
 
     it('should have ListStreamsInput type with optional fields', () => {
@@ -35,15 +31,6 @@ describe('Video Stream Handlers', () => {
       expect(input.sourceNode).toBe('nodeA')
       expect(input.protocol).toBe('media')
       expect(input.token).toBe('test-token')
-    })
-
-    it('should have GetStreamInput type with required fields', () => {
-      const input: GetStreamInput = {
-        name: 'cam-front',
-        videoUrl: 'http://localhost:8100',
-        logLevel: 'info',
-      }
-      expect(input.name).toBe('cam-front')
     })
 
     it('should have SubscribeStreamInput type with required fields', () => {
@@ -129,46 +116,6 @@ describe('Video Stream Handlers', () => {
       }
       expect(result.success).toBe(true)
       expect(result.data.streams.length).toBe(0)
-    })
-
-    it('getStreamHandler should return success with single stream', () => {
-      const result: {
-        success: true
-        data: {
-          stream: {
-            name: string
-            protocol: string
-            source: 'local' | 'remote'
-            sourceNode: string
-            metadata?: Record<string, unknown>
-            nodePath?: string[]
-          }
-        }
-      } = {
-        success: true,
-        data: {
-          stream: {
-            name: 'cam-front',
-            protocol: 'media',
-            source: 'local',
-            sourceNode: 'nodeA',
-            metadata: { sourceType: 'camera' },
-            nodePath: ['nodeA'],
-          },
-        },
-      }
-      expect(result.success).toBe(true)
-      expect(result.data.stream.name).toBe('cam-front')
-      expect(result.data.stream.metadata?.sourceType).toBe('camera')
-    })
-
-    it('getStreamHandler should return error when stream not found', () => {
-      const result: { success: false; error: string } = {
-        success: false,
-        error: "Stream 'nonexistent' not found",
-      }
-      expect(result.success).toBe(false)
-      expect(result.error).toContain('not found')
     })
 
     it('subscribeStreamHandler should return success with playback endpoints', () => {
@@ -287,6 +234,7 @@ describe('Video Stream Handlers', () => {
       const result = await listStreamsHandler({
         videoUrl: 'http://localhost:8100',
         logLevel: 'info',
+        token: 'test-token',
       })
 
       expect(result.success).toBe(true)
@@ -301,53 +249,12 @@ describe('Video Stream Handlers', () => {
       const result = await listStreamsHandler({
         videoUrl: 'http://localhost:8100',
         logLevel: 'info',
+        token: 'test-token',
       })
 
       expect(result.success).toBe(false)
       if (!result.success) {
         expect(result.error).toBe('fetch failed')
-      }
-    })
-
-    it('getStreamHandler finds stream by name', async () => {
-      const streams = [
-        { name: 'cam-front', protocol: 'media', source: 'local', sourceNode: 'nodeA' },
-        { name: 'cam-rear', protocol: 'media', source: 'remote', sourceNode: 'nodeB' },
-      ]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ streams }),
-      })
-
-      const result = await getStreamHandler({
-        name: 'cam-rear',
-        videoUrl: 'http://localhost:8100',
-        logLevel: 'info',
-      })
-
-      expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.data.stream.name).toBe('cam-rear')
-        expect(result.data.stream.sourceNode).toBe('nodeB')
-      }
-    })
-
-    it('getStreamHandler returns error when stream not found', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ streams: [] }),
-      })
-
-      const result = await getStreamHandler({
-        name: 'nonexistent',
-        videoUrl: 'http://localhost:8100',
-        logLevel: 'info',
-      })
-
-      expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error).toContain('nonexistent')
-        expect(result.error).toContain('not found')
       }
     })
 

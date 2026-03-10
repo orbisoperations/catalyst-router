@@ -142,7 +142,7 @@ describe('subscribe-flow integration', () => {
     }
   })
 
-  it('streams endpoint returns catalog after push', async () => {
+  it('streams endpoint requires auth (403 without auth client)', async () => {
     const catalog: StreamCatalog = {
       streams: [
         { name: 'cam-front', protocol: 'media', source: 'local', sourceNode: 'test-node' },
@@ -153,21 +153,22 @@ describe('subscribe-flow integration', () => {
     const ws = await pushCatalog(port, catalog)
 
     try {
-      const res = await fetch(`http://localhost:${port}/streams`)
-      expect(res.status).toBe(200)
-      const body = await res.json()
-      expect(body.streams).toHaveLength(3)
-      const names = body.streams.map((s: { name: string }) => s.name)
-      expect(names).toContain('cam-front')
-      expect(names).toContain('cam-rear')
-      expect(names).toContain('cam-side')
+      // No auth header → 401
+      const noAuthRes = await fetch(`http://localhost:${port}/streams`)
+      expect(noAuthRes.status).toBe(401)
+
+      // With token but no auth client configured → 403 (fail-closed)
+      const res = await fetch(`http://localhost:${port}/streams`, {
+        headers: { Authorization: 'Bearer test-token' },
+      })
+      expect(res.status).toBe(403)
     } finally {
       ws.close()
       await new Promise((r) => setTimeout(r, 200))
     }
   })
 
-  it('streams endpoint returns empty before catalog push', async () => {
+  it('streams endpoint returns 503 before catalog push', async () => {
     // Use a fresh service instance with no orchestrator connected
     const config = makeConfig()
     const freshService = new VideoStreamService({ config })
@@ -180,9 +181,7 @@ describe('subscribe-flow integration', () => {
 
     try {
       const res = await fetch(`http://localhost:${freshServer.port}/streams`)
-      expect(res.status).toBe(200)
-      const body = await res.json()
-      expect(body.streams).toEqual([])
+      expect(res.status).toBe(503)
     } finally {
       await freshServer.stop()
     }

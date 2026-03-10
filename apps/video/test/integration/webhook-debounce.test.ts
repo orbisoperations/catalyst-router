@@ -32,7 +32,6 @@ function createTestApp(
     dispatch,
     getCatalog: () => sampleCatalog,
     nodeId: 'test-node',
-    domains: ['test.local'],
     debounceMs: DEBOUNCE_MS,
     isReady,
   })
