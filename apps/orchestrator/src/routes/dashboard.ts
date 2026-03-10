@@ -1,6 +1,13 @@
 import { Hono } from 'hono'
 import type { CatalystConfig } from '@catalyst/config'
-import type { CatalystNodeBus } from '../orchestrator.js'
+
+/** Minimal interface for dashboard state access — works with both v1 and v2 buses. */
+export interface DashboardStateProvider {
+  getState(): {
+    local: { routes: unknown[] }
+    internal: { peers: unknown[]; routes: unknown[] }
+  }
+}
 
 interface ServiceDef {
   name: string
@@ -91,7 +98,7 @@ async function checkHealth(service: ServiceDef): Promise<ServiceHealth> {
 }
 
 // TODO: Add authentication middleware — dashboard API is currently unauthenticated
-export function createDashboardRoutes(bus: CatalystNodeBus, config: CatalystConfig): Hono {
+export function createDashboardRoutes(bus: DashboardStateProvider, config: CatalystConfig): Hono {
   const app = new Hono()
   const serviceGroups = deriveServiceGroups(config)
 
