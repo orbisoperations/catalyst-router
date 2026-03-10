@@ -13,12 +13,12 @@ const frontendDir = process.env.FRONTEND_DIR ?? path.join(process.cwd(), 'fronte
 app.get('/health', (c) => c.json({ status: 'ok' }))
 
 // Proxy /api/* to orchestrator's /dashboard/api/*
-app.all('/api/*', async (c) => {
-  const subPath = c.req.path.replace(/^\/api/, '')
-  const target = `${ORCHESTRATOR_URL}/dashboard/api${subPath}`
+app.get('/api/*', async (c) => {
+  const url = new URL(c.req.url)
+  const subPath = url.pathname.replace(/^\/api/, '')
+  const target = `${ORCHESTRATOR_URL}/dashboard/api${subPath}${url.search}`
   try {
     const res = await fetch(target, {
-      method: c.req.method,
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(5000),
     })
