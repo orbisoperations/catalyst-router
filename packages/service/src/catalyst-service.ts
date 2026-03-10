@@ -87,6 +87,7 @@ export abstract class CatalystService implements ICatalystService {
       )
     }
     this._state = 'initializing'
+    const startTime = Date.now()
 
     try {
       // Build or reuse telemetry
@@ -113,6 +114,7 @@ export abstract class CatalystService implements ICatalystService {
         'event.name': 'service.initialized',
         name: this.info.name,
         version: this.info.version,
+        'event.duration_ms': Date.now() - startTime,
       })
     } catch (err) {
       this._state = 'stopped'
@@ -129,14 +131,20 @@ export abstract class CatalystService implements ICatalystService {
   async shutdown(): Promise<void> {
     if (this._state !== 'ready') return
     this._state = 'shutting_down'
+    const startTime = Date.now()
 
     try {
       this.telemetry.logger.info('{name} shutting down', {
-        'event.name': 'service.shutting_down',
+        'event.name': 'service.shutdown.started',
         name: this.info.name,
       })
       await this.onShutdown()
     } finally {
+      this.telemetry.logger.info('{name} shutdown completed', {
+        'event.name': 'service.shutdown.completed',
+        name: this.info.name,
+        'event.duration_ms': Date.now() - startTime,
+      })
       // Only shut down telemetry if we built it (not pre-built / shared)
       if (!this._prebuiltTelemetry) {
         await shutdownTelemetry()
