@@ -6,6 +6,11 @@ import { initTracer, getTracer, shutdownTracer } from './instrumentation.js'
 import type { TracerConfig } from './instrumentation.js'
 
 // ---------------------------------------------------------------------------
+// Shared constants
+// ---------------------------------------------------------------------------
+export { DURATION_BUCKETS } from './constants.js'
+
+// ---------------------------------------------------------------------------
 // Per-signal API (advanced / testing — prefer initTelemetry + shutdownTelemetry)
 // ---------------------------------------------------------------------------
 export { configureLogger, shutdownLogger, getLogger }
@@ -40,6 +45,12 @@ export {
   withTraceContext,
 } from './middleware/capnweb-transport.js'
 export type { InstrumentUpgradeOptions } from './middleware/capnweb-transport.js'
+
+// ---------------------------------------------------------------------------
+// Instrumented fetch (HTTP client metrics)
+// ---------------------------------------------------------------------------
+export { createInstrumentedFetch } from './middleware/fetch.js'
+export type { InstrumentedFetchOptions } from './middleware/fetch.js'
 
 // Hono middleware is available via the subpath '@catalyst/telemetry/middleware/hono'
 // to avoid requiring hono for consumers that only need logs/metrics/tracing.
