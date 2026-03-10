@@ -99,8 +99,9 @@ export class OrchestratorService extends CatalystService {
         () => this.refreshNodeTokenIfNeeded(),
         REFRESH_CHECK_INTERVAL
       )
-      this.telemetry.logger.info('Token refresh check enabled (every hour)', {
+      this.telemetry.logger.info('Token refresh check enabled (interval={interval})', {
         'event.name': 'node.token.refresh_scheduled',
+        interval: '1h',
       })
     }
 
@@ -213,7 +214,7 @@ export class OrchestratorService extends CatalystService {
             logger.warn('Authorization denied for action {action}: {errorType}', {
               'event.name': 'auth.authorization.denied',
               action,
-              errorType: result.errorType,
+              'error.type': result.errorType,
             })
             return { valid: false, error: 'Authorization failed' }
           }
@@ -246,7 +247,7 @@ export class OrchestratorService extends CatalystService {
     const { endpoint, systemToken } = this.config.orchestrator.auth
     this.telemetry.logger.info('Connecting to auth service at {endpoint}', {
       'event.name': 'node.token.mint_connecting',
-      endpoint,
+      'auth.endpoint': endpoint,
     })
 
     try {
@@ -277,7 +278,7 @@ export class OrchestratorService extends CatalystService {
       this.telemetry.logger.info('Node token minted for {nodeName} (expires {expiresAt})', {
         'event.name': 'node.token.minted',
         'node.name': this.config.node.name,
-        expiresAt: this._tokenExpiresAt.toISOString(),
+        'token.expires_at': this._tokenExpiresAt.toISOString(),
       })
 
       // Propagate token to the v2 service if already initialized
