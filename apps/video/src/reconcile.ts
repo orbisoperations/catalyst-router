@@ -1,4 +1,5 @@
-import { getLogger } from '@catalyst/telemetry'
+import { DURATION_BUCKETS, getLogger } from '@catalyst/telemetry'
+import type { Meter, Counter, Histogram } from '@opentelemetry/api'
 import type { StreamRelayManager } from './stream-relay-manager.js'
 import type { StreamCatalog } from './bus-client.js'
 
@@ -27,6 +28,7 @@ export interface ReconcileDeps {
   relayManager: StreamRelayManager
   getCatalog: () => StreamCatalog
   fetchFn?: typeof fetch
+  meter?: Meter
 }
 
 export interface ReconcileController {
@@ -71,12 +73,26 @@ function encodePathName(name: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Reconciliation metrics
+// ---------------------------------------------------------------------------
+
+interface ReconcileMetrics {
+  runs: Counter
+  duration: Histogram
+  orphansRemoved: Counter
+}
+
+// ---------------------------------------------------------------------------
 // Core reconciliation logic
 // ---------------------------------------------------------------------------
 
-async function performReconciliation(deps: ReconcileDeps): Promise<void> {
+async function performReconciliation(
+  deps: ReconcileDeps,
+  metrics: ReconcileMetrics | null
+): Promise<void> {
   const { mediamtxApiUrl, relayManager, getCatalog } = deps
   const fetchFn = deps.fetchFn ?? fetch
+  const startTime = performance.now()
 
   // 1. Query MediaMTX for active paths
   let pathList: MediaMTXPathList
@@ -91,6 +107,9 @@ async function performReconciliation(deps: ReconcileDeps): Promise<void> {
     }, 'GET /v3/paths/list')
   } catch {
     // Best-effort: don't crash if MediaMTX is unreachable
+    const durationS = (performance.now() - startTime) / 1000
+    metrics?.runs.add(1, { result: 'failure' })
+    metrics?.duration.record(durationS)
     return
   }
 
@@ -101,6 +120,7 @@ async function performReconciliation(deps: ReconcileDeps): Promise<void> {
   const catalogNames = new Set(catalog.streams.map((s) => s.name))
 
   // 3. Diff and act
+  let orphanCount = 0
   for (const path of items) {
     const inCatalog = catalogNames.has(path.name)
     const readerCount = path.readers?.length ?? 0
@@ -117,6 +137,7 @@ async function performReconciliation(deps: ReconcileDeps): Promise<void> {
             throw new Error(`DELETE ${path.name} returned ${res.status}`)
           }
         }, `DELETE /v3/paths/${path.name}`)
+        orphanCount++
       } catch {
         // Best-effort: log already happened in retryWithBackoff
       }
@@ -132,6 +153,13 @@ async function performReconciliation(deps: ReconcileDeps): Promise<void> {
       relayManager.startGracePeriod(path.name)
     }
   }
+
+  const durationS = (performance.now() - startTime) / 1000
+  metrics?.runs.add(1, { result: 'success' })
+  metrics?.duration.record(durationS)
+  if (orphanCount > 0) {
+    metrics?.orphansRemoved.add(orphanCount)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +167,24 @@ async function performReconciliation(deps: ReconcileDeps): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export function createReconciler(deps: ReconcileDeps): ReconcileController {
+  const metrics: ReconcileMetrics | null = deps.meter
+    ? {
+        runs: deps.meter.createCounter('video.reconciliation.runs', {
+          unit: '{run}',
+          description: 'Number of reconciliation runs',
+        }),
+        duration: deps.meter.createHistogram('video.reconciliation.duration', {
+          unit: 's',
+          description: 'Duration of reconciliation runs',
+          advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+        }),
+        orphansRemoved: deps.meter.createCounter('video.reconciliation.orphans_removed', {
+          unit: '{path}',
+          description: 'Number of orphan paths removed during reconciliation',
+        }),
+      }
+    : null
+
   let running = false
   let queuedResolvers: Array<() => void> = []
 
@@ -153,7 +199,7 @@ export function createReconciler(deps: ReconcileDeps): ReconcileController {
 
     running = true
     try {
-      await performReconciliation(deps)
+      await performReconciliation(deps, metrics)
 
       // Drain queued requests while holding the running lock.
       // This prevents a new caller from starting a concurrent run between
@@ -162,7 +208,7 @@ export function createReconciler(deps: ReconcileDeps): ReconcileController {
         const resolvers = queuedResolvers
         queuedResolvers = []
         try {
-          await performReconciliation(deps)
+          await performReconciliation(deps, metrics)
         } catch (err) {
           // Best-effort: resolve waiters even on failure so their promises don't hang
           logger.error`Queued reconciliation failed: ${err}`

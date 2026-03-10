@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import type { Meter } from '@opentelemetry/api'
 import { createReconciler } from '../../src/reconcile.js'
 import { StreamRelayManager } from '../../src/stream-relay-manager.js'
 import type { StreamCatalog } from '../../src/bus-client.js'
@@ -139,7 +140,8 @@ describe('reconcile', () => {
     expect(session!.gracePeriodTimer).not.toBeNull()
   })
 
-  it('retries 5x on MediaMTX API failure and does not crash', async () => {
+  it('retries 5x on MediaMTX API failure and records failure metric', async () => {
+    const { meter, instruments } = createSpyMeter()
     const mockFetch = vi.fn()
     const relayManager = makeRelayManager()
     const catalog = makeCatalog([])
@@ -154,6 +156,7 @@ describe('reconcile', () => {
       relayManager,
       getCatalog: () => catalog,
       fetchFn: mockFetch as unknown as typeof fetch,
+      meter,
     })
 
     // Need to advance timers for the backoff delays
@@ -169,6 +172,14 @@ describe('reconcile', () => {
 
     // Should have attempted 5 times total
     expect(mockFetch).toHaveBeenCalledTimes(5)
+
+    // Failure metric recorded
+    const runs = instruments['video.reconciliation.runs'] as { add: ReturnType<typeof vi.fn> }
+    const duration = instruments['video.reconciliation.duration'] as {
+      record: ReturnType<typeof vi.fn>
+    }
+    expect(runs.add).toHaveBeenCalledWith(1, { result: 'failure' })
+    expect(duration.record).toHaveBeenCalledWith(expect.any(Number))
   })
 
   it('encodes path segments individually for DELETE', async () => {
@@ -322,5 +333,106 @@ describe('reconcile', () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(2)
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Reconciliation metrics (US5)
+// ---------------------------------------------------------------------------
+
+function createSpyMeter() {
+  const instruments: Record<
+    string,
+    { add: ReturnType<typeof vi.fn> } | { record: ReturnType<typeof vi.fn> }
+  > = {}
+  const meter = {
+    createCounter: vi.fn((name: string) => {
+      const spy = { add: vi.fn() }
+      instruments[name] = spy
+      return spy
+    }),
+    createHistogram: vi.fn((name: string) => {
+      const spy = { record: vi.fn() }
+      instruments[name] = spy
+      return spy
+    }),
+    createUpDownCounter: vi.fn(() => ({ add: vi.fn() })),
+    createObservableCounter: vi.fn(() => ({})),
+    createObservableGauge: vi.fn(() => ({})),
+    createObservableUpDownCounter: vi.fn(() => ({})),
+    createGauge: vi.fn(() => ({})),
+  } as unknown as Meter
+  return { meter, instruments }
+}
+
+describe('reconciliation metrics', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('records success run with duration when no orphans found', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const mockFetch = vi.fn()
+    const relayManager = makeRelayManager()
+    const catalog = makeCatalog(['cam-a'])
+
+    mockFetch.mockResolvedValueOnce(successResponse([pathItem('cam-a', 1)]))
+
+    const reconciler = createReconciler({
+      mediamtxApiUrl: 'http://localhost:9997',
+      relayManager,
+      getCatalog: () => catalog,
+      fetchFn: mockFetch as unknown as typeof fetch,
+      meter,
+    })
+
+    await reconciler.reconcile()
+
+    const runs = instruments['video.reconciliation.runs'] as { add: ReturnType<typeof vi.fn> }
+    const duration = instruments['video.reconciliation.duration'] as {
+      record: ReturnType<typeof vi.fn>
+    }
+    const orphans = instruments['video.reconciliation.orphans_removed'] as {
+      add: ReturnType<typeof vi.fn>
+    }
+
+    expect(runs.add).toHaveBeenCalledWith(1, { result: 'success' })
+    expect(duration.record).toHaveBeenCalledWith(expect.any(Number))
+    expect(orphans.add).not.toHaveBeenCalled()
+  })
+
+  it('records orphans_removed count when orphans are deleted', async () => {
+    const { meter, instruments } = createSpyMeter()
+    const mockFetch = vi.fn()
+    const relayManager = makeRelayManager()
+    const catalog = makeCatalog([]) // empty catalog -> all paths are orphans
+
+    mockFetch.mockResolvedValueOnce(
+      successResponse([pathItem('orphan-a', 0), pathItem('orphan-b', 0)])
+    )
+    mockFetch.mockResolvedValueOnce(deleteSuccessResponse())
+    mockFetch.mockResolvedValueOnce(deleteSuccessResponse())
+
+    const reconciler = createReconciler({
+      mediamtxApiUrl: 'http://localhost:9997',
+      relayManager,
+      getCatalog: () => catalog,
+      fetchFn: mockFetch as unknown as typeof fetch,
+      meter,
+    })
+
+    await reconciler.reconcile()
+
+    const runs = instruments['video.reconciliation.runs'] as { add: ReturnType<typeof vi.fn> }
+    const orphans = instruments['video.reconciliation.orphans_removed'] as {
+      add: ReturnType<typeof vi.fn>
+    }
+
+    expect(runs.add).toHaveBeenCalledWith(1, { result: 'success' })
+    expect(orphans.add).toHaveBeenCalledWith(2)
   })
 })
