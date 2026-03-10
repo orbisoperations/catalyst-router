@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { newWebSocketRpcSession } from 'capnweb'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
-import { getLogger } from '@catalyst/telemetry'
+import { createInstrumentedFetch, getLogger } from '@catalyst/telemetry'
 
 import { VideoBusClient } from './bus-client.js'
 import { VideoRpcServer } from './rpc-server.js'
@@ -81,8 +81,16 @@ export class VideoStreamService extends CatalystService {
     // 2. Create VideoBusClient
     this.busClient = new VideoBusClient()
 
-    // 3. Create StreamRelayManager
+    // 2b. Create instrumented fetch for MediaMTX API calls
     const mediamtxApiUrl = videoConfig.mediamtxApiUrl
+    const meter = this.telemetry.meter
+    const mediamtxUrl = new URL(mediamtxApiUrl)
+    const instrumentedFetch = createInstrumentedFetch(meter, {
+      serverAddress: mediamtxUrl.hostname,
+      serverPort: mediamtxUrl.port ? parseInt(mediamtxUrl.port, 10) : undefined,
+    })
+
+    // 3. Create StreamRelayManager
     this.relayManager = new StreamRelayManager(
       { relayGracePeriodMs: videoConfig.relayGracePeriodMs },
       {
@@ -98,12 +106,16 @@ export class VideoStreamService extends CatalystService {
             .map((s) => encodeURIComponent(s))
             .join('/')
           const url = `${mediamtxApiUrl}/v3/paths/${encoded}`
-          const res = await fetch(url, { method: 'DELETE', signal: AbortSignal.timeout(5000) })
+          const res = await instrumentedFetch(url, {
+            method: 'DELETE',
+            signal: AbortSignal.timeout(5000),
+          })
           if (!res.ok && res.status !== 404) {
             throw new Error(`DELETE ${name} returned ${res.status}`)
           }
         },
-      }
+      },
+      meter
     )
 
     // 4. Create reconciler
@@ -111,12 +123,33 @@ export class VideoStreamService extends CatalystService {
       mediamtxApiUrl,
       relayManager: this.relayManager,
       getCatalog: () => this.busClient.catalog,
+      fetchFn: instrumentedFetch,
+      meter,
     })
+
+    // 4b. Catalog gauge (video.catalog.streams) — tracks stream counts by source
+    const catalogGauge = meter.createUpDownCounter('video.catalog.streams', {
+      unit: '{stream}',
+      description: 'Number of streams in the catalog, segmented by source',
+    })
+    let prevLocalCount = 0
+    let prevRemoteCount = 0
 
     // 5. Create VideoRpcServer
     this.rpcServer = new VideoRpcServer({
       busClient: this.busClient,
       onCatalogUpdate: async () => {
+        // Update catalog gauge with delta
+        const catalog = this.busClient.catalog
+        const localCount = catalog.streams.filter((s) => s.source === 'local').length
+        const remoteCount = catalog.streams.filter((s) => s.source === 'remote').length
+        const localDelta = localCount - prevLocalCount
+        const remoteDelta = remoteCount - prevRemoteCount
+        if (localDelta !== 0) catalogGauge.add(localDelta, { 'video.catalog.source': 'local' })
+        if (remoteDelta !== 0) catalogGauge.add(remoteDelta, { 'video.catalog.source': 'remote' })
+        prevLocalCount = localCount
+        prevRemoteCount = remoteCount
+
         // Fire-and-forget: reconciliation runs in background, doesn't block catalog ack
         this.reconciler.reconcile().catch((err) => {
           logger.error`Reconciliation failed: ${err}`
@@ -128,6 +161,14 @@ export class VideoStreamService extends CatalystService {
         logger.info`Catalog ready — service accepting requests`
       },
       onCatalogLost: () => {
+        // Reset catalog gauge
+        if (prevLocalCount !== 0)
+          catalogGauge.add(-prevLocalCount, { 'video.catalog.source': 'local' })
+        if (prevRemoteCount !== 0)
+          catalogGauge.add(-prevRemoteCount, { 'video.catalog.source': 'remote' })
+        prevLocalCount = 0
+        prevRemoteCount = 0
+
         this.catalogReady = false
         logger.info`Catalog lost — service rejecting requests until reconnect`
       },
@@ -153,6 +194,7 @@ export class VideoStreamService extends CatalystService {
       debounceMs: videoConfig.debounceDurationMs,
       isReady: () => this.catalogReady,
       tracer: this.telemetry.tracer,
+      meter,
     })
     this.handler.route('/video-stream', videoControl.handler)
     this.videoControlCleanup = videoControl.cleanup
@@ -216,6 +258,7 @@ export class VideoStreamService extends CatalystService {
       domains,
       relayManager: this.relayManager,
       tracer: this.telemetry.tracer,
+      meter,
     })
     this.handler.route('/', videoSubscribe)
 
