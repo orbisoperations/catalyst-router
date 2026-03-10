@@ -133,10 +133,11 @@ export class OrchestratorBus {
         if (updates.length > 0) {
           await this.transport.sendUpdate(peer, { updates })
         }
-      } catch {
+      } catch (error) {
         logger.warn('Failed to send route updates to {peerName}', {
           'event.name': 'peer.sync.failed',
           'peer.name': peer.name,
+          error,
         })
         // Fire-and-forget: one peer failure must not affect others.
       }
@@ -189,7 +190,12 @@ export class OrchestratorBus {
 
     try {
       await this.transport.sendUpdate(peer, { updates })
-    } catch {
+    } catch (error) {
+      logger.warn('Initial route sync to {peerName} failed', {
+        'event.name': 'peer.sync.initial_failed',
+        'peer.name': peer.name,
+        error,
+      })
       // Fire-and-forget: failed initial sync is not fatal; the peer can
       // request a refresh on reconnect.
     }

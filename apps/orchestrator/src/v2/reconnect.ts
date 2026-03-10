@@ -78,11 +78,12 @@ export class ReconnectManager {
           data: { peerInfo: { name: peer.name, domains: peer.domains } },
         })
         this.attempts.delete(peer.name) // reset attempt counter on success
-      } catch {
+      } catch (error) {
         logger.warn('Reconnect to {peerName} failed (attempt {attempt}), will retry', {
           'event.name': 'peer.reconnect.failed',
           'peer.name': peer.name,
           'reconnect.attempt': attempt,
+          error,
         })
         // Failed — schedule next attempt
         this.scheduleReconnect(peer)
