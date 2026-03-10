@@ -222,13 +222,12 @@ describe('Multi-hop envoyAddress forwarding', () => {
     expect(result.envoyAddress).toBe('envoy-origin.test.local:8443')
     expect(result.envoyPort).toBe(9000)
 
-    // With overrides — rewrites
+    // With envoyAddress override — rewrites address, port unchanged
     const rewritten = BusTransforms.toDataChannel(route, {
       envoyAddress: 'envoy-transit.test.local:8443',
-      envoyPort: 10050,
     })
     expect(rewritten.envoyAddress).toBe('envoy-transit.test.local:8443')
-    expect(rewritten.envoyPort).toBe(10050)
+    expect(rewritten.envoyPort).toBe(9000)
   })
 
   it('uses egress port in delta propagation (buildUpdatesForPeer)', async () => {
