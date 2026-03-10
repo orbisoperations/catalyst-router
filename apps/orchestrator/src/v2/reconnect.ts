@@ -51,7 +51,10 @@ export class ReconnectManager {
     const timer = setTimeout(async () => {
       this.timers.delete(peer.name)
       if (this.nodeToken === undefined) {
-        logger.warn`Skipping reconnect to ${peer.name}: no node token available`
+        logger.warn('Skipping reconnect to {peerName}: no node token available', {
+          'event.name': 'peer.reconnect.skipped',
+          'peer.name': peer.name,
+        })
         return
       }
       try {
