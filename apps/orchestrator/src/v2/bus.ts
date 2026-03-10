@@ -2,6 +2,7 @@ import {
   RoutingInformationBase,
   ActionQueue,
   Actions,
+  CloseCodes,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -174,6 +175,20 @@ export class OrchestratorBus {
         await this.syncRoutesToPeer(peer, state)
       }
       return
+    }
+
+    // Close notification: when a peer is deleted, notify it before withdrawals.
+    // Uses prevState because the peer is already removed from committed state.
+    if (action.action === Actions.LocalPeerDelete) {
+      const deletedPeer = plan.prevState.internal.peers.find((p) => p.name === action.data.name)
+      if (deletedPeer !== undefined) {
+        try {
+          await this.transport.closePeer(deletedPeer, CloseCodes.NORMAL, 'Peer removed')
+        } catch {
+          // Fire-and-forget: close failure must not block withdrawal propagation.
+        }
+      }
+      // Fall through to route-change fan-out below
     }
 
     // Route changes: propagate deltas to every connected peer.
