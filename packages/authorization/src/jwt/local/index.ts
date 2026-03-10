@@ -1,6 +1,9 @@
+import { getLogger } from '@catalyst/telemetry'
 import * as jose from 'jose'
 import type { TokenManager, TokenStore, MintOptions, TokenRecord } from '../index.js'
 import type { IKeyManager, VerifyResult } from '../../key-manager/index.ts'
+
+const logger = getLogger(['catalyst', 'auth', 'token'])
 
 export class LocalTokenManager implements TokenManager {
   constructor(
@@ -57,15 +60,39 @@ export class LocalTokenManager implements TokenManager {
 
     await this.store.recordToken(record)
 
+    logger.info('Token minted: jti={jti} subject={subject} principal={principal}', {
+      'event.name': 'auth.token.minted',
+      'token.jti': decoded.jti,
+      'token.subject': options.subject,
+      'token.principal': options.principal,
+      'token.entity_type': options.entity.type,
+      'token.expires_at': new Date(decoded.exp * 1000).toISOString(),
+      jti: decoded.jti,
+      subject: options.subject,
+      principal: options.principal,
+    })
+
     return token
   }
 
   async revoke(options: { jti?: string; san?: string }): Promise<void> {
     if (options.jti) {
       await this.store.revokeToken(options.jti)
+      logger.info('Token revoked by JTI: {jti}', {
+        'event.name': 'auth.token.revoked',
+        'token.jti': options.jti,
+        'revoke.method': 'jti',
+        jti: options.jti,
+      })
     }
     if (options.san) {
       await this.store.revokeBySan(options.san)
+      logger.info('Tokens revoked by SAN: {san}', {
+        'event.name': 'auth.token.revoked',
+        'token.san': options.san,
+        'revoke.method': 'san',
+        san: options.san,
+      })
     }
   }
 
@@ -81,6 +108,12 @@ export class LocalTokenManager implements TokenManager {
     // Check if token is revoked in the store
     const isRevoked = await this.store.isRevoked(jti)
     if (isRevoked) {
+      logger.warn('Token rejected (revoked): jti={jti}', {
+        'event.name': 'auth.token.rejected',
+        'token.jti': jti,
+        reason: 'revoked',
+        jti,
+      })
       return { valid: false, error: 'Token is revoked' }
     }
 
