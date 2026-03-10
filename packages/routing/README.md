@@ -18,7 +18,7 @@ import { ... } from '@catalyst/routing/v1' // legacy action/plugin model
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **RIB** (`rib/`)                        | Pure-function `plan()` + `commit()` state machine. Accepts actions, returns `{ prevState, newState, routeChanges, portOps }`. |
 | **ActionQueue** (`rib/`)                | Serializes async dispatch to guarantee single-writer access to RIB state.                                                     |
-| **Journal** (`journal/`)                | Append-only action log for replay. `InMemoryActionLog` (tests) and `SqliteActionLog` (production).                            |
+| **Journal** (`journal/`)                | Append-only action log with snapshot-based compaction. `InMemoryActionLog` (tests) and `SqliteActionLog` (production).        |
 | **Schemas** (`schema.ts`)               | Zod schemas for all v2 action types — local, internal protocol, and system actions.                                           |
 | **State** (`state.ts`)                  | `RoutingTable`, `PeerEntry`, `InternalRoute` types and their Zod schemas.                                                     |
 | **DataChannel** (`datachannel.ts`)      | Route definition with `routeKey()` helper.                                                                                    |
@@ -41,6 +41,34 @@ Actions are split by origin:
 3. **Path-vector loop detection** — `InternalProtocolUpdate` rejects routes whose `nodePath` contains the local `nodeId`.
 4. **Hold timer** — peers negotiate `holdTime = min(local, remote)`. `Tick` actions expire peers that haven't sent a keepalive within `holdTime` ms.
 5. **Graceful restart** — `TRANSPORT_ERROR` close marks routes `isStale` instead of removing them, allowing the peer to reconnect and refresh.
+6. **Journal compaction** — Snapshot + truncate compaction bounds journal growth. `CompactionManager` periodically snapshots the current `RouteTable`, prunes old entries (retaining a configurable tail), and vacuums SQLite to reclaim disk space. Recovery loads the snapshot first, then replays only the tail.
+
+## Journal compaction
+
+The journal supports snapshot-based compaction to prevent unbounded growth:
+
+```
+┌──────────┐   snapshot(seq, state)   ┌──────────┐   prune(seq - tailSize)   ┌──────────┐
+│  Journal  │ ───────────────────────► │ Snapshot  │ ───────────────────────► │ Pruned   │
+│  (full)   │                          │  written  │                          │ + vacuum │
+└──────────┘                           └──────────┘                           └──────────┘
+```
+
+**Recovery flow:**
+
+1. `getSnapshot()` → if present, restore state from snapshot
+2. `replay(snapshot.atSeq)` → replay only entries after the snapshot
+3. Apply each entry via `plan()`/`commit()` on a temporary RIB
+
+**Configuration** (via `OrchestratorConfigSchema.journal`):
+
+| Field                  | Default    | Description                                    |
+| ---------------------- | ---------- | ---------------------------------------------- |
+| `mode`                 | `"memory"` | `"sqlite"` for persistence, `"memory"` for dev |
+| `path`                 | —          | SQLite file path (required for sqlite mode)    |
+| `compactionIntervalMs` | `86400000` | Compaction check interval (0 disables)         |
+| `minEntries`           | `1000`     | Minimum entries before compaction triggers     |
+| `tailSize`             | `100`      | Entries retained after snapshot for debugging  |
 
 ## Testing
 
