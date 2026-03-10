@@ -9,7 +9,9 @@ import { OrchestratorServiceV2 } from './service.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
-import type { VideoNotifier, StreamCatalog } from './video-notifier.js'
+import type { StreamCatalog } from './video-notifier.js'
+import type { Action } from '@catalyst/routing/v2'
+import { VideoConnectionManager } from './video-connection.js'
 
 /**
  * Auth Service RPC API for token minting.
@@ -106,12 +108,7 @@ export class OrchestratorService extends CatalystService {
   private _tokenExpiresAt: Date | undefined
   private _refreshInterval: ReturnType<typeof setInterval> | undefined
   private _authClient: ReturnType<typeof newWebSocketRpcSession<AuthServiceApi>> | undefined
-  private _videoClient:
-    | {
-        updateStreamCatalog: (catalog: StreamCatalog) => Promise<void>
-        refreshToken: (token: string) => Promise<void>
-      }
-    | undefined
+  private _videoConnection: VideoConnectionManager | undefined
 
   constructor(options: CatalystServiceOptions) {
     super(options)
@@ -188,7 +185,7 @@ export class OrchestratorService extends CatalystService {
     this._v2.start()
 
     // Connect to video service if configured
-    await this.connectVideoService()
+    this.connectVideoService()
 
     this.telemetry.logger.info`Orchestrator v2 running as ${this.config.node.name}`
   }
@@ -198,7 +195,8 @@ export class OrchestratorService extends CatalystService {
       clearInterval(this._refreshInterval)
       this._refreshInterval = undefined
     }
-    this._videoClient = undefined
+    this._videoConnection?.stop()
+    this._videoConnection = undefined
     this._v2.setVideoNotifier(undefined)
     await this._v2.stop()
   }
@@ -255,17 +253,17 @@ export class OrchestratorService extends CatalystService {
     }
   }
 
-  private async connectVideoService(): Promise<void> {
+  private connectVideoService(): void {
     const videoEndpoint = this.config.orchestrator?.videoEndpoint
     if (!videoEndpoint) return
 
-    this.telemetry.logger.info`Connecting to video service at ${videoEndpoint}`
-
-    try {
-      const videoSession = newWebSocketRpcSession<VideoRpcApi>(videoEndpoint)
-
-      // Build dispatch capability for the video service
-      const dispatchCapability = {
+    this._videoConnection = new VideoConnectionManager({
+      endpoint: videoEndpoint,
+      createSession: (url) => {
+        const session = newWebSocketRpcSession<VideoRpcApi>(url)
+        return { getVideoClient: (d: unknown) => session.getVideoClient(d as never) }
+      },
+      buildDispatchCapability: () => ({
         dispatch: async (action: {
           action: string
           data: {
@@ -278,34 +276,24 @@ export class OrchestratorService extends CatalystService {
           const result = await this._v2.bus.dispatch({
             action: action.action,
             data: action.data,
-          })
+          } as Action)
           return { success: result.success }
         },
-      }
+      }),
+      onConnected: () => this._v2.bus.pushCurrentCatalog(),
+      logger: {
+        info: (msg: string) => this.telemetry.logger.info`${msg}`,
+        warn: (msg: string) => this.telemetry.logger.warn`${msg}`,
+      },
+    })
 
-      const result = await videoSession.getVideoClient(dispatchCapability)
-      if (!result.success) {
-        this.telemetry.logger.warn`Video service capability exchange failed`
-        return
-      }
-      this._videoClient = result.client
-
-      // Build concrete VideoNotifier wrapping the RPC capability
-      const notifier: VideoNotifier = {
-        pushCatalog: async (catalog) => {
-          const client = this._videoClient
-          if (!client) return
-          await client.updateStreamCatalog(catalog)
-        },
-      }
-
-      this._v2.setVideoNotifier(notifier)
-      await this._v2.bus.pushCurrentCatalog()
-
-      this.telemetry.logger.info`Video service connected — initial catalog pushed`
-    } catch (error) {
-      this.telemetry.logger.warn`Failed to connect to video service: ${error}`
+    // Set current token if available
+    if (this._nodeToken) {
+      this._videoConnection.setNodeToken(this._nodeToken)
     }
+
+    this._v2.setVideoNotifier(this._videoConnection)
+    this._videoConnection.start()
   }
 
   private async mintNodeToken(): Promise<void> {
@@ -350,13 +338,9 @@ export class OrchestratorService extends CatalystService {
         this._v2.setNodeToken(this._nodeToken)
       }
 
-      // Propagate token refresh to video service if connected
-      if (this._videoClient) {
-        try {
-          await this._videoClient.refreshToken(this._nodeToken)
-        } catch (error) {
-          this.telemetry.logger.warn`Video token refresh failed (non-fatal): ${error}`
-        }
+      // Propagate token refresh to video connection manager
+      if (this._videoConnection) {
+        this._videoConnection.setNodeToken(this._nodeToken)
       }
     } catch (error) {
       this.telemetry.logger.error`Failed to mint node token: ${error}`
