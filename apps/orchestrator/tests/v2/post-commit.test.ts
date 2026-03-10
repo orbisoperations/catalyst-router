@@ -3,7 +3,13 @@ import { OrchestratorBus } from '../../src/v2/bus.js'
 import { MockPeerTransport } from '../../src/v2/transport.js'
 import { Actions, CloseCodes } from '@catalyst/routing/v2'
 import type { OrchestratorConfig } from '../../src/v1/types.js'
-import type { PeerInfo, PeerRecord, InternalRoute, RoutePolicy } from '@catalyst/routing/v2'
+import type {
+  PeerInfo,
+  PeerRecord,
+  InternalRoute,
+  DataChannelDefinition,
+  RoutePolicy,
+} from '@catalyst/routing/v2'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -55,10 +61,14 @@ function _makeInternalRoute(
   }
 }
 
-/** Deny-all route policy for testing policy filter. */
+/** Deny-all route policy for testing policy filter. Accepts all inbound. */
 class DenyAllPolicy implements RoutePolicy {
   canSend(_peer: PeerRecord, _routes: InternalRoute[]): InternalRoute[] {
     return []
+  }
+
+  canReceive(_peer: PeerRecord, routes: DataChannelDefinition[]): DataChannelDefinition[] {
+    return routes
   }
 }
 
