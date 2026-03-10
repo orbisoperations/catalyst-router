@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { Hono } from 'hono'
 import { SpanStatusCode } from '@opentelemetry/api'
-import type { Tracer } from '@opentelemetry/api'
+import type { Tracer, Meter, Counter } from '@opentelemetry/api'
 import { getLogger } from '@catalyst/telemetry'
 import type { StreamEntry } from './bus-client.js'
 
@@ -95,6 +95,7 @@ interface VideoHooksDeps {
   debounceMs?: number
   isReady?: () => boolean
   tracer?: Tracer
+  meter?: Meter
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +103,15 @@ interface VideoHooksDeps {
 // ---------------------------------------------------------------------------
 
 export function createVideoHooks(deps: VideoHooksDeps) {
-  const { dispatch, getCatalog, nodeId, debounceMs = 500, isReady, tracer } = deps
+  const { dispatch, getCatalog, nodeId, debounceMs = 500, isReady, tracer, meter } = deps
+
+  let webhookCounter: Counter | undefined
+  if (meter) {
+    webhookCounter = meter.createCounter('video.webhook.received', {
+      unit: '{event}',
+      description: 'Number of webhook events received from MediaMTX',
+    })
+  }
 
   const trackedPaths = new Set<string>()
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -300,11 +309,13 @@ export function createVideoHooks(deps: VideoHooksDeps) {
       debouncedReady(body as MediaMTXWebhookPayload)
     } catch (err) {
       if (err instanceof ValidationError || err instanceof z.ZodError) {
+        webhookCounter?.add(1, { 'video.webhook.type': 'ready', 'error.type': 'ValidationError' })
         return c.json({ error: 'Invalid payload' }, 400)
       }
       logger.error`Webhook ready handler failed: ${err}`
       return c.json({ error: 'Internal error' }, 500)
     }
+    webhookCounter?.add(1, { 'video.webhook.type': 'ready' })
     return c.json({ ok: true })
   })
 
@@ -323,11 +334,16 @@ export function createVideoHooks(deps: VideoHooksDeps) {
       debouncedNotReady(body as MediaMTXWebhookPayload)
     } catch (err) {
       if (err instanceof ValidationError || err instanceof z.ZodError) {
+        webhookCounter?.add(1, {
+          'video.webhook.type': 'not-ready',
+          'error.type': 'ValidationError',
+        })
         return c.json({ error: 'Invalid payload' }, 400)
       }
       logger.error`Webhook not-ready handler failed: ${err}`
       return c.json({ error: 'Internal error' }, 500)
     }
+    webhookCounter?.add(1, { 'video.webhook.type': 'not-ready' })
     return c.json({ ok: true })
   })
 
