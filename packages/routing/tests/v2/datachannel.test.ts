@@ -25,4 +25,27 @@ describe('DataChannelDefinitionSchema', () => {
     })
     expect(result.success).toBe(true)
   })
+
+  it('accepts a route with metadata', () => {
+    const result = DataChannelDefinitionSchema.safeParse({
+      name: 'cam-front',
+      protocol: 'media',
+      metadata: { sourceNode: 'node-a', sourceType: 'rtsp' },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.metadata).toEqual({ sourceNode: 'node-a', sourceType: 'rtsp' })
+    }
+  })
+
+  it('accepts a route without metadata', () => {
+    const result = DataChannelDefinitionSchema.safeParse({
+      name: 'api',
+      protocol: 'http',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.metadata).toBeUndefined()
+    }
+  })
 })

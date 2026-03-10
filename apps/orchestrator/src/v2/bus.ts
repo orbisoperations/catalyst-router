@@ -322,6 +322,7 @@ export const BusTransforms = {
       region: route.region,
       tags: route.tags,
       envoyPort: route.envoyPort,
+      metadata: route.metadata,
     }
   },
 }
