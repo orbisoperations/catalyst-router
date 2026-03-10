@@ -275,8 +275,6 @@ export class PersistentLocalKeyManager implements IKeyManager {
       'key.old_id': oldKey.kid,
       'key.new_id': newKey.kid,
       immediate,
-      oldKeyId: oldKey.kid,
-      newKeyId: newKey.kid,
     })
 
     if (!immediate) {
@@ -295,8 +293,6 @@ export class PersistentLocalKeyManager implements IKeyManager {
       'key.grace_period_ends_at': oldKey.expiresAt
         ? new Date(oldKey.expiresAt).toISOString()
         : undefined,
-      oldKeyId: oldKey.kid,
-      newKeyId: newKey.kid,
     })
 
     return {
