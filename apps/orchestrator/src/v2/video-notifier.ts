@@ -11,7 +11,7 @@ export const StreamEntrySchema = z.object({
   endpoint: z.string().optional(),
   source: z.enum(['local', 'remote']),
   sourceNode: z.string(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   nodePath: z.array(z.string()).optional(),
 })
 export type StreamEntry = z.infer<typeof StreamEntrySchema>
@@ -53,6 +53,7 @@ export function buildStreamCatalog(nodeId: string, state: RouteTable): StreamCat
       sourceNode: nodeId,
     }
     if (route.endpoint !== undefined) entry.endpoint = route.endpoint
+    if (route.metadata !== undefined) entry.metadata = route.metadata
     streams.push(entry)
   }
 
@@ -68,6 +69,7 @@ export function buildStreamCatalog(nodeId: string, state: RouteTable): StreamCat
       nodePath: route.nodePath,
     }
     if (route.endpoint !== undefined) entry.endpoint = route.endpoint
+    if (route.metadata !== undefined) entry.metadata = route.metadata
     streams.push(entry)
   }
 
