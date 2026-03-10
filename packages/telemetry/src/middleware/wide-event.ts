@@ -28,15 +28,15 @@ export function wideEventMiddleware(options?: WideEventMiddlewareOptions): Middl
     const event = new WideEvent('http.request', logger)
 
     event.set({
-      'http.method': c.req.method,
-      'http.url': c.req.path,
+      'http.request.method': c.req.method,
+      'url.path': c.req.path,
     })
 
     c.set('wideEvent', event)
 
     try {
       await next()
-      event.set('http.status_code', c.res.status)
+      event.set('http.response.status_code', c.res.status)
       if (c.res.status >= 400) {
         event.set('event.outcome', 'failure')
       }

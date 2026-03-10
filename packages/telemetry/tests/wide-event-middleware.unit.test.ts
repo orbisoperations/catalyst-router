@@ -88,9 +88,9 @@ describe('wideEventMiddleware', () => {
     const record = captured[0]
     expect(record.properties).toMatchObject({
       'event.name': 'http.request',
-      'http.method': 'GET',
-      'http.url': '/ok',
-      'http.status_code': 200,
+      'http.request.method': 'GET',
+      'url.path': '/ok',
+      'http.response.status_code': 200,
       'event.outcome': 'success',
     })
     expect(record.properties['event.duration_ms']).toBeTypeOf('number')
@@ -104,8 +104,8 @@ describe('wideEventMiddleware', () => {
     expect(res.status).toBe(201)
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
-      'http.method': 'POST',
-      'http.status_code': 201,
+      'http.request.method': 'POST',
+      'http.response.status_code': 201,
       'event.outcome': 'success',
     })
   })
@@ -121,7 +121,7 @@ describe('wideEventMiddleware', () => {
     expect(res.status).toBe(404)
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
-      'http.status_code': 404,
+      'http.response.status_code': 404,
       'event.outcome': 'failure',
     })
   })
@@ -133,7 +133,7 @@ describe('wideEventMiddleware', () => {
     expect(res.status).toBe(500)
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
-      'http.status_code': 500,
+      'http.response.status_code': 500,
       'event.outcome': 'failure',
     })
   })
@@ -151,7 +151,7 @@ describe('wideEventMiddleware', () => {
     expect(res.status).toBe(500)
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
-      'http.status_code': 500,
+      'http.response.status_code': 500,
       'event.outcome': 'failure',
     })
   })
@@ -178,8 +178,8 @@ describe('wideEventMiddleware', () => {
 
     expect(captured).toHaveLength(1)
     expect(captured[0].properties).toMatchObject({
-      'error.type': 'Error',
-      'error.message': 'something broke',
+      'exception.type': 'Error',
+      'exception.message': 'something broke',
       'event.outcome': 'failure',
     })
   })
