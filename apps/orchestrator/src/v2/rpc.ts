@@ -199,7 +199,11 @@ export async function createIBGPClient(
     peerInfo: PeerInfo
   ): { success: true } | { success: false; error: string } {
     if (peerInfo.name !== peerIdentity) {
-      logger.warn`iBGP identity mismatch: JWT sub=${peerIdentity} but peerInfo.name=${peerInfo.name}`
+      logger.warn('iBGP identity mismatch: JWT sub={jwtSub} but peerInfo.name={peerName}', {
+        'event.name': 'peer.auth.identity_mismatch',
+        jwtSub: peerIdentity,
+        'peer.name': peerInfo.name,
+      })
       return {
         success: false,
         error: 'Peer identity mismatch: peerInfo.name does not match authenticated identity',
@@ -234,7 +238,11 @@ export async function createIBGPClient(
         // peer. This prevents route injection with forged origin attribution.
         for (const entry of data.update.updates) {
           if (entry.nodePath.length > 0 && entry.nodePath[0] !== peerIdentity) {
-            logger.warn`iBGP nodePath[0] mismatch: JWT sub=${peerIdentity} but nodePath[0]=${entry.nodePath[0]}`
+            logger.warn('iBGP nodePath[0] mismatch: JWT sub={jwtSub} but nodePath[0]={nodePath0}', {
+              'event.name': 'peer.auth.nodepath_mismatch',
+              jwtSub: peerIdentity,
+              nodePath0: entry.nodePath[0],
+            })
             return {
               success: false,
               error: 'Route origin mismatch: nodePath[0] does not match authenticated identity',
