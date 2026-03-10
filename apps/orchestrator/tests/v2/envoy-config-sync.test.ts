@@ -82,6 +82,9 @@ function mockPortAllocator(): BusPortAllocator {
     release(channelName: string) {
       allocations.delete(channelName)
     },
+    getPort(channelName: string) {
+      return allocations.get(channelName)
+    },
     getAllocations() {
       return allocations
     },
