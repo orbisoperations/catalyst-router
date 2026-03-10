@@ -40,9 +40,6 @@ COPY packages/types packages/types
 COPY packages/service packages/service
 COPY packages/telemetry packages/telemetry
 
-# Build frontend with Vite
-RUN cd apps/orchestrator && pnpm exec vite build --config frontend/vite.config.ts
-
 # Bundle with esbuild — all code inlined except native addons.
 # Banner provides CJS compatibility (require, __dirname) for bundled npm packages.
 RUN pnpm exec esbuild apps/orchestrator/src/server.ts \
@@ -62,10 +59,8 @@ WORKDIR /app
 
 COPY --from=build /deploy/node_modules ./node_modules
 COPY --from=build /app/dist/server.mjs ./server.mjs
-COPY --from=build /app/apps/orchestrator/dist/frontend ./frontend
 
 ENV PORT=3000
-ENV FRONTEND_DIR=/app/frontend
 EXPOSE 3000
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
