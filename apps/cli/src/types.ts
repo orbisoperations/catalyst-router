@@ -141,14 +141,13 @@ export const SubscribeStreamInputSchema = VideoCliConfigSchema.extend({
 })
 export type SubscribeStreamInput = z.infer<typeof SubscribeStreamInputSchema>
 
-export const WatchStreamsInputSchema = VideoCliConfigSchema.extend({
-  scope: z.enum(['all', 'local', 'remote'] as const).optional(),
-  sourceNode: z.string().optional(),
-  protocol: z.string().optional(),
-  token: z.string().optional(),
-  interval: z.number().int().min(1000).default(5000),
+export const PlayStreamInputSchema = VideoCliConfigSchema.extend({
+  name: z.string().min(1),
+  token: z.string().min(1, 'Authentication required — provide --token or set CATALYST_AUTH_TOKEN'),
+  protocol: z.enum(['hls', 'rtsp', 'srt'] as const).default('hls'),
+  player: z.string().optional(),
 })
-export type WatchStreamsInput = z.infer<typeof WatchStreamsInputSchema>
+export type PlayStreamInput = z.infer<typeof PlayStreamInputSchema>
 
 export const HealthCheckInputSchema = VideoCliConfigSchema
 export type HealthCheckInput = z.infer<typeof HealthCheckInputSchema>

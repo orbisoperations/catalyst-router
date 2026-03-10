@@ -1,16 +1,17 @@
+import { spawn } from 'node:child_process'
 import { Command } from 'commander'
 import chalk from 'chalk'
 import {
   ListStreamsInputSchema,
   GetStreamInputSchema,
   SubscribeStreamInputSchema,
-  WatchStreamsInputSchema,
+  PlayStreamInputSchema,
 } from '../../types.js'
 import {
   listStreamsHandler,
   getStreamHandler,
   subscribeStreamHandler,
-  watchStreamsHandler,
+  playStreamHandler,
 } from '../../handlers/video-stream-handlers.js'
 
 export function streamCommands(): Command {
@@ -162,22 +163,20 @@ export function streamCommands(): Command {
     })
 
   stream
-    .command('watch')
-    .description('Watch for stream catalog changes')
-    .option('--scope <scope>', 'Filter by scope (all, local, remote)')
-    .option('--source-node <node>', 'Filter by source node')
-    .option('--protocol <protocol>', 'Filter by protocol')
+    .command('play')
+    .description('Subscribe to a stream and open it in a video player')
+    .argument('<name>', 'Stream name')
     .option('--token <token>', 'Auth token')
-    .option('--interval <ms>', 'Polling interval in milliseconds', '5000')
-    .action(async (options, cmd) => {
+    .option('--protocol <protocol>', 'Playback protocol (hls, rtsp, srt)', 'hls')
+    .option('--player <player>', 'Video player binary (ffplay, mpv, vlc)')
+    .action(async (name, options, cmd) => {
       const globals = cmd.optsWithGlobals()
-      const validation = WatchStreamsInputSchema.safeParse({
-        scope: options.scope,
-        sourceNode: options.sourceNode,
-        protocol: options.protocol,
+      const validation = PlayStreamInputSchema.safeParse({
+        name,
         token: options.token || globals.token || process.env.CATALYST_AUTH_TOKEN,
         videoUrl: globals.videoUrl,
-        interval: parseInt(options.interval, 10),
+        protocol: options.protocol,
+        player: options.player,
       })
 
       if (!validation.success) {
@@ -188,57 +187,39 @@ export function streamCommands(): Command {
         process.exit(1)
       }
 
-      const input = validation.data
+      try {
+        const result = await playStreamHandler(validation.data)
 
-      console.log(chalk.cyan(`[watching] Polling every ${input.interval}ms... (Ctrl+C to stop)`))
+        if (result.success) {
+          console.log(
+            chalk.green(
+              `[ok] Playing '${name}' via ${result.data.protocol} using ${result.data.player}`
+            )
+          )
+          console.log(`  ${chalk.cyan('URL:')} ${result.data.url}`)
 
-      // Initial fetch
-      const initialResult = await watchStreamsHandler(input)
-      if (!initialResult.success) {
-        console.error(chalk.red(`[error] ${initialResult.error}`))
-        process.exit(1)
-      }
+          const child = spawn(result.data.player, [result.data.url], {
+            stdio: 'inherit',
+          })
 
-      let previousStreams = new Map(initialResult.data.streams.map((s) => [s.name, s]))
+          child.on('close', (code) => {
+            process.exit(code ?? 0)
+          })
 
-      console.log(`--- Initial streams (${previousStreams.size}) ---`)
-      for (const s of initialResult.data.streams) {
-        console.log(`  ${s.name} (${s.source}, ${s.sourceNode})`)
-      }
-
-      const intervalId = setInterval(async () => {
-        const result = await watchStreamsHandler(input)
-        if (!result.success) {
-          clearInterval(intervalId)
+          child.on('error', (err) => {
+            console.error(
+              chalk.red(`[error] Failed to launch ${result.data.player}: ${err.message}`)
+            )
+            process.exit(1)
+          })
+        } else {
           console.error(chalk.red(`[error] ${result.error}`))
           process.exit(1)
         }
-
-        const currentStreams = new Map(result.data.streams.map((s) => [s.name, s]))
-
-        // Detect additions
-        for (const [name, stream] of currentStreams) {
-          if (!previousStreams.has(name)) {
-            console.log(chalk.green(`[+] ${name} (${stream.source}, ${stream.sourceNode})`))
-          }
-        }
-
-        // Detect removals
-        for (const [name] of previousStreams) {
-          if (!currentStreams.has(name)) {
-            console.log(chalk.red(`[-] ${name}`))
-          }
-        }
-
-        previousStreams = currentStreams
-      }, input.interval)
-
-      // Handle SIGINT for clean exit
-      const onSigint = () => {
-        clearInterval(intervalId)
-        process.exit(0)
+      } catch (error) {
+        console.error(chalk.red(`[error] Error: ${error instanceof Error ? error.message : error}`))
+        process.exit(1)
       }
-      process.on('SIGINT', onSigint)
     })
 
   return stream

@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ListStreamsInput,
   GetStreamInput,
   SubscribeStreamInput,
-  WatchStreamsInput,
+  PlayStreamInput,
 } from '../types.js'
+import {
+  listStreamsHandler,
+  getStreamHandler,
+  subscribeStreamHandler,
+  playStreamHandler,
+} from './video-stream-handlers.js'
 
 describe('Video Stream Handlers', () => {
   describe('Type Definitions', () => {
@@ -51,27 +57,29 @@ describe('Video Stream Handlers', () => {
       expect(input.token).toBe('test-token')
     })
 
-    it('should have WatchStreamsInput type with required fields', () => {
-      const input: WatchStreamsInput = {
+    it('should have PlayStreamInput type with required fields', () => {
+      const input: PlayStreamInput = {
+        name: 'cam-front',
+        token: 'test-token',
+        protocol: 'hls',
         videoUrl: 'http://localhost:8100',
         logLevel: 'info',
-        interval: 5000,
       }
-      expect(input.interval).toBe(5000)
+      expect(input.name).toBe('cam-front')
+      expect(input.protocol).toBe('hls')
     })
 
-    it('should have WatchStreamsInput type with optional fields', () => {
-      const input: WatchStreamsInput = {
+    it('should have PlayStreamInput type with optional player', () => {
+      const input: PlayStreamInput = {
+        name: 'cam-front',
+        token: 'test-token',
+        protocol: 'rtsp',
+        player: 'mpv',
         videoUrl: 'http://localhost:8100',
         logLevel: 'info',
-        interval: 2000,
-        scope: 'remote',
-        sourceNode: 'nodeB',
-        protocol: 'media',
-        token: 'test-token',
       }
-      expect(input.scope).toBe('remote')
-      expect(input.interval).toBe(2000)
+      expect(input.player).toBe('mpv')
+      expect(input.protocol).toBe('rtsp')
     })
   })
 
@@ -253,6 +261,200 @@ describe('Video Stream Handlers', () => {
       }
       expect(errorResult.success).toBe(false)
       expect(errorResult.error).toContain('timeout')
+    })
+  })
+
+  describe('Handler Behavior', () => {
+    const mockFetch = vi.fn()
+
+    beforeEach(() => {
+      vi.stubGlobal('fetch', mockFetch)
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('listStreamsHandler returns streams from video service', async () => {
+      const streams = [
+        { name: 'cam-front', protocol: 'media', source: 'local', sourceNode: 'nodeA' },
+      ]
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ streams }),
+      })
+
+      const result = await listStreamsHandler({
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.streams).toEqual(streams)
+      }
+    })
+
+    it('listStreamsHandler returns error on network failure', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('fetch failed'))
+
+      const result = await listStreamsHandler({
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error).toBe('fetch failed')
+      }
+    })
+
+    it('getStreamHandler finds stream by name', async () => {
+      const streams = [
+        { name: 'cam-front', protocol: 'media', source: 'local', sourceNode: 'nodeA' },
+        { name: 'cam-rear', protocol: 'media', source: 'remote', sourceNode: 'nodeB' },
+      ]
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ streams }),
+      })
+
+      const result = await getStreamHandler({
+        name: 'cam-rear',
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.stream.name).toBe('cam-rear')
+        expect(result.data.stream.sourceNode).toBe('nodeB')
+      }
+    })
+
+    it('getStreamHandler returns error when stream not found', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ streams: [] }),
+      })
+
+      const result = await getStreamHandler({
+        name: 'nonexistent',
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error).toContain('nonexistent')
+        expect(result.error).toContain('not found')
+      }
+    })
+
+    it('subscribeStreamHandler returns playback endpoints', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          stream: {
+            name: 'cam-front',
+            protocol: 'media',
+            playbackEndpoints: {
+              rtsp: 'rtsp://localhost:8554/cam-front',
+              hls: 'http://localhost:8888/cam-front/index.m3u8',
+              webrtc: 'http://localhost:8889/cam-front/whep',
+              srt: 'srt://localhost:8890/cam-front',
+            },
+          },
+        }),
+      })
+
+      const result = await subscribeStreamHandler({
+        name: 'cam-front',
+        token: 'test-token',
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.name).toBe('cam-front')
+        expect(result.data.playbackEndpoints.rtsp).toContain('rtsp://')
+        expect(result.data.playbackEndpoints.hls).toContain('index.m3u8')
+      }
+    })
+
+    it('subscribeStreamHandler returns error on 403', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({ error: 'Forbidden' }),
+      })
+
+      const result = await subscribeStreamHandler({
+        name: 'cam-front',
+        token: 'bad-token',
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error).toBe('Forbidden')
+      }
+    })
+
+    it('playStreamHandler returns error when no player found', async () => {
+      const result = await playStreamHandler({
+        name: 'cam-front',
+        token: 'test-token',
+        protocol: 'hls',
+        player: 'nonexistent-player-xyz',
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error).toContain('No video player found')
+        expect(result.error).toContain('nonexistent-player-xyz')
+      }
+    })
+
+    it('playStreamHandler returns player and url on success', async () => {
+      // Use 'node' as player since it is always available in dev
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          stream: {
+            name: 'cam-front',
+            protocol: 'media',
+            playbackEndpoints: {
+              rtsp: 'rtsp://localhost:8554/cam-front',
+              hls: 'http://localhost:8888/cam-front/index.m3u8',
+              webrtc: 'http://localhost:8889/cam-front/whep',
+              srt: 'srt://localhost:8890/cam-front',
+            },
+          },
+        }),
+      })
+
+      const result = await playStreamHandler({
+        name: 'cam-front',
+        token: 'test-token',
+        protocol: 'hls',
+        player: 'node',
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.player).toBe('node')
+        expect(result.data.protocol).toBe('hls')
+        expect(result.data.url).toContain('index.m3u8')
+      }
     })
   })
 })

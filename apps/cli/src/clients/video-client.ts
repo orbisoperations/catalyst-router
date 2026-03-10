@@ -106,8 +106,11 @@ export function createVideoClient(url?: string): VideoServiceApi {
       const res = await fetch(`${baseUrl}/readyz`, {
         signal: AbortSignal.timeout(10000),
       })
-      if (!res.ok) throw await httpError(res)
-      return res.json()
+      try {
+        return await res.json()
+      } catch {
+        throw await httpError(res)
+      }
     },
   }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ListRelaysInput } from '../types.js'
+import { listRelaysHandler } from './video-relay-handlers.js'
 
 describe('Video Relay Handlers', () => {
   describe('Type Definitions', () => {
@@ -40,6 +41,20 @@ describe('Video Relay Handlers', () => {
       }
       expect(errorResult.success).toBe(false)
       expect(typeof errorResult.error).toBe('string')
+    })
+  })
+
+  describe('Handler Behavior', () => {
+    it('listRelaysHandler returns deferred result', async () => {
+      const result = await listRelaysHandler({
+        videoUrl: 'http://localhost:8100',
+        logLevel: 'info',
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.available).toBe(false)
+      }
     })
   })
 })
