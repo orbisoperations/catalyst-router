@@ -16,6 +16,39 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- Video streaming ---
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - '8554:8554' # RTSP
+      - '8888:8888' # HLS
+      - '9997:9997' # API
+
+  video:
+    build:
+      context: ..
+      dockerfile: apps/video/Dockerfile
+    ports:
+      - '4001:4001'
+    environment:
+      - CATALYST_VIDEO_PORT=4001
+      - CATALYST_NODE_ID=video
+      - CATALYST_VIDEO_MEDIAMTX_API_URL=http://mediamtx:9997
+      - OTEL_SERVICE_NAME=video
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4001/healthz']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+
   # --- Catalyst services ---
 
   auth:
@@ -52,6 +85,7 @@ services:
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway:4000/api
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-service:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[10000, [10001, 10100]]
+      - CATALYST_VIDEO_ENDPOINT=ws://video:4001/api
       - OTEL_SERVICE_NAME=orchestrator
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
@@ -65,6 +99,8 @@ services:
       gateway:
         condition: service_healthy
       envoy-service:
+        condition: service_healthy
+      video:
         condition: service_healthy
 
   gateway:

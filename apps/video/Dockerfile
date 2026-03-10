@@ -1,4 +1,4 @@
-# Build from repo root: docker build -f examples/movies-api/Dockerfile -t catalyst-example-movies-api .
+# Build from repo root: docker build -f apps/video/Dockerfile -t catalyst-video .
 FROM node:22-alpine AS build
 WORKDIR /app
 
@@ -28,30 +28,37 @@ COPY examples/product-api/package.json examples/product-api/
 # Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy app source
-COPY examples/movies-api examples/movies-api
+# Copy app source and workspace dependencies
+COPY apps/video apps/video
+COPY packages/authorization packages/authorization
+COPY packages/config packages/config
+COPY packages/routing packages/routing
+COPY packages/service packages/service
+COPY packages/telemetry packages/telemetry
 
-# Bundle with esbuild — all code inlined.
+# Bundle with esbuild — all code inlined except WASM addons.
 # Banner provides CJS compatibility (require, __dirname) for bundled npm packages.
-RUN pnpm exec esbuild examples/movies-api/src/index.ts \
+RUN pnpm exec esbuild apps/video/src/index.ts \
   --bundle --platform=node --target=node22 \
-  --outfile=dist/index.mjs --format=esm \
+  --outfile=dist/server.mjs --format=esm \
+  --external:@cedar-policy/cedar-wasm \
+  --loader:.cedar=text --loader:.cedarschema=text \
   --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 # Create production deployment with flat node_modules
-RUN pnpm deploy --filter=@catalyst-examples/movies-api --prod /deploy
+RUN pnpm deploy --filter=@catalyst/video-service --prod /deploy
 
 # Runtime stage
 FROM node:22-alpine
 WORKDIR /app
 
 COPY --from=build /deploy/node_modules ./node_modules
-COPY --from=build /app/dist/index.mjs ./index.mjs
+COPY --from=build /app/dist/server.mjs ./server.mjs
 
-ENV PORT=8080
-EXPOSE 8080
+ENV PORT=4001
+EXPOSE 4001
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-CMD ["node", "index.mjs"]
+CMD ["node", "server.mjs"]

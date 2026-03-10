@@ -31,6 +31,39 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- Video streaming ---
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - '8554:8554' # RTSP
+      - '8888:8888' # HLS
+      - '9997:9997' # API
+
+  video:
+    build:
+      context: ..
+      dockerfile: apps/video/Dockerfile
+    ports:
+      - '4001:4001'
+    environment:
+      - CATALYST_VIDEO_PORT=4001
+      - CATALYST_NODE_ID=video
+      - CATALYST_VIDEO_MEDIAMTX_API_URL=http://mediamtx:9997
+      - OTEL_SERVICE_NAME=video
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4001/healthz']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+
   # --- Shared auth ---
 
   auth:
@@ -117,6 +150,7 @@ services:
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-a:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[10000]
       - CATALYST_ENVOY_ADDRESS=envoy-proxy-a
+      - CATALYST_VIDEO_ENDPOINT=ws://video:4001/api
       - OTEL_SERVICE_NAME=orch-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
@@ -132,6 +166,8 @@ services:
       auth:
         condition: service_healthy
       envoy-svc-a:
+        condition: service_healthy
+      video:
         condition: service_healthy
 
   zenoh-router:
@@ -225,6 +261,7 @@ services:
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-b:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[10000]
       - CATALYST_ENVOY_ADDRESS=envoy-proxy-b
+      - CATALYST_VIDEO_ENDPOINT=ws://video:4001/api
       - OTEL_SERVICE_NAME=orch-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
@@ -240,6 +277,8 @@ services:
       auth:
         condition: service_healthy
       envoy-svc-b:
+        condition: service_healthy
+      video:
         condition: service_healthy
 
   # --- Node C (Consumer): TAK adapter ---
@@ -307,6 +346,7 @@ services:
       - CATALYST_ENVOY_ENDPOINT=ws://envoy-svc-c:3000/api
       - CATALYST_ENVOY_PORT_RANGE=[10000]
       - CATALYST_ENVOY_ADDRESS=envoy-proxy-c
+      - CATALYST_VIDEO_ENDPOINT=ws://video:4001/api
       - OTEL_SERVICE_NAME=orch-c
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
@@ -322,6 +362,8 @@ services:
       auth:
         condition: service_healthy
       envoy-svc-c:
+        condition: service_healthy
+      video:
         condition: service_healthy
 
   tak-adapter:
