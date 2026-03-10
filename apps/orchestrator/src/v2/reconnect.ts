@@ -48,6 +48,13 @@ export class ReconnectManager {
 
     const delay = Math.min(1000 * Math.pow(2, attempt - 1), this.maxBackoffMs)
 
+    logger.info('Scheduling reconnect to {peerName} (attempt {attempt}, delay {delayMs}ms)', {
+      'event.name': 'peer.reconnect.scheduled',
+      'peer.name': peer.name,
+      'reconnect.attempt': attempt,
+      'reconnect.delay_ms': delay,
+    })
+
     const timer = setTimeout(async () => {
       this.timers.delete(peer.name)
       if (this.nodeToken === undefined) {
@@ -60,6 +67,11 @@ export class ReconnectManager {
       }
       try {
         await this.transport.openPeer(peer, this.nodeToken)
+        logger.info('Reconnected to {peerName} after {attempt} attempt(s)', {
+          'event.name': 'peer.reconnect.succeeded',
+          'peer.name': peer.name,
+          'reconnect.attempt': attempt,
+        })
         // Success — dispatch InternalProtocolConnected to trigger full route sync
         await this.dispatchFn({
           action: Actions.InternalProtocolConnected,
@@ -67,6 +79,11 @@ export class ReconnectManager {
         })
         this.attempts.delete(peer.name) // reset attempt counter on success
       } catch {
+        logger.warn('Reconnect to {peerName} failed (attempt {attempt}), will retry', {
+          'event.name': 'peer.reconnect.failed',
+          'peer.name': peer.name,
+          'reconnect.attempt': attempt,
+        })
         // Failed — schedule next attempt
         this.scheduleReconnect(peer)
       }
