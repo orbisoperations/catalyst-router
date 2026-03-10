@@ -6,6 +6,7 @@ import { TickManager } from './tick-manager.js'
 import { ReconnectManager } from './reconnect.js'
 import type { PeerTransport } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
+import type { VideoNotifier } from './video-notifier.js'
 
 export interface OrchestratorServiceV2Options {
   config: OrchestratorConfig
@@ -13,6 +14,7 @@ export interface OrchestratorServiceV2Options {
   nodeToken?: string
   /** File path for a SQLite-backed journal. Omit for an in-memory journal (tests/dev). */
   journalPath?: string
+  videoNotifier?: VideoNotifier
 }
 
 /**
@@ -61,6 +63,7 @@ export class OrchestratorServiceV2 {
       journal: this.journal,
       nodeToken: opts.nodeToken,
       initialState: tempRib.state,
+      videoNotifier: opts.videoNotifier,
     })
 
     // 4. Create the tick manager — drives hold-timer checks on a periodic interval.
@@ -91,5 +94,10 @@ export class OrchestratorServiceV2 {
   setNodeToken(token: string): void {
     this.bus.setNodeToken(token)
     this.reconnectManager.setNodeToken(token)
+  }
+
+  /** Hot-swap the video notifier (used on connect/disconnect). */
+  setVideoNotifier(notifier: VideoNotifier | undefined): void {
+    this.bus.setVideoNotifier(notifier)
   }
 }
