@@ -57,12 +57,13 @@ export function createVideoClient(url?: string): VideoServiceApi {
 
   return {
     async listStreams(query, token) {
+      const params = new URLSearchParams()
+      if (query?.scope) params.set('scope', query.scope)
+      if (query?.sourceNode) params.set('sourceNode', query.sourceNode)
+      if (query?.protocol) params.set('protocol', query.protocol)
+      const qs = params.toString()
+
       if (token) {
-        const params = new URLSearchParams()
-        if (query?.scope) params.set('scope', query.scope)
-        if (query?.sourceNode) params.set('sourceNode', query.sourceNode)
-        if (query?.protocol) params.set('protocol', query.protocol)
-        const qs = params.toString()
         const endpoint = `${baseUrl}/video-stream/streams${qs ? `?${qs}` : ''}`
         const res = await fetch(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
@@ -72,7 +73,8 @@ export function createVideoClient(url?: string): VideoServiceApi {
         return res.json()
       }
 
-      const res = await fetch(`${baseUrl}/streams`, {
+      const endpoint = `${baseUrl}/streams${qs ? `?${qs}` : ''}`
+      const res = await fetch(endpoint, {
         signal: AbortSignal.timeout(10000),
       })
       if (!res.ok) throw await httpError(res)
@@ -104,6 +106,7 @@ export function createVideoClient(url?: string): VideoServiceApi {
       const res = await fetch(`${baseUrl}/readyz`, {
         signal: AbortSignal.timeout(10000),
       })
+      if (!res.ok) throw await httpError(res)
       return res.json()
     },
   }
