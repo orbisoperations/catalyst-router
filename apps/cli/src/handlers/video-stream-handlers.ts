@@ -89,10 +89,11 @@ export async function subscribeStreamHandler(
 const PLAYERS = ['ffplay', 'mpv', 'vlc'] as const
 
 function detectPlayer(preferred?: string): string | undefined {
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which'
   const candidates = preferred ? [preferred] : [...PLAYERS]
   for (const bin of candidates) {
     try {
-      execFileSync('which', [bin], { stdio: 'ignore' })
+      execFileSync(whichCmd, [bin], { stdio: 'ignore' })
       return bin
     } catch {
       // not found, try next
