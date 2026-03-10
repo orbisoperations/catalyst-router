@@ -22,7 +22,7 @@ export function useHealth(pollIntervalMs = 10000) {
     let active = true
     const fetchHealth = async () => {
       try {
-        const res = await fetch('/dashboard/api/services')
+        const res = await fetch('/api/services')
         const data = await res.json()
         if (active) {
           setGroups(data.groups)

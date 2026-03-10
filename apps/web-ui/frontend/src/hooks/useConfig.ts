@@ -8,7 +8,7 @@ export function useConfig() {
   const [config, setConfig] = useState<DashboardConfig | null>(null)
 
   useEffect(() => {
-    fetch('/dashboard/api/config')
+    fetch('/api/config')
       .then((res) => res.json())
       .then(setConfig)
       .catch(() => {})
