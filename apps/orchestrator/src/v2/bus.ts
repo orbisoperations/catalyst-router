@@ -128,6 +128,10 @@ export class OrchestratorBus {
         'catalyst.orchestrator.action.type': action.action,
         'catalyst.orchestrator.node.name': this.config.node.name,
       })
+      // Validate peerToken on LocalPeerCreate
+      if (action.action === Actions.LocalPeerCreate && !action.data.peerToken) {
+        return { success: false, error: 'peerToken is required when creating a peer' }
+      }
 
       const plan = this.rib.plan(action, this.rib.state)
 

@@ -28,6 +28,7 @@ const peerB: PeerInfo = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['reconnect.local'],
+  peerToken: 'token-b',
 }
 
 const routeAlpha = {

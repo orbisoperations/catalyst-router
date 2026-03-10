@@ -25,12 +25,14 @@ const peerB: PeerInfo = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['policy.local'],
+  peerToken: 'token-b',
 }
 
 const peerC: PeerInfo = {
   name: 'node-c',
   endpoint: 'ws://node-c:4000',
   domains: ['policy.local'],
+  peerToken: 'token-c',
 }
 
 const routeAlpha = {
