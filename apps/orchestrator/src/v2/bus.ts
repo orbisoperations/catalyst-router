@@ -115,6 +115,11 @@ export class OrchestratorBus {
 
   async dispatch(action: Action): Promise<StateResult> {
     return this.queue.enqueue(async () => {
+      // Validate peerToken on LocalPeerCreate
+      if (action.action === Actions.LocalPeerCreate && !action.data.peerToken) {
+        return { success: false, error: 'peerToken is required when creating a peer' }
+      }
+
       const plan = this.rib.plan(action, this.rib.state)
 
       if (!this.rib.stateChanged(plan)) {

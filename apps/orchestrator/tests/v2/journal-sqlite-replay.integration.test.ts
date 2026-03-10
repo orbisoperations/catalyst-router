@@ -44,6 +44,7 @@ const peerB = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['journal.local'],
+  peerToken: 'token-b',
 }
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,12 @@ function makeConfig(name: string): OrchestratorConfig {
 }
 
 function makePeerInfo(name: string): PeerInfo {
-  return { name, endpoint: `ws://${name}:4000`, domains: ['keepalive-bidi.local'] }
+  return {
+    name,
+    endpoint: `ws://${name}:4000`,
+    domains: ['keepalive-bidi.local'],
+    peerToken: `token-${name}`,
+  }
 }
 
 interface BusEntry {
