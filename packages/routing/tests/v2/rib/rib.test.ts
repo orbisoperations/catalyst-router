@@ -5,7 +5,7 @@ import { newRouteTable } from '../../../src/v2/state.js'
 import { Actions } from '../../../src/v2/action-types.js'
 import { CloseCodes } from '../../../src/v2/close-codes.js'
 import type { Action } from '../../../src/v2/schema.js'
-import type { PeerInfo, RouteTable } from '../../../src/v2/state.js'
+import type { PeerInfo, RouteTable, InternalRoute } from '../../../src/v2/state.js'
 import type { DataChannelDefinition } from '../../../src/v2/datachannel.js'
 
 // ---------------------------------------------------------------------------
@@ -89,6 +89,15 @@ function makeTick(now: number): Action {
   return { action: Actions.Tick, data: { now } }
 }
 
+// Helper: flatten all internal routes from the nested Map structure
+function allInternalRoutes(state: RouteTable): InternalRoute[] {
+  const routes: InternalRoute[] = []
+  for (const innerMap of state.internal.routes.values()) {
+    routes.push(...innerMap.values())
+  }
+  return routes
+}
+
 // Helper: run plan+commit in one shot
 function apply(rib: RoutingInformationBase, action: Action) {
   const plan = rib.plan(action, rib.state)
@@ -119,7 +128,7 @@ describe('Peer lifecycle', () => {
     const plan = apply(rib, makeLocalPeerCreate(peer))
 
     expect(plan.prevState).not.toBe(plan.newState)
-    const added = rib.state.internal.peers.find((p) => p.name === 'peer-b')
+    const added = rib.state.internal.peers.get('peer-b')
     expect(added).toBeDefined()
     expect(added!.connectionStatus).toBe('initializing')
     expect(added!.holdTime).toBe(90_000)
@@ -148,7 +157,7 @@ describe('Peer lifecycle', () => {
     const plan = apply(rib, makeLocalPeerUpdate(updatedPeer))
 
     expect(plan.prevState).not.toBe(plan.newState)
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')
+    const found = rib.state.internal.peers.get('peer-b')
     expect(found!.domains).toEqual(['updated.com'])
     expect(found!.labels).toEqual({ env: 'prod' })
   })
@@ -156,7 +165,7 @@ describe('Peer lifecycle', () => {
   it('LocalPeerUpdate preserves runtime-only fields (connectionStatus, holdTime, lastReceived)', () => {
     const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
     // Peer should now be connected with lastReceived > 0
-    const connectedPeer = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const connectedPeer = rib.state.internal.peers.get('peer-b')!
     const originalStatus = connectedPeer.connectionStatus
     const originalHoldTime = connectedPeer.holdTime
     const originalLastReceived = connectedPeer.lastReceived
@@ -164,7 +173,7 @@ describe('Peer lifecycle', () => {
     const updatedPeer: PeerInfo = { ...peer, domains: ['new.com'] }
     apply(rib, makeLocalPeerUpdate(updatedPeer))
 
-    const after = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const after = rib.state.internal.peers.get('peer-b')!
     expect(after.connectionStatus).toBe(originalStatus)
     expect(after.holdTime).toBe(originalHoldTime)
     expect(after.lastReceived).toBe(originalLastReceived)
@@ -185,7 +194,7 @@ describe('Peer lifecycle', () => {
     const plan = apply(rib, makeLocalPeerDelete('peer-b'))
 
     expect(plan.prevState).not.toBe(plan.newState)
-    expect(rib.state.internal.peers.find((p) => p.name === 'peer-b')).toBeUndefined()
+    expect(rib.state.internal.peers.get('peer-b')).toBeUndefined()
   })
 
   it('LocalPeerDelete removes all routes from that peer', () => {
@@ -197,11 +206,11 @@ describe('Peer lifecycle', () => {
         { action: 'add', route: makeRoute('svc-x'), nodePath: ['peer-b'], originNode: 'peer-b' },
       ])
     )
-    expect(rib.state.internal.routes.some((r) => r.peer.name === 'peer-b')).toBe(true)
+    expect(allInternalRoutes(rib.state).some((r) => r.peer.name === 'peer-b')).toBe(true)
 
     apply(rib, makeLocalPeerDelete('peer-b'))
 
-    expect(rib.state.internal.routes.some((r) => r.peer.name === 'peer-b')).toBe(false)
+    expect(allInternalRoutes(rib.state).some((r) => r.peer.name === 'peer-b')).toBe(false)
   })
 
   it('LocalPeerDelete generates port release ops for routes with envoyPort', () => {
@@ -238,7 +247,7 @@ describe('Route lifecycle', () => {
     const plan = apply(rib, makeLocalRouteCreate(route))
 
     expect(plan.prevState).not.toBe(plan.newState)
-    expect(rib.state.local.routes.find((r) => r.name === 'my-svc')).toBeDefined()
+    expect(rib.state.local.routes.get('my-svc')).toBeDefined()
   })
 
   it('LocalRouteCreate emits added routeChange', () => {
@@ -267,7 +276,7 @@ describe('Route lifecycle', () => {
     const plan = apply(rib, makeLocalRouteDelete(route))
 
     expect(plan.prevState).not.toBe(plan.newState)
-    expect(rib.state.local.routes.find((r) => r.name === 'my-svc')).toBeUndefined()
+    expect(rib.state.local.routes.get('my-svc')).toBeUndefined()
   })
 
   it('LocalRouteDelete generates port release op if route has envoyPort', () => {
@@ -314,7 +323,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       ])
     )
 
-    const stored = rib.state.internal.routes.find((r) => r.name === 'svc-1')
+    const stored = allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')
     expect(stored).toBeDefined()
     expect(stored!.peer.name).toBe('peer-b')
     expect(stored!.nodePath).toEqual(['peer-b'])
@@ -334,7 +343,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       ])
     )
 
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-loop')).toBeUndefined()
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-loop')).toBeUndefined()
     // routeChanges should be empty (route was skipped)
     expect(plan.routeChanges).toHaveLength(0)
   })
@@ -349,7 +358,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
         { action: 'add', route, nodePath: ['peer-b'], originNode: 'peer-b' },
       ])
     )
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')).toBeDefined()
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')).toBeDefined()
 
     const plan = apply(
       rib,
@@ -358,7 +367,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       ])
     )
 
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')).toBeUndefined()
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')).toBeUndefined()
     expect(plan.routeChanges.some((c) => c.type === 'removed')).toBe(true)
   })
 
@@ -399,7 +408,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       ])
     )
 
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')
+    const found = rib.state.internal.peers.get('peer-b')
     expect(found!.lastReceived).toBe(fixedNow + 5000)
 
     vi.restoreAllMocks()
@@ -416,7 +425,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
         { action: 'add', route, nodePath: ['peer-c', 'peer-b'], originNode: 'peer-c' },
       ])
     )
-    const first = rib.state.internal.routes.find((r) => r.name === 'svc-1')
+    const first = allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')
     expect(first!.nodePath).toHaveLength(2)
 
     // Second: shorter path (1 hop) — should replace
@@ -427,7 +436,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       ])
     )
 
-    const updated = rib.state.internal.routes.find((r) => r.name === 'svc-1')
+    const updated = allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')
     expect(updated!.nodePath).toHaveLength(1)
     expect(plan.routeChanges.some((c) => c.type === 'updated')).toBe(true)
   })
@@ -452,7 +461,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       ])
     )
 
-    const stored = rib.state.internal.routes.find((r) => r.name === 'svc-1')
+    const stored = allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')
     expect(stored!.nodePath).toHaveLength(1)
     // No route changes should be emitted for a rejected longer path
     expect(plan.routeChanges).toHaveLength(0)
@@ -472,7 +481,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     const plan = apply(rib, makeProtocolUpdate(peer, updates))
 
     // All 15 routes should be installed
-    const installed = rib.state.internal.routes.filter((r) => r.name.startsWith('batch-svc-'))
+    const installed = allInternalRoutes(rib.state).filter((r) => r.name.startsWith('batch-svc-'))
     expect(installed).toHaveLength(15)
     expect(plan.routeChanges).toHaveLength(15)
     expect(plan.routeChanges.every((c) => c.type === 'added')).toBe(true)
@@ -489,7 +498,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       originNode: 'peer-b',
     }))
     apply(rib, makeProtocolUpdate(peer, seedRoutes))
-    expect(rib.state.internal.routes).toHaveLength(5)
+    expect(allInternalRoutes(rib.state)).toHaveLength(5)
 
     // Single batch: remove 3 existing + add 7 new
     const batchUpdates = [
@@ -510,7 +519,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     const plan = apply(rib, makeProtocolUpdate(peer, batchUpdates))
 
     // 5 existing - 3 removed + 7 new = 9 routes
-    expect(rib.state.internal.routes).toHaveLength(9)
+    expect(allInternalRoutes(rib.state)).toHaveLength(9)
     expect(plan.routeChanges).toHaveLength(10) // 3 removed + 7 added
 
     const removals = plan.routeChanges.filter((c) => c.type === 'removed')
@@ -546,8 +555,12 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     const plan = apply(rib, makeProtocolUpdate(peer, batchUpdates))
 
     // Only 2 valid routes installed, looped one skipped
-    expect(rib.state.internal.routes).toHaveLength(2)
-    expect(rib.state.internal.routes.map((r) => r.name).sort()).toEqual(['valid-1', 'valid-2'])
+    expect(allInternalRoutes(rib.state)).toHaveLength(2)
+    expect(
+      allInternalRoutes(rib.state)
+        .map((r) => r.name)
+        .sort()
+    ).toEqual(['valid-1', 'valid-2'])
     expect(plan.routeChanges).toHaveLength(2)
   })
 
@@ -573,7 +586,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       ])
     )
 
-    const stored = rib.state.internal.routes.find((r) => r.name === 'svc-1')
+    const stored = allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')
     expect(stored).toBeDefined()
     expect(stored!.isStale).toBe(false)
     expect(plan.routeChanges.some((c) => c.type === 'updated')).toBe(true)
@@ -600,7 +613,7 @@ describe('Peer connection', () => {
     apply(rib, makeLocalPeerCreate(peer))
     apply(rib, makeProtocolOpen(peer))
 
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const found = rib.state.internal.peers.get('peer-b')!
     expect(found.connectionStatus).toBe('connected')
     expect(found.lastReceived).toBe(fixedNow)
 
@@ -614,7 +627,7 @@ describe('Peer connection', () => {
     // Default holdTime is 90_000 ms. Remote offers 30_000 ms — should take min.
     apply(rib, makeProtocolOpen(peer, 30_000))
 
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const found = rib.state.internal.peers.get('peer-b')!
     expect(found.holdTime).toBe(30_000)
   })
 
@@ -625,7 +638,7 @@ describe('Peer connection', () => {
     // Local default 90_000, remote offers 120_000 — should keep 90_000
     apply(rib, makeProtocolOpen(peer, 120_000))
 
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const found = rib.state.internal.peers.get('peer-b')!
     expect(found.holdTime).toBe(90_000)
   })
 
@@ -635,7 +648,7 @@ describe('Peer connection', () => {
     apply(rib, makeLocalPeerCreate(peer))
     apply(rib, makeProtocolOpen(peer, undefined))
 
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const found = rib.state.internal.peers.get('peer-b')!
     expect(found.holdTime).toBe(90_000)
   })
 
@@ -648,7 +661,7 @@ describe('Peer connection', () => {
     apply(rib, makeLocalPeerCreate(peer))
     apply(rib, makeProtocolConnected(peer))
 
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const found = rib.state.internal.peers.get('peer-b')!
     expect(found.connectionStatus).toBe('connected')
     expect(found.lastConnected).toBeInstanceOf(Date)
     expect(found.lastReceived).toBe(fixedNow)
@@ -674,10 +687,8 @@ describe('Peer connection', () => {
 
     apply(rib, makeProtocolClose(peer, CloseCodes.NORMAL))
 
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')).toBeUndefined()
-    expect(rib.state.internal.peers.find((p) => p.name === 'peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')).toBeUndefined()
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
   })
 
   it('InternalProtocolClose with TRANSPORT_ERROR marks routes isStale=true', () => {
@@ -692,7 +703,7 @@ describe('Peer connection', () => {
 
     const plan = apply(rib, makeProtocolClose(peer, CloseCodes.TRANSPORT_ERROR))
 
-    const stale = rib.state.internal.routes.find((r) => r.name === 'svc-1')
+    const stale = allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')
     expect(stale).toBeDefined()
     expect(stale!.isStale).toBe(true)
     // No port ops for graceful restart
@@ -712,7 +723,7 @@ describe('Peer connection', () => {
 
     apply(rib, makeProtocolClose(peer, CloseCodes.HOLD_EXPIRED))
 
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-2')).toBeUndefined()
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-2')).toBeUndefined()
   })
 
   it('InternalProtocolClose with ADMIN_SHUTDOWN removes routes', () => {
@@ -727,7 +738,7 @@ describe('Peer connection', () => {
 
     apply(rib, makeProtocolClose(peer, CloseCodes.ADMIN_SHUTDOWN))
 
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-3')).toBeUndefined()
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-3')).toBeUndefined()
   })
 
   it('InternalProtocolClose generates port release ops for removed routes', () => {
@@ -804,10 +815,8 @@ describe('Tick', () => {
     const plan = apply(rib, makeTick(baseNow + 11_000))
 
     expect(plan.prevState).not.toBe(plan.newState)
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')).toBeUndefined()
-    expect(rib.state.internal.peers.find((p) => p.name === 'peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')).toBeUndefined()
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
   })
 
   it('Tick generates port release ops for expired peer routes', () => {
@@ -872,9 +881,7 @@ describe('Tick', () => {
     const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
     // Close the peer normally — routes are removed, not stale
     apply(rib, makeProtocolClose(peer, CloseCodes.NORMAL))
-    expect(rib.state.internal.peers.find((p) => p.name === 'peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
 
     vi.restoreAllMocks()
 
@@ -902,10 +909,8 @@ describe('Tick', () => {
 
     // Transport error — routes become stale, peer set to closed
     apply(rib, makeProtocolClose(peer, CloseCodes.TRANSPORT_ERROR))
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')?.isStale).toBe(true)
-    expect(rib.state.internal.peers.find((p) => p.name === 'peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')?.isStale).toBe(true)
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
 
     vi.restoreAllMocks()
 
@@ -915,7 +920,7 @@ describe('Tick', () => {
 
     // Tick after holdTime elapses — stale routes should be purged
     const plan = apply(rib, makeTick(baseNow + 11_000))
-    expect(rib.state.internal.routes.find((r) => r.name === 'svc-1')).toBeUndefined()
+    expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')).toBeUndefined()
     expect(plan.routeChanges).toHaveLength(1)
     expect(plan.routeChanges[0].type).toBe('removed')
   })
@@ -956,15 +961,13 @@ describe('Keepalive', () => {
     vi.spyOn(Date, 'now').mockReturnValue(baseNow)
 
     const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
-    const initialLastReceived = rib.state.internal.peers.find(
-      (p) => p.name === 'peer-b'
-    )!.lastReceived
+    const initialLastReceived = rib.state.internal.peers.get('peer-b')!.lastReceived
 
     vi.spyOn(Date, 'now').mockReturnValue(baseNow + 30_000)
     const plan = apply(rib, makeProtocolKeepalive(peer))
 
     expect(plan.prevState).not.toBe(plan.newState)
-    const found = rib.state.internal.peers.find((p) => p.name === 'peer-b')!
+    const found = rib.state.internal.peers.get('peer-b')!
     expect(found.lastReceived).toBe(baseNow + 30_000)
     expect(found.lastReceived).toBeGreaterThan(initialLastReceived)
 
@@ -1010,11 +1013,11 @@ describe('Plan purity', () => {
     // Deep-freeze the state object to catch any mutations
     const frozen = Object.freeze({
       ...state,
-      local: Object.freeze({ ...state.local, routes: Object.freeze([...state.local.routes]) }),
+      local: Object.freeze({ ...state.local, routes: state.local.routes }),
       internal: Object.freeze({
         ...state.internal,
-        peers: Object.freeze([...state.internal.peers]),
-        routes: Object.freeze([...state.internal.routes]),
+        peers: state.internal.peers,
+        routes: state.internal.routes,
       }),
     }) as RouteTable
 
@@ -1032,9 +1035,11 @@ describe('Plan purity', () => {
     const plan2 = rib.plan(action, state)
 
     // Both plans should produce structurally equivalent state
-    expect(plan1.newState.internal.peers[0].name).toBe(plan2.newState.internal.peers[0].name)
-    expect(plan1.newState.internal.peers[0].connectionStatus).toBe(
-      plan2.newState.internal.peers[0].connectionStatus
+    expect(plan1.newState.internal.peers.get('peer-b')?.name).toBe(
+      plan2.newState.internal.peers.get('peer-b')?.name
+    )
+    expect(plan1.newState.internal.peers.get('peer-b')?.connectionStatus).toBe(
+      plan2.newState.internal.peers.get('peer-b')?.connectionStatus
     )
   })
 
@@ -1114,14 +1119,18 @@ describe('Journal integration', () => {
     }
 
     // Local routes should match
-    expect(freshRib.state.local.routes).toHaveLength(rib.state.local.routes.length)
-    expect(freshRib.state.local.routes[0].name).toBe(rib.state.local.routes[0].name)
+    expect(freshRib.state.local.routes.size).toBe(rib.state.local.routes.size)
+    expect(freshRib.state.local.routes.get('svc-1')?.name).toBe(
+      rib.state.local.routes.get('svc-1')?.name
+    )
 
     // Internal peers should match in name and status
-    expect(freshRib.state.internal.peers).toHaveLength(rib.state.internal.peers.length)
-    expect(freshRib.state.internal.peers[0].name).toBe(rib.state.internal.peers[0].name)
-    expect(freshRib.state.internal.peers[0].connectionStatus).toBe(
-      rib.state.internal.peers[0].connectionStatus
+    expect(freshRib.state.internal.peers.size).toBe(rib.state.internal.peers.size)
+    expect(freshRib.state.internal.peers.get('peer-b')?.name).toBe(
+      rib.state.internal.peers.get('peer-b')?.name
+    )
+    expect(freshRib.state.internal.peers.get('peer-b')?.connectionStatus).toBe(
+      rib.state.internal.peers.get('peer-b')?.connectionStatus
     )
   })
 
@@ -1156,8 +1165,8 @@ describe('Journal integration', () => {
 
     apply(rib, makeLocalPeerCreate(peer))
 
-    expect(rib.state.internal.peers).toHaveLength(1)
-    expect(rib.state.internal.peers[0].name).toBe('peer-b')
+    expect(rib.state.internal.peers.size).toBe(1)
+    expect(rib.state.internal.peers.get('peer-b')).toBeDefined()
   })
 })
 
@@ -1189,13 +1198,13 @@ describe('Multi-peer scenarios', () => {
       ])
     )
 
-    expect(rib.state.internal.routes).toHaveLength(2)
+    expect(allInternalRoutes(rib.state)).toHaveLength(2)
 
     // Closing peer-b should only remove svc-b
     apply(rib, makeProtocolClose(peerB, CloseCodes.NORMAL))
 
-    expect(rib.state.internal.routes).toHaveLength(1)
-    expect(rib.state.internal.routes[0].name).toBe('svc-c')
+    expect(allInternalRoutes(rib.state)).toHaveLength(1)
+    expect(allInternalRoutes(rib.state)[0].name).toBe('svc-c')
   })
 
   it('LocalPeerDelete does not affect routes from other peers', () => {
@@ -1223,10 +1232,10 @@ describe('Multi-peer scenarios', () => {
 
     apply(rib, makeLocalPeerDelete('peer-b'))
 
-    expect(rib.state.internal.peers).toHaveLength(1)
-    expect(rib.state.internal.peers[0].name).toBe('peer-c')
-    expect(rib.state.internal.routes).toHaveLength(1)
-    expect(rib.state.internal.routes[0].name).toBe('svc-c')
+    expect(rib.state.internal.peers.size).toBe(1)
+    expect(rib.state.internal.peers.get('peer-c')).toBeDefined()
+    expect(allInternalRoutes(rib.state)).toHaveLength(1)
+    expect(allInternalRoutes(rib.state)[0].name).toBe('svc-c')
   })
 })
 
@@ -1237,11 +1246,12 @@ describe('Multi-peer scenarios', () => {
 describe('initialState option', () => {
   it('uses provided initialState instead of empty table', () => {
     const preset = newRouteTable()
-    preset.local.routes.push(makeRoute('pre-existing'))
+    const route = makeRoute('pre-existing')
+    preset.local.routes.set(route.name, route)
 
     const rib = new RoutingInformationBase({ nodeId: 'node-a', initialState: preset })
 
-    expect(rib.state.local.routes).toHaveLength(1)
-    expect(rib.state.local.routes[0].name).toBe('pre-existing')
+    expect(rib.state.local.routes.size).toBe(1)
+    expect(rib.state.local.routes.get('pre-existing')?.name).toBe('pre-existing')
   })
 })
