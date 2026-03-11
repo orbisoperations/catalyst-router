@@ -15,7 +15,22 @@ const config = CatalystConfigSchema.parse({
   },
 })
 
-const webUi = new WebUiService({ config, orchestratorUrl, frontendDir })
+const dashboardLinksRaw = process.env.CATALYST_DASHBOARD_LINKS
+let dashboardLinks: Record<string, string> | undefined
+if (dashboardLinksRaw) {
+  dashboardLinks = JSON.parse(dashboardLinksRaw) as Record<string, string>
+}
+
+const webUi = new WebUiService({
+  config,
+  orchestratorUrl,
+  frontendDir,
+  otelServiceName: process.env.OTEL_SERVICE_NAME,
+  envoyUrl: process.env.ENVOY_URL,
+  authUrl: process.env.AUTH_URL,
+  gatewayUrl: process.env.GATEWAY_URL,
+  dashboardLinks,
+})
 await webUi.initialize()
 
 catalystHonoServer(webUi.handler, {
