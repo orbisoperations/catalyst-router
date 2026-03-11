@@ -94,6 +94,7 @@ export function createDashboardRoutes(options: DashboardOptions): Hono {
   const app = new Hono()
   const serviceGroups = deriveServiceGroups(options)
   let cachedState: unknown = null
+  let lastUpdated: string | null = null
 
   // GET /state — fetch from orchestrator, cache for resilience
   app.get('/state', async (c) => {
@@ -103,12 +104,14 @@ export function createDashboardRoutes(options: DashboardOptions): Hono {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(ORCHESTRATOR_FETCH_TIMEOUT_MS),
       })
+      if (!res.ok) throw new Error(`Orchestrator returned ${res.status}`)
       const body = await res.json()
       cachedState = body
-      return c.json(body)
+      lastUpdated = new Date().toISOString()
+      return c.json({ data: body, lastUpdated })
     } catch {
       if (cachedState !== null) {
-        return c.json(cachedState)
+        return c.json({ data: cachedState, lastUpdated, stale: true })
       }
       return c.json({ error: 'Orchestrator unreachable' }, 502)
     }
