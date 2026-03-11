@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import type { CatalystConfig } from '@catalyst/config'
-import { getLogger } from '@catalyst/telemetry'
 
 /** Minimal interface for dashboard state access — works with both v1 and v2 buses. */
 export interface DashboardStateProvider {
@@ -117,14 +116,6 @@ async function checkHealth(service: ServiceDef): Promise<ServiceHealth> {
 // TODO: Add authentication middleware — dashboard API is currently unauthenticated
 export function createDashboardRoutes(bus: DashboardStateProvider, config: CatalystConfig): Hono {
   const app = new Hono()
-  const logger = getLogger(['catalyst', 'dashboard'])
-
-  if (!config.orchestrator?.envoyConfig?.endpoint) {
-    logger.warn('Envoy config not set — envoy-service will not appear in dashboard', {
-      'event.name': 'dashboard.envoy_config.missing',
-    })
-  }
-
   const otelServiceName = process.env.OTEL_SERVICE_NAME ?? config.node.name
   const authEndpointFallback = process.env.CATALYST_AUTH_ENDPOINT
   const serviceGroups = deriveServiceGroups({ config, otelServiceName, authEndpointFallback })

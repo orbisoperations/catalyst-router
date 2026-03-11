@@ -2,27 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { CatalystConfig } from '@catalyst/config'
 import type { DashboardStateProvider } from '../../src/routes/dashboard.js'
 
-// ---------------------------------------------------------------------------
-// Mock @catalyst/telemetry — must be before importing the module under test
-// ---------------------------------------------------------------------------
-
-const mockLogger = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-}
-
-vi.mock('@catalyst/telemetry', () => ({
-  getLogger: vi.fn(() => mockLogger),
-}))
-
-// Import after mock is registered
-const { createDashboardRoutes } = await import('../../src/routes/dashboard.js')
+import { createDashboardRoutes } from '../../src/routes/dashboard.js'
 
 // ---------------------------------------------------------------------------
 // Test fixtures
 // ---------------------------------------------------------------------------
+
+const defaultEnvoyConfig = {
+  endpoint: 'ws://envoy:9000',
+  portRange: [[10000, 10100]] as [number, number][],
+}
 
 function makeConfig(overrides: Partial<CatalystConfig> = {}): CatalystConfig {
   return {
@@ -32,6 +21,10 @@ function makeConfig(overrides: Partial<CatalystConfig> = {}): CatalystConfig {
       endpoint: 'ws://test-node:4000',
     },
     port: 3000,
+    orchestrator: {
+      envoyConfig: defaultEnvoyConfig,
+      ...(overrides.orchestrator ?? {}),
+    },
     ...overrides,
   }
 }
@@ -291,24 +284,6 @@ describe('Dashboard routes', () => {
       fetchSpy.mockRestore()
     })
 
-    it('does not include data plane group when envoyConfig is missing', async () => {
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValue(new Response('OK', { status: 200 }))
-
-      const config = makeConfig() // no envoyConfig
-      const bus = makeStateProvider()
-      const app = createDashboardRoutes(bus, config)
-
-      const res = await app.request('/services')
-      const body = await res.json()
-
-      const dataPlane = body.groups.find((g: { name: string }) => g.name === 'Data Plane')
-      expect(dataPlane).toBeUndefined()
-
-      fetchSpy.mockRestore()
-    })
-
     it('includes auth in control plane when auth endpoint is in config', async () => {
       const fetchSpy = vi
         .spyOn(globalThis, 'fetch')
@@ -316,6 +291,7 @@ describe('Dashboard routes', () => {
 
       const config = makeConfig({
         orchestrator: {
+          envoyConfig: defaultEnvoyConfig,
           auth: {
             endpoint: 'ws://auth:5000',
             systemToken: 'test-token',
@@ -369,6 +345,7 @@ describe('Dashboard routes', () => {
 
       const config = makeConfig({
         orchestrator: {
+          envoyConfig: defaultEnvoyConfig,
           gqlGatewayConfig: { endpoint: 'ws://gateway:6000' },
         },
       })
@@ -385,12 +362,12 @@ describe('Dashboard routes', () => {
       fetchSpy.mockRestore()
     })
 
-    it('filters out empty groups', async () => {
+    it('filters out empty groups (no federation when gateway not configured)', async () => {
       const fetchSpy = vi
         .spyOn(globalThis, 'fetch')
         .mockResolvedValue(new Response('OK', { status: 200 }))
 
-      // No envoy, no gateway, no auth => only Control Plane with orchestrator
+      // No gateway, no auth => Control Plane + Data Plane only
       const config = makeConfig()
       const bus = makeStateProvider()
       const app = createDashboardRoutes(bus, config)
@@ -398,9 +375,12 @@ describe('Dashboard routes', () => {
       const res = await app.request('/services')
       const body = await res.json()
 
-      // Should only have Control Plane
-      expect(body.groups).toHaveLength(1)
-      expect(body.groups[0].name).toBe('Control Plane')
+      // Should have Control Plane and Data Plane, but no Federation
+      expect(body.groups).toHaveLength(2)
+      expect(body.groups.map((g: { name: string }) => g.name)).toEqual([
+        'Control Plane',
+        'Data Plane',
+      ])
 
       fetchSpy.mockRestore()
     })
@@ -500,42 +480,6 @@ describe('Dashboard routes', () => {
         process.env.OTEL_SERVICE_NAME = original
       }
       fetchSpy.mockRestore()
-    })
-  })
-
-  // -------------------------------------------------------------------------
-  // Envoy warning log
-  // -------------------------------------------------------------------------
-
-  describe('Envoy warning log', () => {
-    it('logs a warning when envoy config is missing', () => {
-      mockLogger.warn.mockClear()
-
-      const config = makeConfig() // no envoyConfig
-      const bus = makeStateProvider()
-      createDashboardRoutes(bus, config)
-
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Envoy config not set — envoy-service will not appear in dashboard',
-        expect.objectContaining({ 'event.name': 'dashboard.envoy_config.missing' })
-      )
-    })
-
-    it('does not log a warning when envoy config is present', () => {
-      mockLogger.warn.mockClear()
-
-      const config = makeConfig({
-        orchestrator: {
-          envoyConfig: {
-            endpoint: 'ws://envoy:9000',
-            portRange: [[10000, 10100]],
-          },
-        },
-      })
-      const bus = makeStateProvider()
-      createDashboardRoutes(bus, config)
-
-      expect(mockLogger.warn).not.toHaveBeenCalled()
     })
   })
 })
