@@ -61,6 +61,19 @@ export const OrchestratorConfigSchema = z.object({
       portRange: z.array(PortEntrySchema).min(1),
     })
     .optional(),
+  video: z
+    .object({
+      enabled: z.boolean().default(false),
+      mediamtxApiUrl: z.string().optional(),
+      relayGracePeriodMs: z.number().default(30_000),
+      streamAuth: z
+        .object({
+          legacyFallback: z.boolean().default(false),
+        })
+        .default({ legacyFallback: false }),
+    })
+    .optional(),
+  videoEndpoint: z.string().optional(),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -93,6 +106,27 @@ export const AuthConfigSchema = z.object({
 export type AuthConfig = z.infer<typeof AuthConfigSchema>
 
 /**
+ * Video Specific Configuration
+ */
+export const VideoConfigSchema = z.object({
+  port: z.number().int().min(1).max(65535).default(4001),
+  authEndpoint: z.string().optional(),
+  nodeToken: z.string().optional(),
+  mediamtxApiUrl: z.string().default('http://localhost:9997'),
+  relayGracePeriodMs: z.number().default(30_000),
+  debounceDurationMs: z.number().default(500),
+  streamAuth: z
+    .object({
+      // Default true for standalone video service (backward-compat during extraction).
+      // OrchestratorConfigSchema.video defaults to false (embedded mode, fully wired).
+      legacyFallback: z.boolean().default(true),
+    })
+    .default({ legacyFallback: true }),
+})
+
+export type VideoConfig = z.infer<typeof VideoConfigSchema>
+
+/**
  * Top-level Catalyst System Configuration
  */
 export const CatalystConfigSchema = z.object({
@@ -100,12 +134,13 @@ export const CatalystConfigSchema = z.object({
   orchestrator: OrchestratorConfigSchema.optional(),
   auth: AuthConfigSchema.optional(),
   envoy: EnvoyConfigSchema.optional(),
+  video: VideoConfigSchema.optional(),
   port: z.number().default(3000),
 })
 
 export type CatalystConfig = z.infer<typeof CatalystConfigSchema>
 
-type ServiceType = 'gateway' | 'orchestrator' | 'auth' | 'envoy'
+type ServiceType = 'gateway' | 'orchestrator' | 'auth' | 'envoy' | 'video'
 
 /**
  * Configuration load options
@@ -136,6 +171,34 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
     throw new Error(
       'CATALYST_PEERING_ENDPOINT environment variable is required for the orchestrator'
     )
+  }
+
+  // Video service gets its own config shape
+  if (options.serviceType === 'video') {
+    const videoConfig = VideoConfigSchema.parse({
+      port: Number(process.env.CATALYST_VIDEO_PORT || '4001'),
+      authEndpoint: process.env.CATALYST_VIDEO_AUTH_ENDPOINT || undefined,
+      nodeToken: process.env.CATALYST_VIDEO_NODE_TOKEN || undefined,
+      mediamtxApiUrl: process.env.CATALYST_VIDEO_MEDIAMTX_API_URL || undefined,
+      relayGracePeriodMs: process.env.CATALYST_VIDEO_RELAY_GRACE_PERIOD_MS
+        ? Number(process.env.CATALYST_VIDEO_RELAY_GRACE_PERIOD_MS)
+        : undefined,
+      debounceDurationMs: process.env.CATALYST_VIDEO_DEBOUNCE_MS
+        ? Number(process.env.CATALYST_VIDEO_DEBOUNCE_MS)
+        : undefined,
+      streamAuth: {
+        legacyFallback: process.env.CATALYST_VIDEO_STREAM_AUTH_LEGACY_FALLBACK !== 'false',
+      },
+    })
+
+    return CatalystConfigSchema.parse({
+      port: videoConfig.port,
+      node: {
+        name: nodeName,
+        domains: [],
+      },
+      video: videoConfig,
+    })
   }
 
   //Oonly required for the ORCH and AUTH
@@ -191,6 +254,20 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
             }
           : undefined,
       envoyConfig,
+      videoEndpoint: process.env.CATALYST_VIDEO_ENDPOINT || undefined,
+      video:
+        process.env.CATALYST_VIDEO_ENABLED === 'true'
+          ? {
+              enabled: true,
+              mediamtxApiUrl: process.env.CATALYST_VIDEO_MEDIAMTX_API_URL,
+              relayGracePeriodMs: Number(
+                process.env.CATALYST_VIDEO_RELAY_GRACE_PERIOD_MS || '30000'
+              ),
+              streamAuth: {
+                legacyFallback: process.env.CATALYST_VIDEO_LEGACY_FALLBACK !== 'false',
+              },
+            }
+          : undefined,
     },
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,
