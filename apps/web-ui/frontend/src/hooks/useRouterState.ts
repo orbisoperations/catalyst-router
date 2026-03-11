@@ -32,6 +32,8 @@ export interface RouterState {
 
 export function useRouterState(pollIntervalMs = 10000) {
   const [state, setState] = useState<RouterState | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [stale, setStale] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -39,9 +41,11 @@ export function useRouterState(pollIntervalMs = 10000) {
     const fetchState = async () => {
       try {
         const res = await fetch('/api/state')
-        const data = await res.json()
+        const body = await res.json()
         if (active) {
-          setState(data)
+          setState(body.data)
+          setLastUpdated(body.lastUpdated ?? null)
+          setStale(body.stale === true)
           setLoading(false)
         }
       } catch {
@@ -57,5 +61,5 @@ export function useRouterState(pollIntervalMs = 10000) {
     }
   }, [pollIntervalMs])
 
-  return { state, loading }
+  return { state, loading, lastUpdated, stale }
 }
