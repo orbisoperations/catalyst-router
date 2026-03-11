@@ -13,6 +13,7 @@ import type { PeerTransport } from './transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
 import { createDashboardRoutes } from '../routes/dashboard.js'
+import { RouteTableView } from '@catalyst/routing/v2'
 
 /**
  * Auth Service RPC API for token minting.
@@ -174,6 +175,13 @@ export class OrchestratorService extends CatalystService {
       '/dashboard/api',
       createDashboardRoutes({ getState: () => bus.getStateSnapshot() }, this.config)
     )
+
+    // Thin read-only state endpoint for external consumers (e.g., web-ui dashboard)
+    this.handler.get('/api/state', (c) => {
+      const snapshot = bus.getStateSnapshot()
+      return c.json(new RouteTableView(snapshot).toPublic())
+    })
+
 
     // Start tick manager
     this._v2.start()
