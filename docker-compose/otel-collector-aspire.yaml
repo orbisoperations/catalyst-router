@@ -1,0 +1,24 @@
+# Aspire Dashboard exporter extension
+# Merged with base config via: --config otel-collector-config.yaml --config otel-collector-aspire.yaml
+# Note: OTel Collector replaces lists (not appends), so pipelines repeat all exporters.
+
+exporters:
+  otlp/aspire:
+    endpoint: aspire-dashboard:18889
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlphttp/jaeger, otlp/aspire]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, prometheusremotewrite, otlp/aspire]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlphttp/loki, otlp/aspire]
