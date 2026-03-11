@@ -3,7 +3,7 @@
 # Note: OTel Collector replaces lists (not appends), so pipelines repeat all exporters.
 
 exporters:
-  otlp/aspire:
+  otlp_grpc/aspire:
     endpoint: aspire-dashboard:18889
     tls:
       insecure: true
@@ -13,12 +13,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlphttp/jaeger, otlp/aspire]
+      exporters: [debug, otlphttp/jaeger, otlp_grpc/aspire]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, prometheusremotewrite, otlp/aspire]
+      exporters: [debug, prometheusremotewrite, otlp_grpc/aspire]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlphttp/loki, otlp/aspire]
+      exporters: [debug, otlphttp/loki, otlp_grpc/aspire]
