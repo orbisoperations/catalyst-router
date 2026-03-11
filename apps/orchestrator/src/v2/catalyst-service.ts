@@ -9,7 +9,6 @@ import { OrchestratorServiceV2 } from './service.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
-import { createDashboardRoutes } from '../routes/dashboard.js'
 import { RouteTableView } from '@catalyst/routing/v2'
 
 /**
@@ -157,14 +156,8 @@ export class OrchestratorService extends CatalystService {
       )
     })
 
-    // Mount dashboard API routes
-    const bus = this._v2.bus
-    this.handler.route(
-      '/dashboard/api',
-      createDashboardRoutes({ getState: () => bus.getStateSnapshot() }, this.config)
-    )
-
     // Thin read-only state endpoint for external consumers (e.g., web-ui dashboard)
+    const bus = this._v2.bus
     this.handler.get('/api/state', (c) => {
       const snapshot = bus.getStateSnapshot()
       return c.json(new RouteTableView(snapshot).toPublic())
