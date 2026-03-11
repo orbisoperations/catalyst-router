@@ -18,7 +18,11 @@ const config = CatalystConfigSchema.parse({
 const dashboardLinksRaw = process.env.CATALYST_DASHBOARD_LINKS
 let dashboardLinks: Record<string, string> | undefined
 if (dashboardLinksRaw) {
-  dashboardLinks = JSON.parse(dashboardLinksRaw) as Record<string, string>
+  try {
+    dashboardLinks = JSON.parse(dashboardLinksRaw) as Record<string, string>
+  } catch {
+    console.warn('Failed to parse CATALYST_DASHBOARD_LINKS, ignoring')
+  }
 }
 
 const webUi = new WebUiService({
