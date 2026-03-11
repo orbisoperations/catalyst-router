@@ -1,6 +1,15 @@
 # Observability backends — opt-in overlay
 # Usage: docker compose -f docker.compose.yaml -f observability.compose.yaml up
 services:
+  otel-collector:
+    command:
+      - '--config'
+      - '/etc/otel-collector-config.yaml'
+      - '--config'
+      - '/etc/otel-collector-observability.yaml'
+    volumes:
+      - ./otel-collector-observability.yaml:/etc/otel-collector-observability.yaml
+
   prometheus:
     image: prom/prometheus:v3.2.1
     ports:
@@ -20,8 +29,6 @@ services:
     image: jaegertracing/jaeger:2.5.0
     ports:
       - '16686:16686'
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
     depends_on:
       otel-collector:
         condition: service_started

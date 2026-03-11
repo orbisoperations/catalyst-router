@@ -160,7 +160,7 @@ export class OrchestratorService extends CatalystService {
     const bus = this._v2.bus
     this.handler.route(
       '/dashboard/api',
-      createDashboardRoutes({ getState: () => structuredClone(bus.state) }, this.config)
+      createDashboardRoutes({ getState: () => bus.getStateSnapshot() }, this.config)
     )
 
     // Start tick manager
