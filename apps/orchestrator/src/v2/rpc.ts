@@ -1,4 +1,4 @@
-import { Actions } from '@catalyst/routing/v2'
+import { Actions, PeerView, InternalRouteView } from '@catalyst/routing/v2'
 import type {
   PeerInfo,
   PeerRecord,
@@ -105,7 +105,7 @@ export async function createNetworkClient(
       },
 
       async listPeers() {
-        return bus.state.internal.peers.map(({ peerToken: _, ...rest }) => rest)
+        return bus.state.internal.peers.map((p) => new PeerView(p).toPublic())
       },
     },
   }
@@ -140,10 +140,7 @@ export async function createDataChannelClient(
       async listRoutes() {
         return {
           local: bus.state.local.routes,
-          internal: bus.state.internal.routes.map((r) => {
-            const { peerToken: _, ...safePeer } = r.peer
-            return { ...r, peer: safePeer }
-          }),
+          internal: bus.state.internal.routes.map((r) => new InternalRouteView(r).toPublic()),
         }
       },
     },
