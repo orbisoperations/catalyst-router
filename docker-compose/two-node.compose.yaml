@@ -20,7 +20,6 @@ services:
     build:
       context: ..
       dockerfile: apps/auth/Dockerfile
-    user: root
     ports:
       - '4020:4020'
     environment:

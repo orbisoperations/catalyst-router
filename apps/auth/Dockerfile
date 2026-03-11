@@ -55,14 +55,18 @@ RUN pnpm deploy --filter=@catalyst/auth-service --prod /deploy
 FROM node:22-alpine
 WORKDIR /app
 
+# su-exec for privilege dropping in entrypoint
+RUN apk add --no-cache su-exec
+
 COPY --from=build /deploy/node_modules ./node_modules
 COPY --from=build /app/dist/server.mjs ./server.mjs
+COPY --chmod=755 apps/auth/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 ENV PORT=5000
 EXPOSE 5000
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 RUN mkdir -p /data && chown appuser:appgroup /data
-USER appuser
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server.mjs"]
