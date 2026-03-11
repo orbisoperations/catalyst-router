@@ -16,7 +16,7 @@ describe('Dashboard routes', () => {
   })
 
   describe('GET /state', () => {
-    it('fetches state from orchestrator and returns it', async () => {
+    it('fetches state from orchestrator and returns it with lastUpdated', async () => {
       const mockState = { routes: { local: [], internal: [] }, peers: [] }
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockState), {
@@ -29,10 +29,12 @@ describe('Dashboard routes', () => {
       const res = await app.request('/state')
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body).toEqual(mockState)
+      expect(body.data).toEqual(mockState)
+      expect(body.lastUpdated).toBeDefined()
+      expect(body.stale).toBeUndefined()
     })
 
-    it('returns cached state when orchestrator is unreachable', async () => {
+    it('returns cached state marked as stale when orchestrator is unreachable', async () => {
       const mockState = { routes: { local: [], internal: [] }, peers: [] }
       const fetchSpy = vi.spyOn(globalThis, 'fetch')
 
@@ -51,7 +53,9 @@ describe('Dashboard routes', () => {
       const res = await app.request('/state')
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body).toEqual(mockState)
+      expect(body.data).toEqual(mockState)
+      expect(body.stale).toBe(true)
+      expect(body.lastUpdated).toBeDefined()
     })
 
     it('returns 502 when orchestrator unreachable and no cache', async () => {

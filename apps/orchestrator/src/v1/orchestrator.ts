@@ -11,7 +11,6 @@ import {
   type UpdateMessageSchema,
 } from '@catalyst/routing/v1'
 export type { PeerInfo, InternalRoute }
-import { PeerView, InternalRouteView } from '@catalyst/routing/v2'
 import { getLogger, WideEvent } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import { createPortAllocator, type PortAllocator } from '@catalyst/envoy-service'
@@ -1098,7 +1097,7 @@ export class CatalystNodeBus extends RpcTarget {
               return this.dispatch({ action: Actions.LocalPeerDelete, data: peer })
             },
             listPeers: async () => {
-              return this.state.internal.peers.map((p) => new PeerView(p).toPublic())
+              return this.state.internal.peers.map(({ peerToken: _, ...rest }) => rest)
             },
           },
         }
@@ -1124,9 +1123,10 @@ export class CatalystNodeBus extends RpcTarget {
             listRoutes: async () => {
               return {
                 local: this.state.local.routes,
-                internal: this.state.internal.routes.map((r) =>
-                  new InternalRouteView(r).toPublic()
-                ),
+                internal: this.state.internal.routes.map(({ peer, ...rest }) => {
+                  const { peerToken: _, ...safePeer } = peer
+                  return { ...rest, peer: safePeer }
+                }),
               }
             },
           },
