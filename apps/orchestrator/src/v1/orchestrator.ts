@@ -1070,7 +1070,7 @@ export class CatalystNodeBus extends RpcTarget {
 
   /** Read-only snapshot of the route table for the dashboard. */
   getState(): RouteTable {
-    return this.state
+    return structuredClone(this.state)
   }
 
   publicApi(): PublicApi {
