@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --passWithNoTests container integration"
+    "test:integration": "vitest run --passWithNoTests container integration",
+    "test:e2e": "pnpm build:frontend && playwright test --config playwright.config.ts"
   },
   "dependencies": {
     "@catalyst/config": "workspace:*",
@@ -28,6 +29,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "typescript": "catalog:dev",
     "vite": "^6.0.0",
-    "vitest": "catalog:testing"
+    "vitest": "catalog:testing",
+    "@playwright/test": "catalog:testing"
   }
 }
