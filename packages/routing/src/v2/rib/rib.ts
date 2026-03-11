@@ -1,10 +1,19 @@
 import { Actions } from '../action-types.js'
 import { CloseCodes } from '../close-codes.js'
 import { routeKey } from '../datachannel.js'
+import {
+  mapWith,
+  mapWithout,
+  nestedMapGet,
+  nestedMapSet,
+  nestedMapDelete,
+  nestedMapDeleteOuter,
+} from '../map-helpers.js'
 import type { Action } from '../schema.js'
 import type { ActionLog } from '../journal/action-log.js'
 import {
   newRouteTable,
+  internalRouteKey,
   type RouteTable,
   type PeerRecord,
   type InternalRoute,
@@ -150,9 +159,7 @@ export class RoutingInformationBase {
   // -------------------------------------------------------------------------
 
   private planLocalPeerCreate(data: PeerInfo, state: RouteTable): PlanResult {
-    const exists = state.internal.peers.some((p) => p.name === data.name)
-    if (exists) return noChange(state)
-
+    if (state.internal.peers.has(data.name)) return noChange(state)
     const newPeer: PeerRecord = {
       ...data,
       connectionStatus: 'initializing',
@@ -164,55 +171,48 @@ export class RoutingInformationBase {
       ...state,
       internal: {
         ...state.internal,
-        peers: [...state.internal.peers, newPeer],
+        peers: mapWith(state.internal.peers, data.name, newPeer),
       },
     }
     return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
   }
 
   private planLocalPeerUpdate(data: PeerInfo, state: RouteTable): PlanResult {
-    const idx = state.internal.peers.findIndex((p) => p.name === data.name)
-    if (idx === -1) return noChange(state)
-
-    const existing = state.internal.peers[idx]
+    const existing = state.internal.peers.get(data.name)
+    if (existing === undefined) return noChange(state)
     const updated: PeerRecord = {
-      // Apply all incoming PeerInfo fields
       ...existing,
       ...data,
-      // Preserve runtime-only fields — they are managed by protocol events
       connectionStatus: existing.connectionStatus,
       lastConnected: existing.lastConnected,
       holdTime: existing.holdTime,
       lastSent: existing.lastSent,
       lastReceived: existing.lastReceived,
     }
-    const peers = state.internal.peers.map((p, i) => (i === idx ? updated : p))
     const newState: RouteTable = {
       ...state,
-      internal: { ...state.internal, peers },
+      internal: { ...state.internal, peers: mapWith(state.internal.peers, data.name, updated) },
     }
     return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
   }
 
   private planLocalPeerDelete(data: LocalPeerDeleteData, state: RouteTable): PlanResult {
-    const peers = state.internal.peers.filter((p) => p.name !== data.name)
-    if (peers.length === state.internal.peers.length) return noChange(state)
-
-    const removedRoutes = state.internal.routes.filter((r) => r.peer.name === data.name)
-    const routes = state.internal.routes.filter((r) => r.peer.name !== data.name)
-
+    if (!state.internal.peers.has(data.name)) return noChange(state)
+    const peerRouteMap = state.internal.routes.get(data.name)
+    const removedRoutes = peerRouteMap ? [...peerRouteMap.values()] : []
     const portOps: PortOperation[] = removedRoutes
       .filter((r) => r.envoyPort != null)
       .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
-
     const routeChanges: RouteChange[] = removedRoutes.map((r) => ({
       type: 'removed' as const,
       route: r,
     }))
-
     const newState: RouteTable = {
       ...state,
-      internal: { peers, routes },
+      internal: {
+        peers: mapWithout(state.internal.peers, data.name),
+        routes: nestedMapDeleteOuter(state.internal.routes, data.name),
+      },
     }
     return { prevState: state, newState, portOps, routeChanges }
   }
@@ -222,12 +222,10 @@ export class RoutingInformationBase {
   // -------------------------------------------------------------------------
 
   private planLocalRouteCreate(data: LocalRouteCreateData, state: RouteTable): PlanResult {
-    const exists = state.local.routes.some((r) => r.name === data.name)
-    if (exists) return noChange(state)
-
+    if (state.local.routes.has(routeKey(data))) return noChange(state)
     const newState: RouteTable = {
       ...state,
-      local: { ...state.local, routes: [...state.local.routes, data] },
+      local: { ...state.local, routes: mapWith(state.local.routes, routeKey(data), data) },
     }
     return {
       prevState: state,
@@ -238,18 +236,15 @@ export class RoutingInformationBase {
   }
 
   private planLocalRouteDelete(data: LocalRouteDeleteData, state: RouteTable): PlanResult {
-    const route = state.local.routes.find((r) => r.name === data.name)
+    const route = state.local.routes.get(routeKey(data))
     if (route === undefined) return noChange(state)
-
-    const routes = state.local.routes.filter((r) => r.name !== data.name)
     const portOps: PortOperation[] =
       route.envoyPort != null
         ? [{ type: 'release' as const, routeKey: routeKey(route), port: route.envoyPort }]
         : NO_PORT_OPS
-
     const newState: RouteTable = {
       ...state,
-      local: { ...state.local, routes },
+      local: { ...state.local, routes: mapWithout(state.local.routes, routeKey(data)) },
     }
     return {
       prevState: state,
@@ -264,24 +259,22 @@ export class RoutingInformationBase {
   // -------------------------------------------------------------------------
 
   private planInternalProtocolOpen(data: InternalProtocolOpenData, state: RouteTable): PlanResult {
-    const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
-    // Unknown peer — we only accept opens for pre-configured peers
-    if (idx === -1) return noChange(state)
-
-    const existing = state.internal.peers[idx]
+    const existing = state.internal.peers.get(data.peerInfo.name)
+    if (existing === undefined) return noChange(state)
     const negotiatedHoldTime =
       data.holdTime != null ? Math.min(existing.holdTime, data.holdTime) : existing.holdTime
-
     const updated: PeerRecord = {
       ...existing,
       connectionStatus: 'connected',
       holdTime: negotiatedHoldTime,
       lastReceived: Date.now(),
     }
-    const peers = state.internal.peers.map((p, i) => (i === idx ? updated : p))
     const newState: RouteTable = {
       ...state,
-      internal: { ...state.internal, peers },
+      internal: {
+        ...state.internal,
+        peers: mapWith(state.internal.peers, data.peerInfo.name, updated),
+      },
     }
     return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
   }
@@ -290,20 +283,20 @@ export class RoutingInformationBase {
     data: InternalProtocolConnectedData,
     state: RouteTable
   ): PlanResult {
-    const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
-    if (idx === -1) return noChange(state)
-
-    const existing = state.internal.peers[idx]
+    const existing = state.internal.peers.get(data.peerInfo.name)
+    if (existing === undefined) return noChange(state)
     const updated: PeerRecord = {
       ...existing,
       connectionStatus: 'connected',
       lastConnected: new Date(),
       lastReceived: Date.now(),
     }
-    const peers = state.internal.peers.map((p, i) => (i === idx ? updated : p))
     const newState: RouteTable = {
       ...state,
-      internal: { ...state.internal, peers },
+      internal: {
+        ...state.internal,
+        peers: mapWith(state.internal.peers, data.peerInfo.name, updated),
+      },
     }
     return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
   }
@@ -312,45 +305,45 @@ export class RoutingInformationBase {
     data: InternalProtocolCloseData,
     state: RouteTable
   ): PlanResult {
-    const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
-    if (idx === -1) return noChange(state)
+    const existing = state.internal.peers.get(data.peerInfo.name)
+    if (existing === undefined) return noChange(state)
 
     const isTransportError = data.code === CloseCodes.TRANSPORT_ERROR
-    const peerRoutes = state.internal.routes.filter((r) => r.peer.name === data.peerInfo.name)
+    const peerRouteMap = state.internal.routes.get(data.peerInfo.name)
+    const peerRoutes = peerRouteMap ? [...peerRouteMap.values()] : []
 
-    let routes: InternalRoute[]
+    let routes: RouteTable['internal']['routes']
     let routeChanges: RouteChange[]
     let portOps: PortOperation[]
 
     if (isTransportError) {
-      // Graceful-restart behaviour: mark routes stale rather than withdrawing
-      // them immediately. They will be replaced on reconnect or purged by Tick
-      // once the peer's holdTime grace period elapses without reconnection.
-      routes = state.internal.routes.map((r) =>
-        r.peer.name === data.peerInfo.name ? { ...r, isStale: true } : r
-      )
+      if (peerRouteMap && peerRouteMap.size > 0) {
+        const staleInner = new Map<string, InternalRoute>()
+        for (const [key, r] of peerRouteMap) {
+          staleInner.set(key, { ...r, isStale: true })
+        }
+        routes = mapWith(state.internal.routes, data.peerInfo.name, staleInner)
+      } else {
+        routes = state.internal.routes
+      }
       routeChanges = peerRoutes.map((r) => ({
         type: 'updated' as const,
         route: { ...r, isStale: true },
       }))
       portOps = NO_PORT_OPS
     } else {
-      // Hard close (normal, hold-expired, admin-shutdown, protocol-error):
-      // withdraw routes and release any allocated envoy ports.
-      routes = state.internal.routes.filter((r) => r.peer.name !== data.peerInfo.name)
+      routes = nestedMapDeleteOuter(state.internal.routes, data.peerInfo.name)
       routeChanges = peerRoutes.map((r) => ({ type: 'removed' as const, route: r }))
       portOps = peerRoutes
         .filter((r) => r.envoyPort != null)
         .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
     }
 
-    const peers = state.internal.peers.map((p, i) =>
-      i === idx ? { ...p, connectionStatus: 'closed' as const } : p
-    )
-    const newState: RouteTable = {
-      ...state,
-      internal: { peers, routes },
-    }
+    const peers = mapWith(state.internal.peers, data.peerInfo.name, {
+      ...existing,
+      connectionStatus: 'closed' as const,
+    })
+    const newState: RouteTable = { ...state, internal: { peers, routes } }
     return { prevState: state, newState, portOps, routeChanges }
   }
 
@@ -358,19 +351,16 @@ export class RoutingInformationBase {
     data: InternalProtocolUpdateData,
     state: RouteTable
   ): PlanResult {
-    let routes = [...state.internal.routes]
+    let routes = state.internal.routes
     const portOps: PortOperation[] = []
     const routeChanges: RouteChange[] = []
 
     for (const item of data.update.updates) {
       if (item.action === 'add') {
-        // Loop detection — discard advertisements that already include this node
         if (item.nodePath.includes(this._nodeId)) continue
 
-        const key = routeKey(item.route)
-        const existingIdx = routes.findIndex(
-          (r) => routeKey(r) === key && r.originNode === item.originNode
-        )
+        const irKey = internalRouteKey({ name: item.route.name, originNode: item.originNode })
+        const existing = nestedMapGet(routes, data.peerInfo.name, irKey)
 
         const newRoute: InternalRoute = {
           ...item.route,
@@ -380,52 +370,44 @@ export class RoutingInformationBase {
           isStale: false,
         }
 
-        if (existingIdx !== -1) {
-          const existing = routes[existingIdx]
-          // Best-path selection: prefer shorter path, or replace a stale route
+        if (existing !== undefined) {
           const betterPath = item.nodePath.length < existing.nodePath.length
           const replacingStale = existing.isStale === true
           if (betterPath || replacingStale) {
-            routes = routes.map((r, i) => (i === existingIdx ? newRoute : r))
+            routes = nestedMapSet(routes, data.peerInfo.name, irKey, newRoute)
             routeChanges.push({ type: 'updated', route: newRoute })
           }
-          // else: existing path is equal or better and fresh — no change
         } else {
-          routes = [...routes, newRoute]
+          routes = nestedMapSet(routes, data.peerInfo.name, irKey, newRoute)
           routeChanges.push({ type: 'added', route: newRoute })
         }
       } else {
-        // action === 'remove'
-        const key = routeKey(item.route)
-        const removed = routes.find((r) => routeKey(r) === key && r.originNode === item.originNode)
+        const irKey = internalRouteKey({ name: item.route.name, originNode: item.originNode })
+        const removed = nestedMapGet(routes, data.peerInfo.name, irKey)
         if (removed !== undefined) {
-          routes = routes.filter((r) => !(routeKey(r) === key && r.originNode === item.originNode))
+          routes = nestedMapDelete(routes, data.peerInfo.name, irKey)
           routeChanges.push({ type: 'removed', route: removed })
           if (removed.envoyPort != null) {
-            portOps.push({ type: 'release', routeKey: key, port: removed.envoyPort })
+            portOps.push({ type: 'release', routeKey: routeKey(removed), port: removed.envoyPort })
           }
         }
       }
     }
 
-    // Always update lastReceived on the peer, even when no routes changed
-    const peerIdx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
+    const existingPeer = state.internal.peers.get(data.peerInfo.name)
     const peers =
-      peerIdx !== -1
-        ? state.internal.peers.map((p, i) =>
-            i === peerIdx ? { ...p, lastReceived: Date.now() } : p
-          )
+      existingPeer !== undefined
+        ? mapWith(state.internal.peers, data.peerInfo.name, {
+            ...existingPeer,
+            lastReceived: Date.now(),
+          })
         : state.internal.peers
 
-    // No-op: no route changes and peer was unknown (nothing touched)
-    if (routeChanges.length === 0 && peerIdx === -1) {
+    if (routeChanges.length === 0 && existingPeer === undefined) {
       return noChange(state)
     }
 
-    const newState: RouteTable = {
-      ...state,
-      internal: { peers, routes },
-    }
+    const newState: RouteTable = { ...state, internal: { peers, routes } }
     return { prevState: state, newState, portOps, routeChanges }
   }
 
@@ -433,16 +415,13 @@ export class RoutingInformationBase {
     data: InternalProtocolKeepaliveData,
     state: RouteTable
   ): PlanResult {
-    const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
-    if (idx === -1) return noChange(state)
-
-    const peers = state.internal.peers.map((p, i) =>
-      i === idx ? { ...p, lastReceived: Date.now() } : p
-    )
-    const newState: RouteTable = {
-      ...state,
-      internal: { ...state.internal, peers },
-    }
+    const existing = state.internal.peers.get(data.peerInfo.name)
+    if (existing === undefined) return noChange(state)
+    const peers = mapWith(state.internal.peers, data.peerInfo.name, {
+      ...existing,
+      lastReceived: Date.now(),
+    })
+    const newState: RouteTable = { ...state, internal: { ...state.internal, peers } }
     return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
   }
 
@@ -451,54 +430,55 @@ export class RoutingInformationBase {
   // -------------------------------------------------------------------------
 
   private planTick(data: TickData, state: RouteTable): PlanResult {
-    // Find connected peers whose hold timer has expired
     const expiredPeerNames = new Set<string>()
-    const peers = state.internal.peers.map((p) => {
+    let peers = state.internal.peers
+
+    for (const [name, p] of state.internal.peers) {
       const timerActive = p.connectionStatus === 'connected' && p.holdTime > 0 && p.lastReceived > 0
       if (timerActive && data.now - p.lastReceived > p.holdTime) {
-        expiredPeerNames.add(p.name)
-        return { ...p, connectionStatus: 'closed' as const }
+        expiredPeerNames.add(name)
+        peers = mapWith(peers, name, { ...p, connectionStatus: 'closed' as const })
       }
-      return p
-    })
+    }
 
-    // Find closed peers whose stale routes have exceeded the hold timer grace
-    // period. After a transport-error close, routes are marked stale to allow
-    // reconnect. Once holdTime elapses without reconnect, purge them.
     const stalePeerNames = new Set<string>()
-    for (const p of peers) {
+    for (const [name, p] of peers) {
       if (
         p.connectionStatus === 'closed' &&
         p.holdTime > 0 &&
         p.lastReceived > 0 &&
         data.now - p.lastReceived > p.holdTime
       ) {
-        const hasStaleRoutes = state.internal.routes.some(
-          (r) => r.peer.name === p.name && r.isStale === true
-        )
-        if (hasStaleRoutes) stalePeerNames.add(p.name)
+        const peerRouteMap = state.internal.routes.get(name)
+        if (peerRouteMap) {
+          const hasStaleRoutes = [...peerRouteMap.values()].some((r) => r.isStale === true)
+          if (hasStaleRoutes) stalePeerNames.add(name)
+        }
       }
     }
 
     const purgedPeerNames = new Set([...expiredPeerNames, ...stalePeerNames])
     if (purgedPeerNames.size === 0) return noChange(state)
 
-    const removedRoutes = state.internal.routes.filter((r) => purgedPeerNames.has(r.peer.name))
-    const routes = state.internal.routes.filter((r) => !purgedPeerNames.has(r.peer.name))
+    const removedRoutes: InternalRoute[] = []
+    let routes = state.internal.routes
+    for (const peerName of purgedPeerNames) {
+      const peerRouteMap = routes.get(peerName)
+      if (peerRouteMap) {
+        removedRoutes.push(...peerRouteMap.values())
+        routes = nestedMapDeleteOuter(routes, peerName)
+      }
+    }
 
     const portOps: PortOperation[] = removedRoutes
       .filter((r) => r.envoyPort != null)
       .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
-
     const routeChanges: RouteChange[] = removedRoutes.map((r) => ({
       type: 'removed' as const,
       route: r,
     }))
 
-    const newState: RouteTable = {
-      ...state,
-      internal: { peers, routes },
-    }
+    const newState: RouteTable = { ...state, internal: { peers, routes } }
     return { prevState: state, newState, portOps, routeChanges }
   }
 }

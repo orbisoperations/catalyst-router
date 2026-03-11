@@ -73,12 +73,18 @@ export class RouteTableView {
 
   /** Returns the full route table safe for API exposure. */
   toPublic(): PublicRouteTable {
+    const internalRoutes: PublicInternalRoute[] = []
+    for (const innerMap of this.state.internal.routes.values()) {
+      for (const r of innerMap.values()) {
+        internalRoutes.push(new InternalRouteView(r).toPublic())
+      }
+    }
     return {
       routes: {
-        local: this.state.local.routes,
-        internal: this.state.internal.routes.map((r) => new InternalRouteView(r).toPublic()),
+        local: [...this.state.local.routes.values()],
+        internal: internalRoutes,
       },
-      peers: this.state.internal.peers.map((p) => new PeerView(p).toPublic()),
+      peers: [...this.state.internal.peers.values()].map((p) => new PeerView(p).toPublic()),
     }
   }
 }
