@@ -71,6 +71,11 @@ export class InternalRouteView {
 export class RouteTableView {
   constructor(private readonly state: RouteTable) {}
 
+  /** Total number of internal routes across all peers. */
+  get internalRouteCount(): number {
+    return [...this.state.internal.routes.values()].reduce((n, m) => n + m.size, 0)
+  }
+
   /** Returns the full route table safe for API exposure. */
   toPublic(): PublicRouteTable {
     const internalRoutes: PublicInternalRoute[] = []

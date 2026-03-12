@@ -3,6 +3,7 @@ import {
   ActionQueue,
   Actions,
   InternalRouteView,
+  RouteTableView,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -96,8 +97,7 @@ export class OrchestratorBus {
         'catalyst.orchestrator.action.state_changed': true,
         'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
         'catalyst.orchestrator.route.total':
-          committed.local.routes.size +
-          [...committed.internal.routes.values()].reduce((n, m) => n + m.size, 0),
+          committed.local.routes.size + new RouteTableView(committed).internalRouteCount,
       })
 
       if (plan.routeChanges.length > 0) {
@@ -119,8 +119,7 @@ export class OrchestratorBus {
           'catalyst.orchestrator.route.modified': counts.modified,
           'catalyst.orchestrator.route.trigger': action.action,
           'catalyst.orchestrator.route.total':
-            committed.local.routes.size +
-            [...committed.internal.routes.values()].reduce((n, m) => n + m.size, 0),
+            committed.local.routes.size + new RouteTableView(committed).internalRouteCount,
         })
       }
 
