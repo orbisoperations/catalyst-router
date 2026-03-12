@@ -102,13 +102,14 @@ The HTTP middleware (`packages/telemetry/src/middleware/wide-event.ts`) is the r
 
 #### Orchestrator v2: `orchestrator.peer_sync` (`apps/orchestrator/src/v2/bus.ts`)
 
-**Current:** 1 intermediate log. Single `emit()` call. No try/catch at all — exceptions prevent emit.
+**Current:** 1 intermediate log in `handleBGPNotify`. Additionally, `syncRoutesToPeer()` (called within this WideEvent scope) contains 3 more intermediate logs at lines 254, 263, 269 (`route.sync.empty`, `route.sync.completed`, `peer.sync.initial_failed`). Single `emit()` call. No try/catch at all — exceptions prevent emit.
 
 **Changes:**
 
 - Remove `logger.info('Peer connected, syncing...')` — peer name already in WideEvent fields
+- Remove the 3 intermediate logs inside `syncRoutesToPeer()` — fold route count and sync result into `event.set()`
+- Change `syncRoutesToPeer()` to return `{ routeCount: number }` (currently returns `void`) so the WideEvent can capture the result
 - Add try/catch/finally with `setError()` and single `emit()`
-- Fold sync result data (route count, empty check) into `event.set()` from the `syncRoutesToPeer` return
 
 #### Orchestrator v2: `orchestrator.route_propagation` (`apps/orchestrator/src/v2/bus.ts`)
 
@@ -123,13 +124,12 @@ The HTTP middleware (`packages/telemetry/src/middleware/wide-event.ts`) is the r
 
 #### Orchestrator v1: `orchestrator.action` (`apps/orchestrator/src/v1/orchestrator.ts`)
 
-**Current:** 3-4 intermediate logs including a debug-level log. Two `emit()` calls. No `finally`.
+**Current:** 3 intermediate logs directly in `dispatch()` (lines 240, 249, 275). Additionally, `handleAction()` is called synchronously within the WideEvent scope and contains many more `logger.*` calls throughout its branches (e.g., `InternalProtocolUpdate` logging, loop detection debug, unknown action warn). Two `emit()` calls. No `finally`.
 
-**Changes:**
+**Changes — minimal cleanup only (v1 is being superseded by v2):**
 
-- Remove `logger.info('Dispatching action...')` — action type already in WideEvent
-- Remove `logger.debug('Route create data...')` — debug data, not operational
-- Remove `logger.error('Action failed...')` — `setError()` captures this
+- Remove the 3 direct intermediate logs in `dispatch()`: `logger.info('Dispatching action...')`, `logger.debug('Route create data...')`, `logger.error('Action failed...')`
+- Leave `handleAction()` internal logs as-is — deep refactoring of v1 is not justified since v2 is the successor
 - Leave async `handleNotify` failure log as-is (fires after emit, separate concern)
 - Add try/finally with single `emit()`
 
@@ -151,8 +151,8 @@ Replace classes with zod-derived schemas and plain functions:
 **Schemas (derived from existing zod schemas):**
 
 - `PublicPeerSchema` = `PeerRecordSchema.omit({ peerToken, holdTime, lastSent, lastReceived })`
-- `PublicInternalRouteSchema` = derived from `InternalRouteSchema` with peer token stripped
-- `PublicRouteTableSchema` = composite schema
+- `PublicInternalRouteSchema` — Note: `InternalRoute` is a plain TypeScript type alias (`DataChannelDefinition & { peer, nodePath, originNode, isStale? }`), not a zod schema. Create `InternalRouteSchema` by extending `DataChannelDefinitionSchema` with the additional fields, then derive `PublicInternalRouteSchema` via `.omit()`. Alternatively, if creating the full schema is too heavy, use manual field stripping in the function (as today) and keep `PublicInternalRoute` as a TypeScript `Omit<>` type rather than `z.infer<>`.
+- `PublicRouteTableSchema` = composite schema (or plain TypeScript type if `InternalRouteSchema` is not created)
 
 **Functions:**
 
@@ -197,19 +197,69 @@ Replace classes with zod-derived schemas and plain functions:
 
 **Env var:** `CATALYST_DASHBOARD_LINKS_FILE` points to the mounted file path. Fall back to `CATALYST_DASHBOARD_LINKS` inline JSON for backward compatibility.
 
+**Precedence and error handling:**
+
+1. If `CATALYST_DASHBOARD_LINKS_FILE` is set → read the file. If file is missing or unreadable, **throw** (this is a misconfiguration, not a graceful degradation case). If JSON is invalid, **throw**.
+2. If `CATALYST_DASHBOARD_LINKS_FILE` is not set → fall back to `CATALYST_DASHBOARD_LINKS` env var. If present, parse as JSON; throw on invalid JSON.
+3. If neither is set → dashboard links are `undefined` (optional feature).
+4. If both are set → `_FILE` takes precedence, `CATALYST_DASHBOARD_LINKS` is ignored.
+
+**Unified error behavior:** Always throw on invalid input. The web-ui's current "warn and continue" behavior is a bug — if the operator configured links and they're broken, they should know immediately, not discover it later when the UI shows no links.
+
 **Code changes:**
 
-- `packages/config/src/index.ts`: add file-based loading. Read from `CATALYST_DASHBOARD_LINKS_FILE` first, fall back to `CATALYST_DASHBOARD_LINKS` env var.
+- `packages/config/src/index.ts`: add file-based loading with the precedence rules above. Validate with `DashboardConfigSchema`.
 - `apps/web-ui/src/server.ts`: use the config package's loader instead of its own JSON parsing. Eliminates inconsistent error handling.
 - Docker compose files: mount `dashboard-links.json`, set `CATALYST_DASHBOARD_LINKS_FILE` env var, remove inline JSON.
 
 ## PR Structure
 
-| PR  | Content                                     |
-| --- | ------------------------------------------- |
-| 1   | WideEvent Option A: gateway cleanup         |
-| 2   | WideEvent Option A: envoy cleanup           |
-| 3   | WideEvent Option A: orchestrator v2 cleanup |
-| 4   | WideEvent Option A: orchestrator v1 cleanup |
-| 5   | views.ts → plain functions + zod            |
-| 6   | CATALYST_DASHBOARD_LINKS → config file      |
+PRs are stacked in this order. Each PR builds on the previous.
+
+| PR  | Content                                     | Notes                                                                                                                |
+| --- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1   | views.ts → plain functions + zod            | Goes first because PR 3 touches the same consumers in bus.ts. After this PR, bus.ts uses the new function-based API. |
+| 2   | WideEvent Option A: gateway cleanup         | Independent of PR 1                                                                                                  |
+| 3   | WideEvent Option A: envoy cleanup           | Independent of PR 1                                                                                                  |
+| 4   | WideEvent Option A: orchestrator v2 cleanup | Uses new function API from PR 1 in bus.ts                                                                            |
+| 5   | WideEvent Option A: orchestrator v1 cleanup | Minimal cleanup only (v1 being superseded)                                                                           |
+| 6   | CATALYST_DASHBOARD_LINKS → config file      | Independent of other PRs                                                                                             |
+
+## Manual Verification Plan
+
+After all PRs are implemented, verify with the full Docker Compose stack:
+
+### 1. Start the stack
+
+```bash
+docker compose -f docker-compose/docker.compose.yaml up
+```
+
+### 2. Verify WideEvent pure accumulation
+
+For each operation type, trigger the operation and check Loki:
+
+- **Gateway reload**: Trigger a config push. Verify Loki shows exactly one `gateway.reload` record per reload with all fields (`gateway.service_count`, `gateway.subgraph_count`, `gateway.duration_ms`, outcome). No `gateway.reload.started`, `gateway.reloaded`, `gateway.reload.failed`, or `gateway.subgraph.sdl_validated` records.
+- **Envoy route update**: Push a route config. Verify one `envoy.route_update` record with all fields including `xds.clusters_added`, `xds.clusters_removed`. No `envoy.route_update.received`, `envoy.routes.stored`, `xds.snapshot.pushed` records.
+- **Orchestrator action**: Trigger a route change. Verify one `orchestrator.action` record. No `route.table.changed` records.
+- **Orchestrator peer sync**: Connect a peer. Verify one `orchestrator.peer_sync` record with route count. No `peer.sync.started`, `route.sync.completed` records.
+- **HTTP request**: Verify `http.request` records still work as before (gold standard, unchanged).
+
+### 3. Verify error paths
+
+- **Kill a peer mid-sync**: Verify `orchestrator.peer_sync` emits with `outcome=failure` and exception fields (tests `finally` block).
+- **Send malformed route config**: Verify `envoy.route_update` emits with `outcome=failure`.
+- **Partial peer failure**: Disconnect one peer, keep another connected, trigger route propagation. Verify `orchestrator.route_propagation` shows `peer.failed_count` and appropriate outcome.
+
+### 4. Verify traces still correlate
+
+- Pick any WideEvent log record in Loki, click the `trace_id` link, confirm Jaeger shows the full span tree for that operation.
+
+### 5. Verify views.ts refactor
+
+- Hit the orchestrator HTTP API (`/api/state` or equivalent) and verify the response shape is unchanged — no `peerToken`, `holdTime`, `lastSent`, `lastReceived` fields leaked.
+
+### 6. Verify dashboard links from config file
+
+- Confirm the web UI loads and shows correct Grafana links for metrics, traces, logs.
+- Confirm links contain the correct `{service}` template substitution.
