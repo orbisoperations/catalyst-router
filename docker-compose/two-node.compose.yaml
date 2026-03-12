@@ -95,8 +95,9 @@ services:
       - CATALYST_ENVOY_PORT_RANGE=[10000, [10001, 10050]]
       - OTEL_SERVICE_NAME=orchestrator-node-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-      - >-
-        CATALYST_DASHBOARD_LINKS={"metrics":"http://localhost:3050/d/catalyst-services?var-service={service}","traces":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D","logs":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"}
+      - CATALYST_DASHBOARD_LINKS_FILE=/app/config/dashboard-links.json
+    volumes:
+      - ./dashboard-links.json:/app/config/dashboard-links.json:ro
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
@@ -169,8 +170,9 @@ services:
       - CATALYST_ENVOY_PORT_RANGE=[[10051, 10100]]
       - OTEL_SERVICE_NAME=orchestrator-node-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-      - >-
-        CATALYST_DASHBOARD_LINKS={"metrics":"http://localhost:3050/d/catalyst-services?var-service={service}","traces":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D","logs":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"}
+      - CATALYST_DASHBOARD_LINKS_FILE=/app/config/dashboard-links.json
+    volumes:
+      - ./dashboard-links.json:/app/config/dashboard-links.json:ro
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
@@ -200,8 +202,9 @@ services:
       - AUTH_URL=http://auth:4020
       - GATEWAY_URL=http://gateway-a:4000
       - OTEL_SERVICE_NAME=orchestrator-node-a
-      - >-
-        CATALYST_DASHBOARD_LINKS={"metrics":"http://localhost:3050/d/catalyst-services?var-service={service}","traces":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D","logs":"http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"}
+      - CATALYST_DASHBOARD_LINKS_FILE=/app/config/dashboard-links.json
+    volumes:
+      - ./dashboard-links.json:/app/config/dashboard-links.json:ro
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
