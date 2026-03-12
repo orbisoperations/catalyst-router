@@ -41,6 +41,10 @@ export function useRouterState(pollIntervalMs = 10000) {
     const fetchState = async () => {
       try {
         const res = await fetch('/api/state')
+        if (!res.ok) {
+          if (active) setLoading(false)
+          return
+        }
         const body = await res.json()
         if (active) {
           setState(body.data)
