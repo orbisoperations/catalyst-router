@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
     "test:integration": "vitest run --passWithNoTests container integration",
-    "test:rpc": "tsx scripts/test-rpc.ts"
+    "test:rpc": "tsx scripts/test-rpc.ts",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@graphql-tools/delegate": "catalog:",
