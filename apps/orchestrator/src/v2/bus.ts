@@ -2,7 +2,6 @@ import {
   RoutingInformationBase,
   ActionQueue,
   Actions,
-  InternalRouteView,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -162,12 +161,14 @@ export class OrchestratorBus {
           'catalyst.orchestrator.peer.name': peerName,
           'catalyst.orchestrator.sync.type': 'full',
         })
-        logger.info('Peer {peerName} connected, syncing full route table', {
-          'event.name': 'peer.sync.started',
-          'catalyst.orchestrator.peer.name': peerName,
-        })
-        await this.syncRoutesToPeer(peer, state)
-        event.emit()
+        try {
+          const result = await this.syncRoutesToPeer(peer, state)
+          event.set('catalyst.orchestrator.sync.route_count', result.routeCount)
+        } catch (error) {
+          event.setError(error)
+        } finally {
+          event.emit()
+        }
       }
       return
     }
@@ -181,34 +182,44 @@ export class OrchestratorBus {
       'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
     })
 
-    const promises = connectedPeers.map(async (peer) => {
-      try {
-        const updates = this.buildUpdatesForPeer(peer, plan, state)
-        if (updates.length > 0) {
-          await this.transport.sendUpdate(peer, { updates })
-        }
-      } catch (error) {
-        logger.warn('Failed to send route updates to {peerName}', {
-          'event.name': 'peer.sync.failed',
-          'catalyst.orchestrator.peer.name': peer.name,
-          error,
+    try {
+      const results = await Promise.allSettled(
+        connectedPeers.map(async (peer) => {
+          const updates = this.buildUpdatesForPeer(peer, plan, state)
+          if (updates.length > 0) {
+            await this.transport.sendUpdate(peer, { updates })
+          }
         })
-        // Fire-and-forget: one peer failure must not affect others.
-      }
-    })
+      )
 
-    await Promise.allSettled(promises)
-    event.emit()
+      const failedPeers = results
+        .map((r, i) => (r.status === 'rejected' ? connectedPeers[i].name : null))
+        .filter(Boolean) as string[]
+      if (failedPeers.length > 0) {
+        event.set({
+          'catalyst.orchestrator.peer.failed_count': failedPeers.length,
+          'catalyst.orchestrator.peer.failed_peers': failedPeers,
+          'catalyst.event.outcome':
+            failedPeers.length === connectedPeers.length ? 'failure' : 'partial_failure',
+        })
+      }
+    } catch (error) {
+      event.setError(error)
+    } finally {
+      event.emit()
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Initial full-table sync (sent once when a peer connects)
   // ---------------------------------------------------------------------------
 
-  private async syncRoutesToPeer(peer: PeerRecord, state: RouteTable): Promise<void> {
+  private async syncRoutesToPeer(
+    peer: PeerRecord,
+    state: RouteTable
+  ): Promise<{ routeCount: number }> {
     const updates: UpdateMessage['updates'] = []
 
-    // Advertise all local routes to the new peer.
     for (const route of state.local.routes) {
       updates.push({
         action: 'add',
@@ -218,16 +229,11 @@ export class OrchestratorBus {
       })
     }
 
-    // Advertise internal routes the peer doesn't already know.
     for (const route of state.internal.routes) {
-      // Exclude stale routes — they may no longer be valid.
       if (route.isStale === true) continue
-      // Don't reflect a peer's own routes back at them.
       if (route.peer.name === peer.name) continue
-      // Loop guard: don't advertise paths that already pass through this peer.
       if (route.nodePath.includes(peer.name)) continue
 
-      // Apply route policy if configured.
       if (this.routePolicy !== undefined) {
         const allowed = this.routePolicy.canSend(peer, [route])
         if (allowed.length === 0) continue
@@ -242,29 +248,11 @@ export class OrchestratorBus {
     }
 
     if (updates.length === 0) {
-      logger.info('No routes to sync to peer {peerName}', {
-        'event.name': 'route.sync.empty',
-        'catalyst.orchestrator.peer.name': peer.name,
-      })
-      return
+      return { routeCount: 0 }
     }
 
-    try {
-      await this.transport.sendUpdate(peer, { updates })
-      logger.info('Synced {count} route(s) to peer {peerName}', {
-        'event.name': 'route.sync.completed',
-        'catalyst.orchestrator.peer.name': peer.name,
-        'catalyst.orchestrator.route.count': updates.length,
-      })
-    } catch (error) {
-      logger.warn('Initial route sync to {peerName} failed', {
-        'event.name': 'peer.sync.initial_failed',
-        'catalyst.orchestrator.peer.name': peer.name,
-        error,
-      })
-      // Fire-and-forget: failed initial sync is not fatal; the peer can
-      // request a refresh on reconnect.
-    }
+    await this.transport.sendUpdate(peer, { updates })
+    return { routeCount: updates.length }
   }
 
   // ---------------------------------------------------------------------------
