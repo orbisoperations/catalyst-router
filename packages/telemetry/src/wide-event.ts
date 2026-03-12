@@ -62,6 +62,11 @@ export class WideEvent {
     return this
   }
 
+  /** Elapsed time in milliseconds since this event was created. */
+  get durationMs(): number {
+    return Math.round(performance.now() - this.startTime)
+  }
+
   /**
    * Emit the wide event as a single structured log record.
    * Computes `catalyst.event.duration_ms` and defaults `catalyst.event.outcome` to `'success'`.
@@ -70,7 +75,7 @@ export class WideEvent {
   emit(): void {
     if (this.emitted) return
     this.emitted = true
-    this.fields['catalyst.event.duration_ms'] = Math.round(performance.now() - this.startTime)
+    this.fields['catalyst.event.duration_ms'] = this.durationMs
     if (!('catalyst.event.outcome' in this.fields)) {
       this.fields['catalyst.event.outcome'] = 'success'
     }

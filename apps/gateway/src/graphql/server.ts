@@ -64,8 +64,6 @@ export class GatewayGraphqlServer {
       'gateway.service_count': config.services.length,
       serviceCount: config.services.length,
     })
-    const startTime = performance.now()
-
     try {
       const subschemas = await Promise.all(
         config.services.map(async (service) => {
@@ -93,9 +91,8 @@ export class GatewayGraphqlServer {
             },
           },
         ])
-        const durationS = (performance.now() - startTime) / 1000
         this.reloadCounter.add(1, { result: 'success' })
-        this.reloadDuration.record(durationS)
+        this.reloadDuration.record(event.durationMs / 1000)
         const newCount = 0
         this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
         this.currentSubgraphCount = newCount
@@ -109,29 +106,26 @@ export class GatewayGraphqlServer {
 
       this.createYogaInstance({ schema: stitchedSchema })
 
-      const durationS = (performance.now() - startTime) / 1000
       this.reloadCounter.add(1, { result: 'success' })
-      this.reloadDuration.record(durationS)
+      this.reloadDuration.record(event.durationMs / 1000)
       const newCount = subschemas.length
       this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
       this.currentSubgraphCount = newCount
 
-      const durationMs = Math.round(durationS * 1000)
       this.logger.info('Gateway reloaded successfully in {durationMs}ms', {
         'event.name': 'gateway.reloaded',
-        'gateway.duration_ms': durationMs,
-        durationMs,
+        'gateway.duration_ms': event.durationMs,
+        durationMs: event.durationMs,
       })
       event.set({
-        'gateway.duration_ms': durationMs,
+        'gateway.duration_ms': event.durationMs,
         'gateway.subgraph_count': subschemas.length,
       })
       event.emit()
       return { success: true }
     } catch (error: unknown) {
-      const durationS = (performance.now() - startTime) / 1000
       this.reloadCounter.add(1, { result: 'failure' })
-      this.reloadDuration.record(durationS)
+      this.reloadDuration.record(event.durationMs / 1000)
 
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error('Gateway reload failed: {errorMessage}', {
