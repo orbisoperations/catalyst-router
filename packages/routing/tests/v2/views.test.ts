@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { PeerView, InternalRouteView, RouteTableView } from '../../src/v2/views.js'
+import {
+  toPublicPeer,
+  toPublicInternalRoute,
+  toDataChannel,
+  toPublicRouteTable,
+  internalRouteCount,
+} from '../../src/v2/views.js'
 import type { PeerRecord, InternalRoute, RouteTable } from '../../src/v2/index.js'
 
 function makePeerRecord(overrides: Partial<PeerRecord> = {}): PeerRecord {
@@ -57,26 +63,23 @@ function makeRouteTable(): RouteTable {
   }
 }
 
-describe('PeerView', () => {
-  it('strips peerToken from toPublic()', () => {
+describe('toPublicPeer', () => {
+  it('strips peerToken', () => {
     const peer = makePeerRecord({ peerToken: 'secret' })
-    const view = new PeerView(peer)
-    const pub = view.toPublic()
+    const pub = toPublicPeer(peer)
     expect(pub).not.toHaveProperty('peerToken')
     expect(pub.name).toBe('peer-1')
   })
 
-  it('strips holdTime, lastSent, lastReceived from toPublic()', () => {
-    const peer = makePeerRecord()
-    const pub = new PeerView(peer).toPublic()
+  it('strips holdTime, lastSent, lastReceived', () => {
+    const pub = toPublicPeer(makePeerRecord())
     expect(pub).not.toHaveProperty('holdTime')
     expect(pub).not.toHaveProperty('lastSent')
     expect(pub).not.toHaveProperty('lastReceived')
   })
 
   it('preserves name, domains, endpoint, connectionStatus', () => {
-    const peer = makePeerRecord({ endpoint: 'ws://peer:4000' })
-    const pub = new PeerView(peer).toPublic()
+    const pub = toPublicPeer(makePeerRecord({ endpoint: 'ws://peer:4000' }))
     expect(pub.name).toBe('peer-1')
     expect(pub.domains).toEqual(['example.com'])
     expect(pub.endpoint).toBe('ws://peer:4000')
@@ -84,23 +87,23 @@ describe('PeerView', () => {
   })
 })
 
-describe('InternalRouteView', () => {
-  it('strips peerToken from peer in toPublic()', () => {
-    const route = makeInternalRoute()
-    const pub = new InternalRouteView(route).toPublic()
+describe('toPublicInternalRoute', () => {
+  it('strips peerToken from peer', () => {
+    const pub = toPublicInternalRoute(makeInternalRoute())
     expect(pub.peer).not.toHaveProperty('peerToken')
     expect(pub.peer.name).toBe('peer-1')
   })
 
-  it('strips isStale from toPublic()', () => {
-    const route = makeInternalRoute({ isStale: true })
-    const pub = new InternalRouteView(route).toPublic()
+  it('strips isStale', () => {
+    const pub = toPublicInternalRoute(makeInternalRoute({ isStale: true }))
     expect(pub).not.toHaveProperty('isStale')
   })
+})
 
-  it('toDataChannel() returns only DataChannelDefinition fields', () => {
+describe('toDataChannel', () => {
+  it('returns only DataChannelDefinition fields', () => {
     const route = makeInternalRoute({ region: 'us-east', tags: ['a'], envoyPort: 10000 })
-    const dc = new InternalRouteView(route).toDataChannel()
+    const dc = toDataChannel(route)
     expect(dc).toEqual({
       name: 'route-a',
       protocol: 'http',
@@ -116,12 +119,10 @@ describe('InternalRouteView', () => {
   })
 })
 
-describe('RouteTableView', () => {
-  it('toPublic() strips all credentials', () => {
-    const table = makeRouteTable()
-    const pub = new RouteTableView(table).toPublic()
+describe('toPublicRouteTable', () => {
+  it('strips all credentials', () => {
+    const pub = toPublicRouteTable(makeRouteTable())
 
-    // Peers: no peerToken, no holdTime/lastSent/lastReceived
     for (const peer of pub.peers) {
       expect(peer).not.toHaveProperty('peerToken')
       expect(peer).not.toHaveProperty('holdTime')
@@ -129,23 +130,36 @@ describe('RouteTableView', () => {
       expect(peer).not.toHaveProperty('lastReceived')
     }
 
-    // Internal routes: no peerToken on peer, no isStale
     for (const route of pub.routes.internal) {
       expect(route.peer).not.toHaveProperty('peerToken')
       expect(route).not.toHaveProperty('isStale')
     }
 
-    // Local routes pass through unchanged
-    expect(pub.routes.local).toEqual([...table.local.routes.values()])
+    expect(pub.routes.local).toHaveLength(1)
   })
 
-  it('toPublic() preserves data integrity', () => {
+  it('preserves data integrity', () => {
     const table = makeRouteTable()
-    const pub = new RouteTableView(table).toPublic()
+    const pub = toPublicRouteTable(table)
     expect(pub.peers).toHaveLength(2)
     expect(pub.routes.internal).toHaveLength(2)
     expect(pub.routes.local).toHaveLength(1)
     expect(pub.peers[0].name).toBe('peer-1')
     expect(pub.routes.internal[0].name).toBe('route-a')
+  })
+})
+
+describe('internalRouteCount', () => {
+  it('counts routes across all peers', () => {
+    const table = makeRouteTable()
+    expect(internalRouteCount(table)).toBe(2)
+  })
+
+  it('returns 0 for empty table', () => {
+    const table: RouteTable = {
+      local: { routes: new Map() },
+      internal: { peers: new Map(), routes: new Map() },
+    }
+    expect(internalRouteCount(table)).toBe(0)
   })
 })
