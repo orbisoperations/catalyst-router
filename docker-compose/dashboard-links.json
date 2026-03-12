@@ -1,0 +1,5 @@
+{
+  "metrics": "http://localhost:3050/d/catalyst-services?var-service={service}",
+  "traces": "http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22jaeger%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22search%22%2C%22service%22%3A%22{service}%22%7D%5D%7D%7D",
+  "logs": "http://localhost:3050/explore?schemaVersion=1&panes=%7B%22a%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice_name%3D%5C%22{service}%5C%22%7D%22%7D%5D%7D%7D"
+}
