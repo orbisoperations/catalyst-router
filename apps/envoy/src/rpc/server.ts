@@ -81,117 +81,85 @@ export class EnvoyRpcServer extends RpcTarget {
    */
   async updateRoutes(config: unknown): Promise<UpdateResult> {
     const event = new WideEvent('envoy.route_update', this.logger)
-    this.logger.info('Route update received via RPC', {
-      'event.name': 'envoy.route_update.received',
-    })
-
-    const result = RouteConfigSchema.safeParse(config)
-    if (!result.success) {
-      this.logger.error('Malformed route config received', {
-        'event.name': 'envoy.route_update.invalid',
-      })
-      event.setError(new Error('Malformed route configuration'))
-      event.emit()
-      return {
-        success: false,
-        error: 'Malformed route configuration received and unable to parse',
-      }
-    }
-
-    this.config = result.data
-    const total = this.config.local.length + this.config.internal.length
-    this.logger.info('Stored {total} route(s) ({localCount} local, {internalCount} internal)', {
-      'event.name': 'envoy.routes.stored',
-      total,
-      localCount: this.config.local.length,
-      internalCount: this.config.internal.length,
-    })
-    event.set({
-      'envoy.route_count': total,
-      'envoy.local_count': this.config.local.length,
-      'envoy.internal_count': this.config.internal.length,
-    })
-
-    // Build and push xDS snapshot if a cache is configured
-    if (this.snapshotCache) {
-      // Use explicit portAllocations from orchestrator when available.
-      // These separate local listener ports from upstream remote ports,
-      // which is required for multi-hop transit routing.
-      let portAllocations: Record<string, number>
-
-      if (result.data.portAllocations) {
-        portAllocations = { ...result.data.portAllocations }
-      } else {
-        // Backward compat: derive from route.envoyPort (2-node mode).
-        // This conflates local listener ports with remote upstream ports,
-        // which only works when ports are symmetric (direct 2-node links).
-        // Multi-hop routing requires explicit portAllocations.
-        this.logger.warn(
-          'No portAllocations in route config — using legacy envoyPort derivation (2-node only)',
-          { 'event.name': 'envoy.port.legacy_derivation' }
-        )
-        portAllocations = {}
-        for (const route of this.config.local) {
-          if (route.envoyPort) {
-            portAllocations[route.name] = route.envoyPort
-          }
-        }
-        for (const route of this.config.internal) {
-          if (route.envoyPort) {
-            const egressKey = `egress_${route.name}_via_${route.peer.name}`
-            portAllocations[egressKey] = route.envoyPort
-          }
+    try {
+      const result = RouteConfigSchema.safeParse(config)
+      if (!result.success) {
+        event.setError(new Error('Malformed route configuration'))
+        return {
+          success: false,
+          error: 'Malformed route configuration received and unable to parse',
         }
       }
 
-      const snapshot = buildXdsSnapshot({
-        local: this.config.local,
-        internal: this.config.internal,
-        portAllocations,
-        bindAddress: this.bindAddress,
-        version: String(++this.versionCounter),
+      this.config = result.data
+      const total = this.config.local.length + this.config.internal.length
+      event.set({
+        'envoy.route_count': total,
+        'envoy.local_count': this.config.local.length,
+        'envoy.internal_count': this.config.internal.length,
       })
 
-      // Log config diff from previous snapshot
-      if (this.previousSnapshot) {
-        const prevClusterNames = new Set(this.previousSnapshot.clusters.map((c) => c.name))
-        const newClusterNames = new Set(snapshot.clusters.map((c) => c.name))
-        const clustersAdded = [...newClusterNames].filter((n) => !prevClusterNames.has(n)).length
-        const clustersRemoved = [...prevClusterNames].filter((n) => !newClusterNames.has(n)).length
+      if (this.snapshotCache) {
+        let portAllocations: Record<string, number>
 
-        this.logger.info('xDS config diff: clusters +{added} -{removed}', {
-          'event.name': 'envoy.config.diff',
-          'xds.clusters_added': clustersAdded,
-          'xds.clusters_removed': clustersRemoved,
-          'xds.version': snapshot.version,
-          added: clustersAdded,
-          removed: clustersRemoved,
+        if (result.data.portAllocations) {
+          portAllocations = { ...result.data.portAllocations }
+        } else {
+          event.set('envoy.legacy_port_derivation', true)
+          portAllocations = {}
+          for (const route of this.config.local) {
+            if (route.envoyPort) {
+              portAllocations[route.name] = route.envoyPort
+            }
+          }
+          for (const route of this.config.internal) {
+            if (route.envoyPort) {
+              const egressKey = `egress_${route.name}_via_${route.peer.name}`
+              portAllocations[egressKey] = route.envoyPort
+            }
+          }
+        }
+
+        const snapshot = buildXdsSnapshot({
+          local: this.config.local,
+          internal: this.config.internal,
+          portAllocations,
+          bindAddress: this.bindAddress,
+          version: String(++this.versionCounter),
+        })
+
+        if (this.previousSnapshot) {
+          const prevClusterNames = new Set(this.previousSnapshot.clusters.map((c) => c.name))
+          const newClusterNames = new Set(snapshot.clusters.map((c) => c.name))
+          const clustersAdded = [...newClusterNames].filter((n) => !prevClusterNames.has(n)).length
+          const clustersRemoved = [...prevClusterNames].filter(
+            (n) => !newClusterNames.has(n)
+          ).length
+          event.set({
+            'xds.clusters_added': clustersAdded,
+            'xds.clusters_removed': clustersRemoved,
+          })
+        }
+
+        this.snapshotCache.setSnapshot(snapshot)
+        this.previousSnapshot = snapshot
+        event.set({
+          'xds.snapshot_version': snapshot.version,
+          'xds.listener_count': snapshot.listeners.length,
+          'xds.cluster_count': snapshot.clusters.length,
         })
       }
 
-      this.snapshotCache.setSnapshot(snapshot)
-      this.previousSnapshot = snapshot
-      this.logger.info(
-        'xDS snapshot v{version} pushed ({listenerCount} listeners, {clusterCount} clusters)',
-        {
-          'event.name': 'xds.snapshot.pushed',
-          'xds.version': snapshot.version,
-          'xds.listener_count': snapshot.listeners.length,
-          'xds.cluster_count': snapshot.clusters.length,
-          version: snapshot.version,
-          listenerCount: snapshot.listeners.length,
-          clusterCount: snapshot.clusters.length,
-        }
-      )
-      event.set({
-        'xds.snapshot_version': snapshot.version,
-        'xds.listener_count': snapshot.listeners.length,
-        'xds.cluster_count': snapshot.clusters.length,
-      })
+      return { success: true }
+    } catch (error: unknown) {
+      event.setError(error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    } finally {
+      event.emit()
     }
-
-    event.emit()
-    return { success: true }
   }
 
   /**
