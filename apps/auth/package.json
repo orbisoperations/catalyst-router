@@ -14,7 +14,8 @@
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
     "test:integration": "vitest run --passWithNoTests container integration",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@catalyst/authorization": "workspace:*",

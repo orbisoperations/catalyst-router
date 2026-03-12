@@ -11,7 +11,8 @@
     "start": "node dist/index.js",
     "compile": "esbuild src/index.ts --bundle --platform=node --target=node22 --outfile=../../dist/rpi-config/catalyst-rpi-config.mjs --format=esm --packages=external --banner:js='#!/usr/bin/env node'",
     "test": "vitest",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",
