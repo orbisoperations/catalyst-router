@@ -9,7 +9,8 @@
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "test": "vitest",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@types/node": "catalog:dev",
