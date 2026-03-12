@@ -78,54 +78,50 @@ export class OrchestratorBus {
         'catalyst.orchestrator.node.name': this.config.node.name,
       })
 
-      const plan = this.rib.plan(action, this.rib.state)
+      try {
+        const plan = this.rib.plan(action, this.rib.state)
 
-      if (!this.rib.stateChanged(plan)) {
-        // Tick with no expired peers: keepalives still need to fire.
-        if (action.action === Actions.Tick) {
-          await this.handleKeepalives(this.rib.state, action.data.now)
+        if (!this.rib.stateChanged(plan)) {
+          if (action.action === Actions.Tick) {
+            await this.handleKeepalives(this.rib.state, action.data.now)
+          }
+          event.set('catalyst.orchestrator.action.state_changed', false)
+          return { success: false, error: 'No state change' }
         }
-        event.set('catalyst.orchestrator.action.state_changed', false)
-        event.emit()
-        return { success: false, error: 'No state change' }
-      }
 
-      const committed = this.rib.commit(plan, action)
+        const committed = this.rib.commit(plan, action)
 
-      event.set({
-        'catalyst.orchestrator.action.state_changed': true,
-        'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
-        'catalyst.orchestrator.route.total':
-          committed.local.routes.length + committed.internal.routes.length,
-      })
-
-      if (plan.routeChanges.length > 0) {
-        const counts = { added: 0, removed: 0, modified: 0 }
-        for (const c of plan.routeChanges) {
-          if (c.type === 'added') counts.added++
-          else if (c.type === 'removed') counts.removed++
-          else counts.modified++
-        }
         event.set({
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-        })
-        logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
-          'event.name': 'route.table.changed',
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-          'catalyst.orchestrator.route.trigger': action.action,
+          'catalyst.orchestrator.action.state_changed': true,
+          'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
           'catalyst.orchestrator.route.total':
             committed.local.routes.length + committed.internal.routes.length,
         })
+
+        if (plan.routeChanges.length > 0) {
+          const counts = { added: 0, removed: 0, modified: 0 }
+          for (const c of plan.routeChanges) {
+            if (c.type === 'added') counts.added++
+            else if (c.type === 'removed') counts.removed++
+            else counts.modified++
+          }
+          event.set({
+            'catalyst.orchestrator.route.added': counts.added,
+            'catalyst.orchestrator.route.removed': counts.removed,
+            'catalyst.orchestrator.route.modified': counts.modified,
+            'catalyst.orchestrator.route.trigger': action.action,
+          })
+        }
+
+        await this.handlePostCommit(action, plan, committed)
+
+        return { success: true, state: committed, action }
+      } catch (error) {
+        event.setError(error)
+        throw error
+      } finally {
+        event.emit()
       }
-
-      await this.handlePostCommit(action, plan, committed)
-
-      event.emit()
-      return { success: true, state: committed, action }
     })
   }
 
