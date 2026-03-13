@@ -29,6 +29,47 @@ Integration points: Hono HTTP middleware (gateway, auth), orchestrator action di
 
 ~90 template literal log calls were migrated across orchestrator, gateway, auth, envoy, and node packages. Logs redundant with the wide event (e.g. "received request") were removed rather than converted.
 
+### WideEvent Pure Accumulation (Option A)
+
+All WideEvent call sites follow the "pure accumulation" pattern: no intermediate `logger.*` calls within a WideEvent scope. Everything goes through `event.set()`, and `emit()` is called in a `finally` block.
+
+**Rationale:** The codebase already has OTel distributed tracing (Jaeger). Traces provide the step-by-step narrative of an operation (spans with timing, parent-child relationships, error recording). Adding log-level correlation would duplicate what traces already provide. Logs are the **summary layer** (what happened, how long, did it succeed); traces are the **narrative layer** (step-by-step detail).
+
+**Operator workflow:**
+
+1. Loki: query by `event.name`, see summary record with outcome, duration, key fields
+2. Need step-by-step? Click `trace_id` on the log record → Jaeger shows the full span tree
+
+The HTTP middleware (`packages/telemetry/src/middleware/wide-event.ts`) is the gold standard reference implementation.
+
+### Wide Event Catalog
+
+| Service      | event.name                       | Key fields                                                                 |
+| ------------ | -------------------------------- | -------------------------------------------------------------------------- |
+| orchestrator | `orchestrator.action`            | `action.type`, `peer.name`, `route.change_count`, `route.total`            |
+| orchestrator | `orchestrator.peer_sync`         | `peer.name`, `sync.type`, `sync.route_count`                               |
+| orchestrator | `orchestrator.route_propagation` | `peer.connected_count`, `route.change_count`, `peer.failed_count`          |
+| orchestrator | `transport.open_peer`            | `peer.name`, `peer.endpoint`                                               |
+| gateway      | `gateway.reload`                 | `gateway.service_count`, `gateway.subgraph_count`, `gateway.zero_services` |
+| gateway      | `http.request`                   | `http.method`, `http.route`, `http.status_code`                            |
+| auth         | `http.request`                   | `auth.operation`, `auth.token_type`, `auth.subject`                        |
+| envoy        | `envoy.route_update`             | `envoy.route_count`, `xds.clusters_added`, `xds.clusters_removed`          |
+| node         | `rpc.call`                       | `rpc.method`, `rpc.status`                                                 |
+
+### State Transition Log Catalog
+
+| event.name              | Service      | When                                        |
+| ----------------------- | ------------ | ------------------------------------------- |
+| `peer.session.opened`   | orchestrator | Peer connected                              |
+| `peer.session.closed`   | orchestrator | Peer disconnected (includes `close.reason`) |
+| `route.advertised`      | orchestrator | Route pushed to peer                        |
+| `route.withdrawn`       | orchestrator | Route removed from peer                     |
+| `route.installed`       | orchestrator | Route added to local table                  |
+| `token.minted`          | auth         | New JWT issued                              |
+| `token.refresh.failed`  | auth         | Token refresh failed                        |
+| `xds.client.subscribed` | envoy        | New xDS subscription                        |
+| `xds.client.acked`      | envoy        | Client ACK received                         |
+
 ### OTel Attribute Naming Convention
 
 PR review feedback identified that custom attributes need a domain namespace to avoid collisions with OTel semantic conventions. All custom attributes follow:
@@ -94,7 +135,25 @@ Browser → web-ui (port 8080) → orchestrator (port 3000)
 
 The frontend moved from `apps/orchestrator/frontend/` to `apps/web-ui/frontend/`. The orchestrator's dashboard API routes stay in the orchestrator (they became internal API). Frontend fetch URLs changed from `/dashboard/api/*` to `/api/*` since the proxy handles routing.
 
-## 3. Review Hardening
+## 3. Views.ts Refactor
+
+The `packages/routing/src/v2/views.ts` file used 3 classes (`PeerView`, `InternalRouteView`, `RouteTableView`) to strip sensitive fields (peer tokens, internal bookkeeping) from API responses. These were replaced with plain functions (`toPublicPeer`, `toPublicInternalRoute`, `toDataChannel`, `toPublicRouteTable`, `internalRouteCount`) and zod-derived types.
+
+**Rationale:** The classes added unnecessary indirection for what are simple field-stripping transforms. Plain functions are easier to compose and test. The `PublicPeer` type is now derived from `PeerRecordSchema.omit()`, giving zod-based validation instead of hand-written `Omit<>` types.
+
+## 4. Dashboard Links Config File
+
+The `CATALYST_DASHBOARD_LINKS` env var contained a JSON blob with URL-encoded JSON nested inside — unreadable and duplicated across `docker.compose.yaml` and `two-node.compose.yaml`.
+
+Replaced with `CATALYST_DASHBOARD_LINKS_FILE` pointing to a mounted `docker-compose/dashboard-links.json` file. Single source of truth, human-readable. The config package's `loadDashboardLinks()` handles both file and env var with clear precedence:
+
+1. `CATALYST_DASHBOARD_LINKS_FILE` set → read file, throw on missing/invalid
+2. `CATALYST_DASHBOARD_LINKS` set → parse inline JSON, throw on invalid
+3. Neither → `undefined` (optional feature)
+
+Error handling is now consistent: always throw on invalid input (the web-ui previously warned and continued, hiding broken config from operators).
+
+## 5. Review Hardening
 
 Items addressed from PR review feedback:
 
@@ -107,6 +166,28 @@ Items addressed from PR review feedback:
 | Remove `user: root` from auth compose    | Auth Dockerfile creates a non-root `appuser` but compose overrode with `user: root` for volume ownership. Added entrypoint that starts as root, fixes ownership, then drops to `appuser` via `su-exec`. |
 | Observability stack → compose overlay    | Prometheus/Jaeger/Loki/Grafana were duplicated across compose files. Extracted to `observability.compose.yaml` (same pattern as `aspire.compose.yaml`).                                                 |
 
-## 4. Aspire Dashboard
+### Review Items Not Actioned
+
+| Item                               | Reason                                                                                                         |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| PR #510 `process.env.FRONTEND_DIR` | Already resolved by web-ui extraction (PR #534)                                                                |
+| PR #522 holocrons subskill         | Process concern, already replied to by author                                                                  |
+| PR #561 `otlp_grpc` naming         | Reviewer incorrect — `otlp_grpc` is the canonical name as of collector v0.144.0 (upstream renamed from `otlp`) |
+| PR #506 "GQL doesn't matter"       | Informational comment, no action needed                                                                        |
+
+## 6. Aspire Dashboard
 
 Added .NET Aspire Dashboard as an opt-in compose profile (`--profile aspire`) for verifying OTel attribute naming. Aspire accepts OTLP directly and renders all three signals in an OTel-native UI — useful for catching attribute naming issues that Grafana might mask. Stores data in-memory, no persistence. Verification tool, not a Grafana replacement.
+
+Alternatives considered and rejected: SigNoz (requires swapping entire backend to ClickHouse), Uptrace (BSL license concern), VictoriaMetrics/InfluxDB (storage engines, still use Grafana for UI).
+
+## 7. Future Work: Comprehensive Node Logging
+
+This stack established the logging infrastructure and conventions. The next phase would add ~45 additional event types across 6 categories to achieve full diagnostic coverage without SSH access:
+
+1. **Node lifecycle** — startup/shutdown timing, config loaded, bootstrap auth
+2. **Peering & network health** — session state changes, keepalive timeouts, reconnection, partition detection
+3. **Route exchange** — convergence timing, route install/reject, conflict resolution, stale route detection
+4. **Gateway & federation** — subgraph health changes, SDL validation, query routing, stitching timing
+5. **Envoy data plane** — upstream health, config diffs, repeated NACKs, traffic routing
+6. **Security & audit** — auth decisions with policy reasons, cert rotation, token usage tracking
