@@ -1,16 +1,26 @@
 import type { Logger } from '@logtape/logtape'
 
+/** Logger proxy that injects the parent WideEvent's `event.name` into every log call. */
+export interface EventLogger {
+  debug(message: string, properties?: Record<string, unknown>): void
+  info(message: string, properties?: Record<string, unknown>): void
+  warn(message: string, properties?: Record<string, unknown>): void
+  error(message: string, properties?: Record<string, unknown>): void
+}
+
 /**
  * Accumulates structured fields throughout a unit of work and emits a single
  * canonical "wide event" log record at completion.
  *
  * Fields become LogTape `record.properties` -> OTEL log record attributes -> Loki labels.
  *
- * Usage:
+ * Use `event.log` for intermediate log calls that are automatically correlated
+ * to this event via `event.name`:
+ *
  * ```typescript
- * const ev = new WideEvent('http.request', logger)
- * ev.set('http.request.method', 'GET')
- * ev.set({ 'url.path': '/api/health', 'http.response.status_code': 200 })
+ * const ev = new WideEvent('gateway.reload', logger)
+ * ev.log.info('SDL validated for {url}', { url })
+ * ev.set({ 'gateway.subgraph_count': 3 })
  * ev.emit()
  * ```
  */
@@ -19,11 +29,35 @@ export class WideEvent {
   private readonly logger: Logger
   private readonly startTime: number
   private emitted = false
+  private _log: EventLogger | null = null
 
   constructor(eventName: string, logger: Logger) {
     this.logger = logger
     this.startTime = performance.now()
     this.fields['event.name'] = eventName
+  }
+
+  /**
+   * Logger that automatically injects `event.name` into every log call,
+   * so intermediate logs can be correlated with the parent wide event.
+   */
+  get log(): EventLogger {
+    if (!this._log) {
+      const eventName = this.fields['event.name'] as string
+      const logger = this.logger
+      const makeCall =
+        (level: 'debug' | 'info' | 'warn' | 'error') =>
+        (message: string, properties?: Record<string, unknown>) => {
+          logger[level](message, { 'event.name': eventName, ...properties })
+        }
+      this._log = {
+        debug: makeCall('debug'),
+        info: makeCall('info'),
+        warn: makeCall('warn'),
+        error: makeCall('error'),
+      }
+    }
+    return this._log
   }
 
   /** Set a single field by key-value pair. */
