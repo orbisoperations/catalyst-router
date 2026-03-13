@@ -243,6 +243,8 @@ export class CatalystNodeBus extends RpcTarget {
       const result = await this.handleAction(sentAction, this.state)
       if (result.success) {
         this.state = result.state
+        // Fire-and-forget: handleNotify can recursively call dispatch(), so
+        // awaiting it here would deadlock. Failures are logged but non-fatal.
         this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState).catch(
           (e) => {
             this.logger.error('Error in handleNotify for {action}: {error}', {
@@ -259,7 +261,7 @@ export class CatalystNodeBus extends RpcTarget {
       }
     } catch (error) {
       event.setError(error)
-      throw error
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
     } finally {
       event.emit()
     }
