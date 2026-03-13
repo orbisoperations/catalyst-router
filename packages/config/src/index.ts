@@ -153,13 +153,23 @@ export function loadDashboardLinks(): DashboardConfig['links'] | undefined {
         `CATALYST_DASHBOARD_LINKS_FILE: cannot read ${filePath}: ${(err as Error).message}`
       )
     }
-    const parsed = JSON.parse(raw) as unknown
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new Error(`CATALYST_DASHBOARD_LINKS_FILE: invalid JSON in ${filePath}`)
+    }
     return DashboardConfigSchema.shape.links.parse(parsed)
   }
 
   const envVar = process.env.CATALYST_DASHBOARD_LINKS
   if (envVar) {
-    const parsed = JSON.parse(envVar) as unknown
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(envVar)
+    } catch {
+      throw new Error('CATALYST_DASHBOARD_LINKS: invalid JSON')
+    }
     return DashboardConfigSchema.shape.links.parse(parsed)
   }
 
