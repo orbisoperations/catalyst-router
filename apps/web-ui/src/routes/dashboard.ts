@@ -1,5 +1,8 @@
 import { Hono } from 'hono'
 
+const HEALTH_CHECK_TIMEOUT_MS = 3000
+const ORCHESTRATOR_FETCH_TIMEOUT_MS = 5000
+
 export interface DashboardOptions {
   /** URL of the orchestrator's /api/state endpoint. */
   orchestratorUrl: string
@@ -71,7 +74,7 @@ function deriveServiceGroups(
 async function checkHealth(service: ServiceDef): Promise<ServiceHealth> {
   const start = performance.now()
   try {
-    const res = await fetch(service.url, { signal: AbortSignal.timeout(3000) })
+    const res = await fetch(service.url, { signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS) })
     return {
       ...service,
       status: res.ok ? 'up' : 'down',
@@ -98,7 +101,7 @@ export function createDashboardRoutes(options: DashboardOptions): Hono {
     try {
       const res = await fetch(stateUrl, {
         headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(ORCHESTRATOR_FETCH_TIMEOUT_MS),
       })
       const body = await res.json()
       cachedState = body
