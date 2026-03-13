@@ -70,6 +70,7 @@ export class GatewayGraphqlServer {
       )
 
       if (subschemas.length === 0) {
+        event.set('gateway.zero_services', true)
         this.createYogaInstance([
           {
             typeDefs: 'type Query { status: String }',
