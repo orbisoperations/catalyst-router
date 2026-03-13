@@ -135,7 +135,7 @@ describe('toPublicRouteTable', () => {
       expect(route).not.toHaveProperty('isStale')
     }
 
-    expect(pub.routes.local).toHaveLength(1)
+    expect(pub.routes.local).toEqual([...table.local.routes.values()])
   })
 
   it('preserves data integrity', () => {
