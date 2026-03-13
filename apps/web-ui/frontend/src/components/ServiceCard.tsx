@@ -5,7 +5,7 @@ import { ObservabilityLinks } from './ObservabilityLinks'
 
 export function ServiceCard({ service }: { service: ServiceHealth }) {
   const [expanded, setExpanded] = useState(false)
-  const config = useConfig()
+  const { config } = useConfig()
 
   const isUp = service.status === 'up'
   const isDown = service.status === 'down'
