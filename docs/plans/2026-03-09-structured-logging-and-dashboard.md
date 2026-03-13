@@ -180,7 +180,3 @@ Items addressed from PR review feedback:
 Added .NET Aspire Dashboard as an opt-in compose profile (`--profile aspire`) for verifying OTel attribute naming. Aspire accepts OTLP directly and renders all three signals in an OTel-native UI — useful for catching attribute naming issues that Grafana might mask. Stores data in-memory, no persistence. Verification tool, not a Grafana replacement.
 
 Alternatives considered and rejected: SigNoz (requires swapping entire backend to ClickHouse), Uptrace (BSL license concern), VictoriaMetrics/InfluxDB (storage engines, still use Grafana for UI).
-
-## 7. Future Work: Comprehensive Node Logging
-
-This stack established the logging infrastructure and conventions. The next phase would add ~45 additional event types to achieve full diagnostic coverage without SSH access. See the [Node Logs Notion ticket](https://www.notion.so/31947ad1da7980c581d2e93b1f5a4674) for details.
