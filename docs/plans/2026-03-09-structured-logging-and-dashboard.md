@@ -183,11 +183,4 @@ Alternatives considered and rejected: SigNoz (requires swapping entire backend t
 
 ## 7. Future Work: Comprehensive Node Logging
 
-This stack established the logging infrastructure and conventions. The next phase would add ~45 additional event types across 6 categories to achieve full diagnostic coverage without SSH access:
-
-1. **Node lifecycle** — startup/shutdown timing, config loaded, bootstrap auth
-2. **Peering & network health** — session state changes, keepalive timeouts, reconnection, partition detection
-3. **Route exchange** — convergence timing, route install/reject, conflict resolution, stale route detection
-4. **Gateway & federation** — subgraph health changes, SDL validation, query routing, stitching timing
-5. **Envoy data plane** — upstream health, config diffs, repeated NACKs, traffic routing
-6. **Security & audit** — auth decisions with policy reasons, cert rotation, token usage tracking
+This stack established the logging infrastructure and conventions. The next phase would add ~45 additional event types to achieve full diagnostic coverage without SSH access. See the [Node Logs Notion ticket](https://www.notion.so/31947ad1da7980c581d2e93b1f5a4674) for details.
