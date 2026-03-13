@@ -106,6 +106,7 @@ export class EnvoyRpcServer extends RpcTarget {
           portAllocations = { ...result.data.portAllocations }
         } else {
           event.set('envoy.legacy_port_derivation', true)
+          event.log.warn('No portAllocations in route config — using legacy envoyPort derivation')
           portAllocations = {}
           for (const route of this.config.local) {
             if (route.envoyPort) {
