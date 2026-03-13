@@ -17,6 +17,7 @@ export interface ServiceGroup {
 export function useHealth(pollIntervalMs = 10000) {
   const [groups, setGroups] = useState<ServiceGroup[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -27,9 +28,13 @@ export function useHealth(pollIntervalMs = 10000) {
         if (active) {
           setGroups(data.groups)
           setLoading(false)
+          setError(null)
         }
-      } catch {
-        if (active) setLoading(false)
+      } catch (e) {
+        if (active) {
+          setError(e instanceof Error ? e.message : String(e))
+          setLoading(false)
+        }
       }
     }
 
@@ -41,5 +46,5 @@ export function useHealth(pollIntervalMs = 10000) {
     }
   }, [pollIntervalMs])
 
-  return { groups, loading }
+  return { groups, loading, error }
 }

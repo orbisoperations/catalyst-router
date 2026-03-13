@@ -35,6 +35,7 @@ export function useRouterState(pollIntervalMs = 10000) {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [stale, setStale] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -42,7 +43,10 @@ export function useRouterState(pollIntervalMs = 10000) {
       try {
         const res = await fetch('/api/state')
         if (!res.ok) {
-          if (active) setLoading(false)
+          if (active) {
+            setError(`Orchestrator returned ${res.status}`)
+            setLoading(false)
+          }
           return
         }
         const body = await res.json()
@@ -51,9 +55,13 @@ export function useRouterState(pollIntervalMs = 10000) {
           setLastUpdated(body.lastUpdated ?? null)
           setStale(body.stale === true)
           setLoading(false)
+          setError(null)
         }
-      } catch {
-        if (active) setLoading(false)
+      } catch (e) {
+        if (active) {
+          setError(e instanceof Error ? e.message : String(e))
+          setLoading(false)
+        }
       }
     }
 
@@ -65,5 +73,5 @@ export function useRouterState(pollIntervalMs = 10000) {
     }
   }, [pollIntervalMs])
 
-  return { state, loading, lastUpdated, stale }
+  return { state, loading, lastUpdated, stale, error }
 }
