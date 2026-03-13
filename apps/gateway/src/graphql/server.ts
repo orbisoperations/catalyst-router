@@ -91,8 +91,9 @@ export class GatewayGraphqlServer {
             },
           },
         ])
+        const durationMs = event.durationMs
         this.reloadCounter.add(1, { result: 'success' })
-        this.reloadDuration.record(event.durationMs / 1000)
+        this.reloadDuration.record(durationMs / 1000)
         const newCount = 0
         this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
         this.currentSubgraphCount = newCount
@@ -106,26 +107,28 @@ export class GatewayGraphqlServer {
 
       this.createYogaInstance({ schema: stitchedSchema })
 
+      const durationMs = event.durationMs
       this.reloadCounter.add(1, { result: 'success' })
-      this.reloadDuration.record(event.durationMs / 1000)
+      this.reloadDuration.record(durationMs / 1000)
       const newCount = subschemas.length
       this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
       this.currentSubgraphCount = newCount
 
       this.logger.info('Gateway reloaded successfully in {durationMs}ms', {
         'event.name': 'gateway.reloaded',
-        'gateway.duration_ms': event.durationMs,
-        durationMs: event.durationMs,
+        'gateway.duration_ms': durationMs,
+        durationMs,
       })
       event.set({
-        'gateway.duration_ms': event.durationMs,
+        'gateway.duration_ms': durationMs,
         'gateway.subgraph_count': subschemas.length,
       })
       event.emit()
       return { success: true }
     } catch (error: unknown) {
+      const durationMs = event.durationMs
       this.reloadCounter.add(1, { result: 'failure' })
-      this.reloadDuration.record(event.durationMs / 1000)
+      this.reloadDuration.record(durationMs / 1000)
 
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error('Gateway reload failed: {errorMessage}', {
