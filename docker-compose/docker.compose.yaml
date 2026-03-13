@@ -2,7 +2,11 @@ services:
   # --- Observability stack ---
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.144.0
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM otel/opentelemetry-collector-contrib:0.144.0
+        COPY --from=busybox:1.37-musl /bin/wget /usr/bin/wget
     container_name: catalyst-otel-collector
     command: ['--config', '/etc/otel-collector-config.yaml']
     volumes:
@@ -11,7 +15,7 @@ services:
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:13133']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:13133']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,10 +30,16 @@ services:
       - '4020:4020'
     environment:
       - PORT=4020
+      - CATALYST_NODE_ID=auth.dev.catalyst.local
+      - CATALYST_DOMAINS=dev.catalyst.local
+      - CATALYST_AUTH_KEYS_DB=/data/keys.db
+      - CATALYST_AUTH_TOKENS_DB=/data/tokens.db
       - OTEL_SERVICE_NAME=auth
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    volumes:
+      - auth-data:/data
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4020/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4020/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,7 +65,7 @@ services:
       - OTEL_SERVICE_NAME=orchestrator
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,10 +85,12 @@ services:
       - '4000:4000'
     environment:
       - PORT=4000
+      - CATALYST_NODE_ID=gateway.dev.catalyst.local
+      - CATALYST_DOMAINS=dev.catalyst.local
       - OTEL_SERVICE_NAME=gateway
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -99,7 +111,7 @@ services:
     environment:
       - PORT=8080
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -113,7 +125,7 @@ services:
     environment:
       - PORT=8080
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -135,7 +147,7 @@ services:
       - OTEL_SERVICE_NAME=envoy-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -159,7 +171,7 @@ services:
           '--no-verbose',
           '--tries=1',
           '--spider',
-          'http://localhost:9901/server_info',
+          'http://127.0.0.1:9901/server_info',
         ]
       interval: 10s
       timeout: 5s
@@ -167,3 +179,6 @@ services:
     depends_on:
       envoy-service:
         condition: service_healthy
+
+volumes:
+  auth-data:

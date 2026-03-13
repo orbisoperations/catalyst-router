@@ -61,6 +61,7 @@ ENV PORT=5000
 EXPOSE 5000
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN mkdir -p /data && chown appuser:appgroup /data
 USER appuser
 
 CMD ["node", "server.mjs"]
