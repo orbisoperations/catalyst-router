@@ -1,34 +1,54 @@
-import { makeExecutor, type GatewayConfig, type ServiceConfig } from '@catalyst/types'
-import { getLogger, WideEvent } from '@catalyst/telemetry'
-import { createSchema, createYoga, type YogaServerInstance } from 'graphql-yoga'
-import { stitchSchemas, type SubschemaConfig } from '@graphql-tools/stitch'
-import { schemaFromExecutor } from '@graphql-tools/wrap'
-import { SpanStatusCode, type Span, trace } from '@opentelemetry/api'
+import { Hono } from 'hono'
+import { createYoga, createSchema } from 'graphql-yoga'
+import { stitchSchemas } from '@graphql-tools/stitch'
+import { context, propagation, SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import type { Counter, Histogram, UpDownCounter } from '@opentelemetry/api'
+import { TelemetryBuilder, WideEvent } from '@catalyst/telemetry'
+import type { ServiceTelemetry } from '@catalyst/telemetry'
 
-const logger = getLogger(['catalyst', 'gateway'])
+import type { AsyncExecutor, Executor } from '@graphql-tools/utils'
+import {
+  parse,
+  print,
+  getIntrospectionQuery,
+  buildClientSchema,
+  type GraphQLSchema,
+  type IntrospectionQuery,
+} from 'graphql'
+import type { GatewayConfig } from '../rpc/server.js'
 
-export class GatewayServer {
-  private yoga: YogaServerInstance<Record<string, unknown>, Record<string, unknown>> | null = null
-  private readonly logger = logger
+export class GatewayGraphqlServer {
+  private yoga: ReturnType<typeof createYoga> | null = null
+  private readonly telemetry: ServiceTelemetry
+  private readonly logger: ServiceTelemetry['logger']
   private readonly reloadCounter: Counter
   private readonly reloadDuration: Histogram
   private readonly activeSubgraphs: UpDownCounter
   private currentSubgraphCount = 0
 
-  constructor(
-    reloadCounter: Counter,
-    reloadDuration: Histogram,
-    activeSubgraphs: UpDownCounter
-  ) {
-    this.reloadCounter = reloadCounter
-    this.reloadDuration = reloadDuration
-    this.activeSubgraphs = activeSubgraphs
+  constructor(telemetry: ServiceTelemetry = TelemetryBuilder.noop('gateway')) {
+    this.telemetry = telemetry
+    this.logger = telemetry.logger.getChild('graphql')
+
+    this.reloadCounter = telemetry.meter.createCounter('gateway.schema.reloads', {
+      description: 'Number of schema reload attempts',
+      unit: '{reload}',
+    })
+    this.reloadDuration = telemetry.meter.createHistogram('gateway.schema.reload.duration', {
+      description: 'Duration of schema reload operations',
+      unit: 's',
+    })
+    this.activeSubgraphs = telemetry.meter.createUpDownCounter('gateway.subgraph.active', {
+      description: 'Number of active subgraph services',
+      unit: '{subgraph}',
+    })
+
+    // Initialize with a default health check schema
     this.createYogaInstance([
       {
         typeDefs: 'type Query { status: String }',
         resolvers: {
-          Query: { status: () => 'No services configured.' },
+          Query: { status: () => 'Waiting for configuration...' },
         },
       },
     ])
@@ -50,7 +70,6 @@ export class GatewayServer {
       )
 
       if (subschemas.length === 0) {
-        event.set('gateway.zero_services', true)
         this.createYogaInstance([
           {
             typeDefs: 'type Query { status: String }',
@@ -104,94 +123,139 @@ export class GatewayServer {
     } else if (Array.isArray(config)) {
       schema = createSchema({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        typeDefs: config.map((c) => c.typeDefs) as any,
+        typeDefs: (config as { typeDefs: any }[]).map((c) => c.typeDefs),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        resolvers: config.map((c) => c.resolvers) as any,
+        resolvers: (config as { resolvers: any }[]).map((c) => c.resolvers),
       })
+    } else {
+      schema = config
     }
 
     this.yoga = createYoga({
-      schema: schema as Parameters<typeof createYoga>[0]['schema'],
-      graphqlEndpoint: '/api',
+      schema: schema as GraphQLSchema,
+      graphqlEndpoint: '/graphql',
       landingPage: false,
-      logging: false,
-      maskedErrors: false,
     })
   }
 
-  private createRemoteExecutor(url: string, token?: string): ReturnType<typeof makeExecutor> {
-    return makeExecutor(url, token)
-  }
+  private createRemoteExecutor(url: string, token?: string): AsyncExecutor {
+    const tracer = this.telemetry.tracer
+    const hostname = new URL(url).hostname
+    return async ({ document, variables, operationName, extensions }) => {
+      const query = print(document)
+      return tracer.startActiveSpan(
+        `gateway subgraph ${hostname}`,
+        { kind: SpanKind.CLIENT, attributes: { 'url.full': url } },
+        async (span) => {
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          }
+          // Inject W3C traceparent into outbound headers
+          propagation.inject(context.active(), headers)
 
-  private async fetchRemoteSchema(executor: ReturnType<typeof makeExecutor>) {
-    return schemaFromExecutor(executor as Parameters<typeof schemaFromExecutor>[0])
-  }
-
-  /**
-   * Validate a service's SDL endpoint.
-   *
-   * On success the span is ended normally.
-   * On failure the span records the exception, sets ERROR status, and
-   * re-throws so the caller can handle it.
-   */
-  async validateServiceSdl(url: string, token?: string): Promise<void> {
-    const tracer = trace.getTracer('gateway')
-    const span: Span = tracer.startSpan('gateway.validate_service_sdl', {
-      attributes: {
-        'service.url': url,
-      },
-    })
-
-    try {
-      const sdlUrl = `${url}/sdl`
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      }
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-      }
-      const response = await fetch(sdlUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          query: '{ _sdl }',
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Service returned ${response.status}: ${response.statusText}`)
-      }
-
-      const result = (await response.json()) as {
-        data?: { _sdl?: string }
-        errors?: Array<{ message: string }>
-      }
-
-      if (result.errors && result.errors.length > 0) {
-        throw new Error(result.errors.map((e) => e.message).join(', '))
-      }
-
-      const sdl = result.data?._sdl
-      if (!sdl || typeof sdl !== 'string' || sdl.trim().length === 0) {
-        throw new Error('Service returned empty or invalid SDL')
-      }
-
-      span.end()
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      span.recordException(error as Error)
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message,
-      })
-      span.end()
-      throw new Error(`Service validation failed for ${url}: ${message}`)
+          try {
+            const res = await fetch(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                query,
+                variables,
+                operationName,
+                extensions,
+              }),
+            })
+            const result = await res.json()
+            span.end()
+            return result
+          } catch (err) {
+            span.recordException(err as Error)
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: err instanceof Error ? err.message : String(err),
+            })
+            span.end()
+            throw err
+          }
+        }
+      )
     }
+  }
+
+  private async fetchRemoteSchema(executor: Executor) {
+    const result = (await executor({
+      document: parse(getIntrospectionQuery()),
+    })) as {
+      data?: unknown
+      errors?: { message: string }[]
+    }
+    if (result.errors) {
+      throw new Error(result.errors.map((e) => e.message).join('\n'))
+    }
+    return buildClientSchema(result.data as unknown as IntrospectionQuery)
+  }
+
+  private async validateServiceSdl(url: string, token?: string) {
+    const tracer = this.telemetry.tracer
+    const hostname = new URL(url).hostname
+    return tracer.startActiveSpan(
+      `gateway validate-sdl ${hostname}`,
+      { kind: SpanKind.CLIENT, attributes: { 'url.full': url } },
+      async (span) => {
+        try {
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          }
+          propagation.inject(context.active(), headers)
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ query: 'query { _sdl }' }),
+          })
+
+          if (!res.ok) {
+            throw new Error(`Service returned status ${res.status}`)
+          }
+
+          const result = (await res.json()) as {
+            data?: { _sdl?: string }
+            errors?: { message: string }[]
+          }
+          if (result.errors) {
+            throw new Error(result.errors.map((e) => e.message).join(', '))
+          }
+
+          const sdl = result.data?._sdl
+          if (!sdl || typeof sdl !== 'string' || sdl.trim().length === 0) {
+            throw new Error('Service returned empty or invalid SDL')
+          }
+
+          span.end()
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error)
+          span.recordException(error as Error)
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message,
+          })
+          span.end()
+          throw new Error(`Service validation failed for ${url}: ${message}`)
+        }
+      }
+    )
   }
 }
 
-export function createGatewayHandler(gateway: GatewayServer) {
-  return (request: Request, env: unknown, ctx: unknown) => {
-    return gateway.fetch(request, env, ctx)
-  }
+export function createGatewayHandler(gateway?: GatewayGraphqlServer): {
+  app: Hono
+  server: GatewayGraphqlServer
+} {
+  const server = gateway || new GatewayGraphqlServer()
+  const app = new Hono()
+  app.all('/*', (c) => server.fetch(c.req.raw, c.env, {}))
+  return { app, server }
 }
