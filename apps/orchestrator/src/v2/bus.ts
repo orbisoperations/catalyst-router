@@ -195,15 +195,23 @@ export class OrchestratorBus {
       })
     )
 
-    const failedPeers = results
-      .map((r, i) => (r.status === 'rejected' ? connectedPeers[i].name : null))
-      .filter(Boolean) as string[]
-    if (failedPeers.length > 0) {
+    const failures = results
+      .map((r, i) =>
+        r.status === 'rejected'
+          ? {
+              name: connectedPeers[i].name,
+              error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+            }
+          : null
+      )
+      .filter(Boolean) as { name: string; error: string }[]
+    if (failures.length > 0) {
       event.set({
-        'catalyst.orchestrator.peer.failed_count': failedPeers.length,
-        'catalyst.orchestrator.peer.failed_peers': failedPeers,
+        'catalyst.orchestrator.peer.failed_count': failures.length,
+        'catalyst.orchestrator.peer.failed_peers': failures.map((f) => f.name),
+        'catalyst.orchestrator.peer.failed_errors': failures.map((f) => `${f.name}: ${f.error}`),
         'catalyst.event.outcome':
-          failedPeers.length === connectedPeers.length ? 'failure' : 'partial_failure',
+          failures.length === connectedPeers.length ? 'failure' : 'partial_failure',
       })
     }
 
