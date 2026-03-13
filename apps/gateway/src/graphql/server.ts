@@ -63,6 +63,10 @@ export class GatewayGraphqlServer {
       const subschemas = await Promise.all(
         config.services.map(async (service) => {
           await this.validateServiceSdl(service.url, service.token)
+          event.log.info('SDL validated for {url}', {
+            'subgraph.url': service.url,
+            url: service.url,
+          })
           const executor = this.createRemoteExecutor(service.url, service.token)
           const schema = await this.fetchRemoteSchema(executor)
           return { schema, executor }
