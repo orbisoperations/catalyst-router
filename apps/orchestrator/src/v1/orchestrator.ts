@@ -261,7 +261,7 @@ export class CatalystNodeBus extends RpcTarget {
       }
     } catch (error) {
       event.setError(error)
-      return { success: false, error: error instanceof Error ? error.message : String(error) }
+      throw error
     } finally {
       event.emit()
     }
