@@ -236,6 +236,9 @@ export class CatalystNodeBus extends RpcTarget {
       'catalyst.orchestrator.action.type': sentAction.action,
       'catalyst.orchestrator.node.name': this.config.node.name,
     })
+    if (sentAction.action === Actions.LocalRouteCreate) {
+      event.set('catalyst.orchestrator.action.data', JSON.stringify(sentAction.data))
+    }
 
     try {
       const prevState = this.state
