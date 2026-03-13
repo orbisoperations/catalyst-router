@@ -78,12 +78,12 @@ console.log(`Listening on http://localhost:${webUiPort}`)
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   mockOrchServer.close()
-  await webUiServer.stop().catch((e) => console.error('web-ui shutdown error', e))
+  await webUiServer.stop().catch(() => {})
   process.exit(0)
 })
 
 process.on('SIGINT', async () => {
   mockOrchServer.close()
-  await webUiServer.stop().catch((e) => console.error('web-ui shutdown error', e))
+  await webUiServer.stop().catch(() => {})
   process.exit(0)
 })
