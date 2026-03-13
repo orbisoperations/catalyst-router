@@ -248,6 +248,36 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
   const links = loadDashboardLinks()
   const dashboard = links ? { links } : undefined
 
+  // Only include orchestrator config when envoyConfig is available (i.e. the env vars are set)
+  const orchestrator = envoyConfig
+    ? {
+        gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
+          ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
+          : undefined,
+        auth:
+          process.env.CATALYST_AUTH_ENDPOINT && process.env.CATALYST_SYSTEM_TOKEN
+            ? {
+                endpoint: process.env.CATALYST_AUTH_ENDPOINT,
+                systemToken: process.env.CATALYST_SYSTEM_TOKEN,
+              }
+            : undefined,
+        envoyConfig,
+        journal: {
+          mode: process.env.CATALYST_JOURNAL_MODE || undefined,
+          path: process.env.CATALYST_JOURNAL_PATH || undefined,
+          compactionIntervalMs: process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS
+            ? Number(process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS)
+            : undefined,
+          minEntries: process.env.CATALYST_JOURNAL_MIN_ENTRIES
+            ? Number(process.env.CATALYST_JOURNAL_MIN_ENTRIES)
+            : undefined,
+          tailSize: process.env.CATALYST_JOURNAL_TAIL_SIZE
+            ? Number(process.env.CATALYST_JOURNAL_TAIL_SIZE)
+            : undefined,
+        },
+      }
+    : undefined
+
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
     dashboard,
@@ -258,32 +288,7 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       envoyAddress: process.env.CATALYST_ENVOY_ADDRESS || undefined,
     },
     envoy,
-    orchestrator: {
-      gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
-        ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
-        : undefined,
-      auth:
-        process.env.CATALYST_AUTH_ENDPOINT && process.env.CATALYST_SYSTEM_TOKEN
-          ? {
-              endpoint: process.env.CATALYST_AUTH_ENDPOINT,
-              systemToken: process.env.CATALYST_SYSTEM_TOKEN,
-            }
-          : undefined,
-      envoyConfig,
-      journal: {
-        mode: process.env.CATALYST_JOURNAL_MODE || undefined,
-        path: process.env.CATALYST_JOURNAL_PATH || undefined,
-        compactionIntervalMs: process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS
-          ? Number(process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS)
-          : undefined,
-        minEntries: process.env.CATALYST_JOURNAL_MIN_ENTRIES
-          ? Number(process.env.CATALYST_JOURNAL_MIN_ENTRIES)
-          : undefined,
-        tailSize: process.env.CATALYST_JOURNAL_TAIL_SIZE
-          ? Number(process.env.CATALYST_JOURNAL_TAIL_SIZE)
-          : undefined,
-      },
-    },
+    orchestrator,
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,
       tokensDb: process.env.CATALYST_AUTH_TOKENS_DB,
