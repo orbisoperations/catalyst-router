@@ -182,38 +182,38 @@ export class OrchestratorBus {
       'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
     })
 
-    try {
-      const results = await Promise.allSettled(
-        connectedPeers.map(async (peer) => {
-          const updates = this.buildUpdatesForPeer(peer, plan, state)
-          if (updates.length > 0) {
-            await this.transport.sendUpdate(peer, { updates })
-          }
-        })
-      )
+    const results = await Promise.allSettled(
+      connectedPeers.map(async (peer) => {
+        const updates = this.buildUpdatesForPeer(peer, plan, state)
+        if (updates.length > 0) {
+          await this.transport.sendUpdate(peer, { updates })
+        }
+      })
+    )
 
-      const failedPeers = results
-        .map((r, i) => (r.status === 'rejected' ? connectedPeers[i].name : null))
-        .filter(Boolean) as string[]
-      if (failedPeers.length > 0) {
-        event.set({
-          'catalyst.orchestrator.peer.failed_count': failedPeers.length,
-          'catalyst.orchestrator.peer.failed_peers': failedPeers,
-          'catalyst.event.outcome':
-            failedPeers.length === connectedPeers.length ? 'failure' : 'partial_failure',
-        })
-      }
-    } catch (error) {
-      event.setError(error)
-    } finally {
-      event.emit()
+    const failedPeers = results
+      .map((r, i) => (r.status === 'rejected' ? connectedPeers[i].name : null))
+      .filter(Boolean) as string[]
+    if (failedPeers.length > 0) {
+      event.set({
+        'catalyst.orchestrator.peer.failed_count': failedPeers.length,
+        'catalyst.orchestrator.peer.failed_peers': failedPeers,
+        'catalyst.event.outcome':
+          failedPeers.length === connectedPeers.length ? 'failure' : 'partial_failure',
+      })
     }
+
+    event.emit()
   }
 
   // ---------------------------------------------------------------------------
   // Initial full-table sync (sent once when a peer connects)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Send all known routes to a newly connected peer.
+   * Failures are non-fatal — the peer can request a full refresh on reconnect.
+   */
   private async syncRoutesToPeer(
     peer: PeerRecord,
     state: RouteTable
