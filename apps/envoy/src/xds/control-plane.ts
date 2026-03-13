@@ -47,6 +47,9 @@ export interface XdsControlPlaneOptions {
   telemetry?: ServiceTelemetry
 }
 
+/** Log a warning every N NACKs from the same client. */
+const NACK_WARN_INTERVAL = 3
+
 export class XdsControlPlane {
   private readonly server: grpc.Server
   private readonly port: number
@@ -214,7 +217,7 @@ export class XdsControlPlane {
           // Track repeated NACKs per client
           const nackCount = (this.clientNackCounts.get(clientId) ?? 0) + 1
           this.clientNackCounts.set(clientId, nackCount)
-          if (nackCount >= 3 && nackCount % 3 === 0) {
+          if (nackCount >= NACK_WARN_INTERVAL && nackCount % NACK_WARN_INTERVAL === 0) {
             this.logger.warn('Client {clientId} has NACKed {nackCount} times', {
               'event.name': 'envoy.nack.repeated',
               'xds.client_id': clientId,
