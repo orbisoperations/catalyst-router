@@ -165,6 +165,7 @@ export class OrchestratorBus {
           'catalyst.orchestrator.peer.name': peerName,
           'catalyst.orchestrator.sync.type': 'full',
         })
+        event.log.info('Peer {peerName} connected, syncing full route table', { peerName })
         try {
           const result = await this.syncRoutesToPeer(peer, state)
           event.set('catalyst.orchestrator.sync.route_count', result.routeCount)
