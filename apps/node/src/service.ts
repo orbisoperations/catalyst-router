@@ -22,6 +22,6 @@ export class NodeService extends CatalystService {
 
   protected override async onInitialize(): Promise<void> {
     this._rpcServer = new CatalystRpcServer()
-    this.telemetry.logger.info`RPC server initialized`
+    this.telemetry.logger.info('RPC server initialized', { 'event.name': 'node.rpc.initialized' })
   }
 }

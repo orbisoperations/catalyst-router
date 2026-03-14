@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { RpcTarget } from 'capnweb'
 import { newRpcResponse } from '@hono/capnweb'
-import { TelemetryBuilder } from '@catalyst/telemetry'
+import { TelemetryBuilder, WideEvent } from '@catalyst/telemetry'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import { DataChannelDefinitionSchema } from '@catalyst/routing'
 import type { SnapshotCache } from '../xds/snapshot-cache.js'
@@ -79,11 +79,18 @@ export class EnvoyRpcServer extends RpcTarget {
    * from the route config and pushes a new snapshot to the cache.
    */
   async updateRoutes(config: unknown): Promise<UpdateResult> {
-    this.logger.info`Route update received via RPC`
+    const event = new WideEvent('envoy.route_update', this.logger)
+    this.logger.info('Route update received via RPC', {
+      'event.name': 'envoy.route_update.received',
+    })
 
     const result = RouteConfigSchema.safeParse(config)
     if (!result.success) {
-      this.logger.error`Malformed route config received`
+      this.logger.error('Malformed route config received', {
+        'event.name': 'envoy.route_update.invalid',
+      })
+      event.setError(new Error('Malformed route configuration'))
+      event.emit()
       return {
         success: false,
         error: 'Malformed route configuration received and unable to parse',
@@ -92,8 +99,17 @@ export class EnvoyRpcServer extends RpcTarget {
 
     this.config = result.data
     const total = this.config.local.length + this.config.internal.length
-    this.logger
-      .info`Stored ${total} route(s) (${this.config.local.length} local, ${this.config.internal.length} internal)`
+    this.logger.info('Stored {total} route(s) ({localCount} local, {internalCount} internal)', {
+      'event.name': 'envoy.routes.stored',
+      total,
+      localCount: this.config.local.length,
+      internalCount: this.config.internal.length,
+    })
+    event.set({
+      'envoy.route_count': total,
+      'envoy.local_count': this.config.local.length,
+      'envoy.internal_count': this.config.internal.length,
+    })
 
     // Build and push xDS snapshot if a cache is configured
     if (this.snapshotCache) {
@@ -109,8 +125,10 @@ export class EnvoyRpcServer extends RpcTarget {
         // This conflates local listener ports with remote upstream ports,
         // which only works when ports are symmetric (direct 2-node links).
         // Multi-hop routing requires explicit portAllocations.
-        this.logger
-          .warn`No portAllocations in route config — using legacy envoyPort derivation (2-node only)`
+        this.logger.warn(
+          'No portAllocations in route config — using legacy envoyPort derivation (2-node only)',
+          { 'event.name': 'envoy.port.legacy_derivation' }
+        )
         portAllocations = {}
         for (const route of this.config.local) {
           if (route.envoyPort) {
@@ -134,10 +152,26 @@ export class EnvoyRpcServer extends RpcTarget {
       })
 
       this.snapshotCache.setSnapshot(snapshot)
-      this.logger
-        .info`xDS snapshot v${snapshot.version} pushed (${snapshot.listeners.length} listeners, ${snapshot.clusters.length} clusters)`
+      this.logger.info(
+        'xDS snapshot v{version} pushed ({listenerCount} listeners, {clusterCount} clusters)',
+        {
+          'event.name': 'xds.snapshot.pushed',
+          'xds.version': snapshot.version,
+          'xds.listener_count': snapshot.listeners.length,
+          'xds.cluster_count': snapshot.clusters.length,
+          version: snapshot.version,
+          listenerCount: snapshot.listeners.length,
+          clusterCount: snapshot.clusters.length,
+        }
+      )
+      event.set({
+        'xds.snapshot_version': snapshot.version,
+        'xds.listener_count': snapshot.listeners.length,
+        'xds.cluster_count': snapshot.clusters.length,
+      })
     }
 
+    event.emit()
     return { success: true }
   }
 

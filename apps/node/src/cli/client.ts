@@ -7,7 +7,7 @@ export class CatalystClient {
   // Mock connect - in reality this would connect via HTTP/WebSocket/IPC to the server
   async connect(): Promise<CatalystRpc> {
     // Return a proxy or stub. For now, returning null to show structure.
-    this.logger.info`Connecting to Catalyst Node RPC...`
+    this.logger.info('Connecting to Catalyst Node RPC', { 'event.name': 'node.rpc.connecting' })
     throw new Error('Not implemented: Transport layer for Client')
   }
 }
