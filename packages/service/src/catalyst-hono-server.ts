@@ -3,7 +3,7 @@ import { createAdaptorServer } from '@hono/node-server'
 import type { ServerType } from '@hono/node-server'
 import { createNodeWebSocket } from '@hono/node-ws'
 import { getLogger } from '@catalyst/telemetry'
-import { telemetryMiddleware } from '@catalyst/telemetry/middleware/hono'
+import { telemetryMiddleware, wideEventMiddleware } from '@catalyst/telemetry/middleware/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 
@@ -123,6 +123,9 @@ export class CatalystHonoServer {
     // Standard telemetry middleware
     app.use(telemetryMiddleware({ ignorePaths }))
 
+    // Wide event middleware — emits a canonical log per HTTP request
+    app.use(wideEventMiddleware())
+
     // Standard health endpoint
     const serviceNames = this._options.services?.map((s) => s.info.name) ?? []
     app.get('/health', (c) =>
@@ -144,7 +147,10 @@ export class CatalystHonoServer {
     // Attached before listen() so the handler is ready when the error fires.
     this._server.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
-        this._logger.error`Port ${port} is already in use`
+        this._logger.error('Port {port} is already in use', {
+          'event.name': 'server.port.conflict',
+          port,
+        })
         process.exit(1)
       }
       throw err
@@ -169,7 +175,12 @@ export class CatalystHonoServer {
 
     const names = serviceNames.length > 0 ? ` [${serviceNames.join(', ')}]` : ''
     const logger = getLogger(['catalyst', 'server'])
-    logger.info`Catalyst server${names} listening on ${hostname}:${port}`
+    logger.info('Catalyst server{names} listening on {hostname}:{port}', {
+      'event.name': 'server.listening',
+      names,
+      hostname,
+      port,
+    })
 
     return this
   }
