@@ -126,6 +126,7 @@ export class OrchestratorService extends CatalystService {
     const localNodeInfo = {
       name: this.config.node.name,
       domains: this.config.node.domains,
+      envoyAddress: this.config.node.envoyAddress,
     }
     const transport: PeerTransport =
       transportType === 'http'

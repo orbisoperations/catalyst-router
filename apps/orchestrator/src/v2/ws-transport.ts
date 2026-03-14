@@ -13,20 +13,20 @@ interface RemotePublicApi {
         success: true
         client: {
           open(data: {
-            peerInfo: { name: string; domains: string[] }
+            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
             holdTime?: number
           }): Promise<{ success: true } | { success: false; error: string }>
           close(data: {
-            peerInfo: { name: string; domains: string[] }
+            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
             code: number
             reason?: string
           }): Promise<{ success: true } | { success: false; error: string }>
           update(data: {
-            peerInfo: { name: string; domains: string[] }
+            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
             update: UpdateMessage
           }): Promise<{ success: true } | { success: false; error: string }>
           keepalive(data: {
-            peerInfo: { name: string; domains: string[] }
+            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
           }): Promise<{ success: true } | { success: false; error: string }>
         }
       }

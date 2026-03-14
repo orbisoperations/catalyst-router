@@ -1,4 +1,4 @@
-import { newHttpBatchRpcSession, type RpcStub } from 'capnweb'
+import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
 import type { EnvoyClient, EnvoyUpdateResult } from './bus.js'
 
 interface EnvoyRpcApi {
@@ -27,7 +27,7 @@ export function createEnvoyClient(endpoint: string): EnvoyClient {
   return {
     async updateRoutes(config) {
       if (stub === undefined) {
-        stub = newHttpBatchRpcSession<EnvoyRpcApi>(endpoint)
+        stub = newWebSocketRpcSession<EnvoyRpcApi>(endpoint)
       }
       return stub.updateRoutes(config)
     },

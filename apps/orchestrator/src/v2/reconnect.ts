@@ -17,22 +17,15 @@ export class ReconnectManager {
   private readonly transport: PeerTransport
   private readonly dispatchFn: (action: Action) => Promise<unknown>
   private readonly maxBackoffMs: number
-  private nodeToken: string | undefined
 
   constructor(opts: {
     transport: PeerTransport
     dispatchFn: (action: Action) => Promise<unknown>
-    nodeToken?: string
     maxBackoffMs?: number
   }) {
     this.transport = opts.transport
     this.dispatchFn = opts.dispatchFn
-    this.nodeToken = opts.nodeToken
     this.maxBackoffMs = opts.maxBackoffMs ?? 60_000
-  }
-
-  setNodeToken(token: string): void {
-    this.nodeToken = token
   }
 
   /**
@@ -57,21 +50,12 @@ export class ReconnectManager {
 
     const timer = setTimeout(async () => {
       this.timers.delete(peer.name)
-      if (this.nodeToken === undefined) {
-        logger.warn('Skipping reconnect to {peerName}: no node token available', {
-          'event.name': 'peer.reconnect.skipped',
-          'catalyst.orchestrator.peer.name': peer.name,
-          reason: 'no_token',
-        })
+      if (!peer.peerToken) {
+        logger.warn`Skipping reconnect to ${peer.name}: no peer token available`
         return
       }
       try {
-        await this.transport.openPeer(peer, this.nodeToken)
-        logger.info('Reconnected to {peerName} after {attempt} attempt(s)', {
-          'event.name': 'peer.reconnect.succeeded',
-          'catalyst.orchestrator.peer.name': peer.name,
-          'catalyst.orchestrator.reconnect.attempt': attempt,
-        })
+        await this.transport.openPeer(peer, peer.peerToken)
         // Success — dispatch InternalProtocolConnected to trigger full route sync
         await this.dispatchFn({
           action: Actions.InternalProtocolConnected,
