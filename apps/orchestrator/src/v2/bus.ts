@@ -3,6 +3,7 @@ import {
   ActionQueue,
   Actions,
   InternalRouteView,
+  RouteTableView,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -96,7 +97,7 @@ export class OrchestratorBus {
         'catalyst.orchestrator.action.state_changed': true,
         'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
         'catalyst.orchestrator.route.total':
-          committed.local.routes.length + committed.internal.routes.length,
+          committed.local.routes.size + new RouteTableView(committed).internalRouteCount,
       })
 
       if (plan.routeChanges.length > 0) {
@@ -118,7 +119,7 @@ export class OrchestratorBus {
           'catalyst.orchestrator.route.modified': counts.modified,
           'catalyst.orchestrator.route.trigger': action.action,
           'catalyst.orchestrator.route.total':
-            committed.local.routes.length + committed.internal.routes.length,
+            committed.local.routes.size + new RouteTableView(committed).internalRouteCount,
         })
       }
 
@@ -153,7 +154,9 @@ export class OrchestratorBus {
     plan: PlanResult,
     state: RouteTable
   ): Promise<void> {
-    const connectedPeers = state.internal.peers.filter((p) => p.connectionStatus === 'connected')
+    const connectedPeers = [...state.internal.peers.values()].filter(
+      (p) => p.connectionStatus === 'connected'
+    )
 
     // Initial sync: when a peer connects (outbound dial succeeded), send all
     // known routes so the session starts with a full table dump.
@@ -213,7 +216,7 @@ export class OrchestratorBus {
     const updates: UpdateMessage['updates'] = []
 
     // Advertise all local routes to the new peer.
-    for (const route of state.local.routes) {
+    for (const route of state.local.routes.values()) {
       updates.push({
         action: 'add',
         route,
@@ -223,26 +226,28 @@ export class OrchestratorBus {
     }
 
     // Advertise internal routes the peer doesn't already know.
-    for (const route of state.internal.routes) {
-      // Exclude stale routes — they may no longer be valid.
-      if (route.isStale === true) continue
-      // Don't reflect a peer's own routes back at them.
-      if (route.peer.name === peer.name) continue
-      // Loop guard: don't advertise paths that already pass through this peer.
-      if (route.nodePath.includes(peer.name)) continue
+    for (const innerMap of state.internal.routes.values()) {
+      for (const route of innerMap.values()) {
+        // Exclude stale routes — they may no longer be valid.
+        if (route.isStale === true) continue
+        // Don't reflect a peer's own routes back at them.
+        if (route.peer.name === peer.name) continue
+        // Loop guard: don't advertise paths that already pass through this peer.
+        if (route.nodePath.includes(peer.name)) continue
 
-      // Apply route policy if configured.
-      if (this.routePolicy !== undefined) {
-        const allowed = this.routePolicy.canSend(peer, [route])
-        if (allowed.length === 0) continue
+        // Apply route policy if configured.
+        if (this.routePolicy !== undefined) {
+          const allowed = this.routePolicy.canSend(peer, [route])
+          if (allowed.length === 0) continue
+        }
+
+        updates.push({
+          action: 'add',
+          route: BusTransforms.toDataChannel(route),
+          nodePath: [this.config.node.name, ...route.nodePath],
+          originNode: route.originNode,
+        })
       }
-
-      updates.push({
-        action: 'add',
-        route: BusTransforms.toDataChannel(route),
-        nodePath: [this.config.node.name, ...route.nodePath],
-        originNode: route.originNode,
-      })
     }
 
     if (updates.length === 0) {
@@ -281,7 +286,7 @@ export class OrchestratorBus {
    * we last sent (tracked ephemerally via lastKeepaliveSent) exceeds holdTime / 3.
    */
   private async handleKeepalives(state: RouteTable, now: number): Promise<void> {
-    const promises = state.internal.peers
+    const promises = [...state.internal.peers.values()]
       .filter((p) => {
         if (p.connectionStatus !== 'connected' || p.holdTime <= 0) return false
         const lastSent = this.lastKeepaliveSent.get(p.name) ?? 0

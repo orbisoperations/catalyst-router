@@ -90,7 +90,7 @@ describe('OrchestratorBus — basic dispatch behaviour', () => {
 
     // The state after both commits must contain both routes
     const state = bus.state
-    const names = state.local.routes.map((r) => r.name)
+    const names = [...state.local.routes.values()].map((r) => r.name)
     expect(names).toContain('alpha')
     expect(names).toContain('beta')
   })
@@ -140,8 +140,8 @@ describe('OrchestratorBus — basic dispatch behaviour', () => {
 
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.state.local.routes).toHaveLength(1)
-      expect(result.state.local.routes[0].name).toBe('alpha')
+      expect(result.state.local.routes.size).toBe(1)
+      expect(result.state.local.routes.get('alpha')?.name).toBe('alpha')
     }
   })
 
@@ -158,7 +158,7 @@ describe('OrchestratorBus — basic dispatch behaviour', () => {
 
     // The committed state must reflect the route
     const state = bus.state
-    expect(state.local.routes.some((r) => r.name === 'alpha')).toBe(true)
+    expect(state.local.routes.has('alpha')).toBe(true)
 
     // The update message must contain the correct route
     expect(call.message.updates).toHaveLength(1)
@@ -183,21 +183,22 @@ describe('OrchestratorBus — getStateSnapshot() immutability', () => {
     // 2. Get a snapshot via getStateSnapshot()
     const snapshot = bus.getStateSnapshot()
 
-    // 3. Mutate the snapshot (push a fake route and modify existing route name)
-    snapshot.local.routes.push({
+    // 3. Mutate the snapshot (set a fake route and modify existing route name)
+    snapshot.local.routes.set('injected', {
       name: 'injected',
       protocol: 'http' as const,
       endpoint: 'http://injected:9999',
     })
-    snapshot.local.routes[0].name = 'mutated-alpha'
+    const alphaRoute = snapshot.local.routes.get('alpha')!
+    alphaRoute.name = 'mutated-alpha'
 
     // 4. Verify bus.state is unchanged (the mutation did not propagate)
     const liveState = bus.state
-    const liveNames = liveState.local.routes.map((r) => r.name)
+    const liveNames = [...liveState.local.routes.values()].map((r) => r.name)
     expect(liveNames).toContain('alpha')
     expect(liveNames).not.toContain('injected')
     expect(liveNames).not.toContain('mutated-alpha')
-    expect(liveState.local.routes).toHaveLength(1)
+    expect(liveState.local.routes.size).toBe(1)
   })
 
   it('getStateSnapshot() reflects current state at call time', async () => {
@@ -211,8 +212,8 @@ describe('OrchestratorBus — getStateSnapshot() immutability', () => {
     const snapshotAfter = bus.getStateSnapshot()
 
     // 4. Verify they differ (second has the new route)
-    expect(snapshotBefore.local.routes).toHaveLength(0)
-    expect(snapshotAfter.local.routes).toHaveLength(1)
-    expect(snapshotAfter.local.routes[0].name).toBe('alpha')
+    expect(snapshotBefore.local.routes.size).toBe(0)
+    expect(snapshotAfter.local.routes.size).toBe(1)
+    expect(snapshotAfter.local.routes.get('alpha')?.name).toBe('alpha')
   })
 })

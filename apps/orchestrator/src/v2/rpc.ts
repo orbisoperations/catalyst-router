@@ -105,7 +105,7 @@ export async function createNetworkClient(
       },
 
       async listPeers() {
-        return bus.state.internal.peers.map((p) => new PeerView(p).toPublic())
+        return [...bus.state.internal.peers.values()].map((p) => new PeerView(p).toPublic())
       },
     },
   }
@@ -139,8 +139,10 @@ export async function createDataChannelClient(
 
       async listRoutes() {
         return {
-          local: bus.state.local.routes,
-          internal: bus.state.internal.routes.map((r) => new InternalRouteView(r).toPublic()),
+          local: [...bus.state.local.routes.values()],
+          internal: [...bus.state.internal.routes.values()]
+            .flatMap((innerMap) => [...innerMap.values()])
+            .map((r) => new InternalRouteView(r).toPublic()),
         }
       },
     },
