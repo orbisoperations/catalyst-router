@@ -79,54 +79,50 @@ export class OrchestratorBus {
         'catalyst.orchestrator.node.name': this.config.node.name,
       })
 
-      const plan = this.rib.plan(action, this.rib.state)
+      try {
+        const plan = this.rib.plan(action, this.rib.state)
 
-      if (!this.rib.stateChanged(plan)) {
-        // Tick with no expired peers: keepalives still need to fire.
-        if (action.action === Actions.Tick) {
-          await this.handleKeepalives(this.rib.state, action.data.now)
+        if (!this.rib.stateChanged(plan)) {
+          if (action.action === Actions.Tick) {
+            await this.handleKeepalives(this.rib.state, action.data.now)
+          }
+          event.set('catalyst.orchestrator.action.state_changed', false)
+          return { success: false, error: 'No state change' }
         }
-        event.set('catalyst.orchestrator.action.state_changed', false)
-        event.emit()
-        return { success: false, error: 'No state change' }
-      }
 
-      const committed = this.rib.commit(plan, action)
+        const committed = this.rib.commit(plan, action)
 
-      event.set({
-        'catalyst.orchestrator.action.state_changed': true,
-        'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
-        'catalyst.orchestrator.route.total':
-          committed.local.routes.size + internalRouteCount(committed),
-      })
-
-      if (plan.routeChanges.length > 0) {
-        const counts = { added: 0, removed: 0, modified: 0 }
-        for (const c of plan.routeChanges) {
-          if (c.type === 'added') counts.added++
-          else if (c.type === 'removed') counts.removed++
-          else counts.modified++
-        }
         event.set({
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-        })
-        logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
-          'event.name': 'route.table.changed',
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-          'catalyst.orchestrator.route.trigger': action.action,
+          'catalyst.orchestrator.action.state_changed': true,
+          'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
           'catalyst.orchestrator.route.total':
             committed.local.routes.size + internalRouteCount(committed),
         })
+
+        if (plan.routeChanges.length > 0) {
+          const counts = { added: 0, removed: 0, modified: 0 }
+          for (const c of plan.routeChanges) {
+            if (c.type === 'added') counts.added++
+            else if (c.type === 'removed') counts.removed++
+            else counts.modified++
+          }
+          event.set({
+            'catalyst.orchestrator.route.added': counts.added,
+            'catalyst.orchestrator.route.removed': counts.removed,
+            'catalyst.orchestrator.route.modified': counts.modified,
+            'catalyst.orchestrator.route.trigger': action.action,
+          })
+        }
+
+        await this.handlePostCommit(action, plan, committed)
+
+        return { success: true, state: committed, action }
+      } catch (error) {
+        event.setError(error)
+        throw error
+      } finally {
+        event.emit()
       }
-
-      await this.handlePostCommit(action, plan, committed)
-
-      event.emit()
-      return { success: true, state: committed, action }
     })
   }
 
@@ -169,12 +165,15 @@ export class OrchestratorBus {
           'catalyst.orchestrator.peer.name': peerName,
           'catalyst.orchestrator.sync.type': 'full',
         })
-        logger.info('Peer {peerName} connected, syncing full route table', {
-          'event.name': 'peer.sync.started',
-          'catalyst.orchestrator.peer.name': peerName,
-        })
-        await this.syncRoutesToPeer(peer, state)
-        event.emit()
+        event.log.info('Peer {peerName} connected, syncing full route table', { peerName })
+        try {
+          const result = await this.syncRoutesToPeer(peer, state)
+          event.set('catalyst.orchestrator.sync.route_count', result.routeCount)
+        } catch (error) {
+          event.setError(error)
+        } finally {
+          event.emit()
+        }
       }
       return
     }
@@ -188,23 +187,35 @@ export class OrchestratorBus {
       'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
     })
 
-    const promises = connectedPeers.map(async (peer) => {
-      try {
+    const results = await Promise.allSettled(
+      connectedPeers.map(async (peer) => {
         const updates = this.buildUpdatesForPeer(peer, plan, state)
         if (updates.length > 0) {
           await this.transport.sendUpdate(peer, { updates })
         }
-      } catch (error) {
-        logger.warn('Failed to send route updates to {peerName}', {
-          'event.name': 'peer.sync.failed',
-          'catalyst.orchestrator.peer.name': peer.name,
-          error,
-        })
-        // Fire-and-forget: one peer failure must not affect others.
-      }
-    })
+      })
+    )
 
-    await Promise.allSettled(promises)
+    const failures = results
+      .map((r, i) =>
+        r.status === 'rejected'
+          ? {
+              name: connectedPeers[i].name,
+              error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+            }
+          : null
+      )
+      .filter(Boolean) as { name: string; error: string }[]
+    if (failures.length > 0) {
+      event.set({
+        'catalyst.orchestrator.peer.failed_count': failures.length,
+        'catalyst.orchestrator.peer.failed_peers': failures.map((f) => f.name),
+        'catalyst.orchestrator.peer.failed_errors': failures.map((f) => `${f.name}: ${f.error}`),
+        'catalyst.event.outcome':
+          failures.length === connectedPeers.length ? 'failure' : 'partial_failure',
+      })
+    }
+
     event.emit()
   }
 
@@ -212,10 +223,16 @@ export class OrchestratorBus {
   // Initial full-table sync (sent once when a peer connects)
   // ---------------------------------------------------------------------------
 
-  private async syncRoutesToPeer(peer: PeerRecord, state: RouteTable): Promise<void> {
+  /**
+   * Send all known routes to a newly connected peer.
+   * Failures are non-fatal — the peer can request a full refresh on reconnect.
+   */
+  private async syncRoutesToPeer(
+    peer: PeerRecord,
+    state: RouteTable
+  ): Promise<{ routeCount: number }> {
     const updates: UpdateMessage['updates'] = []
 
-    // Advertise all local routes to the new peer.
     for (const route of state.local.routes.values()) {
       updates.push({
         action: 'add',
@@ -225,17 +242,12 @@ export class OrchestratorBus {
       })
     }
 
-    // Advertise internal routes the peer doesn't already know.
     for (const innerMap of state.internal.routes.values()) {
       for (const route of innerMap.values()) {
-        // Exclude stale routes — they may no longer be valid.
         if (route.isStale === true) continue
-        // Don't reflect a peer's own routes back at them.
         if (route.peer.name === peer.name) continue
-        // Loop guard: don't advertise paths that already pass through this peer.
         if (route.nodePath.includes(peer.name)) continue
 
-        // Apply route policy if configured.
         if (this.routePolicy !== undefined) {
           const allowed = this.routePolicy.canSend(peer, [route])
           if (allowed.length === 0) continue
@@ -251,29 +263,11 @@ export class OrchestratorBus {
     }
 
     if (updates.length === 0) {
-      logger.info('No routes to sync to peer {peerName}', {
-        'event.name': 'route.sync.empty',
-        'catalyst.orchestrator.peer.name': peer.name,
-      })
-      return
+      return { routeCount: 0 }
     }
 
-    try {
-      await this.transport.sendUpdate(peer, { updates })
-      logger.info('Synced {count} route(s) to peer {peerName}', {
-        'event.name': 'route.sync.completed',
-        'catalyst.orchestrator.peer.name': peer.name,
-        'catalyst.orchestrator.route.count': updates.length,
-      })
-    } catch (error) {
-      logger.warn('Initial route sync to {peerName} failed', {
-        'event.name': 'peer.sync.initial_failed',
-        'catalyst.orchestrator.peer.name': peer.name,
-        error,
-      })
-      // Fire-and-forget: failed initial sync is not fatal; the peer can
-      // request a refresh on reconnect.
-    }
+    await this.transport.sendUpdate(peer, { updates })
+    return { routeCount: updates.length }
   }
 
   // ---------------------------------------------------------------------------
