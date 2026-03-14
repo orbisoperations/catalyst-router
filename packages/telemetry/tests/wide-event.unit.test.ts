@@ -10,7 +10,7 @@ import { WideEvent } from '../src/wide-event.js'
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Minimal spy logger that records calls to .info() and .error() */
+/** Minimal spy logger that records calls to all levels. */
 function createSpyLogger() {
   const calls: { level: string; message: string; properties: Record<string, unknown> }[] = []
   const makeSpy = (level: string) =>
@@ -22,7 +22,9 @@ function createSpyLogger() {
       })
     })
 
+  const debugSpy = makeSpy('debug')
   const infoSpy = makeSpy('info')
+  const warnSpy = makeSpy('warn')
   const errorSpy = makeSpy('error')
 
   const logger = {
@@ -31,9 +33,9 @@ function createSpyLogger() {
     getChild: vi.fn(),
     with: vi.fn(),
     trace: vi.fn(),
-    debug: vi.fn(),
+    debug: debugSpy,
     info: infoSpy,
-    warn: vi.fn(),
+    warn: warnSpy,
     warning: vi.fn(),
     error: errorSpy,
     fatal: vi.fn(),
@@ -41,7 +43,7 @@ function createSpyLogger() {
     isEnabledFor: vi.fn(() => true),
   } as unknown as Logger
 
-  return { logger, calls, infoSpy, errorSpy }
+  return { logger, calls, debugSpy, infoSpy, warnSpy, errorSpy }
 }
 
 // ---------------------------------------------------------------------------
@@ -217,5 +219,50 @@ describe('WideEvent', () => {
     const duration = calls[0].properties['catalyst.event.duration_ms'] as number
     expect(duration).toBeTypeOf('number')
     expect(duration).toBeGreaterThanOrEqual(0)
+  })
+
+  // -------------------------------------------------------------------------
+  // event.log (correlated intermediate logging)
+  // -------------------------------------------------------------------------
+
+  it('event.log.info injects event.name into properties', () => {
+    const ev = new WideEvent('gateway.reload', logger)
+    ev.log.info('SDL validated for {url}', { url: 'http://svc:4000/graphql' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].level).toBe('info')
+    expect(calls[0].message).toBe('SDL validated for {url}')
+    expect(calls[0].properties).toMatchObject({
+      'event.name': 'gateway.reload',
+      url: 'http://svc:4000/graphql',
+    })
+  })
+
+  it('event.log.warn preserves warn severity', () => {
+    const ev = new WideEvent('envoy.route_update', logger)
+    ev.log.warn('legacy port derivation', { legacy: true })
+
+    expect(calls[0].level).toBe('warn')
+    expect(calls[0].properties['event.name']).toBe('envoy.route_update')
+  })
+
+  it('event.log calls are independent from the final emit', () => {
+    const ev = new WideEvent('test.op', logger)
+    ev.log.info('step 1')
+    ev.log.debug('step 2')
+    ev.set('result', 'ok')
+    ev.emit()
+
+    // 2 intermediate logs + 1 final emit = 3 calls
+    expect(calls).toHaveLength(3)
+    expect(calls[0].level).toBe('info')
+    expect(calls[1].level).toBe('debug')
+    expect(calls[2].level).toBe('info')
+    expect(calls[2].message).toBe('test.op completed')
+  })
+
+  it('event.log returns the same instance on repeated access', () => {
+    const ev = new WideEvent('test.op', logger)
+    expect(ev.log).toBe(ev.log)
   })
 })
