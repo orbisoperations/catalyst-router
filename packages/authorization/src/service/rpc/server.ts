@@ -271,12 +271,12 @@ export class AuthRpcServer extends RpcTarget {
           context: {},
         })
 
-        logger.info('Authorization check - action: {action}, allowed: {allowed}', {
-          'event.name': 'auth.authorization.checked',
+        logger.info('Authorization check: action={action} allowed={allowed}', {
+          'event.name': 'auth.policy.evaluated',
           'auth.action': request.action,
           'auth.allowed': result.type === 'evaluated' && result.allowed,
-          action: request.action,
-          allowed: result.type === 'evaluated' && result.allowed,
+          'auth.decision': result.type === 'evaluated' ? result.decision : 'error',
+          'auth.reasons': result.type === 'evaluated' ? result.reasons : [],
         })
 
         // Handle authorization result

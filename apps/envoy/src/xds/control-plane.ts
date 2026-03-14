@@ -54,6 +54,7 @@ export class XdsControlPlane {
   private readonly cache: SnapshotCache
   private readonly logger: ServiceTelemetry['logger']
   private started = false
+  private readonly clientNackCounts = new Map<string, number>()
 
   constructor(options: XdsControlPlaneOptions) {
     this.port = options.port
@@ -149,6 +150,7 @@ export class XdsControlPlane {
    * This ensures Envoy doesn't discard unsolicited responses.
    */
   private handleStream(call: grpc.ServerDuplexStream<Buffer, Buffer>): void {
+    const clientId = call.getPeer() ?? 'unknown'
     this.logger.info('New ADS stream connected', { 'event.name': 'xds.client.connected' })
 
     // Track subscribed types and sent versions per-stream
@@ -208,6 +210,20 @@ export class XdsControlPlane {
             nonce: request.response_nonce,
             errorMessage: request.error_detail.message,
           })
+
+          // Track repeated NACKs per client
+          const nackCount = (this.clientNackCounts.get(clientId) ?? 0) + 1
+          this.clientNackCounts.set(clientId, nackCount)
+          if (nackCount >= 3 && nackCount % 3 === 0) {
+            this.logger.warn('Client {clientId} has NACKed {nackCount} times', {
+              'event.name': 'envoy.nack.repeated',
+              'xds.client_id': clientId,
+              'xds.nack_count': nackCount,
+              'xds.resource_type': typeUrl,
+              clientId,
+              nackCount,
+            })
+          }
         } else {
           // ACK — client confirmed it applied this version
           this.logger.info('ACK received for {typeUrl} v{version}', {
@@ -229,6 +245,7 @@ export class XdsControlPlane {
 
     call.on('end', () => {
       streamClosed = true
+      this.clientNackCounts.delete(clientId)
       this.logger.info('ADS stream disconnected', { 'event.name': 'xds.client.disconnected' })
       unwatch()
       call.end()
@@ -236,6 +253,7 @@ export class XdsControlPlane {
 
     call.on('error', (err) => {
       streamClosed = true
+      this.clientNackCounts.delete(clientId)
       // CANCELLED is normal when Envoy disconnects
       if ((err as grpc.ServiceError).code !== grpc.status.CANCELLED) {
         this.logger.error('ADS stream error: {error}', {

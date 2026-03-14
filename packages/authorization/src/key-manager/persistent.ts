@@ -1,4 +1,5 @@
 import type { ValidationResult } from '@catalyst/types'
+import { getLogger } from '@catalyst/telemetry'
 import * as jose from 'jose'
 import type {
   IKeyManager,
@@ -8,6 +9,8 @@ import type {
   SignOptions,
   VerifyOptions,
 } from './index.js'
+
+const logger = getLogger(['catalyst', 'auth', 'keys'])
 
 const ALGORITHM = 'ES384'
 const DEFAULT_GRACE_PERIOD_MS = 24 * 60 * 60 * 1000
@@ -267,6 +270,13 @@ export class PersistentLocalKeyManager implements IKeyManager {
 
     const newKey = await this.generateNewKey()
 
+    logger.info('Key rotation started: old={oldKeyId} new={newKeyId}', {
+      'event.name': 'auth.cert.rotation.started',
+      'key.old_id': oldKey.kid,
+      'key.new_id': newKey.kid,
+      immediate,
+    })
+
     if (!immediate) {
       oldKey.expiresAt = Date.now() + gracePeriodMs
       this.previousKeys.push(oldKey)
@@ -275,6 +285,15 @@ export class PersistentLocalKeyManager implements IKeyManager {
     }
 
     await this.persist()
+
+    logger.info('Key rotation completed: old={oldKeyId} new={newKeyId}', {
+      'event.name': 'auth.cert.rotation.completed',
+      'key.old_id': oldKey.kid,
+      'key.new_id': newKey.kid,
+      'key.grace_period_ends_at': oldKey.expiresAt
+        ? new Date(oldKey.expiresAt).toISOString()
+        : undefined,
+    })
 
     return {
       previousKeyId: oldKey.kid,

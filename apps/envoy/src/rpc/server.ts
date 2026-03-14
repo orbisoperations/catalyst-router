@@ -6,7 +6,7 @@ import { newRpcResponse } from '@hono/capnweb'
 import { TelemetryBuilder, WideEvent } from '@catalyst/telemetry'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 import { DataChannelDefinitionSchema } from '@catalyst/routing'
-import type { SnapshotCache } from '../xds/snapshot-cache.js'
+import type { SnapshotCache, XdsSnapshot } from '../xds/snapshot-cache.js'
 import { buildXdsSnapshot } from '../xds/resources.js'
 
 /**
@@ -60,6 +60,7 @@ export class EnvoyRpcServer extends RpcTarget {
   private readonly bindAddress: string
   private config: RouteConfig = { local: [], internal: [] }
   private versionCounter = 0
+  private previousSnapshot: XdsSnapshot | undefined
 
   constructor(options: EnvoyRpcServerOptions = {}) {
     super()
@@ -151,7 +152,25 @@ export class EnvoyRpcServer extends RpcTarget {
         version: String(++this.versionCounter),
       })
 
+      // Log config diff from previous snapshot
+      if (this.previousSnapshot) {
+        const prevClusterNames = new Set(this.previousSnapshot.clusters.map((c) => c.name))
+        const newClusterNames = new Set(snapshot.clusters.map((c) => c.name))
+        const clustersAdded = [...newClusterNames].filter((n) => !prevClusterNames.has(n)).length
+        const clustersRemoved = [...prevClusterNames].filter((n) => !newClusterNames.has(n)).length
+
+        this.logger.info('xDS config diff: clusters +{added} -{removed}', {
+          'event.name': 'envoy.config.diff',
+          'xds.clusters_added': clustersAdded,
+          'xds.clusters_removed': clustersRemoved,
+          'xds.version': snapshot.version,
+          added: clustersAdded,
+          removed: clustersRemoved,
+        })
+      }
+
       this.snapshotCache.setSnapshot(snapshot)
+      this.previousSnapshot = snapshot
       this.logger.info(
         'xDS snapshot v{version} pushed ({listenerCount} listeners, {clusterCount} clusters)',
         {
