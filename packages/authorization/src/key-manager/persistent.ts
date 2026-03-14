@@ -270,7 +270,7 @@ export class PersistentLocalKeyManager implements IKeyManager {
 
     const newKey = await this.generateNewKey()
 
-    logger.info('Key rotation started: old={oldKeyId} new={newKeyId}', {
+    logger.info('Key rotation started: old={key.old_id} new={key.new_id}', {
       'event.name': 'auth.cert.rotation.started',
       'key.old_id': oldKey.kid,
       'key.new_id': newKey.kid,
@@ -286,7 +286,7 @@ export class PersistentLocalKeyManager implements IKeyManager {
 
     await this.persist()
 
-    logger.info('Key rotation completed: old={oldKeyId} new={newKeyId}', {
+    logger.info('Key rotation completed: old={key.old_id} new={key.new_id}', {
       'event.name': 'auth.cert.rotation.completed',
       'key.old_id': oldKey.kid,
       'key.new_id': newKey.kid,

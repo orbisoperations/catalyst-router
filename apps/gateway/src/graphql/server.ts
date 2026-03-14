@@ -136,7 +136,7 @@ export class GatewayGraphqlServer {
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error('Gateway reload failed: {errorMessage}', {
         'event.name': 'gateway.reload.failed',
-        'error.message': message,
+        'exception.message': message,
         errorMessage: message,
       })
       event.setError(error)
@@ -287,7 +287,7 @@ export class GatewayGraphqlServer {
             'event.name': 'gateway.subgraph.sdl_validated',
             'subgraph.name': url,
             valid: false,
-            'error.message': message,
+            'exception.message': message,
             serviceName: url,
             error: message,
           })

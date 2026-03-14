@@ -11,7 +11,7 @@ import {
   type DataChannelDefinition,
 } from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
-import { getLogger } from '@catalyst/telemetry'
+import { getLogger, WideEvent } from '@catalyst/telemetry'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
 
@@ -66,6 +66,9 @@ export class OrchestratorBus {
 
   async dispatch(action: Action): Promise<StateResult> {
     return this.queue.enqueue(async () => {
+      const event = new WideEvent('orchestrator.action', logger)
+      event.set({ 'action.type': action.action, 'node.name': this.config.node.name })
+
       const plan = this.rib.plan(action, this.rib.state)
 
       if (!this.rib.stateChanged(plan)) {
@@ -73,10 +76,18 @@ export class OrchestratorBus {
         if (action.action === Actions.Tick) {
           await this.handleKeepalives(this.rib.state, action.data.now)
         }
+        event.set('action.state_changed', false)
+        event.emit()
         return { success: false, error: 'No state change' }
       }
 
       const committed = this.rib.commit(plan, action)
+
+      event.set({
+        'action.state_changed': true,
+        'route.change_count': plan.routeChanges.length,
+        'route.total': committed.local.routes.length + committed.internal.routes.length,
+      })
 
       if (plan.routeChanges.length > 0) {
         const counts = { added: 0, removed: 0, modified: 0 }
@@ -85,6 +96,11 @@ export class OrchestratorBus {
           else if (c.type === 'removed') counts.removed++
           else counts.modified++
         }
+        event.set({
+          'route.added': counts.added,
+          'route.removed': counts.removed,
+          'route.modified': counts.modified,
+        })
         logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
           'event.name': 'route.table.changed',
           'route.added': counts.added,
@@ -97,6 +113,7 @@ export class OrchestratorBus {
 
       await this.handlePostCommit(action, plan, committed)
 
+      event.emit()
       return { success: true, state: committed, action }
     })
   }
@@ -133,17 +150,26 @@ export class OrchestratorBus {
       const peerName = action.data.peerInfo.name
       const peer = connectedPeers.find((p) => p.name === peerName)
       if (peer !== undefined) {
+        const event = new WideEvent('orchestrator.peer_sync', logger)
+        event.set({ 'peer.name': peerName, 'sync.type': 'full' })
         logger.info('Peer {peerName} connected, syncing full route table', {
           'event.name': 'peer.sync.started',
           'peer.name': peerName,
         })
         await this.syncRoutesToPeer(peer, state)
+        event.emit()
       }
       return
     }
 
     // Route changes: propagate deltas to every connected peer.
     if (plan.routeChanges.length === 0) return
+
+    const event = new WideEvent('orchestrator.route_propagation', logger)
+    event.set({
+      'peer.connected_count': connectedPeers.length,
+      'route.change_count': plan.routeChanges.length,
+    })
 
     const promises = connectedPeers.map(async (peer) => {
       try {
@@ -162,6 +188,7 @@ export class OrchestratorBus {
     })
 
     await Promise.allSettled(promises)
+    event.emit()
   }
 
   // ---------------------------------------------------------------------------

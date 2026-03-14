@@ -522,6 +522,12 @@ importers:
 
   apps/web-ui:
     dependencies:
+      '@catalyst/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@catalyst/service':
+        specifier: workspace:*
+        version: link:../../packages/service
       '@hono/node-server':
         specifier: 'catalog:'
         version: 1.19.9(hono@4.12.0)

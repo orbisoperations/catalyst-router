@@ -32,6 +32,12 @@ COPY examples/zenoh-tak-adapter/package.json examples/zenoh-tak-adapter/
 # Install all dependencies
 RUN pnpm install --frozen-lockfile
 
+# Copy workspace packages that web-ui depends on
+COPY packages/config packages/config
+COPY packages/service packages/service
+COPY packages/telemetry packages/telemetry
+COPY packages/types packages/types
+
 # Copy web-ui source
 COPY apps/web-ui apps/web-ui
 
