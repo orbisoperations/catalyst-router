@@ -9,6 +9,7 @@ import { OrchestratorServiceV2 } from './service.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
+import { createDashboardRoutes } from '../routes/dashboard.js'
 
 /**
  * Auth Service RPC API for token minting.
@@ -154,6 +155,13 @@ export class OrchestratorService extends CatalystService {
         }
       )
     })
+
+    // Mount dashboard API routes
+    const bus = this._v2.bus
+    this.handler.route(
+      '/dashboard/api',
+      createDashboardRoutes({ getState: () => bus.state }, this.config)
+    )
 
     // Start tick manager
     this._v2.start()

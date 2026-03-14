@@ -1,6 +1,21 @@
 import { Hono } from 'hono'
 import type { CatalystConfig } from '@catalyst/config'
-import type { CatalystNodeBus } from '../orchestrator.js'
+
+/** Minimal interface for dashboard state access — works with both v1 and v2 buses. */
+export interface DashboardStateProvider {
+  getState(): {
+    local: { routes: unknown[] }
+    internal: { peers: Record<string, unknown>[]; routes: Record<string, unknown>[] }
+  }
+}
+
+/** Strip peerToken from a record (credential — must not be exposed via API). */
+function stripPeerToken({
+  peerToken: _,
+  ...rest
+}: Record<string, unknown>): Record<string, unknown> {
+  return rest
+}
 
 interface ServiceDef {
   name: string
@@ -91,7 +106,7 @@ async function checkHealth(service: ServiceDef): Promise<ServiceHealth> {
 }
 
 // TODO: Add authentication middleware — dashboard API is currently unauthenticated
-export function createDashboardRoutes(bus: CatalystNodeBus, config: CatalystConfig): Hono {
+export function createDashboardRoutes(bus: DashboardStateProvider, config: CatalystConfig): Hono {
   const app = new Hono()
   const serviceGroups = deriveServiceGroups(config)
 
@@ -101,9 +116,14 @@ export function createDashboardRoutes(bus: CatalystNodeBus, config: CatalystConf
     return c.json({
       routes: {
         local: state.local.routes,
-        internal: state.internal.routes,
+        internal: state.internal.routes.map((r) => {
+          if (r.peer && typeof r.peer === 'object') {
+            return { ...r, peer: stripPeerToken(r.peer as Record<string, unknown>) }
+          }
+          return r
+        }),
       },
-      peers: state.internal.peers,
+      peers: state.internal.peers.map(stripPeerToken),
     })
   })
 

@@ -1,10 +1,8 @@
-# Build from repo root: docker build -f apps/auth/Dockerfile -t catalyst-auth .
+# Build from repo root: docker build -f apps/web-ui/Dockerfile -t catalyst-web-ui .
 FROM node:22-alpine AS build
 WORKDIR /app
 
 RUN corepack enable
-# Build tools for native addons (better-sqlite3, argon2, etc.)
-RUN apk add --no-cache python3 make g++
 
 # Copy workspace manifests for dependency caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -14,6 +12,7 @@ COPY apps/envoy/package.json apps/envoy/
 COPY apps/gateway/package.json apps/gateway/
 COPY apps/node/package.json apps/node/
 COPY apps/orchestrator/package.json apps/orchestrator/
+COPY apps/rpi-config/package.json apps/rpi-config/
 COPY apps/web-ui/package.json apps/web-ui/
 COPY packages/authorization/package.json packages/authorization/
 COPY packages/config/package.json packages/config/
@@ -26,30 +25,27 @@ COPY examples/books-api/package.json examples/books-api/
 COPY examples/movies-api/package.json examples/movies-api/
 COPY examples/orders-api/package.json examples/orders-api/
 COPY examples/product-api/package.json examples/product-api/
+COPY examples/zeno-tak-adapter-v2/package.json examples/zeno-tak-adapter-v2/
+COPY examples/zenoh-radar-publisher/package.json examples/zenoh-radar-publisher/
+COPY examples/zenoh-tak-adapter/package.json examples/zenoh-tak-adapter/
 
 # Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy app source and workspace dependencies
-COPY apps/auth apps/auth
-COPY packages/authorization packages/authorization
-COPY packages/config packages/config
-COPY packages/types packages/types
-COPY packages/service packages/service
-COPY packages/telemetry packages/telemetry
+# Copy web-ui source
+COPY apps/web-ui apps/web-ui
 
-# Bundle with esbuild — all code inlined except native addons.
-# Banner provides CJS compatibility (require, __dirname) for bundled npm packages.
-RUN pnpm exec esbuild apps/auth/src/server.ts \
+# Build frontend with Vite
+RUN cd apps/web-ui && pnpm exec vite build --config frontend/vite.config.ts
+
+# Bundle backend with esbuild
+RUN pnpm exec esbuild apps/web-ui/src/server.ts \
   --bundle --platform=node --target=node22 \
   --outfile=dist/server.mjs --format=esm \
-  --external:better-sqlite3 \
-  --external:@cedar-policy/cedar-wasm \
-  --loader:.cedar=text --loader:.cedarschema=text \
   --banner:js='import{createRequire}from"module";import{fileURLToPath as __file}from"url";import{dirname as __dir}from"path";const require=createRequire(import.meta.url),__filename=__file(import.meta.url),__dirname=__dir(__filename);'
 
 # Create production deployment with flat node_modules
-RUN pnpm deploy --filter=@catalyst/auth-service --prod /deploy
+RUN pnpm deploy --filter=@catalyst/web-ui --prod /deploy
 
 # Runtime stage
 FROM node:22-alpine
@@ -57,12 +53,13 @@ WORKDIR /app
 
 COPY --from=build /deploy/node_modules ./node_modules
 COPY --from=build /app/dist/server.mjs ./server.mjs
+COPY --from=build /app/apps/web-ui/dist/frontend ./frontend
 
-ENV PORT=5000
-EXPOSE 5000
+ENV PORT=3000
+ENV FRONTEND_DIR=/app/frontend
+EXPOSE 3000
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-RUN mkdir -p /data && chown appuser:appgroup /data
 USER appuser
 
 CMD ["node", "server.mjs"]

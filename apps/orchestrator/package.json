@@ -7,8 +7,6 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "build:frontend": "vite build --config frontend/vite.config.ts",
-    "dev:frontend": "vite --config frontend/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
@@ -27,19 +25,13 @@
     "capnweb": "catalog:",
     "hono": "catalog:",
     "jose": "catalog:",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/better-sqlite3": "catalog:dev",
     "@types/node": "catalog:dev",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
     "testcontainers": "catalog:testing",
     "typescript": "catalog:dev",
-    "vite": "^6.0.0",
     "vitest": "catalog:testing"
   }
 }
