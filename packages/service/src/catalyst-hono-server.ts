@@ -221,9 +221,9 @@ export class CatalystHonoServer {
     }
     this._shutdownHandlers = []
 
-    // Log completion before service shutdown — services may tear down telemetry
-    this._logger.info('server shutdown completed in {durationMs}ms', {
-      'event.name': 'server.shutdown.completed',
+    // Log before service shutdown — services may tear down telemetry during their shutdown
+    this._logger.info('Stopping {serviceCount} services', {
+      'event.name': 'server.shutdown.stopping_services',
       'catalyst.event.duration_ms': Date.now() - startTime,
       'catalyst.server.service_count': serviceCount,
     })

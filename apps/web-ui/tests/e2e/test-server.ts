@@ -43,7 +43,9 @@ orchApp.get('/api/state', (c) => c.json(mockState))
 orchApp.get('/health', (c) => c.json({ status: 'ok' }))
 
 const mockOrchServer = serve({ fetch: orchApp.fetch, port: 0 })
-const orchPort = (mockOrchServer.address() as { port: number }).port
+const addr = mockOrchServer.address()
+if (!addr || typeof addr === 'string') throw new Error('Mock orchestrator failed to bind')
+const orchPort = addr.port
 
 // ── Start web-ui service ────────────────────────────────────────────
 const frontendDir = path.resolve(import.meta.dirname, '../../dist/frontend')

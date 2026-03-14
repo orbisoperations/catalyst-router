@@ -1,11 +1,6 @@
 import { Actions, PeerView, InternalRouteView } from '@catalyst/routing/v2'
-import type {
-  PeerInfo,
-  PeerRecord,
-  DataChannelDefinition,
-  InternalRoute,
-  UpdateMessageSchema,
-} from '@catalyst/routing/v2'
+import type { PeerInfo, DataChannelDefinition, UpdateMessageSchema } from '@catalyst/routing/v2'
+import type { PublicPeer, PublicInternalRoute } from '@catalyst/routing/v2'
 import type { z } from 'zod'
 import { decodeJwt } from 'jose'
 import { getLogger } from '@catalyst/telemetry'
@@ -25,8 +20,9 @@ export interface TokenValidator {
 }
 
 // ---------------------------------------------------------------------------
-// RPC interface definitions — match v1 shapes for backward compatibility,
-// with v2 additions (keepalive on IBGPClient).
+// RPC interface definitions — based on v1 shapes with v2 additions
+// (keepalive on IBGPClient). List methods return public types with
+// credentials stripped (PublicPeer, PublicInternalRoute).
 // ---------------------------------------------------------------------------
 
 export interface NetworkClient {
@@ -35,7 +31,7 @@ export interface NetworkClient {
   removePeer(
     peer: Pick<PeerInfo, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
-  listPeers(): Promise<PeerRecord[]>
+  listPeers(): Promise<PublicPeer[]>
 }
 
 export interface DataChannel {
@@ -45,7 +41,7 @@ export interface DataChannel {
   removeRoute(
     route: Pick<DataChannelDefinition, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
-  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
+  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: PublicInternalRoute[] }>
 }
 
 export interface IBGPClient {

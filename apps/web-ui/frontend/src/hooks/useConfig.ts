@@ -6,13 +6,19 @@ export interface DashboardConfig {
 
 export function useConfig() {
   const [config, setConfig] = useState<DashboardConfig | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/config')
       .then((res) => res.json())
-      .then(setConfig)
-      .catch(() => {})
+      .then((data) => {
+        setConfig(data)
+        setError(null)
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : String(e))
+      })
   }, [])
 
-  return config
+  return { config, error }
 }
