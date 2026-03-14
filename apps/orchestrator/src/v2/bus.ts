@@ -2,6 +2,7 @@ import {
   RoutingInformationBase,
   ActionQueue,
   Actions,
+  InternalRouteView,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -368,13 +369,6 @@ export const BusGuards = {
 export const BusTransforms = {
   /** Strips InternalRoute-only fields, returning only the DataChannelDefinition shape. */
   toDataChannel(route: DataChannelDefinition | InternalRoute): DataChannelDefinition {
-    return {
-      name: route.name,
-      protocol: route.protocol,
-      endpoint: route.endpoint,
-      region: route.region,
-      tags: route.tags,
-      envoyPort: route.envoyPort,
-    }
+    return new InternalRouteView(route as InternalRoute).toDataChannel()
   },
 }
