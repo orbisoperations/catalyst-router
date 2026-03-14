@@ -80,7 +80,11 @@ export class WebSocketPeerTransport implements PeerTransport {
     if (!openResult.success) {
       throw new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
     }
-    logger.info`Opened connection to ${peer.name}`
+    logger.info('Opened connection to {peerName}', {
+      'event.name': 'peer.session.opened',
+      'peer.name': peer.name,
+      'peer.endpoint': peer.endpoint,
+    })
   }
 
   async sendUpdate(peer: PeerRecord, message: UpdateMessage): Promise<void> {
@@ -117,7 +121,10 @@ export class WebSocketPeerTransport implements PeerTransport {
     const stub = this.getStub(endpoint)
     const token = peer.peerToken
     if (!token) {
-      logger.warn`No peerToken for ${peer.name} — closing without notification`
+      logger.warn('No peerToken for {peerName} — closing without notification', {
+        'event.name': 'peer.session.close_unnotified',
+        'peer.name': peer.name,
+      })
       return
     }
     try {

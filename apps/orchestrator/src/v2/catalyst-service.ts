@@ -99,7 +99,10 @@ export class OrchestratorService extends CatalystService {
         () => this.refreshNodeTokenIfNeeded(),
         REFRESH_CHECK_INTERVAL
       )
-      this.telemetry.logger.info`Token refresh check enabled (every hour)`
+      this.telemetry.logger.info('Token refresh check enabled (interval={interval})', {
+        'event.name': 'node.token.refresh_scheduled',
+        interval: '1h',
+      })
     }
 
     // Set up auth client for token validation
@@ -155,7 +158,10 @@ export class OrchestratorService extends CatalystService {
     // Start tick manager
     this._v2.start()
 
-    this.telemetry.logger.info`Orchestrator v2 running as ${this.config.node.name}`
+    this.telemetry.logger.info('Orchestrator v2 running as {nodeName}', {
+      'event.name': 'orchestrator.started',
+      'node.name': this.config.node.name,
+    })
   }
 
   protected async onShutdown(): Promise<void> {
@@ -188,7 +194,11 @@ export class OrchestratorService extends CatalystService {
         try {
           const permissionsApi = await authClient.permissions(token)
           if ('error' in permissionsApi) {
-            logger.warn`Token validation failed for action ${action}: ${permissionsApi.error}`
+            logger.warn('Token validation failed for action {action}: {error}', {
+              'event.name': 'auth.token.validation_failed',
+              action,
+              error: permissionsApi.error,
+            })
             return { valid: false, error: 'Authorization failed' }
           }
 
@@ -201,7 +211,11 @@ export class OrchestratorService extends CatalystService {
           })
 
           if (!result.success) {
-            logger.warn`Authorization denied for action ${action}: ${result.errorType}`
+            logger.warn('Authorization denied for action {action}: {errorType}', {
+              'event.name': 'auth.authorization.denied',
+              action,
+              'error.type': result.errorType,
+            })
             return { valid: false, error: 'Authorization failed' }
           }
 
@@ -211,7 +225,11 @@ export class OrchestratorService extends CatalystService {
 
           return { valid: true }
         } catch (error) {
-          logger.error`Token validation error for action ${action}: ${error}`
+          logger.error('Token validation error for action {action}: {error}', {
+            'event.name': 'auth.token.validation_error',
+            action,
+            error,
+          })
           return { valid: false, error: 'Authorization failed' }
         }
       },
@@ -220,12 +238,17 @@ export class OrchestratorService extends CatalystService {
 
   private async mintNodeToken(): Promise<void> {
     if (!this.config.orchestrator?.auth) {
-      this.telemetry.logger.info`No auth service configured -- skipping node token mint`
+      this.telemetry.logger.info('No auth service configured -- skipping node token mint', {
+        'event.name': 'node.token.mint_skipped',
+      })
       return
     }
 
     const { endpoint, systemToken } = this.config.orchestrator.auth
-    this.telemetry.logger.info`Connecting to auth service at ${endpoint}`
+    this.telemetry.logger.info('Connecting to auth service at {endpoint}', {
+      'event.name': 'node.token.mint_connecting',
+      'auth.endpoint': endpoint,
+    })
 
     try {
       const authClient = newWebSocketRpcSession<AuthRpcApi>(endpoint)
@@ -252,15 +275,21 @@ export class OrchestratorService extends CatalystService {
       this._tokenIssuedAt = new Date()
       this._tokenExpiresAt = new Date(Date.now() + TOKEN_TTL_MS)
 
-      this.telemetry.logger
-        .info`Node token minted for ${this.config.node.name} (expires ${this._tokenExpiresAt.toISOString()})`
+      this.telemetry.logger.info('Node token minted for {nodeName} (expires {expiresAt})', {
+        'event.name': 'node.token.minted',
+        'node.name': this.config.node.name,
+        'token.expires_at': this._tokenExpiresAt.toISOString(),
+      })
 
       // Propagate token to the v2 service if already initialized
       if (this._v2) {
         this._v2.setNodeToken(this._nodeToken)
       }
     } catch (error) {
-      this.telemetry.logger.error`Failed to mint node token: ${error}`
+      this.telemetry.logger.error('Failed to mint node token: {error}', {
+        'event.name': 'node.token.mint_failed',
+        error,
+      })
       throw error
     }
   }
@@ -277,12 +306,19 @@ export class OrchestratorService extends CatalystService {
     const refreshTime = issuedTime + totalLifetime * REFRESH_THRESHOLD
 
     if (now >= refreshTime) {
-      this.telemetry.logger.info`Node token approaching expiration, refreshing...`
+      this.telemetry.logger.info('Node token approaching expiration, refreshing...', {
+        'event.name': 'node.token.refresh_started',
+      })
       try {
         await this.mintNodeToken()
-        this.telemetry.logger.info`Node token refreshed successfully`
+        this.telemetry.logger.info('Node token refreshed successfully', {
+          'event.name': 'node.token.refreshed',
+        })
       } catch (error) {
-        this.telemetry.logger.error`Failed to refresh node token: ${error}`
+        this.telemetry.logger.error('Failed to refresh node token: {error}', {
+          'event.name': 'node.token.refresh_failed',
+          error,
+        })
       }
     }
   }

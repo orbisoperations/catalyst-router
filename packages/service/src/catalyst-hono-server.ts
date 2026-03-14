@@ -195,6 +195,14 @@ export class CatalystHonoServer {
 
   /** Gracefully stop: shut down services, flush telemetry, close server. */
   async stop(): Promise<void> {
+    const startTime = Date.now()
+    const serviceCount = this._options.services?.length ?? 0
+
+    this._logger.info('Server shutdown started (services={serviceCount})', {
+      'event.name': 'server.shutdown.started',
+      'service.count': serviceCount,
+    })
+
     // Close the HTTP server first — force-close active connections so it resolves promptly.
     // Done before service shutdown so WebSocket handlers don't keep the server alive.
     if (this._server) {
@@ -206,17 +214,24 @@ export class CatalystHonoServer {
       })
     }
 
-    // Shut down all registered services (flushes telemetry etc.)
-    if (this._options.services) {
-      await Promise.allSettled(this._options.services.map((s) => s.shutdown()))
-    }
-
     // Remove signal handlers to avoid duplicate calls
     for (const handler of this._shutdownHandlers) {
       process.removeListener('SIGTERM', handler)
       process.removeListener('SIGINT', handler)
     }
     this._shutdownHandlers = []
+
+    // Log completion before service shutdown — services may tear down telemetry
+    this._logger.info('server shutdown completed in {durationMs}ms', {
+      'event.name': 'server.shutdown.completed',
+      'event.duration_ms': Date.now() - startTime,
+      'service.count': serviceCount,
+    })
+
+    // Shut down all registered services (flushes telemetry etc.)
+    if (this._options.services) {
+      await Promise.allSettled(this._options.services.map((s) => s.shutdown()))
+    }
   }
 }
 

@@ -11,8 +11,11 @@ import {
   type DataChannelDefinition,
 } from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
+import { getLogger } from '@catalyst/telemetry'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'bus'])
 
 // v2-specific StateResult — uses v2 RouteTable (no `external` field)
 export type StateResult =
@@ -74,6 +77,24 @@ export class OrchestratorBus {
       }
 
       const committed = this.rib.commit(plan, action)
+
+      if (plan.routeChanges.length > 0) {
+        const counts = { added: 0, removed: 0, modified: 0 }
+        for (const c of plan.routeChanges) {
+          if (c.type === 'added') counts.added++
+          else if (c.type === 'removed') counts.removed++
+          else counts.modified++
+        }
+        logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
+          'event.name': 'route.table.changed',
+          'route.added': counts.added,
+          'route.removed': counts.removed,
+          'route.modified': counts.modified,
+          'route.trigger': action.action,
+          'route.total': committed.local.routes.length + committed.internal.routes.length,
+        })
+      }
+
       await this.handlePostCommit(action, plan, committed)
 
       return { success: true, state: committed, action }
@@ -112,6 +133,10 @@ export class OrchestratorBus {
       const peerName = action.data.peerInfo.name
       const peer = connectedPeers.find((p) => p.name === peerName)
       if (peer !== undefined) {
+        logger.info('Peer {peerName} connected, syncing full route table', {
+          'event.name': 'peer.sync.started',
+          'peer.name': peerName,
+        })
         await this.syncRoutesToPeer(peer, state)
       }
       return
@@ -126,7 +151,12 @@ export class OrchestratorBus {
         if (updates.length > 0) {
           await this.transport.sendUpdate(peer, { updates })
         }
-      } catch {
+      } catch (error) {
+        logger.warn('Failed to send route updates to {peerName}', {
+          'event.name': 'peer.sync.failed',
+          'peer.name': peer.name,
+          error,
+        })
         // Fire-and-forget: one peer failure must not affect others.
       }
     })
@@ -174,11 +204,27 @@ export class OrchestratorBus {
       })
     }
 
-    if (updates.length === 0) return
+    if (updates.length === 0) {
+      logger.info('No routes to sync to peer {peerName}', {
+        'event.name': 'route.sync.empty',
+        'peer.name': peer.name,
+      })
+      return
+    }
 
     try {
       await this.transport.sendUpdate(peer, { updates })
-    } catch {
+      logger.info('Synced {count} route(s) to peer {peerName}', {
+        'event.name': 'route.sync.completed',
+        'peer.name': peer.name,
+        'route.count': updates.length,
+      })
+    } catch (error) {
+      logger.warn('Initial route sync to {peerName} failed', {
+        'event.name': 'peer.sync.initial_failed',
+        'peer.name': peer.name,
+        error,
+      })
       // Fire-and-forget: failed initial sync is not fatal; the peer can
       // request a refresh on reconnect.
     }
@@ -204,6 +250,10 @@ export class OrchestratorBus {
         try {
           await this.transport.sendKeepalive(peer)
           this.lastKeepaliveSent.set(peer.name, now)
+          logger.debug('Keepalive sent to {peerName}', {
+            'event.name': 'peer.keepalive.sent',
+            'peer.name': peer.name,
+          })
         } catch {
           // Fire-and-forget: keepalive failure is not fatal.
         }
