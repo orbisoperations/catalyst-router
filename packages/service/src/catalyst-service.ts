@@ -114,7 +114,7 @@ export abstract class CatalystService implements ICatalystService {
         'event.name': 'service.initialized',
         name: this.info.name,
         version: this.info.version,
-        'event.duration_ms': Date.now() - startTime,
+        'catalyst.event.duration_ms': Date.now() - startTime,
       })
     } catch (err) {
       this._state = 'stopped'
@@ -143,7 +143,7 @@ export abstract class CatalystService implements ICatalystService {
       this.telemetry.logger.info('{name} shutdown completed', {
         'event.name': 'service.shutdown.completed',
         name: this.info.name,
-        'event.duration_ms': Date.now() - startTime,
+        'catalyst.event.duration_ms': Date.now() - startTime,
       })
       // Only shut down telemetry if we built it (not pre-built / shared)
       if (!this._prebuiltTelemetry) {

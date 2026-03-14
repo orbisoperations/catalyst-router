@@ -67,7 +67,10 @@ export class OrchestratorBus {
   async dispatch(action: Action): Promise<StateResult> {
     return this.queue.enqueue(async () => {
       const event = new WideEvent('orchestrator.action', logger)
-      event.set({ 'action.type': action.action, 'node.name': this.config.node.name })
+      event.set({
+        'catalyst.orchestrator.action.type': action.action,
+        'catalyst.orchestrator.node.name': this.config.node.name,
+      })
 
       const plan = this.rib.plan(action, this.rib.state)
 
@@ -76,7 +79,7 @@ export class OrchestratorBus {
         if (action.action === Actions.Tick) {
           await this.handleKeepalives(this.rib.state, action.data.now)
         }
-        event.set('action.state_changed', false)
+        event.set('catalyst.orchestrator.action.state_changed', false)
         event.emit()
         return { success: false, error: 'No state change' }
       }
@@ -84,9 +87,10 @@ export class OrchestratorBus {
       const committed = this.rib.commit(plan, action)
 
       event.set({
-        'action.state_changed': true,
-        'route.change_count': plan.routeChanges.length,
-        'route.total': committed.local.routes.length + committed.internal.routes.length,
+        'catalyst.orchestrator.action.state_changed': true,
+        'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
+        'catalyst.orchestrator.route.total':
+          committed.local.routes.length + committed.internal.routes.length,
       })
 
       if (plan.routeChanges.length > 0) {
@@ -97,17 +101,18 @@ export class OrchestratorBus {
           else counts.modified++
         }
         event.set({
-          'route.added': counts.added,
-          'route.removed': counts.removed,
-          'route.modified': counts.modified,
+          'catalyst.orchestrator.route.added': counts.added,
+          'catalyst.orchestrator.route.removed': counts.removed,
+          'catalyst.orchestrator.route.modified': counts.modified,
         })
         logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
           'event.name': 'route.table.changed',
-          'route.added': counts.added,
-          'route.removed': counts.removed,
-          'route.modified': counts.modified,
-          'route.trigger': action.action,
-          'route.total': committed.local.routes.length + committed.internal.routes.length,
+          'catalyst.orchestrator.route.added': counts.added,
+          'catalyst.orchestrator.route.removed': counts.removed,
+          'catalyst.orchestrator.route.modified': counts.modified,
+          'catalyst.orchestrator.route.trigger': action.action,
+          'catalyst.orchestrator.route.total':
+            committed.local.routes.length + committed.internal.routes.length,
         })
       }
 
@@ -151,10 +156,13 @@ export class OrchestratorBus {
       const peer = connectedPeers.find((p) => p.name === peerName)
       if (peer !== undefined) {
         const event = new WideEvent('orchestrator.peer_sync', logger)
-        event.set({ 'peer.name': peerName, 'sync.type': 'full' })
+        event.set({
+          'catalyst.orchestrator.peer.name': peerName,
+          'catalyst.orchestrator.sync.type': 'full',
+        })
         logger.info('Peer {peerName} connected, syncing full route table', {
           'event.name': 'peer.sync.started',
-          'peer.name': peerName,
+          'catalyst.orchestrator.peer.name': peerName,
         })
         await this.syncRoutesToPeer(peer, state)
         event.emit()
@@ -167,8 +175,8 @@ export class OrchestratorBus {
 
     const event = new WideEvent('orchestrator.route_propagation', logger)
     event.set({
-      'peer.connected_count': connectedPeers.length,
-      'route.change_count': plan.routeChanges.length,
+      'catalyst.orchestrator.peer.connected_count': connectedPeers.length,
+      'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
     })
 
     const promises = connectedPeers.map(async (peer) => {
@@ -180,7 +188,7 @@ export class OrchestratorBus {
       } catch (error) {
         logger.warn('Failed to send route updates to {peerName}', {
           'event.name': 'peer.sync.failed',
-          'peer.name': peer.name,
+          'catalyst.orchestrator.peer.name': peer.name,
           error,
         })
         // Fire-and-forget: one peer failure must not affect others.
@@ -234,7 +242,7 @@ export class OrchestratorBus {
     if (updates.length === 0) {
       logger.info('No routes to sync to peer {peerName}', {
         'event.name': 'route.sync.empty',
-        'peer.name': peer.name,
+        'catalyst.orchestrator.peer.name': peer.name,
       })
       return
     }
@@ -243,13 +251,13 @@ export class OrchestratorBus {
       await this.transport.sendUpdate(peer, { updates })
       logger.info('Synced {count} route(s) to peer {peerName}', {
         'event.name': 'route.sync.completed',
-        'peer.name': peer.name,
-        'route.count': updates.length,
+        'catalyst.orchestrator.peer.name': peer.name,
+        'catalyst.orchestrator.route.count': updates.length,
       })
     } catch (error) {
       logger.warn('Initial route sync to {peerName} failed', {
         'event.name': 'peer.sync.initial_failed',
-        'peer.name': peer.name,
+        'catalyst.orchestrator.peer.name': peer.name,
         error,
       })
       // Fire-and-forget: failed initial sync is not fatal; the peer can
@@ -279,7 +287,7 @@ export class OrchestratorBus {
           this.lastKeepaliveSent.set(peer.name, now)
           logger.debug('Keepalive sent to {peerName}', {
             'event.name': 'peer.keepalive.sent',
-            'peer.name': peer.name,
+            'catalyst.orchestrator.peer.name': peer.name,
           })
         } catch {
           // Fire-and-forget: keepalive failure is not fatal.

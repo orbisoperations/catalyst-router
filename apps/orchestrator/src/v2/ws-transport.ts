@@ -69,7 +69,10 @@ export class WebSocketPeerTransport implements PeerTransport {
 
   async openPeer(peer: PeerRecord, token: string): Promise<void> {
     const event = new WideEvent('transport.open_peer', logger)
-    event.set({ 'peer.name': peer.name, 'peer.endpoint': peer.endpoint })
+    event.set({
+      'catalyst.orchestrator.peer.name': peer.name,
+      'catalyst.orchestrator.peer.endpoint': peer.endpoint,
+    })
     const stub = this.getStub(this.requireEndpoint(peer))
     const result = await stub.getIBGPClient(token)
     if (!result.success) {
@@ -90,8 +93,8 @@ export class WebSocketPeerTransport implements PeerTransport {
     }
     logger.info('Opened connection to {peerName}', {
       'event.name': 'peer.session.opened',
-      'peer.name': peer.name,
-      'peer.endpoint': peer.endpoint,
+      'catalyst.orchestrator.peer.name': peer.name,
+      'catalyst.orchestrator.peer.endpoint': peer.endpoint,
     })
     event.emit()
   }
@@ -132,7 +135,7 @@ export class WebSocketPeerTransport implements PeerTransport {
     if (!token) {
       logger.warn('No peerToken for {peerName} — closing without notification', {
         'event.name': 'peer.session.close_unnotified',
-        'peer.name': peer.name,
+        'catalyst.orchestrator.peer.name': peer.name,
       })
       return
     }

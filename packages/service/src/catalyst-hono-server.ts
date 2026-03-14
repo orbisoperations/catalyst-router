@@ -200,7 +200,7 @@ export class CatalystHonoServer {
 
     this._logger.info('Server shutdown started (services={serviceCount})', {
       'event.name': 'server.shutdown.started',
-      'service.count': serviceCount,
+      'catalyst.server.service_count': serviceCount,
     })
 
     // Close the HTTP server first — force-close active connections so it resolves promptly.
@@ -224,8 +224,8 @@ export class CatalystHonoServer {
     // Log completion before service shutdown — services may tear down telemetry
     this._logger.info('server shutdown completed in {durationMs}ms', {
       'event.name': 'server.shutdown.completed',
-      'event.duration_ms': Date.now() - startTime,
-      'service.count': serviceCount,
+      'catalyst.event.duration_ms': Date.now() - startTime,
+      'catalyst.server.service_count': serviceCount,
     })
 
     // Shut down all registered services (flushes telemetry etc.)

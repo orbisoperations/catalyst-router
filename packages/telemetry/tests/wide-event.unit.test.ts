@@ -83,10 +83,10 @@ describe('WideEvent', () => {
       'event.name': 'http.request',
       'http.request.method': 'GET',
       'url.path': '/api/health',
-      'event.outcome': 'success',
+      'catalyst.event.outcome': 'success',
     })
-    expect(record.properties['event.duration_ms']).toBeTypeOf('number')
-    expect(record.properties['event.duration_ms']).toBeGreaterThanOrEqual(0)
+    expect(record.properties['catalyst.event.duration_ms']).toBeTypeOf('number')
+    expect(record.properties['catalyst.event.duration_ms']).toBeGreaterThanOrEqual(0)
   })
 
   it('does not emit twice', () => {
@@ -102,15 +102,15 @@ describe('WideEvent', () => {
     const ev = new WideEvent('test.op', logger)
     ev.emit()
 
-    expect(calls[0].properties['event.outcome']).toBe('success')
+    expect(calls[0].properties['catalyst.event.outcome']).toBe('success')
   })
 
   it('does not override an explicit event.outcome', () => {
     const ev = new WideEvent('test.op', logger)
-    ev.set('event.outcome', 'partial')
+    ev.set('catalyst.event.outcome', 'partial')
     ev.emit()
 
-    expect(calls[0].properties['event.outcome']).toBe('partial')
+    expect(calls[0].properties['catalyst.event.outcome']).toBe('partial')
   })
 
   // -------------------------------------------------------------------------
@@ -167,7 +167,7 @@ describe('WideEvent', () => {
     expect(calls[0].properties).toMatchObject({
       'exception.type': 'TypeError',
       'exception.message': 'bad input',
-      'event.outcome': 'failure',
+      'catalyst.event.outcome': 'failure',
     })
     expect(calls[0].properties['exception.stacktrace']).toBeTypeOf('string')
     expect(calls[0].properties['exception.stacktrace']).toContain('TypeError')
@@ -182,7 +182,7 @@ describe('WideEvent', () => {
     expect(calls[0].properties).toMatchObject({
       'exception.type': 'string',
       'exception.message': 'string error',
-      'event.outcome': 'failure',
+      'catalyst.event.outcome': 'failure',
     })
   })
 
@@ -195,7 +195,7 @@ describe('WideEvent', () => {
     expect(calls[0].properties).toMatchObject({
       'exception.type': 'number',
       'exception.message': '42',
-      'event.outcome': 'failure',
+      'catalyst.event.outcome': 'failure',
     })
   })
 
@@ -214,7 +214,7 @@ describe('WideEvent', () => {
     const ev = new WideEvent('test.op', logger)
     ev.emit()
 
-    const duration = calls[0].properties['event.duration_ms'] as number
+    const duration = calls[0].properties['catalyst.event.duration_ms'] as number
     expect(duration).toBeTypeOf('number')
     expect(duration).toBeGreaterThanOrEqual(0)
   })

@@ -232,7 +232,10 @@ export class CatalystNodeBus extends RpcTarget {
     sentAction: Action
   ): Promise<{ success: true } | { success: false; error: string }> {
     const event = new WideEvent('orchestrator.action', this.logger)
-    event.set({ 'action.type': sentAction.action, 'node.name': this.config.node.name })
+    event.set({
+      'catalyst.orchestrator.action.type': sentAction.action,
+      'catalyst.orchestrator.node.name': this.config.node.name,
+    })
 
     this.logger.info('Dispatching action: {action}', {
       'event.name': 'orchestrator.action.dispatched',

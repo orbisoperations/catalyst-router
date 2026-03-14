@@ -18,7 +18,7 @@ describe('lifecycle logging', () => {
 
     it('service.initialized event includes event.duration_ms', () => {
       expect(content).toContain("'event.name': 'service.initialized'")
-      expect(content).toContain("'event.duration_ms':")
+      expect(content).toContain("'catalyst.event.duration_ms':")
     })
 
     it('emits service.shutdown.started event', () => {
@@ -34,7 +34,7 @@ describe('lifecycle logging', () => {
       // Find the closing of the log call (next })  after the event.name)
       const blockEnd = content.indexOf('})', shutdownCompletedIdx)
       const block = content.slice(blockStart, blockEnd)
-      expect(block).toContain("'event.duration_ms':")
+      expect(block).toContain("'catalyst.event.duration_ms':")
     })
   })
 
@@ -47,7 +47,7 @@ describe('lifecycle logging', () => {
       const blockStart = content.lastIndexOf('logger', startedIdx)
       const blockEnd = content.indexOf('})', startedIdx)
       const block = content.slice(blockStart, blockEnd)
-      expect(block).toContain("'service.count':")
+      expect(block).toContain("'catalyst.server.service_count':")
     })
 
     it('emits server.shutdown.completed event with duration and service.count', () => {
@@ -56,8 +56,8 @@ describe('lifecycle logging', () => {
       const blockStart = content.lastIndexOf('logger', completedIdx)
       const blockEnd = content.indexOf('})', completedIdx)
       const block = content.slice(blockStart, blockEnd)
-      expect(block).toContain("'event.duration_ms':")
-      expect(block).toContain("'service.count':")
+      expect(block).toContain("'catalyst.event.duration_ms':")
+      expect(block).toContain("'catalyst.server.service_count':")
     })
   })
 })
