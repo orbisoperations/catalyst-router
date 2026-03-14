@@ -5,7 +5,7 @@ export interface ServiceHealth {
   otelName: string
   url: string
   status: 'up' | 'down' | 'unknown'
-  latencyMs?: number
+  durationMs?: number
   error?: string
 }
 

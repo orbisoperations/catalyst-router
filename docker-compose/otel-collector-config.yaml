@@ -24,29 +24,25 @@ processors:
     limit_mib: 256
 
 # Output destinations for telemetry data
+# Backend-specific exporters live in overlay configs (otel-collector-observability.yaml, etc.)
 exporters:
   debug:
     verbosity: detailed
-  otlphttp/jaeger:
-    endpoint: http://jaeger:4318
-  prometheusremotewrite:
-    endpoint: http://prometheus:9090/api/v1/write
-  otlphttp/loki:
-    endpoint: http://loki:3100/otlp
 
-# All three signal types use the same receiver -> processor -> exporter chain
+# All three signal types use the same receiver -> processor -> exporter chain.
+# Overlay configs (observability, aspire) replace these pipelines to add their exporters.
 service:
   extensions: [health_check]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlphttp/jaeger]
+      exporters: [debug]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, prometheusremotewrite]
+      exporters: [debug]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlphttp/loki]
+      exporters: [debug]

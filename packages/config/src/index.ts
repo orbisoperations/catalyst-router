@@ -54,13 +54,11 @@ export const OrchestratorConfigSchema = z.object({
       systemToken: z.string(),
     })
     .optional(),
-  envoyConfig: z
-    .object({
-      endpoint: z.string(),
-      envoyAddress: z.string().optional(),
-      portRange: z.array(PortEntrySchema).min(1),
-    })
-    .optional(),
+  envoyConfig: z.object({
+    endpoint: z.string(),
+    envoyAddress: z.string().optional(),
+    portRange: z.array(PortEntrySchema).min(1),
+  }),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>

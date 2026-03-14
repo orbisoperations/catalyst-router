@@ -166,3 +166,53 @@ describe('OrchestratorBus — basic dispatch behaviour', () => {
     expect(call.message.updates[0].action).toBe('add')
   })
 })
+
+describe('OrchestratorBus — getStateSnapshot() immutability', () => {
+  let transport: MockPeerTransport
+  let bus: OrchestratorBus
+
+  beforeEach(() => {
+    transport = new MockPeerTransport()
+    bus = new OrchestratorBus({ config: configA, transport })
+  })
+
+  it('getStateSnapshot() returns a deep clone that does not affect the live state', async () => {
+    // 1. Add a route to the bus
+    await bus.dispatch({ action: Actions.LocalRouteCreate, data: routeAlpha })
+
+    // 2. Get a snapshot via getStateSnapshot()
+    const snapshot = bus.getStateSnapshot()
+
+    // 3. Mutate the snapshot (push a fake route and modify existing route name)
+    snapshot.local.routes.push({
+      name: 'injected',
+      protocol: 'http' as const,
+      endpoint: 'http://injected:9999',
+    })
+    snapshot.local.routes[0].name = 'mutated-alpha'
+
+    // 4. Verify bus.state is unchanged (the mutation did not propagate)
+    const liveState = bus.state
+    const liveNames = liveState.local.routes.map((r) => r.name)
+    expect(liveNames).toContain('alpha')
+    expect(liveNames).not.toContain('injected')
+    expect(liveNames).not.toContain('mutated-alpha')
+    expect(liveState.local.routes).toHaveLength(1)
+  })
+
+  it('getStateSnapshot() reflects current state at call time', async () => {
+    // 1. Get snapshot before adding route
+    const snapshotBefore = bus.getStateSnapshot()
+
+    // 2. Add a route
+    await bus.dispatch({ action: Actions.LocalRouteCreate, data: routeAlpha })
+
+    // 3. Get snapshot after adding route
+    const snapshotAfter = bus.getStateSnapshot()
+
+    // 4. Verify they differ (second has the new route)
+    expect(snapshotBefore.local.routes).toHaveLength(0)
+    expect(snapshotAfter.local.routes).toHaveLength(1)
+    expect(snapshotAfter.local.routes[0].name).toBe('alpha')
+  })
+})

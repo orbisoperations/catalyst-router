@@ -1,0 +1,26 @@
+# Observability backend exporters — merged with base config via:
+#   --config otel-collector-config.yaml --config otel-collector-observability.yaml
+# Note: OTel Collector replaces lists (not appends), so pipelines repeat all exporters.
+
+exporters:
+  otlphttp/jaeger:
+    endpoint: http://jaeger:4318
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlphttp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, prometheusremotewrite]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlphttp/loki]
