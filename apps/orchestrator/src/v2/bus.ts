@@ -2,8 +2,8 @@ import {
   RoutingInformationBase,
   ActionQueue,
   Actions,
-  InternalRouteView,
-  RouteTableView,
+  internalRouteCount,
+  toDataChannel,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -97,7 +97,7 @@ export class OrchestratorBus {
         'catalyst.orchestrator.action.state_changed': true,
         'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
         'catalyst.orchestrator.route.total':
-          committed.local.routes.size + new RouteTableView(committed).internalRouteCount,
+          committed.local.routes.size + internalRouteCount(committed),
       })
 
       if (plan.routeChanges.length > 0) {
@@ -119,7 +119,7 @@ export class OrchestratorBus {
           'catalyst.orchestrator.route.modified': counts.modified,
           'catalyst.orchestrator.route.trigger': action.action,
           'catalyst.orchestrator.route.total':
-            committed.local.routes.size + new RouteTableView(committed).internalRouteCount,
+            committed.local.routes.size + internalRouteCount(committed),
         })
       }
 
@@ -374,6 +374,6 @@ export const BusGuards = {
 export const BusTransforms = {
   /** Strips InternalRoute-only fields, returning only the DataChannelDefinition shape. */
   toDataChannel(route: DataChannelDefinition | InternalRoute): DataChannelDefinition {
-    return new InternalRouteView(route as InternalRoute).toDataChannel()
+    return toDataChannel(route)
   },
 }
