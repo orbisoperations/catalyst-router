@@ -41,8 +41,14 @@ export {
 } from './middleware/capnweb-transport.js'
 export type { InstrumentUpgradeOptions } from './middleware/capnweb-transport.js'
 
-// Hono middleware is available via the subpath '@catalyst/telemetry/middleware/hono'
-// to avoid requiring hono for consumers that only need logs/metrics/tracing.
+// Hono middleware (telemetryMiddleware, wideEventMiddleware) is available via the
+// subpath '@catalyst/telemetry/middleware/hono' to avoid requiring hono for
+// consumers that only need logs/metrics/tracing.
+
+// ---------------------------------------------------------------------------
+// Wide event builder
+// ---------------------------------------------------------------------------
+export { WideEvent } from './wide-event.js'
 
 // ---------------------------------------------------------------------------
 // Builder + DI
