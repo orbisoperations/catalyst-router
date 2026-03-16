@@ -1143,6 +1143,90 @@ describe('isTcpProxyListener', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// buildXdsSnapshot with media protocol (excluded from Envoy)
+// ---------------------------------------------------------------------------
+
+describe('buildXdsSnapshot with media protocol', () => {
+  it('creates no listener or cluster for local media routes', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [
+        {
+          name: 'cam-front',
+          protocol: 'media',
+          endpoint: 'rtsp://10.0.1.5:8554/cam-front',
+          envoyPort: 8554,
+        },
+      ],
+      internal: [],
+      portAllocations: { 'cam-front': 8554 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(0)
+    expect(snapshot.clusters).toHaveLength(0)
+  })
+
+  it('creates no listener or cluster for internal media routes', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [],
+      internal: [
+        {
+          name: 'cam-rear',
+          protocol: 'media',
+          endpoint: 'rtsp://10.0.1.10:8554/cam-rear',
+          envoyPort: 8554,
+          peer: { name: 'node-b', envoyAddress: '10.0.1.10' },
+          nodePath: ['local-node', 'node-b'],
+        },
+      ],
+      portAllocations: { 'egress_cam-rear_via_node-b': 18554 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    expect(snapshot.listeners).toHaveLength(0)
+    expect(snapshot.clusters).toHaveLength(0)
+  })
+
+  it('filters media routes while preserving http and tcp routes in mixed snapshot', () => {
+    const snapshot = buildXdsSnapshot({
+      local: [
+        {
+          name: 'cam-front',
+          protocol: 'media',
+          endpoint: 'rtsp://10.0.1.5:8554/cam-front',
+          envoyPort: 8554,
+        },
+        {
+          name: 'rest-api',
+          protocol: 'http',
+          endpoint: 'http://localhost:5001',
+          envoyPort: 8001,
+        },
+        {
+          name: 'redis-cache',
+          protocol: 'tcp',
+          endpoint: 'http://localhost:6379',
+          envoyPort: 6379,
+        },
+      ],
+      internal: [],
+      portAllocations: { 'cam-front': 8554, 'rest-api': 8001, 'redis-cache': 6379 },
+      bindAddress: '0.0.0.0',
+      version: '1',
+    })
+
+    // Only http and tcp routes should produce listeners — media is excluded
+    expect(snapshot.listeners).toHaveLength(2)
+    expect(snapshot.clusters).toHaveLength(2)
+
+    const listenerNames = snapshot.listeners.map((l) => l.name).sort()
+    expect(listenerNames).toEqual(['ingress_redis-cache', 'ingress_rest-api'])
+  })
+})
+
 describe('buildXdsSnapshot with TCP protocol', () => {
   it('uses TCP proxy listener for local tcp routes', () => {
     const snapshot = buildXdsSnapshot({
