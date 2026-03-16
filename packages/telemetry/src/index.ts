@@ -14,6 +14,7 @@ export { resetLogger }
 export type { LoggerConfig }
 export { configureMetrics, shutdownMetrics, getMeter }
 export type { MetricsConfig }
+export { DURATION_BUCKETS } from './constants.js'
 export { initTracer, getTracer, shutdownTracer }
 export type { TracerConfig }
 
