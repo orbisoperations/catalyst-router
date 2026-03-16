@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
+import { getLogger } from '@catalyst/telemetry'
 import { MediaMtxHookPayloadSchema } from '../mediamtx/types.js'
 import type { StreamRouteManager } from '../routes/stream-route-manager.js'
+
+const logger = getLogger(['catalyst', 'video', 'publish'])
 
 const LOCALHOST_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
@@ -44,6 +47,11 @@ export function createLifecycleHooks(options: LifecycleHookOptions): Hono {
         sourceType: parsed.data.sourceType,
         sourceId: parsed.data.sourceId,
       })
+      logger.info('Stream published: {streamPath}', {
+        'event.name': 'video.stream.published',
+        streamPath: parsed.data.path,
+        sourceType: parsed.data.sourceType,
+      })
       return c.json({ success: true, route: parsed.data.path })
     } catch (err) {
       return c.json(
@@ -78,6 +86,11 @@ export function createLifecycleHooks(options: LifecycleHookOptions): Hono {
 
     try {
       await routeManager.handleNotReady(parsed.data.path)
+      logger.info('Stream ended: {streamPath}', {
+        'event.name': 'video.stream.ended',
+        streamPath: parsed.data.path,
+        reason: 'not-ready',
+      })
       return c.json({ success: true })
     } catch (err) {
       return c.json(

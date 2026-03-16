@@ -16,8 +16,11 @@
  * and converges to the correct state before resubscribing to deltas.
  */
 
+import { getLogger } from '@catalyst/telemetry'
 import type { ControlApiClient } from '../mediamtx/control-api-client.js'
 import type { RouteChange, DataChannelDefinition, InternalRoute } from '@catalyst/routing/v2'
+
+const logger = getLogger(['catalyst', 'video', 'relay'])
 
 // ---------------------------------------------------------------------------
 // Interfaces — dependency injection for testability
@@ -235,6 +238,19 @@ export class RelayManager {
 
     if (result.ok) {
       this.activeRelays.set(name, endpoint)
+      logger.info('Relay path created for {streamPath} from {sourceNode}', {
+        'event.name': 'video.relay.created',
+        streamPath: name,
+        sourceNode: validation.host,
+        endpoint,
+      })
+    } else {
+      logger.error('Failed to create relay path for {streamPath}: {error}', {
+        'event.name': 'video.relay.create_failed',
+        streamPath: name,
+        endpoint,
+        error: result.error,
+      })
     }
   }
 
@@ -242,6 +258,10 @@ export class RelayManager {
     const result = await this.controlApi.deletePath(name)
     if (result.ok || result.status === 404) {
       this.activeRelays.delete(name)
+      logger.info('Stale relay path removed: {streamPath}', {
+        'event.name': 'video.relay.removed',
+        streamPath: name,
+      })
     }
   }
 
