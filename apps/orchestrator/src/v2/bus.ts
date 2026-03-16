@@ -129,7 +129,7 @@ export class OrchestratorBus {
         'catalyst.orchestrator.node.name': this.config.node.name,
       })
       // Validate peerToken on LocalPeerCreate
-      if (action.action === Actions.LocalPeerCreate && !action.data.peerToken) {
+      if (action.action === Actions.LocalPeerCreate && !action.data.peerToken?.trim()) {
         return { success: false, error: 'peerToken is required when creating a peer' }
       }
 
