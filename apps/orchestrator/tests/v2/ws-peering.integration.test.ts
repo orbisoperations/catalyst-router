@@ -203,18 +203,18 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
   })
 
   it('openPeer establishes an iBGP session via WebSocket RPC', async () => {
+    const tokenA = await makeJwt('node-a')
     const peerA: PeerInfo = {
       name: 'node-a',
       endpoint: 'ws://localhost:0/rpc',
       domains: ['ws-test.local'],
+      peerToken: tokenA,
     }
     await serverNode.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerA })
 
     const transportA = new WebSocketPeerTransport({
       localNodeInfo: { name: 'node-a', domains: ['ws-test.local'] },
     })
-
-    const tokenA = await makeJwt('node-a')
     const peerRecord = {
       name: 'node-b',
       endpoint: serverNode.endpoint,
