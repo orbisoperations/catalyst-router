@@ -13,12 +13,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlphttp/jaeger, otlp_grpc/aspire]
+      exporters: [debug, otlp_grpc/aspire]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, prometheusremotewrite, otlp_grpc/aspire]
+      exporters: [debug, otlp_grpc/aspire]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug, otlphttp/loki, otlp_grpc/aspire]
+      exporters: [debug, otlp_grpc/aspire]

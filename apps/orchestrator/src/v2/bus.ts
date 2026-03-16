@@ -60,6 +60,11 @@ export class OrchestratorBus {
     return this.rib.state
   }
 
+  /** Read-only snapshot of the route table (deep clone). */
+  getStateSnapshot(): RouteTable {
+    return structuredClone(this.rib.state)
+  }
+
   setNodeToken(token: string): void {
     this.nodeToken = token
   }

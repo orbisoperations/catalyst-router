@@ -25,7 +25,7 @@ interface ServiceDef {
 
 interface ServiceHealth extends ServiceDef {
   status: 'up' | 'down' | 'unknown'
-  latencyMs?: number
+  durationMs?: number
   error?: string
 }
 
@@ -42,17 +42,25 @@ function healthUrlFromWsEndpoint(wsEndpoint: string): string {
   return parsed.toString()
 }
 
+interface DeriveOptions {
+  config: CatalystConfig
+  otelServiceName: string
+  authEndpointFallback?: string
+}
+
 /** Derive health-check targets from the orchestrator's existing config. */
-function deriveServiceGroups(config: CatalystConfig): { name: string; services: ServiceDef[] }[] {
+function deriveServiceGroups({
+  config,
+  otelServiceName,
+  authEndpointFallback,
+}: DeriveOptions): { name: string; services: ServiceDef[] }[] {
   const port = config.port ?? 3000
-  const nodeId = config.node.name
-  const otelName = process.env.OTEL_SERVICE_NAME ?? nodeId
 
   const controlPlane: ServiceDef[] = [
-    { name: 'orchestrator', otelName, url: `http://localhost:${port}/health` },
+    { name: 'orchestrator', otelName: otelServiceName, url: `http://localhost:${port}/health` },
   ]
 
-  const authEndpoint = config.orchestrator?.auth?.endpoint ?? process.env.CATALYST_AUTH_ENDPOINT
+  const authEndpoint = config.orchestrator?.auth?.endpoint ?? authEndpointFallback
   if (authEndpoint) {
     controlPlane.push({
       name: 'auth',
@@ -93,13 +101,13 @@ async function checkHealth(service: ServiceDef): Promise<ServiceHealth> {
     return {
       ...service,
       status: res.ok ? 'up' : 'down',
-      latencyMs: Math.round(performance.now() - start),
+      durationMs: Math.round(performance.now() - start),
     }
   } catch (err) {
     return {
       ...service,
       status: 'down',
-      latencyMs: Math.round(performance.now() - start),
+      durationMs: Math.round(performance.now() - start),
       error: err instanceof Error ? err.message : String(err),
     }
   }
@@ -108,7 +116,9 @@ async function checkHealth(service: ServiceDef): Promise<ServiceHealth> {
 // TODO: Add authentication middleware — dashboard API is currently unauthenticated
 export function createDashboardRoutes(bus: DashboardStateProvider, config: CatalystConfig): Hono {
   const app = new Hono()
-  const serviceGroups = deriveServiceGroups(config)
+  const otelServiceName = process.env.OTEL_SERVICE_NAME ?? config.node.name
+  const authEndpointFallback = process.env.CATALYST_AUTH_ENDPOINT
+  const serviceGroups = deriveServiceGroups({ config, otelServiceName, authEndpointFallback })
 
   // GET /state — route table + peers from in-memory state
   app.get('/state', (c) => {

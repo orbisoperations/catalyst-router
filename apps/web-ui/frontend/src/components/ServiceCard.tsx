@@ -76,7 +76,7 @@ export function ServiceCard({ service }: { service: ServiceHealth }) {
         </span>
 
         {/* Latency badge */}
-        {service.latencyMs !== undefined && (
+        {service.durationMs !== undefined && (
           <span
             style={{
               fontFamily: 'var(--font-mono)',
@@ -88,7 +88,7 @@ export function ServiceCard({ service }: { service: ServiceHealth }) {
               borderRadius: 'var(--radius-sm)',
             }}
           >
-            {service.latencyMs}ms
+            {service.durationMs}ms
           </span>
         )}
 
