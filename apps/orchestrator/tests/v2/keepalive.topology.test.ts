@@ -50,7 +50,7 @@ describe('Keepalive: outbound keepalive sending', () => {
   })
 
   it('sends keepalive to a connected peer when Tick fires and lastSent is stale', async () => {
-    const peer = bus.state.internal.peers.find((p) => p.name === 'node-b')
+    const peer = bus.state.internal.peers.get('node-b')
     expect(peer).toBeDefined()
     const holdTime = peer!.holdTime
     const lastReceived = peer!.lastReceived
@@ -65,7 +65,7 @@ describe('Keepalive: outbound keepalive sending', () => {
   })
 
   it('does not send keepalive again before holdTime / 3 elapses', async () => {
-    const peer = bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peer = bus.state.internal.peers.get('node-b')!
     const holdTime = peer.holdTime
     const lastReceived = peer.lastReceived
     // t1 is past holdTime/3 (triggers keepalive) but well before holdTime (no expiry)
@@ -83,7 +83,7 @@ describe('Keepalive: outbound keepalive sending', () => {
   })
 
   it('sends keepalive again after holdTime / 3 elapses from last send', async () => {
-    const peer = bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peer = bus.state.internal.peers.get('node-b')!
     const holdTime = peer.holdTime
     const lastReceived = peer.lastReceived
     // t1 is past holdTime/3 but NOT past holdTime (avoids expiry)
@@ -139,7 +139,7 @@ describe('Keepalive: outbound keepalive sending', () => {
 
   it('keepalive transport failure is swallowed (fire-and-forget)', async () => {
     transport.setShouldFail(true)
-    const holdTime = bus.state.internal.peers.find((p) => p.name === 'node-b')?.holdTime ?? 90_000
+    const holdTime = bus.state.internal.peers.get('node-b')?.holdTime ?? 90_000
 
     // Should not throw even when transport fails
     await expect(
@@ -159,14 +159,14 @@ describe('Keepalive: incoming keepalive updates lastReceived', () => {
   })
 
   it('dispatching InternalProtocolKeepalive updates lastReceived on the peer', async () => {
-    const before = bus.state.internal.peers.find((p) => p.name === 'node-b')?.lastReceived ?? 0
+    const before = bus.state.internal.peers.get('node-b')?.lastReceived ?? 0
 
     await bus.dispatch({
       action: Actions.InternalProtocolKeepalive,
       data: { peerInfo: peerBInfo },
     })
 
-    const after = bus.state.internal.peers.find((p) => p.name === 'node-b')?.lastReceived ?? 0
+    const after = bus.state.internal.peers.get('node-b')?.lastReceived ?? 0
     expect(after).toBeGreaterThanOrEqual(before)
   })
 
@@ -199,7 +199,7 @@ describe('Keepalive: hold timer expiry on missed keepalives', () => {
   })
 
   it('peer expires when Tick fires after holdTime has elapsed since lastReceived', async () => {
-    const peer = bus.state.internal.peers.find((p) => p.name === 'node-b')
+    const peer = bus.state.internal.peers.get('node-b')
     expect(peer).toBeDefined()
     const holdTime = peer!.holdTime // 90_000 by default
     const lastReceived = peer!.lastReceived
@@ -210,19 +210,19 @@ describe('Keepalive: hold timer expiry on missed keepalives', () => {
 
     expect(result.success).toBe(true)
     // Peer should now be closed
-    const peerAfter = bus.state.internal.peers.find((p) => p.name === 'node-b')
+    const peerAfter = bus.state.internal.peers.get('node-b')
     expect(peerAfter?.connectionStatus).toBe('closed')
   })
 
   it('peer does NOT expire when Tick fires before holdTime has elapsed', async () => {
-    const peer = bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peer = bus.state.internal.peers.get('node-b')!
     const now = peer.lastReceived + peer.holdTime - 1 // 1ms before expiry
 
     const result = await bus.dispatch({ action: Actions.Tick, data: { now } })
 
     // No state change — peer is still alive
     expect(result.success).toBe(false)
-    const peerAfter = bus.state.internal.peers.find((p) => p.name === 'node-b')
+    const peerAfter = bus.state.internal.peers.get('node-b')
     expect(peerAfter?.connectionStatus).toBe('connected')
   })
 
@@ -263,14 +263,15 @@ describe('Keepalive: hold timer expiry on missed keepalives', () => {
     transport.reset()
 
     // Expire B's short hold timer (3_000ms). C has 90_000ms holdTime → still alive.
-    const peerB = bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peerB = bus.state.internal.peers.get('node-b')!
     expect(peerB.holdTime).toBe(3_000)
     const expiryNow = peerB.lastReceived + 3_001
 
     await bus.dispatch({ action: Actions.Tick, data: { now: expiryNow } })
 
     // B's route should be gone
-    expect(bus.state.internal.routes.some((r) => r.name === 'svc-b')).toBe(false)
+    const allRoutes = [...bus.state.internal.routes.values()].flatMap((m) => [...m.values()])
+    expect(allRoutes.some((r) => r.name === 'svc-b')).toBe(false)
 
     // Withdrawal should have been sent to C
     const updateCalls = transport
@@ -298,13 +299,13 @@ describe('Keepalive: hold timer expiry on missed keepalives', () => {
     })
 
     // Confirm holdTime is 0
-    const peer = bus.state.internal.peers.find((p) => p.name === 'node-c')
+    const peer = bus.state.internal.peers.get('node-c')
     expect(peer?.holdTime).toBe(0)
 
     // Tick far in the future — peer should not expire
     await bus.dispatch({ action: Actions.Tick, data: { now: Date.now() + 999_999_999 } })
 
-    const peerAfter = bus.state.internal.peers.find((p) => p.name === 'node-c')
+    const peerAfter = bus.state.internal.peers.get('node-c')
     expect(peerAfter?.connectionStatus).toBe('connected')
   })
 })

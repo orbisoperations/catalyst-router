@@ -411,7 +411,8 @@ describe('Post-commit BGP notification — initial sync on InternalProtocolConne
     })
 
     // Verify route is stale
-    const staleRoute = bus.state.internal.routes.find((r) => r.name === 'alpha')
+    const allRoutes = [...bus.state.internal.routes.values()].flatMap((m) => [...m.values()])
+    const staleRoute = allRoutes.find((r) => r.name === 'alpha')
     expect(staleRoute?.isStale).toBe(true)
 
     // Now B connects — stale route must NOT be synced

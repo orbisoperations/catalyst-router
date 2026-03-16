@@ -34,9 +34,9 @@ describe('journal replay', () => {
 
     const state = replayJournal(journal)
 
-    expect(state.local.routes).toHaveLength(0)
-    expect(state.internal.peers).toHaveLength(0)
-    expect(state.internal.routes).toHaveLength(0)
+    expect(state.local.routes.size).toBe(0)
+    expect(state.internal.peers.size).toBe(0)
+    expect(state.internal.routes.size).toBe(0)
   })
 
   it('replays a single LocalRouteCreate', () => {
@@ -51,8 +51,8 @@ describe('journal replay', () => {
 
     const state = replayJournal(journal)
 
-    expect(state.local.routes).toHaveLength(1)
-    expect(state.local.routes[0].name).toBe('alpha')
+    expect(state.local.routes.size).toBe(1)
+    expect(state.local.routes.get('alpha')?.name).toBe('alpha')
   })
 
   it('replays multiple actions in sequence — create and delete', () => {
@@ -78,8 +78,8 @@ describe('journal replay', () => {
 
     const state = replayJournal(journal)
 
-    expect(state.local.routes).toHaveLength(1)
-    expect(state.local.routes[0].name).toBe('beta')
+    expect(state.local.routes.size).toBe(1)
+    expect(state.local.routes.get('beta')?.name).toBe('beta')
   })
 
   it('replays peer lifecycle — create peer', () => {
@@ -93,9 +93,9 @@ describe('journal replay', () => {
 
     const state = replayJournal(journal)
 
-    expect(state.internal.peers).toHaveLength(1)
-    expect(state.internal.peers[0].name).toBe('node-b')
-    expect(state.internal.peers[0].connectionStatus).toBe('initializing')
+    expect(state.internal.peers.size).toBe(1)
+    expect(state.internal.peers.get('node-b')?.name).toBe('node-b')
+    expect(state.internal.peers.get('node-b')?.connectionStatus).toBe('initializing')
   })
 
   it('replays connected status after InternalProtocolConnected', () => {
@@ -110,7 +110,7 @@ describe('journal replay', () => {
 
     const state = replayJournal(journal)
 
-    const peer = state.internal.peers.find((p) => p.name === 'node-b')
+    const peer = state.internal.peers.get('node-b')
     expect(peer?.connectionStatus).toBe('connected')
   })
 
@@ -126,7 +126,7 @@ describe('journal replay', () => {
 
     const state = replayJournal(journal)
 
-    expect(state.internal.peers).toHaveLength(0)
+    expect(state.internal.peers.size).toBe(0)
   })
 
   it('skips duplicate (rejected) actions gracefully — second create for same route is a no-op', () => {
@@ -150,7 +150,7 @@ describe('journal replay', () => {
     const state = replayJournal(journal)
 
     // Should have exactly one route, not two
-    expect(state.local.routes).toHaveLength(1)
+    expect(state.local.routes.size).toBe(1)
   })
 
   it('correctly replays a mixed sequence of peers and routes', () => {
@@ -180,8 +180,8 @@ describe('journal replay', () => {
 
     const state = replayJournal(journal)
 
-    expect(state.local.routes).toHaveLength(2)
-    expect(state.internal.peers).toHaveLength(1)
-    expect(state.internal.peers[0].connectionStatus).toBe('connected')
+    expect(state.local.routes.size).toBe(2)
+    expect(state.internal.peers.size).toBe(1)
+    expect(state.internal.peers.get('node-b')?.connectionStatus).toBe('connected')
   })
 })

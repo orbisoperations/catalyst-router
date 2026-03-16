@@ -186,8 +186,8 @@ describe('createNetworkClient', () => {
 
     const addResult = await result.client.addPeer(peerInfo)
     expect(addResult.success).toBe(true)
-    expect(bus.state.internal.peers).toHaveLength(1)
-    expect(bus.state.internal.peers[0].name).toBe('node-b')
+    expect(bus.state.internal.peers.size).toBe(1)
+    expect(bus.state.internal.peers.get('node-b')?.name).toBe('node-b')
   })
 
   it('addPeer returns error when peer already exists', async () => {
@@ -231,12 +231,12 @@ describe('createNetworkClient', () => {
     if (!result.success) return
 
     await result.client.addPeer(peerInfo)
-    expect(bus.state.internal.peers).toHaveLength(1)
+    expect(bus.state.internal.peers.size).toBe(1)
 
     const removeResult = await result.client.removePeer({ name: peerInfo.name })
 
     expect(removeResult.success).toBe(true)
-    expect(bus.state.internal.peers).toHaveLength(0)
+    expect(bus.state.internal.peers.size).toBe(0)
   })
 
   it('removePeer returns error when peer does not exist', async () => {
@@ -283,8 +283,8 @@ describe('createDataChannelClient', () => {
 
     const addResult = await result.client.addRoute(routeAlpha)
     expect(addResult.success).toBe(true)
-    expect(bus.state.local.routes).toHaveLength(1)
-    expect(bus.state.local.routes[0].name).toBe('alpha')
+    expect(bus.state.local.routes.size).toBe(1)
+    expect(bus.state.local.routes.get('alpha')?.name).toBe('alpha')
   })
 
   it('addRoute returns error when route already exists', async () => {
@@ -305,12 +305,12 @@ describe('createDataChannelClient', () => {
     if (!result.success) return
 
     await result.client.addRoute(routeAlpha)
-    expect(bus.state.local.routes).toHaveLength(1)
+    expect(bus.state.local.routes.size).toBe(1)
 
     const removeResult = await result.client.removeRoute({ name: 'alpha' })
 
     expect(removeResult.success).toBe(true)
-    expect(bus.state.local.routes).toHaveLength(0)
+    expect(bus.state.local.routes.size).toBe(0)
   })
 
   it('removeRoute returns error when route does not exist', async () => {
@@ -390,7 +390,7 @@ describe('createIBGPClient', () => {
     const openResult = await result.client.open({ peerInfo })
     expect(openResult.success).toBe(true)
 
-    const peer = bus.state.internal.peers.find((p) => p.name === 'node-b')
+    const peer = bus.state.internal.peers.get('node-b')
     expect(peer?.connectionStatus).toBe('connected')
   })
 
@@ -445,7 +445,10 @@ describe('createIBGPClient', () => {
     })
 
     expect(updateResult.success).toBe(true)
-    expect(bus.state.internal.routes).toHaveLength(1)
+    const allInternalRoutes = [...bus.state.internal.routes.values()].flatMap((m) => [
+      ...m.values(),
+    ])
+    expect(allInternalRoutes).toHaveLength(1)
   })
 
   it('keepalive dispatches InternalProtocolKeepalive', async () => {
