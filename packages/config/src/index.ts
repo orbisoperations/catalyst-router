@@ -147,7 +147,7 @@ export const CatalystConfigSchema = z.object({
 
 export type CatalystConfig = z.infer<typeof CatalystConfigSchema>
 
-type ServiceType = 'gateway' | 'orchestrator' | 'auth' | 'envoy'
+type ServiceType = 'gateway' | 'orchestrator' | 'auth' | 'envoy' | 'video'
 
 /**
  * Configuration load options
