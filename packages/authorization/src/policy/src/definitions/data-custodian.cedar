@@ -3,7 +3,8 @@ permit (
     action in [
         CATALYST::Action::"ROUTE_CREATE",
         CATALYST::Action::"ROUTE_DELETE",
-        CATALYST::Action::"ROUTE_LIST"
+        CATALYST::Action::"ROUTE_LIST",
+        CATALYST::Action::"STREAM_VIEW"
     ],
     resource
 )
