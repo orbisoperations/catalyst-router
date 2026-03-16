@@ -1,4 +1,4 @@
-import { Actions, PeerView, InternalRouteView } from '@catalyst/routing/v2'
+import { Actions, toPublicPeer, toPublicInternalRoute } from '@catalyst/routing/v2'
 import type { PeerInfo, DataChannelDefinition, UpdateMessageSchema } from '@catalyst/routing/v2'
 import type { PublicPeer, PublicInternalRoute } from '@catalyst/routing/v2'
 import type { z } from 'zod'
@@ -101,7 +101,7 @@ export async function createNetworkClient(
       },
 
       async listPeers() {
-        return [...bus.state.internal.peers.values()].map((p) => new PeerView(p).toPublic())
+        return [...bus.state.internal.peers.values()].map(toPublicPeer)
       },
     },
   }
@@ -138,7 +138,7 @@ export async function createDataChannelClient(
           local: [...bus.state.local.routes.values()],
           internal: [...bus.state.internal.routes.values()]
             .flatMap((innerMap) => [...innerMap.values()])
-            .map((r) => new InternalRouteView(r).toPublic()),
+            .map(toPublicInternalRoute),
         }
       },
     },

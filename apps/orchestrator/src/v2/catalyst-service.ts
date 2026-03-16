@@ -9,7 +9,7 @@ import { OrchestratorServiceV2 } from './service.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
-import { RouteTableView } from '@catalyst/routing/v2'
+import { toPublicRouteTable } from '@catalyst/routing/v2'
 
 /**
  * Auth Service RPC API for token minting.
@@ -162,7 +162,7 @@ export class OrchestratorService extends CatalystService {
     const bus = this._v2.bus
     this.handler.get('/api/state', (c) => {
       const snapshot = bus.getStateSnapshot()
-      return c.json(new RouteTableView(snapshot).toPublic())
+      return c.json(toPublicRouteTable(snapshot))
     })
 
     // Start tick manager
