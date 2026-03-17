@@ -7,8 +7,8 @@
 > xDS control plane design, port allocation strategy, route table changes, cross-node
 > routing topology, and implementation plan.
 >
-> **Prerequisites**: [ARCHITECTURE.md](./ARCHITECTURE.md), [BGP_PROTOCOL.md](./BGP_PROTOCOL.md),
-> [INTERNAL_PEERING.md](./INTERNAL_PEERING.md), [constitution.md](./constitution.md)
+> **Prerequisites**: [ARCHITECTURE](../../ARCHITECTURE.md), [BGP Protocol](./bgp-protocol.md),
+> [Internal Peering](./internal-peering.md), [constitution](../../constitution.md)
 
 ---
 
