@@ -1,5 +1,5 @@
 import { newHttpBatchRpcSession, type RpcStub } from 'capnweb'
-import { getLogger } from '@catalyst/telemetry'
+import { getLogger, WideEvent } from '@catalyst/telemetry'
 import type { PeerRecord } from '@catalyst/routing/v2'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 
@@ -70,22 +70,31 @@ export class HttpPeerTransport implements PeerTransport {
   }
 
   async openPeer(peer: PeerRecord, token: string): Promise<void> {
+    const event = new WideEvent('transport.open_peer', logger)
+    event.set({
+      'catalyst.orchestrator.peer.name': peer.name,
+      'catalyst.orchestrator.peer.endpoint': peer.endpoint,
+      'catalyst.orchestrator.transport.type': 'http',
+    })
     const stub = this.getStub(this.requireEndpoint(peer))
     const result = await stub.getIBGPClient(token)
     if (!result.success) {
-      throw new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
+      const err = new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
+      event.setError(err)
+      event.emit()
+      throw err
     }
     const openResult = await result.client.open({
       peerInfo: this.localNodeInfo,
       holdTime: peer.holdTime,
     })
     if (!openResult.success) {
-      throw new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
+      const err = new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
+      event.setError(err)
+      event.emit()
+      throw err
     }
-    logger.info('Opened HTTP peer connection to {peerName}', {
-      'event.name': 'peer.connect.opened',
-      'catalyst.orchestrator.peer.name': peer.name,
-    })
+    event.emit()
   }
 
   async sendUpdate(peer: PeerRecord, message: UpdateMessage): Promise<void> {
@@ -124,14 +133,18 @@ export class HttpPeerTransport implements PeerTransport {
   }
 
   async closePeer(peer: PeerRecord, code: number, reason?: string): Promise<void> {
+    const event = new WideEvent('transport.close_peer', logger)
+    event.set({
+      'catalyst.orchestrator.peer.name': peer.name,
+      'catalyst.orchestrator.transport.close_code': code,
+      'catalyst.orchestrator.transport.close_reason': reason,
+    })
     const endpoint = this.requireEndpoint(peer)
     const stub = this.getStub(endpoint)
     const token = peer.peerToken
     if (!token) {
-      logger.warn('No peerToken for {peerName} — closing without notification', {
-        'event.name': 'peer.close.skipped',
-        'catalyst.orchestrator.peer.name': peer.name,
-      })
+      event.set('catalyst.orchestrator.transport.close_skipped', true)
+      event.emit()
       return
     }
     try {
@@ -143,16 +156,13 @@ export class HttpPeerTransport implements PeerTransport {
           reason,
         })
         if (!closeResult.success) {
-          logger.warn('Failed to close peer {peerName}: {error}', {
-            'event.name': 'peer.close.failed',
-            'catalyst.orchestrator.peer.name': peer.name,
-            error: closeResult.error,
-          })
+          event.setError(new Error(closeResult.error))
         }
       }
     } catch {
       // Best-effort close — if the connection is already down, nothing to do.
     }
+    event.emit()
     this.stubs.delete(endpoint)
   }
 }

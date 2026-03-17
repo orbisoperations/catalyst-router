@@ -3,6 +3,7 @@ import { newWebSocketRpcSession } from 'capnweb'
 import { Principal } from '@catalyst/authorization'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
+import { WideEvent } from '@catalyst/telemetry'
 import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { OrchestratorServiceV2 } from './service.js'
@@ -204,18 +205,16 @@ export class OrchestratorService extends CatalystService {
     maxAttempts = MINT_TOKEN_MAX_ATTEMPTS,
     _baseDelayMs = MINT_TOKEN_BASE_DELAY_MS
   ): Promise<void> {
+    const event = new WideEvent('orchestrator.token_mint', this.telemetry.logger)
+
     if (!this.config.orchestrator?.auth) {
-      this.telemetry.logger.info('No auth service configured -- skipping node token mint', {
-        'event.name': 'node.token.mint_skipped',
-      })
+      event.set('catalyst.orchestrator.token_mint.skipped', true)
+      event.emit()
       return
     }
 
     const { endpoint, systemToken } = this.config.orchestrator.auth
-    this.telemetry.logger.info('Connecting to auth service at {endpoint}', {
-      'event.name': 'node.token.mint_connecting',
-      'catalyst.orchestrator.auth.endpoint': endpoint,
-    })
+    event.set('catalyst.orchestrator.auth.endpoint', endpoint)
 
     let _lastError: unknown
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -245,21 +244,16 @@ export class OrchestratorService extends CatalystService {
         this._tokenIssuedAt = now
         this._tokenExpiresAt = now + TOKEN_TTL_MS
 
-        this.telemetry.logger.info('Node token minted for {nodeName} (expires {expiresAt})', {
-          'event.name': 'node.token.minted',
-          'catalyst.orchestrator.node.name': this.config.node.name,
-          'token.expires_at': this._tokenExpiresAt.toISOString(),
-        })
+        event.set('catalyst.orchestrator.auth.expires_at', this._tokenExpiresAt)
+        event.emit()
 
         // Propagate token to the v2 service if already initialized
         if (this._v2) {
           this._v2.setNodeToken(this._nodeToken)
         }
       } catch (error) {
-        this.telemetry.logger.error('Failed to mint node token', {
-          'event.name': 'node.token.mint_failed',
-          error,
-        })
+        event.setError(error)
+        event.emit()
         throw error
       }
     }
@@ -275,19 +269,13 @@ export class OrchestratorService extends CatalystService {
     const refreshTime = this._tokenIssuedAt + totalLifetime * REFRESH_THRESHOLD
 
     if (now >= refreshTime) {
-      this.telemetry.logger.info('Node token approaching expiration, refreshing...', {
-        'event.name': 'node.token.refresh_started',
-      })
+      const event = new WideEvent('orchestrator.token_refresh', this.telemetry.logger)
       try {
         await this.mintNodeToken()
-        this.telemetry.logger.info('Node token refreshed successfully', {
-          'event.name': 'node.token.refreshed',
-        })
+        event.emit()
       } catch (error) {
-        this.telemetry.logger.error('Failed to refresh node token', {
-          'event.name': 'node.token.refresh.failed',
-          error,
-        })
+        event.setError(error)
+        event.emit()
       }
     }
   }

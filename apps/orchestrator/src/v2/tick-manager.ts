@@ -1,5 +1,8 @@
 import { Actions } from '@catalyst/routing/v2'
 import type { Action } from '@catalyst/routing/v2'
+import { getLogger } from '@catalyst/telemetry'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'tick'])
 
 /**
  * Manages periodic Tick dispatch and keepalive lifecycle.
@@ -44,6 +47,11 @@ export class TickManager {
     const newInterval = Math.max(1000, Math.floor(minHold / 3))
 
     if (newInterval !== this.intervalMs) {
+      logger.info('Tick interval recalculated: {oldMs}ms -> {newMs}ms', {
+        'event.name': 'orchestrator.tick.recalculated',
+        'catalyst.orchestrator.tick.old_interval_ms': this.intervalMs,
+        'catalyst.orchestrator.tick.new_interval_ms': newInterval,
+      })
       this.intervalMs = newInterval
       if (this.timer !== undefined) {
         this.stop()

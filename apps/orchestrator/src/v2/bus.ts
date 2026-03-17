@@ -3,7 +3,6 @@ import {
   ActionQueue,
   Actions,
   CloseCodes,
-  InternalRouteView,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -147,7 +146,11 @@ export class OrchestratorBus {
       if (!this.rib.stateChanged(ribPlan)) {
         // Tick with no expired peers: keepalives still need to fire.
         if (action.action === Actions.Tick) {
-          await this.handleKeepalives(this.rib.state, action.data.now)
+          const ka = await this.handleKeepalives(this.rib.state, action.data.now)
+          event.set({
+            'catalyst.orchestrator.keepalive.needed': ka.needed,
+            'catalyst.orchestrator.keepalive.sent': ka.sent,
+          })
         }
         event.set('catalyst.orchestrator.action.state_changed', false)
         event.emit()
@@ -157,6 +160,16 @@ export class OrchestratorBus {
       // Step 3: Port allocation — release/allocate ports, stamp on newState.
       //         Runs between plan and commit so committed state has ports.
       const plan = this.planPortAllocations(ribPlan)
+
+      // Enrich dispatch event with port allocation summary.
+      const portsAllocated = plan.portOps.filter((op) => op.type === 'allocate').length
+      const portsReleased = plan.portOps.filter((op) => op.type === 'release').length
+      if (portsAllocated > 0 || portsReleased > 0) {
+        event.set({
+          'catalyst.orchestrator.port.allocated': portsAllocated,
+          'catalyst.orchestrator.port.released': portsReleased,
+        })
+      }
 
       // Step 4: Commit — apply state + journal.
       const committed = this.rib.commit(plan, action)
@@ -193,7 +206,7 @@ export class OrchestratorBus {
         })
       }
 
-      await this.handlePostCommit(action, plan, committed)
+      await this.handlePostCommit(action, plan, committed, event)
 
       event.emit()
       return { success: true, state: committed, action }
@@ -241,7 +254,8 @@ export class OrchestratorBus {
   private async handlePostCommit(
     action: Action,
     plan: PlanResult,
-    committedState: RouteTable
+    committedState: RouteTable,
+    event: WideEvent
   ): Promise<void> {
     // Use committedState snapshot — NEVER this.rib.state
     await this.handleBGPNotify(action, plan, committedState)
@@ -257,7 +271,11 @@ export class OrchestratorBus {
     // (The no-state-change Tick path in dispatch() handles the common case;
     // this handles Ticks that also caused peer expiry.)
     if (action.action === Actions.Tick) {
-      await this.handleKeepalives(committedState, action.data.now)
+      const ka = await this.handleKeepalives(committedState, action.data.now)
+      event.set({
+        'catalyst.orchestrator.keepalive.needed': ka.needed,
+        'catalyst.orchestrator.keepalive.sent': ka.sent,
+      })
     }
   }
 
@@ -350,11 +368,16 @@ export class OrchestratorBus {
 
     if (graphqlRoutes.length === 0) return
 
+    const event = new WideEvent('orchestrator.gateway_sync', logger)
+    event.set('catalyst.orchestrator.gateway.route_count', graphqlRoutes.length)
     try {
       await this.gatewayClient.updateConfig({
         services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
       })
-    } catch {
+      event.emit()
+    } catch (err) {
+      event.setError(err)
+      event.emit()
       // Fire-and-forget: gateway sync failure must not disrupt the bus.
     }
   }
@@ -483,6 +506,11 @@ export class OrchestratorBus {
   private async handleEnvoySync(_plan: PlanResult, state: RouteTable): Promise<void> {
     if (this.envoyClient === undefined) return
 
+    const event = new WideEvent('orchestrator.envoy_sync', logger)
+    event.set({
+      'catalyst.orchestrator.envoy.local_count': state.local.routes.length,
+      'catalyst.orchestrator.envoy.internal_count': state.internal.routes.length,
+    })
     try {
       await this.envoyClient.updateRoutes({
         local: state.local.routes,
@@ -491,7 +519,10 @@ export class OrchestratorBus {
           ? Object.fromEntries(this.portAllocator.getAllocations())
           : undefined,
       })
-    } catch {
+      event.emit()
+    } catch (err) {
+      event.setError(err)
+      event.emit()
       // Fire-and-forget: envoy sync failure must not disrupt the bus.
     }
   }
@@ -575,27 +606,33 @@ export class OrchestratorBus {
    * A peer needs a keepalive if: connected, holdTime > 0, and the time since
    * we last sent (tracked ephemerally via lastKeepaliveSent) exceeds holdTime / 3.
    */
-  private async handleKeepalives(state: RouteTable, now: number): Promise<void> {
-    const promises = state.internal.peers
-      .filter((p) => {
-        if (p.connectionStatus !== 'connected' || p.holdTime <= 0) return false
-        const lastSent = this.lastKeepaliveSent.get(p.name) ?? 0
-        return now - lastSent > p.holdTime / 3
-      })
-      .map(async (peer) => {
-        try {
-          await this.transport.sendKeepalive(peer)
-          this.lastKeepaliveSent.set(peer.name, now)
-          logger.debug('Keepalive sent to {peerName}', {
-            'event.name': 'peer.keepalive.sent',
-            'catalyst.orchestrator.peer.name': peer.name,
-          })
-        } catch {
-          // Fire-and-forget: keepalive failure is not fatal.
-        }
-      })
+  private async handleKeepalives(
+    state: RouteTable,
+    now: number
+  ): Promise<{ needed: number; sent: number }> {
+    let sent = 0
+    const peersNeeding = state.internal.peers.filter((p) => {
+      if (p.connectionStatus !== 'connected' || p.holdTime <= 0) return false
+      const lastSent = this.lastKeepaliveSent.get(p.name) ?? 0
+      return now - lastSent > p.holdTime / 3
+    })
+
+    const promises = peersNeeding.map(async (peer) => {
+      try {
+        await this.transport.sendKeepalive(peer)
+        this.lastKeepaliveSent.set(peer.name, now)
+        sent++
+        logger.debug('Keepalive sent to {peerName}', {
+          'event.name': 'peer.keepalive.sent',
+          'catalyst.orchestrator.peer.name': peer.name,
+        })
+      } catch {
+        // Fire-and-forget: keepalive failure is not fatal.
+      }
+    })
 
     await Promise.allSettled(promises)
+    return { needed: peersNeeding.length, sent }
   }
 
   // ---------------------------------------------------------------------------

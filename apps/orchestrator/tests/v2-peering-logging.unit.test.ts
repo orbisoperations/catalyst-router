@@ -44,7 +44,7 @@ describe('V2 peering & reconnection logging', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // bus.ts — keepalive and sync events
+  // bus.ts — keepalive and sync events + wide events
   // ---------------------------------------------------------------------------
 
   describe('bus.ts', () => {
@@ -61,6 +61,72 @@ describe('V2 peering & reconnection logging', () => {
     it('should log peer.sync.failed', () => {
       const src = readSource('bus.ts')
       expect(src).toContain("'event.name': 'peer.sync.failed'")
+    })
+
+    it('should emit orchestrator.gateway_sync wide event', () => {
+      const src = readSource('bus.ts')
+      expect(src).toContain("'orchestrator.gateway_sync'")
+      expect(src).toContain("'catalyst.orchestrator.gateway.route_count'")
+    })
+
+    it('should emit orchestrator.envoy_sync wide event', () => {
+      const src = readSource('bus.ts')
+      expect(src).toContain("'orchestrator.envoy_sync'")
+      expect(src).toContain("'catalyst.orchestrator.envoy.local_count'")
+      expect(src).toContain("'catalyst.orchestrator.envoy.internal_count'")
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // service.ts — journal recovery and auto-dial wide events
+  // ---------------------------------------------------------------------------
+
+  describe('service.ts', () => {
+    it('should emit orchestrator.journal_recovery wide event', () => {
+      const src = readSource('service.ts')
+      expect(src).toContain("'orchestrator.journal_recovery'")
+      expect(src).toContain("'catalyst.orchestrator.journal.mode'")
+      expect(src).toContain("'catalyst.orchestrator.journal.replayed_entries'")
+    })
+
+    it('should emit orchestrator.auto_dial wide event', () => {
+      const src = readSource('service.ts')
+      expect(src).toContain("'orchestrator.auto_dial'")
+      expect(src).toContain("'catalyst.orchestrator.peer.name'")
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // catalyst-service.ts — token lifecycle wide events
+  // ---------------------------------------------------------------------------
+
+  describe('catalyst-service.ts', () => {
+    it('should emit orchestrator.token_mint wide event', () => {
+      const src = readSource('catalyst-service.ts')
+      expect(src).toContain("'orchestrator.token_mint'")
+      expect(src).toContain("'catalyst.orchestrator.auth.endpoint'")
+    })
+
+    it('should emit orchestrator.token_refresh wide event', () => {
+      const src = readSource('catalyst-service.ts')
+      expect(src).toContain("'orchestrator.token_refresh'")
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // http-transport.ts — transport wide events (match ws-transport pattern)
+  // ---------------------------------------------------------------------------
+
+  describe('http-transport.ts', () => {
+    it('should emit transport.open_peer wide event', () => {
+      const src = readSource('http-transport.ts')
+      expect(src).toContain("'transport.open_peer'")
+      expect(src).toContain("'catalyst.orchestrator.peer.name'")
+    })
+
+    it('should emit transport.close_peer wide event', () => {
+      const src = readSource('http-transport.ts')
+      expect(src).toContain("'transport.close_peer'")
     })
   })
 })
