@@ -5,6 +5,7 @@ import {
   localPeerDeleteMessageSchema,
   localRouteCreateMessageSchema,
   localRouteDeleteMessageSchema,
+  localRouteHealthUpdateMessageSchema,
 } from './local/actions.js'
 import {
   InternalProtocolOpenMessageSchema,
@@ -25,6 +26,7 @@ export const ActionSchema = z.discriminatedUnion('action', [
   localPeerDeleteMessageSchema,
   localRouteCreateMessageSchema,
   localRouteDeleteMessageSchema,
+  localRouteHealthUpdateMessageSchema,
   InternalProtocolOpenMessageSchema,
   InternalProtocolUpdateMessageSchema,
   InternalProtocolCloseMessageSchema,
