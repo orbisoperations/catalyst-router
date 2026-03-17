@@ -19,7 +19,9 @@
     "@catalyst/service": "workspace:*",
     "@catalyst/telemetry": "workspace:*",
     "@opentelemetry/api": "catalog:",
+    "capnweb": "catalog:",
     "hono": "catalog:",
+    "jose": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
