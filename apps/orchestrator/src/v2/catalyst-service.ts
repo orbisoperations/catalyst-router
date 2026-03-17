@@ -6,6 +6,7 @@ import type { CatalystServiceOptions } from '@catalyst/service'
 import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { OrchestratorServiceV2 } from './service.js'
+import { AdapterHealthChecker } from './adapter-health.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
@@ -76,6 +77,7 @@ export class OrchestratorService extends CatalystService {
   readonly handler = new Hono()
 
   private _v2!: OrchestratorServiceV2
+  private _healthChecker: AdapterHealthChecker | undefined
   private _nodeToken: string | undefined
   private _tokenIssuedAt: Date | undefined
   private _tokenExpiresAt: Date | undefined
@@ -137,6 +139,15 @@ export class OrchestratorService extends CatalystService {
       // journalPath: undefined → uses in-memory journal
     })
 
+    const adapterHealthConfig = this.config.orchestrator?.adapterHealth
+    if (adapterHealthConfig?.enabled !== false) {
+      this._healthChecker = new AdapterHealthChecker({
+        intervalMs: adapterHealthConfig?.intervalMs ?? 30_000,
+        timeoutMs: adapterHealthConfig?.timeoutMs ?? 3_000,
+      })
+      this._healthChecker.start(() => this._v2.bus.state.local.routes)
+    }
+
     // Build the token validator
     const validator = this.buildTokenValidator()
 
@@ -162,6 +173,9 @@ export class OrchestratorService extends CatalystService {
     const bus = this._v2.bus
     this.handler.get('/api/state', (c) => {
       const snapshot = bus.getStateSnapshot()
+      if (this._healthChecker) {
+        this._healthChecker.applyHealth(snapshot.local.routes)
+      }
       return c.json(new RouteTableView(snapshot).toPublic())
     })
 
@@ -175,6 +189,7 @@ export class OrchestratorService extends CatalystService {
   }
 
   protected async onShutdown(): Promise<void> {
+    this._healthChecker?.stop()
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval)
       this._refreshInterval = undefined
