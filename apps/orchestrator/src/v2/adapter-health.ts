@@ -9,6 +9,7 @@ export interface AdapterHealth {
 interface AdapterHealthCheckerOptions {
   intervalMs: number
   timeoutMs: number
+  dispatchFn?: (action: { action: string; data: Record<string, unknown> }) => Promise<unknown>
 }
 
 export class AdapterHealthChecker {
@@ -86,6 +87,7 @@ export class AdapterHealthChecker {
 
   private async checkOne(route: DataChannelDefinition): Promise<void> {
     const { name } = route
+    const prevStatus = this.healthMap.get(name)?.healthStatus
 
     // Skip if we already know there's no health endpoint
     if (this.noHealthEndpoint.has(name)) {
@@ -160,6 +162,27 @@ export class AdapterHealthChecker {
         responseTimeMs: null,
         lastChecked: new Date().toISOString(),
       })
+    }
+
+    // Dispatch to bus if health status changed (for iBGP propagation)
+    const newHealth = this.healthMap.get(name)
+    if (this.options.dispatchFn && newHealth && prevStatus !== newHealth.healthStatus) {
+      this.options
+        .dispatchFn({
+          action: 'local:route:health-update',
+          data: {
+            name,
+            healthStatus: newHealth.healthStatus,
+            responseTimeMs: newHealth.responseTimeMs,
+            lastChecked: newHealth.lastChecked,
+          },
+        })
+        .catch((error) => {
+          console.error(
+            `[AdapterHealthChecker] Failed to dispatch health update for ${name}:`,
+            error
+          )
+        })
     }
   }
 

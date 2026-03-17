@@ -331,4 +331,76 @@ describe('AdapterHealthChecker', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
     expect(checker.getHealth('flaky')?.healthStatus).toBe('up')
   })
+
+  // -------------------------------------------------------------------------
+  // Dispatch on status change
+  // -------------------------------------------------------------------------
+  it('dispatches LocalRouteHealthUpdate when status changes to up', async () => {
+    const dispatchFn = vi.fn().mockResolvedValue(undefined)
+    const dispatchChecker = new AdapterHealthChecker({
+      intervalMs: 30_000,
+      timeoutMs: 3_000,
+      dispatchFn,
+    })
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeMockResponse(200)))
+    await dispatchChecker.checkAll([makeRoute('alpha')])
+
+    expect(dispatchFn).toHaveBeenCalledOnce()
+    expect(dispatchFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'local:route:health-update',
+        data: expect.objectContaining({ name: 'alpha', healthStatus: 'up' }),
+      })
+    )
+    dispatchChecker.stop()
+  })
+
+  it('does NOT dispatch when status stays the same', async () => {
+    const dispatchFn = vi.fn().mockResolvedValue(undefined)
+    const dispatchChecker = new AdapterHealthChecker({
+      intervalMs: 30_000,
+      timeoutMs: 3_000,
+      dispatchFn,
+    })
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeMockResponse(200)))
+    const routes = [makeRoute('alpha')]
+
+    await dispatchChecker.checkAll(routes)
+    expect(dispatchFn).toHaveBeenCalledOnce()
+
+    await dispatchChecker.checkAll(routes)
+    expect(dispatchFn).toHaveBeenCalledOnce() // still 1
+    dispatchChecker.stop()
+  })
+
+  it('dispatches on status transition up → down', async () => {
+    const dispatchFn = vi.fn().mockResolvedValue(undefined)
+    const dispatchChecker = new AdapterHealthChecker({
+      intervalMs: 30_000,
+      timeoutMs: 3_000,
+      dispatchFn,
+    })
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(makeMockResponse(200))
+      .mockRejectedValueOnce(new Error('timeout'))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const routes = [makeRoute('alpha')]
+    await dispatchChecker.checkAll(routes)
+    await dispatchChecker.checkAll(routes)
+
+    expect(dispatchFn).toHaveBeenCalledTimes(2)
+    expect(dispatchFn.mock.calls[1][0].data.healthStatus).toBe('down')
+    dispatchChecker.stop()
+  })
+
+  it('works without dispatchFn (backward compat)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeMockResponse(200)))
+    await checker.checkAll([makeRoute('alpha')])
+    expect(checker.getHealth('alpha')?.healthStatus).toBe('up')
+  })
 })

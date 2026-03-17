@@ -122,4 +122,49 @@ describe('adapter health propagation', () => {
     expect(route?.responseTimeMs).toBeUndefined()
     expect(route?.lastChecked).toBeUndefined()
   })
+
+  it('health status update propagates to connected peer', async () => {
+    await setupConnectedPeer(bus, peerBInfo)
+
+    // Create the route first
+    await bus.dispatch({
+      action: Actions.LocalRouteCreate,
+      data: {
+        name: 'books',
+        protocol: 'http:graphql' as const,
+        endpoint: 'http://books:4001/graphql',
+      },
+    })
+
+    transport.reset()
+
+    // Dispatch health update
+    await bus.dispatch({
+      action: Actions.LocalRouteHealthUpdate,
+      data: {
+        name: 'books',
+        healthStatus: 'down' as const,
+        responseTimeMs: null,
+        lastChecked: '2026-03-17T02:20:00Z',
+      },
+    })
+
+    // Verify the local state reflects the health update
+    const state = bus.getStateSnapshot()
+    expect(state.local.routes[0].healthStatus).toBe('down')
+
+    // Verify the peer received the health update via iBGP
+    const updateCalls = transport.getCallsFor('sendUpdate')
+    expect(updateCalls).toHaveLength(1)
+
+    const call = updateCalls[0]
+    if (call.method !== 'sendUpdate') throw new Error('wrong call type')
+
+    expect(call.message.updates).toHaveLength(1)
+    const update = call.message.updates[0]
+    expect(update.route.name).toBe('books')
+    expect(update.route.healthStatus).toBe('down')
+    expect(update.route.responseTimeMs).toBeNull()
+    expect(update.route.lastChecked).toBe('2026-03-17T02:20:00Z')
+  })
 })
