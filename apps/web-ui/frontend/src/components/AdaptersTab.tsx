@@ -92,7 +92,31 @@ const tdStyle: React.CSSProperties = {
 }
 
 export function AdaptersTab() {
-  const { state, loading } = useRouterState()
+  const { state, loading, error } = useRouterState()
+
+  if (error) {
+    return (
+      <div
+        style={{
+          border: '1px solid var(--status-down-border)',
+          borderRadius: 'var(--radius-lg)',
+          background: 'var(--status-down-bg)',
+          padding: '2rem',
+          textAlign: 'center',
+        }}
+      >
+        <p
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.85rem',
+            color: 'var(--status-down)',
+          }}
+        >
+          Failed to load adapters: {error}
+        </p>
+      </div>
+    )
+  }
 
   if (loading || !state) {
     return (
