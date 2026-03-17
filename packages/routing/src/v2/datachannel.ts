@@ -20,6 +20,9 @@ export const DataChannelDefinitionSchema = z.object({
   region: z.string().optional(),
   tags: z.array(z.string()).optional(),
   envoyPort: z.number().int().optional(),
+  healthStatus: z.enum(['up', 'down', 'unknown']).optional(),
+  responseTimeMs: z.number().nullable().optional(),
+  lastChecked: z.string().optional(),
 })
 export type DataChannelDefinition = z.infer<typeof DataChannelDefinitionSchema>
 
