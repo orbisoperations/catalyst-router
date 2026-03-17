@@ -144,8 +144,8 @@ describe('SQLite journal: durability and restart reconstruction', () => {
 
     expect(svc2.bus.state.internal.peers).toHaveLength(1)
     expect(svc2.bus.state.internal.peers[0].name).toBe('node-b')
-    // Restored peer should be in 'initializing' state (not 'connected')
-    expect(svc2.bus.state.internal.peers[0].connectionStatus).toBe('initializing')
+    // After journal replay, auto-dial fires (GAP-001) and connects the peer
+    expect(svc2.bus.state.internal.peers[0].connectionStatus).toBe('connected')
 
     await svc2.stop()
   })

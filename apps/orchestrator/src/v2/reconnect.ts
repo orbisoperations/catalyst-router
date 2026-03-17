@@ -51,11 +51,19 @@ export class ReconnectManager {
     const timer = setTimeout(async () => {
       this.timers.delete(peer.name)
       if (!peer.peerToken) {
-        logger.warn`Skipping reconnect to ${peer.name}: no peer token available`
+        logger.warn('Skipping reconnect to {peerName}: no peer token available', {
+          'event.name': 'peer.reconnect.skipped',
+          'catalyst.orchestrator.peer.name': peer.name,
+        })
         return
       }
       try {
         await this.transport.openPeer(peer, peer.peerToken)
+        logger.info('Reconnect to {peerName} succeeded (attempt {attempt})', {
+          'event.name': 'peer.reconnect.succeeded',
+          'catalyst.orchestrator.peer.name': peer.name,
+          'catalyst.orchestrator.reconnect.attempt': attempt,
+        })
         // Success — dispatch InternalProtocolConnected to trigger full route sync
         await this.dispatchFn({
           action: Actions.InternalProtocolConnected,

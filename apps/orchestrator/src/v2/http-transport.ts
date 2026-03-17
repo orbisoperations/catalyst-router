@@ -82,7 +82,10 @@ export class HttpPeerTransport implements PeerTransport {
     if (!openResult.success) {
       throw new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
     }
-    logger.info`Opened HTTP connection to ${peer.name}`
+    logger.info('Opened HTTP peer connection to {peerName}', {
+      'event.name': 'peer.connect.opened',
+      'catalyst.orchestrator.peer.name': peer.name,
+    })
   }
 
   async sendUpdate(peer: PeerRecord, message: UpdateMessage): Promise<void> {
@@ -119,7 +122,10 @@ export class HttpPeerTransport implements PeerTransport {
     const stub = this.getStub(endpoint)
     const token = peer.peerToken
     if (!token) {
-      logger.warn`No peerToken for ${peer.name} — closing without notification`
+      logger.warn('No peerToken for {peerName} — closing without notification', {
+        'event.name': 'peer.close.skipped',
+        'catalyst.orchestrator.peer.name': peer.name,
+      })
       return
     }
     try {
