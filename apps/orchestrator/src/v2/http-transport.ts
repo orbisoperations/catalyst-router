@@ -98,10 +98,13 @@ export class HttpPeerTransport implements PeerTransport {
     if (!result.success) {
       throw new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
     }
-    await result.client.update({
+    const updateResult = await result.client.update({
       peerInfo: this.localNodeInfo,
       update: message,
     })
+    if (!updateResult.success) {
+      throw new Error(`Failed to send update to ${peer.name}: ${updateResult.error}`)
+    }
   }
 
   async sendKeepalive(peer: PeerRecord): Promise<void> {
@@ -114,7 +117,10 @@ export class HttpPeerTransport implements PeerTransport {
     if (!result.success) {
       throw new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
     }
-    await result.client.keepalive({ peerInfo: this.localNodeInfo })
+    const keepaliveResult = await result.client.keepalive({ peerInfo: this.localNodeInfo })
+    if (!keepaliveResult.success) {
+      throw new Error(`Failed to send keepalive to ${peer.name}: ${keepaliveResult.error}`)
+    }
   }
 
   async closePeer(peer: PeerRecord, code: number, reason?: string): Promise<void> {
@@ -131,7 +137,18 @@ export class HttpPeerTransport implements PeerTransport {
     try {
       const result = await stub.getIBGPClient(token)
       if (result.success) {
-        await result.client.close({ peerInfo: this.localNodeInfo, code, reason })
+        const closeResult = await result.client.close({
+          peerInfo: this.localNodeInfo,
+          code,
+          reason,
+        })
+        if (!closeResult.success) {
+          logger.warn('Failed to close peer {peerName}: {error}', {
+            'event.name': 'peer.close.failed',
+            'catalyst.orchestrator.peer.name': peer.name,
+            error: closeResult.error,
+          })
+        }
       }
     } catch {
       // Best-effort close — if the connection is already down, nothing to do.
