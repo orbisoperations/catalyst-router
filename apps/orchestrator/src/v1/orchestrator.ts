@@ -1123,10 +1123,12 @@ export class CatalystNodeBus extends RpcTarget {
             listRoutes: async () => {
               return {
                 local: this.state.local.routes,
-                internal: this.state.internal.routes.map(({ peer, ...rest }) => {
-                  const { peerToken: _, ...safePeer } = peer
-                  return { ...rest, peer: safePeer }
-                }),
+                internal: this.state.internal.routes.map(
+                  ({ peer: { peerToken: _, ...safePeer }, ...rest }) => ({
+                    ...rest,
+                    peer: safePeer,
+                  })
+                ),
               }
             },
           },
