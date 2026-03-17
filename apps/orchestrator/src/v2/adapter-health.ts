@@ -16,6 +16,7 @@ export class AdapterHealthChecker {
   private readonly healthMap = new Map<string, AdapterHealth>()
   private readonly noHealthEndpoint = new Set<string>()
   private interval: ReturnType<typeof setInterval> | undefined
+  private running = false
 
   constructor(options: AdapterHealthCheckerOptions) {
     this.options = options
@@ -25,7 +26,10 @@ export class AdapterHealthChecker {
   start(getRoutes: () => DataChannelDefinition[]): void {
     if (this.options.intervalMs <= 0) return
     this.interval = setInterval(() => {
-      this.checkAll(getRoutes()).catch(() => {})
+      if (this.running) return
+      this.checkAll(getRoutes()).catch((error) => {
+        console.error('[AdapterHealthChecker] Unexpected error during health check cycle:', error)
+      })
     }, this.options.intervalMs)
   }
 
@@ -40,7 +44,11 @@ export class AdapterHealthChecker {
     return this.healthMap.get(name)
   }
 
-  /** Apply health data to routes in-place. Returns the same array with health fields set. */
+  /**
+   * Apply health data to routes in-place.
+   * Used to stamp health fields onto live local routes so they propagate via iBGP,
+   * and onto snapshots for API responses.
+   */
   applyHealth(routes: DataChannelDefinition[]): DataChannelDefinition[] {
     for (const route of routes) {
       const health = this.healthMap.get(route.name)
@@ -55,20 +63,25 @@ export class AdapterHealthChecker {
 
   /** Check all routes and return health results. Clears entries for removed routes. */
   async checkAll(routes: DataChannelDefinition[]): Promise<Map<string, AdapterHealth>> {
-    const currentNames = new Set(routes.map((r) => r.name))
+    this.running = true
+    try {
+      const currentNames = new Set(routes.map((r) => r.name))
 
-    // Clear entries for removed routes
-    for (const name of this.healthMap.keys()) {
-      if (!currentNames.has(name)) {
-        this.healthMap.delete(name)
-        this.noHealthEndpoint.delete(name)
+      // Clear entries for removed routes
+      for (const name of this.healthMap.keys()) {
+        if (!currentNames.has(name)) {
+          this.healthMap.delete(name)
+          this.noHealthEndpoint.delete(name)
+        }
       }
+
+      const checks = routes.map((route) => this.checkOne(route))
+      await Promise.allSettled(checks)
+
+      return this.healthMap
+    } finally {
+      this.running = false
     }
-
-    const checks = routes.map((route) => this.checkOne(route))
-    await Promise.allSettled(checks)
-
-    return this.healthMap
   }
 
   private async checkOne(route: DataChannelDefinition): Promise<void> {
@@ -106,12 +119,23 @@ export class AdapterHealthChecker {
       })
 
       if (res.status === 404) {
-        this.noHealthEndpoint.add(name)
-        this.healthMap.set(name, {
-          healthStatus: 'unknown',
-          responseTimeMs: null,
-          lastChecked: new Date().toISOString(),
-        })
+        const prev = this.healthMap.get(name)
+        if (prev?.healthStatus === 'up') {
+          // Was healthy before — mark as down, don't suppress future checks
+          this.healthMap.set(name, {
+            healthStatus: 'down',
+            responseTimeMs: null,
+            lastChecked: new Date().toISOString(),
+          })
+        } else {
+          // Never been up — no health endpoint, suppress future checks
+          this.noHealthEndpoint.add(name)
+          this.healthMap.set(name, {
+            healthStatus: 'unknown',
+            responseTimeMs: null,
+            lastChecked: new Date().toISOString(),
+          })
+        }
         return
       }
 

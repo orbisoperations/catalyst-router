@@ -145,7 +145,12 @@ export class OrchestratorService extends CatalystService {
         intervalMs: adapterHealthConfig?.intervalMs ?? 30_000,
         timeoutMs: adapterHealthConfig?.timeoutMs ?? 3_000,
       })
-      this._healthChecker.start(() => this._v2.bus.state.local.routes)
+      // Health checks read a snapshot of routes (safe), then store results in the
+      // health map. Results are applied to API responses at query time via applyHealth.
+      // Note: health data is local-only for v1 — not propagated to peers via iBGP.
+      // Peer propagation would require a bus action (e.g. LocalRouteHealthUpdate) to
+      // avoid violating the RIB state invariant.
+      this._healthChecker.start(() => this._v2.bus.getStateSnapshot().local.routes)
     }
 
     // Build the token validator

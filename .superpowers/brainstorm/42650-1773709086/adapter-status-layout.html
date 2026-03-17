@@ -1,0 +1,117 @@
+<h2>Per-Adapter Health: UI Layout Options</h2>
+<p class="subtitle">How should adapter health appear on the status page?</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;">
+        <div style="color:#888;margin-bottom:12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Adapters</div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#252540;border-radius:6px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#4ade80;flex-shrink:0;"></div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-weight:600;">coastguard-tracks</div>
+            <div style="color:#888;font-size:11px;">http:graphql &middot; http://coastguard:4001/graphql</div>
+          </div>
+          <div style="color:#888;font-size:11px;">12ms &middot; 3s ago</div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#252540;border-radius:6px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#f87171;flex-shrink:0;"></div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-weight:600;">navy-radar</div>
+            <div style="color:#888;font-size:11px;">udp &middot; udp://radar:5000</div>
+          </div>
+          <div style="color:#888;font-size:11px;">— &middot; 30s ago</div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#252540;border-radius:6px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#fbbf24;flex-shrink:0;"></div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-weight:600;">movies-service</div>
+            <div style="color:#888;font-size:11px;">http:graphql &middot; http://movies:4002/graphql</div>
+          </div>
+          <div style="color:#888;font-size:11px;">unknown</div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#252540;border-radius:6px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#4ade80;flex-shrink:0;"></div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-weight:600;">books-service</div>
+            <div style="color:#888;font-size:11px;">http:graphql &middot; http://books:4001/graphql</div>
+          </div>
+          <div style="color:#888;font-size:11px;">8ms &middot; 5s ago</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Enhanced Adapters Tab</h3>
+      <p>Add health dots + response time to the existing adapter list. Minimal change — same layout, just richer data per row. Green = up, red = down, yellow = unknown.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;">
+        <div style="color:#888;margin-bottom:12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Adapters</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="background:#252540;border-radius:6px;padding:12px;border-left:3px solid #4ade80;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <div style="color:#e0e0e0;font-weight:600;font-size:13px;">coastguard-tracks</div>
+              <div style="color:#4ade80;font-size:11px;">UP</div>
+            </div>
+            <div style="color:#888;font-size:11px;">http:graphql</div>
+            <div style="color:#888;font-size:11px;margin-top:4px;">12ms &middot; origin: node-a</div>
+            <div style="color:#666;font-size:10px;margin-top:4px;">Peers: node-b, node-c</div>
+          </div>
+
+          <div style="background:#252540;border-radius:6px;padding:12px;border-left:3px solid #f87171;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <div style="color:#e0e0e0;font-weight:600;font-size:13px;">navy-radar</div>
+              <div style="color:#f87171;font-size:11px;">DOWN</div>
+            </div>
+            <div style="color:#888;font-size:11px;">udp</div>
+            <div style="color:#888;font-size:11px;margin-top:4px;">— &middot; origin: node-b</div>
+            <div style="color:#666;font-size:10px;margin-top:4px;">Peers: node-a</div>
+          </div>
+
+          <div style="background:#252540;border-radius:6px;padding:12px;border-left:3px solid #fbbf24;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <div style="color:#e0e0e0;font-weight:600;font-size:13px;">movies-service</div>
+              <div style="color:#fbbf24;font-size:11px;">UNKNOWN</div>
+            </div>
+            <div style="color:#888;font-size:11px;">http:graphql</div>
+            <div style="color:#888;font-size:11px;margin-top:4px;">origin: node-a</div>
+            <div style="color:#666;font-size:10px;margin-top:4px;">No /health endpoint</div>
+          </div>
+
+          <div style="background:#252540;border-radius:6px;padding:12px;border-left:3px solid #4ade80;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <div style="color:#e0e0e0;font-weight:600;font-size:13px;">books-service</div>
+              <div style="color:#4ade80;font-size:11px;">UP</div>
+            </div>
+            <div style="color:#888;font-size:11px;">http:graphql</div>
+            <div style="color:#888;font-size:11px;margin-top:4px;">8ms &middot; origin: node-a</div>
+            <div style="color:#666;font-size:10px;margin-top:4px;">Peers: node-b, node-c</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Adapter Cards Grid</h3>
+      <p>Replace the adapter list with cards showing health, protocol, origin node, response time, and which peers have the route. More info at a glance, follows the ServiceCard pattern from the Services tab.</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:24px;padding:16px;background:rgba(255,255,255,0.05);border-radius:8px;">
+  <h3 style="margin-top:0;">Backend approach (same for both)</h3>
+  <ul style="color:#aaa;font-size:14px;line-height:1.8;">
+    <li>Orchestrator periodically checks <code>/health</code> on local adapters (configurable interval, 30s default)</li>
+    <li>Health status (up/down/unknown, responseTimeMs, lastChecked) added to route metadata</li>
+    <li>Propagated to peers via iBGP alongside existing route data</li>
+    <li>No <code>/health</code> endpoint → show "unknown" (not "down")</li>
+    <li><code>/api/state</code> includes health data — web-ui just renders it</li>
+  </ul>
+</div>

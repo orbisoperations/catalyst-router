@@ -75,6 +75,31 @@ describe('AdapterHealthChecker', () => {
   })
 
   // -------------------------------------------------------------------------
+  // 2b. /health was up then returns 404 → status 'down', still re-checked
+  // -------------------------------------------------------------------------
+  it('adapter previously up then 404 → status down, still re-checked', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(makeMockResponse(200)) // first: up
+      .mockResolvedValueOnce(makeMockResponse(404, false)) // second: 404
+      .mockResolvedValueOnce(makeMockResponse(404, false)) // third: still 404
+
+    vi.stubGlobal('fetch', mockFetch)
+
+    const routes = [makeRoute('beta')]
+
+    await checker.checkAll(routes)
+    expect(checker.getHealth('beta')?.healthStatus).toBe('up')
+
+    await checker.checkAll(routes)
+    expect(checker.getHealth('beta')?.healthStatus).toBe('down')
+
+    // Should NOT be suppressed — still re-checked on next cycle
+    await checker.checkAll(routes)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
+
+  // -------------------------------------------------------------------------
   // 3. Adapter previously 'up' then fails → status 'down'
   // -------------------------------------------------------------------------
   it('adapter previously up then fails → status down', async () => {

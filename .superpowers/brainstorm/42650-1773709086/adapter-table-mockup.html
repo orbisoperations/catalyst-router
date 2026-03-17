@@ -1,0 +1,138 @@
+<h2>Per-Adapter Status: Table Layout (Figma-inspired)</h2>
+<p class="subtitle">Matching the Catalyst UI table style with our health check model</p>
+
+<div class="mockup">
+  <div class="mockup-header">Adapters Tab — Enhanced</div>
+  <div class="mockup-body" style="background:#fff;color:#1a1a2e;padding:0;">
+
+    <!-- Breadcrumb -->
+    <div style="padding:12px 24px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#6366f1;">
+      Status Page <span style="color:#9ca3af;margin:0 4px;">/</span> <span style="color:#374151;font-weight:500;">Adapters</span>
+    </div>
+
+    <!-- Controls row -->
+    <div style="padding:16px 24px;display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="border:1px solid #d1d5db;border-radius:6px;padding:8px 12px;font-size:13px;color:#9ca3af;width:200px;display:flex;align-items:center;gap:6px;">
+          <span style="color:#9ca3af;">&#128269;</span> Search by name
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="border:1px solid #d1d5db;border-radius:6px;padding:6px 10px;font-size:12px;color:#6b7280;cursor:pointer;">&#9776;</div>
+        <div style="border:1px solid #d1d5db;border-radius:6px;padding:6px 10px;font-size:12px;color:#6b7280;cursor:pointer;">&#9663;</div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f0f0ff;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;">
+          <th style="text-align:left;padding:10px 24px;color:#4338ca;font-weight:600;font-size:12px;">Data channel <span style="color:#a5b4fc;">&#9662;</span></th>
+          <th style="text-align:left;padding:10px 16px;color:#4338ca;font-weight:600;font-size:12px;">Protocol <span style="color:#a5b4fc;">&#9662;</span></th>
+          <th style="text-align:left;padding:10px 16px;color:#4338ca;font-weight:600;font-size:12px;">Endpoint <span style="color:#a5b4fc;">&#9662;</span></th>
+          <th style="text-align:left;padding:10px 16px;color:#4338ca;font-weight:600;font-size:12px;">Origin <span style="color:#a5b4fc;">&#9662;</span></th>
+          <th style="text-align:left;padding:10px 16px;color:#4338ca;font-weight:600;font-size:12px;">Status <span style="color:#a5b4fc;">&#9662;</span></th>
+          <th style="text-align:right;padding:10px 24px;color:#4338ca;font-weight:600;font-size:12px;">Response</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:12px 24px;font-weight:500;color:#1e1b4b;">coastguard-tracks</td>
+          <td style="padding:12px 16px;color:#6b7280;">http:graphql</td>
+          <td style="padding:12px 16px;color:#6b7280;font-family:monospace;font-size:11px;">http://coastguard:4001/graphql</td>
+          <td style="padding:12px 16px;color:#6366f1;font-size:12px;">node-alpha</td>
+          <td style="padding:12px 16px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#15803d;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+              Up
+            </span>
+          </td>
+          <td style="padding:12px 24px;text-align:right;color:#6b7280;font-size:12px;">12ms</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:12px 24px;font-weight:500;color:#1e1b4b;">navy-radar-feed</td>
+          <td style="padding:12px 16px;color:#6b7280;">udp</td>
+          <td style="padding:12px 16px;color:#6b7280;font-family:monospace;font-size:11px;">udp://radar:5000</td>
+          <td style="padding:12px 16px;color:#6366f1;font-size:12px;">node-bravo</td>
+          <td style="padding:12px 16px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#fee2e2;color:#b91c1c;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
+              Down
+            </span>
+          </td>
+          <td style="padding:12px 24px;text-align:right;color:#6b7280;font-size:12px;">—</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:12px 24px;font-weight:500;color:#1e1b4b;">movies-service</td>
+          <td style="padding:12px 16px;color:#6b7280;">http:graphql</td>
+          <td style="padding:12px 16px;color:#6b7280;font-family:monospace;font-size:11px;">http://movies:4002/graphql</td>
+          <td style="padding:12px 16px;color:#6366f1;font-size:12px;">node-alpha</td>
+          <td style="padding:12px 16px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#fef9c3;color:#a16207;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#eab308;display:inline-block;"></span>
+              Unknown
+            </span>
+          </td>
+          <td style="padding:12px 24px;text-align:right;color:#6b7280;font-size:12px;">—</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:12px 24px;font-weight:500;color:#1e1b4b;">books-service</td>
+          <td style="padding:12px 16px;color:#6b7280;">http:graphql</td>
+          <td style="padding:12px 16px;color:#6b7280;font-family:monospace;font-size:11px;">http://books:4001/graphql</td>
+          <td style="padding:12px 16px;color:#6366f1;font-size:12px;">node-alpha</td>
+          <td style="padding:12px 16px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#15803d;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+              Up
+            </span>
+          </td>
+          <td style="padding:12px 24px;text-align:right;color:#6b7280;font-size:12px;">8ms</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:12px 24px;font-weight:500;color:#1e1b4b;">tak-cot-consumer</td>
+          <td style="padding:12px 16px;color:#6b7280;">tcp</td>
+          <td style="padding:12px 16px;color:#6b7280;font-family:monospace;font-size:11px;">tcp://tak-consumer:8089</td>
+          <td style="padding:12px 16px;color:#6366f1;font-size:12px;">node-charlie</td>
+          <td style="padding:12px 16px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#15803d;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+              Up
+            </span>
+          </td>
+          <td style="padding:12px 24px;text-align:right;color:#6b7280;font-size:12px;">23ms</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:12px 24px;font-weight:500;color:#1e1b4b;">uav-telemetry</td>
+          <td style="padding:12px 16px;color:#6b7280;">http:graphql</td>
+          <td style="padding:12px 16px;color:#6b7280;font-family:monospace;font-size:11px;">http://uav:4003/graphql</td>
+          <td style="padding:12px 16px;color:#6366f1;font-size:12px;">node-bravo</td>
+          <td style="padding:12px 16px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#fef9c3;color:#a16207;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#eab308;display:inline-block;"></span>
+              Unknown
+            </span>
+          </td>
+          <td style="padding:12px 24px;text-align:right;color:#6b7280;font-size:12px;">—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Footer -->
+    <div style="padding:12px 24px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;">
+      <div>6 adapters across 3 nodes</div>
+      <div>Last checked: 5s ago</div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:20px;padding:16px;background:rgba(255,255,255,0.05);border-radius:8px;">
+  <h3 style="margin-top:0;">What's shown</h3>
+  <ul style="color:#aaa;font-size:14px;line-height:1.8;">
+    <li><strong>Data channel</strong> — adapter/route name</li>
+    <li><strong>Protocol</strong> — http:graphql, tcp, udp, etc.</li>
+    <li><strong>Endpoint</strong> — the service URL</li>
+    <li><strong>Origin</strong> — which node the adapter is local to</li>
+    <li><strong>Status</strong> — Up (green), Down (red), Unknown (yellow) from /health checks</li>
+    <li><strong>Response</strong> — health check response time in ms</li>
+  </ul>
+</div>

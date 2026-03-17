@@ -96,6 +96,8 @@ services:
       - OTEL_SERVICE_NAME=orchestrator-node-a
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - CATALYST_DASHBOARD_LINKS_FILE=/app/config/dashboard-links.json
+      - CATALYST_AUTH_ENDPOINT=${CATALYST_AUTH_ENDPOINT:-}
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN:-}
     volumes:
       - ./dashboard-links.json:/app/config/dashboard-links.json:ro
     healthcheck:
@@ -171,6 +173,8 @@ services:
       - OTEL_SERVICE_NAME=orchestrator-node-b
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - CATALYST_DASHBOARD_LINKS_FILE=/app/config/dashboard-links.json
+      - CATALYST_AUTH_ENDPOINT=${CATALYST_AUTH_ENDPOINT:-}
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN:-}
     volumes:
       - ./dashboard-links.json:/app/config/dashboard-links.json:ro
     healthcheck:
