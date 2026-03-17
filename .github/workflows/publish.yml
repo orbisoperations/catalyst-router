@@ -1,0 +1,255 @@
+name: Publish Container Images
+
+on:
+  push:
+    tags:
+      - 'v*' # Full release — builds all core artifacts
+      - '*/v*' # Per-artifact — builds only the tagged app (e.g. auth/v1.0.0)
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Determine which apps to build and extract version info
+  # ---------------------------------------------------------------------------
+  prepare:
+    name: Prepare Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      version: ${{ steps.tag.outputs.version }}
+      normalized_version: ${{ steps.tag.outputs.normalized_version }}
+      is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
+      tag_name: ${{ steps.tag.outputs.tag_name }}
+    steps:
+      - name: Extract tag info
+        id: tag
+        run: |
+          FULL_TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag_name=${FULL_TAG}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$FULL_TAG" == */* ]]; then
+            # Per-artifact tag: auth/v1.0.0
+            VERSION=$(echo "$FULL_TAG" | cut -d'/' -f2)
+          else
+            # Full release tag: v1.0.0
+            VERSION="$FULL_TAG"
+          fi
+
+          NORMALIZED="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "normalized_version=${NORMALIZED}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$FULL_TAG" == *"-dev"* ]] || [[ "$FULL_TAG" == *"-rc"* ]] || [[ "$FULL_TAG" == *"-alpha"* ]] || [[ "$FULL_TAG" == *"-beta"* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set build matrix
+        id: set-matrix
+        run: |
+          FULL_TAG="${GITHUB_REF#refs/tags/}"
+
+          if [[ "$FULL_TAG" == */* ]]; then
+            # Per-artifact: extract app name
+            APP_NAME=$(echo "$FULL_TAG" | cut -d'/' -f1)
+            MATRIX="{\"app\":[\"${APP_NAME}\"]}"
+          else
+            # Full release: build all core artifacts
+            MATRIX='{"app":["auth","gateway","orchestrator","envoy"]}'
+          fi
+
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "Build matrix: ${MATRIX}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Quality checks (scoped per app)
+  # ---------------------------------------------------------------------------
+  quality:
+    name: 'Quality · ${{ matrix.app }}'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: ./.github/actions/setup-repo
+
+      - name: Verify app exists
+        run: |
+          if [ ! -d "apps/${{ matrix.app }}" ]; then
+            echo "::error::App '${{ matrix.app }}' not found in apps/ directory"
+            exit 1
+          fi
+          if [ ! -f "apps/${{ matrix.app }}/Dockerfile" ]; then
+            echo "::error::No Dockerfile found for '${{ matrix.app }}'"
+            exit 1
+          fi
+
+      - name: Lint (scoped)
+        run: pnpm exec turbo run lint --filter=./apps/${{ matrix.app }}
+
+      - name: Typecheck (scoped)
+        run: pnpm exec turbo run typecheck --filter=./apps/${{ matrix.app }}
+
+      - name: Test (scoped)
+        run: pnpm exec turbo run test:unit --filter=./apps/${{ matrix.app }}
+
+  # ---------------------------------------------------------------------------
+  # 3. Build & push multi-arch container images
+  # ---------------------------------------------------------------------------
+  publish:
+    name: 'Publish · ${{ matrix.app }}'
+    needs: [prepare, quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,amd64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        run: |
+          APP="${{ matrix.app }}"
+          VERSION="${{ needs.prepare.outputs.normalized_version }}"
+          IS_PRE="${{ needs.prepare.outputs.is_prerelease }}"
+
+          IMAGE="ghcr.io/${{ github.repository_owner }}/catalyst-${APP}"
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+
+          TAGS="${IMAGE}:${VERSION}"
+          if [[ "$IS_PRE" != "true" ]]; then
+            TAGS="${TAGS},${IMAGE}:latest"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=catalyst-${{ matrix.app }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+
+      - name: Verify multi-arch manifest
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+
+          echo "Inspecting ${IMAGE}:${VERSION}..."
+          docker buildx imagetools inspect "${IMAGE}:${VERSION}"
+
+          ARCHS=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" \
+            --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}')
+
+          echo "Architectures: ${ARCHS}"
+
+          if echo "$ARCHS" | grep -q "linux/amd64" && echo "$ARCHS" | grep -q "linux/arm64"; then
+            echo "✓ Both amd64 and arm64 confirmed"
+          else
+            echo "::error::Missing expected architectures"
+            exit 1
+          fi
+
+      - name: Build summary
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ### 🚀 Published \`catalyst-${{ matrix.app }}\`
+
+          | Field | Value |
+          |-------|-------|
+          | Image | \`${IMAGE}\` |
+          | Version | \`${VERSION}\` |
+          | Platforms | linux/amd64, linux/arm64 |
+
+          \`\`\`bash
+          docker pull ${IMAGE}:${VERSION}
+          \`\`\`
+          EOF
+
+  # ---------------------------------------------------------------------------
+  # 4. Create GitHub Release (once all images are published)
+  # ---------------------------------------------------------------------------
+  release:
+    name: Create Release
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Build release body
+        id: body
+        run: |
+          VERSION="${{ needs.prepare.outputs.normalized_version }}"
+          TAG="${{ needs.prepare.outputs.tag_name }}"
+          APPS=$(echo '${{ needs.prepare.outputs.matrix }}' | jq -r '.app[]')
+
+          BODY="## Container Images\n\n"
+          BODY+="| Image | Pull Command |\n"
+          BODY+="|-------|--------------|\n"
+
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          for APP in $APPS; do
+            IMG="ghcr.io/${OWNER}/catalyst-${APP}:${VERSION}"
+            BODY+="| catalyst-${APP} | \`docker pull ${IMG}\` |\n"
+          done
+
+          BODY+="\n### Platforms\n- linux/amd64\n- linux/arm64\n"
+
+          {
+            echo "body<<BODY_EOF"
+            echo -e "$BODY"
+            echo "BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: '${{ needs.prepare.outputs.tag_name }}'
+          body: ${{ steps.body.outputs.body }}
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+          generate_release_notes: true
