@@ -1,2 +1,2 @@
 pnpm exec lint-staged
-pnpm -r run test:unit || true
+pnpm run test:unit || true
