@@ -32,20 +32,36 @@ export interface RouterState {
 
 export function useRouterState(pollIntervalMs = 10000) {
   const [state, setState] = useState<RouterState | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [stale, setStale] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
     const fetchState = async () => {
       try {
         const res = await fetch('/api/state')
-        const data = await res.json()
+        if (!res.ok) {
+          if (active) {
+            setError(`Orchestrator returned ${res.status}`)
+            setLoading(false)
+          }
+          return
+        }
+        const body = await res.json()
         if (active) {
-          setState(data)
+          setState(body.data)
+          setLastUpdated(body.lastUpdated ?? null)
+          setStale(body.stale === true)
+          setLoading(false)
+          setError(null)
+        }
+      } catch (e) {
+        if (active) {
+          setError(e instanceof Error ? e.message : String(e))
           setLoading(false)
         }
-      } catch {
-        if (active) setLoading(false)
       }
     }
 
@@ -57,5 +73,5 @@ export function useRouterState(pollIntervalMs = 10000) {
     }
   }, [pollIntervalMs])
 
-  return { state, loading }
+  return { state, loading, lastUpdated, stale, error }
 }

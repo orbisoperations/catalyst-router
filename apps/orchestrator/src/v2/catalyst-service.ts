@@ -168,13 +168,14 @@ export class OrchestratorService extends CatalystService {
       )
     })
 
-    // Thin read-only state endpoint for external consumers (e.g., web-ui dashboard)
+    // TODO: Add token validation — currently unauthenticated. Exposes topology
+    // (peer endpoints, routes, connection status) but no credentials. Safe for
+    // internal/dev use; needs auth before production exposure.
     const bus = this._v2.bus
     this.handler.get('/api/state', (c) => {
       const snapshot = bus.getStateSnapshot()
       return c.json(new RouteTableView(snapshot).toPublic())
     })
-
 
     // Start tick manager
     this._v2.start()
