@@ -147,7 +147,7 @@ The v2 routing system (`packages/routing` + `apps/orchestrator`) implements BGP-
 - **Hold timer keepalive**: Peers negotiate `holdTime = min(local, remote)`. `Tick` actions expire stale peers.
 - **Graceful restart**: `TRANSPORT_ERROR` marks routes `isStale` instead of removing, allowing reconnection.
 - **Journal replay**: `InMemoryActionLog` (tests) and `SqliteActionLog` (production) for durable action replay.
-- **232 tests** across 18 files. See [Test Catalog](./test-catalog.md).
+- **235 tests** across 18 files (105 routing + 130 orchestrator). See [Test Catalog](./test-catalog.md).
 
 ---
 
