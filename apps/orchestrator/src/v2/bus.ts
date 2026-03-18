@@ -2,11 +2,10 @@ import {
   RoutingInformationBase,
   ActionQueue,
   Actions,
-  CloseCodes,
+  InternalRouteView,
   type Action,
   type RouteTable,
   type PlanResult,
-  type PortOperation,
   type RoutePolicy,
   type InternalRoute,
   type PeerRecord,
@@ -17,49 +16,7 @@ import { getLogger, WideEvent } from '@catalyst/telemetry'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
 
-// ---------------------------------------------------------------------------
-// Gateway client interface (for GraphQL gateway config sync)
-// ---------------------------------------------------------------------------
-
-export interface GatewayUpdateResult {
-  success: boolean
-  error?: string
-}
-
-export interface GatewayClient {
-  updateConfig(config: {
-    services: Array<{ name: string; url: string }>
-  }): Promise<GatewayUpdateResult>
-}
-
 const logger = getLogger(['catalyst', 'orchestrator', 'bus'])
-// ---------------------------------------------------------------------------
-// Envoy client interface (for Envoy config sync)
-// ---------------------------------------------------------------------------
-
-export interface EnvoyUpdateResult {
-  success: boolean
-  error?: string
-}
-
-export interface EnvoyClient {
-  updateRoutes(config: {
-    local: DataChannelDefinition[]
-    internal: InternalRoute[]
-    portAllocations?: Record<string, number>
-  }): Promise<EnvoyUpdateResult>
-}
-
-/**
- * Port allocator interface — matches @catalyst/envoy-service's PortAllocator.
- * Defined here to avoid a hard dependency on the envoy package from the bus.
- */
-export interface BusPortAllocator {
-  allocate(channelName: string): { success: true; port: number } | { success: false; error: string }
-  release(channelName: string): void
-  getPort(channelName: string): number | undefined
-  getAllocations(): ReadonlyMap<string, number>
-}
 
 // v2-specific StateResult — uses v2 RouteTable (no `external` field)
 export type StateResult =
@@ -73,9 +30,6 @@ export class OrchestratorBus {
   private readonly routePolicy: RoutePolicy | undefined
   private readonly config: OrchestratorConfig
   private nodeToken: string | undefined
-  private readonly gatewayClient: GatewayClient | undefined
-  private readonly envoyClient: EnvoyClient | undefined
-  private readonly portAllocator: BusPortAllocator | undefined
   /**
    * Tracks the last time a keepalive was successfully sent to each peer.
    * Ephemeral (not persisted/journaled) — resets to 0 on restart.
@@ -90,17 +44,11 @@ export class OrchestratorBus {
     routePolicy?: RoutePolicy
     nodeToken?: string
     initialState?: RouteTable
-    gatewayClient?: GatewayClient
-    envoyClient?: EnvoyClient
-    portAllocator?: BusPortAllocator
   }) {
     this.config = opts.config
     this.transport = opts.transport
     this.routePolicy = opts.routePolicy
     this.nodeToken = opts.nodeToken
-    this.gatewayClient = opts.gatewayClient
-    this.envoyClient = opts.envoyClient
-    this.portAllocator = opts.portAllocator
     this.queue = new ActionQueue()
     this.rib = new RoutingInformationBase({
       nodeId: opts.config.node.name,
@@ -129,122 +77,52 @@ export class OrchestratorBus {
         'catalyst.orchestrator.action.type': action.action,
         'catalyst.orchestrator.node.name': this.config.node.name,
       })
-      // Step 1: Validate — reject invalid actions before planning.
-      if (action.action === Actions.LocalPeerCreate && !action.data.peerToken?.trim()) {
-        return { success: false, error: 'peerToken is required when creating a peer' }
-      }
 
-      // Step 1b: Inbound route policy — filter received routes before planning.
-      const filteredAction = this.applyInboundPolicy(action)
-      if (filteredAction === undefined) {
-        return { success: false, error: 'All routes rejected by inbound policy' }
-      }
+      try {
+        const plan = this.rib.plan(action, this.rib.state)
 
-      // Step 2: Plan — pure state transition, no side effects.
-      const ribPlan = this.rib.plan(filteredAction, this.rib.state)
-
-      if (!this.rib.stateChanged(ribPlan)) {
-        // Tick with no expired peers: keepalives still need to fire.
-        if (action.action === Actions.Tick) {
-          const ka = await this.handleKeepalives(this.rib.state, action.data.now)
-          event.set({
-            'catalyst.orchestrator.keepalive.needed': ka.needed,
-            'catalyst.orchestrator.keepalive.sent': ka.sent,
-          })
+        if (!this.rib.stateChanged(plan)) {
+          if (action.action === Actions.Tick) {
+            await this.handleKeepalives(this.rib.state, action.data.now)
+          }
+          event.set('catalyst.orchestrator.action.state_changed', false)
+          return { success: false, error: 'No state change' }
         }
-        event.set('catalyst.orchestrator.action.state_changed', false)
-        event.emit()
-        return { success: false, error: 'No state change' }
-      }
 
-      // Step 3: Port allocation — release/allocate ports, stamp on newState.
-      //         Runs between plan and commit so committed state has ports.
-      const plan = this.planPortAllocations(ribPlan)
+        const committed = this.rib.commit(plan, action)
 
-      // Enrich dispatch event with port allocation summary.
-      const portsAllocated = plan.portOps.filter((op) => op.type === 'allocate').length
-      const portsReleased = plan.portOps.filter((op) => op.type === 'release').length
-      if (portsAllocated > 0 || portsReleased > 0) {
         event.set({
-          'catalyst.orchestrator.port.allocated': portsAllocated,
-          'catalyst.orchestrator.port.released': portsReleased,
-        })
-      }
-
-      // Step 4: Commit — apply state + journal.
-      const committed = this.rib.commit(plan, action)
-
-      // Step 5: Notify — propagate to peers, push to envoy/gateway.
-
-      event.set({
-        'catalyst.orchestrator.action.state_changed': true,
-        'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
-        'catalyst.orchestrator.route.total':
-          committed.local.routes.length + committed.internal.routes.length,
-      })
-
-      if (plan.routeChanges.length > 0) {
-        const counts = { added: 0, removed: 0, modified: 0 }
-        for (const c of plan.routeChanges) {
-          if (c.type === 'added') counts.added++
-          else if (c.type === 'removed') counts.removed++
-          else counts.modified++
-        }
-        event.set({
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-        })
-        logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
-          'event.name': 'route.table.changed',
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-          'catalyst.orchestrator.route.trigger': action.action,
+          'catalyst.orchestrator.action.state_changed': true,
+          'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
           'catalyst.orchestrator.route.total':
             committed.local.routes.length + committed.internal.routes.length,
         })
+
+        if (plan.routeChanges.length > 0) {
+          const counts = { added: 0, removed: 0, modified: 0 }
+          for (const c of plan.routeChanges) {
+            if (c.type === 'added') counts.added++
+            else if (c.type === 'removed') counts.removed++
+            else counts.modified++
+          }
+          event.set({
+            'catalyst.orchestrator.route.added': counts.added,
+            'catalyst.orchestrator.route.removed': counts.removed,
+            'catalyst.orchestrator.route.modified': counts.modified,
+            'catalyst.orchestrator.route.trigger': action.action,
+          })
+        }
+
+        await this.handlePostCommit(action, plan, committed)
+
+        return { success: true, state: committed, action }
+      } catch (error) {
+        event.setError(error)
+        throw error
+      } finally {
+        event.emit()
       }
-
-      await this.handlePostCommit(action, plan, committed, event)
-
-      event.emit()
-      return { success: true, state: committed, action }
     })
-  }
-
-  // ---------------------------------------------------------------------------
-  // Inbound route policy (filters received routes before planning)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Apply inbound route policy to InternalProtocolUpdate actions.
-   * Returns the action with filtered routes, or undefined if all routes
-   * were rejected (caller should short-circuit with no state change).
-   * Non-update actions pass through unchanged.
-   */
-  private applyInboundPolicy(action: Action): Action | undefined {
-    if (action.action !== Actions.InternalProtocolUpdate) return action
-    if (this.routePolicy === undefined) return action
-
-    const peer = this.rib.state.internal.peers.find((p) => p.name === action.data.peerInfo.name)
-    if (peer === undefined) return action
-
-    const updates = action.data.update.updates
-    const routes = updates.map((u) => u.route)
-    const allowed = this.routePolicy.canReceive(peer, routes)
-    const allowedNames = new Set(allowed.map((r) => r.name))
-
-    const filteredUpdates = updates.filter((u) => allowedNames.has(u.route.name))
-    if (filteredUpdates.length === 0) return undefined
-
-    return {
-      ...action,
-      data: {
-        ...action.data,
-        update: { updates: filteredUpdates },
-      },
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -254,28 +132,15 @@ export class OrchestratorBus {
   private async handlePostCommit(
     action: Action,
     plan: PlanResult,
-    committedState: RouteTable,
-    event: WideEvent
+    committedState: RouteTable
   ): Promise<void> {
     // Use committedState snapshot — NEVER this.rib.state
     await this.handleBGPNotify(action, plan, committedState)
-    // Sync GraphQL route list to gateway after route changes propagate.
-    if (plan.routeChanges.length > 0) {
-      await this.handleGraphqlGatewaySync(committedState)
-    }
-    // Execute port operations and push config to envoy.
-    if (plan.routeChanges.length > 0 || plan.portOps.length > 0) {
-      await this.handleEnvoySync(plan, committedState)
-    }
     // After BGP propagation, handle keepalive sends for Tick actions.
     // (The no-state-change Tick path in dispatch() handles the common case;
     // this handles Ticks that also caused peer expiry.)
     if (action.action === Actions.Tick) {
-      const ka = await this.handleKeepalives(committedState, action.data.now)
-      event.set({
-        'catalyst.orchestrator.keepalive.needed': ka.needed,
-        'catalyst.orchestrator.keepalive.sent': ka.sent,
-      })
+      await this.handleKeepalives(committedState, action.data.now)
     }
   }
 
@@ -297,28 +162,17 @@ export class OrchestratorBus {
           'catalyst.orchestrator.peer.name': peerName,
           'catalyst.orchestrator.sync.type': 'full',
         })
-        logger.info('Peer {peerName} connected, syncing full route table', {
-          'event.name': 'peer.sync.started',
-          'catalyst.orchestrator.peer.name': peerName,
-        })
-        await this.syncRoutesToPeer(peer, state)
-        event.emit()
-      }
-      return
-    }
-
-    // Close notification: when a peer is deleted, notify it before withdrawals.
-    // Uses prevState because the peer is already removed from committed state.
-    if (action.action === Actions.LocalPeerDelete) {
-      const deletedPeer = plan.prevState.internal.peers.find((p) => p.name === action.data.name)
-      if (deletedPeer !== undefined) {
+        event.log.info('Peer {peerName} connected, syncing full route table', { peerName })
         try {
-          await this.transport.closePeer(deletedPeer, CloseCodes.NORMAL, 'Peer removed')
-        } catch {
-          // Fire-and-forget: close failure must not block withdrawal propagation.
+          const result = await this.syncRoutesToPeer(peer, state)
+          event.set('catalyst.orchestrator.sync.route_count', result.routeCount)
+        } catch (error) {
+          event.setError(error)
+        } finally {
+          event.emit()
         }
       }
-      // Fall through to route-change fan-out below
+      return
     }
 
     // Route changes: propagate deltas to every connected peer.
@@ -330,271 +184,85 @@ export class OrchestratorBus {
       'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
     })
 
-    const promises = connectedPeers.map(async (peer) => {
-      try {
+    const results = await Promise.allSettled(
+      connectedPeers.map(async (peer) => {
         const updates = this.buildUpdatesForPeer(peer, plan, state)
         if (updates.length > 0) {
           await this.transport.sendUpdate(peer, { updates })
         }
-      } catch (error) {
-        logger.warn('Failed to send route updates to {peerName}', {
-          'event.name': 'peer.sync.failed',
-          'catalyst.orchestrator.peer.name': peer.name,
-          error,
-        })
-        // Fire-and-forget: one peer failure must not affect others.
-      }
-    })
-
-    await Promise.allSettled(promises)
-  }
-
-  // ---------------------------------------------------------------------------
-  // GraphQL gateway sync (pushes graphql route list to gateway)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Sync GraphQL routes to the gateway whenever routes change.
-   * Filters all routes (local + internal) by protocol http:graphql or http:gql,
-   * then pushes the full service list via the gateway client.
-   * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
-   */
-  private async handleGraphqlGatewaySync(state: RouteTable): Promise<void> {
-    if (this.gatewayClient === undefined) return
-
-    const graphqlRoutes = [...state.local.routes, ...state.internal.routes].filter(
-      (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
+      })
     )
 
-    if (graphqlRoutes.length === 0) return
-
-    const event = new WideEvent('orchestrator.gateway_sync', logger)
-    event.set('catalyst.orchestrator.gateway.route_count', graphqlRoutes.length)
-    try {
-      await this.gatewayClient.updateConfig({
-        services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
+    const failures = results
+      .map((r, i) =>
+        r.status === 'rejected'
+          ? {
+              name: connectedPeers[i].name,
+              error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+            }
+          : null
+      )
+      .filter(Boolean) as { name: string; error: string }[]
+    if (failures.length > 0) {
+      event.set({
+        'catalyst.orchestrator.peer.failed_count': failures.length,
+        'catalyst.orchestrator.peer.failed_peers': failures.map((f) => f.name),
+        'catalyst.orchestrator.peer.failed_errors': failures.map((f) => `${f.name}: ${f.error}`),
+        'catalyst.event.outcome':
+          failures.length === connectedPeers.length ? 'failure' : 'partial_failure',
       })
-      event.emit()
-    } catch (err) {
-      event.setError(err)
-      event.emit()
-      // Fire-and-forget: gateway sync failure must not disrupt the bus.
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Port allocation planning (runs between plan and commit)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Enrich a RIB plan with port allocations. Returns a new PlanResult whose
-   * newState has envoyPort stamped on every route and whose portOps contain
-   * the full audit trail of allocations and releases.
-   *
-   * Phases (each clearly separated for traceability):
-   *   Phase 1 — Release: free ports for removed routes and RIB release ops
-   *   Phase 2 — Allocate local: assign ingress ports to local routes
-   *   Phase 3 — Allocate egress: assign egress ports to internal routes
-   *   Phase 4 — Stamp: build new state with ports applied
-   *
-   * No-ops gracefully when no port allocator is configured.
-   */
-  private planPortAllocations(plan: PlanResult): PlanResult {
-    if (this.portAllocator === undefined) return plan
-
-    const portOps: PortOperation[] = []
-
-    // Phase 1 — Release: free ports for removed routes.
-    for (const change of plan.routeChanges) {
-      if (change.type !== 'removed') continue
-      const route = change.route
-
-      // Release local route port.
-      const localPort = this.portAllocator.getPort(route.name)
-      if (localPort !== undefined) {
-        this.portAllocator.release(route.name)
-        portOps.push({ type: 'release', routeKey: route.name, port: localPort })
-      }
-
-      // Release egress port if it was an internal route.
-      if (BusGuards.isInternalRoute(route)) {
-        const egressKey = `egress_${route.name}_via_${route.peer.name}`
-        const egressPort = this.portAllocator.getPort(egressKey)
-        if (egressPort !== undefined) {
-          this.portAllocator.release(egressKey)
-          portOps.push({ type: 'release', routeKey: egressKey, port: egressPort })
-        }
-      }
     }
 
-    // Also honour RIB-generated release ops (routes with envoyPort already stamped).
-    for (const op of plan.portOps) {
-      if (op.type === 'release') {
-        this.portAllocator.release(op.routeKey)
-        portOps.push(op)
-      }
-    }
-
-    // Phase 2 — Allocate local: assign ingress ports to local routes.
-    //          Builds a lookup map for Phase 5 (routeChange stamping).
-    const localPortMap = new Map<string, number>()
-    const localRoutes = plan.newState.local.routes.map((route) => {
-      if (route.envoyPort) return route
-      const result = this.portAllocator!.allocate(route.name)
-      if (!result.success) return route
-      portOps.push({ type: 'allocate', routeKey: route.name, port: result.port })
-      localPortMap.set(route.name, result.port)
-      return { ...route, envoyPort: result.port }
-    })
-
-    // Phase 3 — Allocate egress: assign egress ports to internal routes.
-    const egressPortMap = new Map<string, number>()
-    const internalRoutes = plan.newState.internal.routes.map((route) => {
-      const egressKey = `egress_${route.name}_via_${route.peer.name}`
-      const result = this.portAllocator!.allocate(egressKey)
-      if (!result.success) return route
-      if (route.envoyPort !== result.port) {
-        portOps.push({ type: 'allocate', routeKey: egressKey, port: result.port })
-      }
-      egressPortMap.set(egressKey, result.port)
-      return { ...route, envoyPort: result.port }
-    })
-
-    // Phase 4 — Stamp: build enriched state with ports applied.
-    const newState: RouteTable = {
-      local: { routes: localRoutes },
-      internal: {
-        ...plan.newState.internal,
-        routes: internalRoutes,
-      },
-    }
-
-    // Phase 5 — Sync routeChanges: stamp ports on added/updated route changes
-    //           so downstream consumers (buildUpdatesForPeer) see correct ports.
-    const routeChanges = plan.routeChanges.map((change) => {
-      if (change.type === 'removed') return change
-      const route = change.route
-      if (BusGuards.isInternalRoute(route)) {
-        const egressKey = `egress_${route.name}_via_${route.peer.name}`
-        const port = egressPortMap.get(egressKey)
-        if (port !== undefined && route.envoyPort !== port) {
-          return { ...change, route: { ...route, envoyPort: port } }
-        }
-      } else {
-        const port = localPortMap.get(route.name)
-        if (port !== undefined && !route.envoyPort) {
-          return { ...change, route: { ...route, envoyPort: port } }
-        }
-      }
-      return change
-    })
-
-    return { ...plan, newState, portOps, routeChanges }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Envoy config sync (pushes committed state to envoy service)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Push the full route config to the envoy service.
-   * Port allocation is already done in planPortAllocations — this method
-   * only pushes the committed (port-stamped) state.
-   *
-   * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
-   */
-  private async handleEnvoySync(_plan: PlanResult, state: RouteTable): Promise<void> {
-    if (this.envoyClient === undefined) return
-
-    const event = new WideEvent('orchestrator.envoy_sync', logger)
-    event.set({
-      'catalyst.orchestrator.envoy.local_count': state.local.routes.length,
-      'catalyst.orchestrator.envoy.internal_count': state.internal.routes.length,
-    })
-    try {
-      await this.envoyClient.updateRoutes({
-        local: state.local.routes,
-        internal: state.internal.routes,
-        portAllocations: this.portAllocator
-          ? Object.fromEntries(this.portAllocator.getAllocations())
-          : undefined,
-      })
-      event.emit()
-    } catch (err) {
-      event.setError(err)
-      event.emit()
-      // Fire-and-forget: envoy sync failure must not disrupt the bus.
-    }
+    event.emit()
   }
 
   // ---------------------------------------------------------------------------
   // Initial full-table sync (sent once when a peer connects)
   // ---------------------------------------------------------------------------
 
-  private async syncRoutesToPeer(peer: PeerRecord, state: RouteTable): Promise<void> {
+  /**
+   * Send all known routes to a newly connected peer.
+   * Failures are non-fatal — the peer can request a full refresh on reconnect.
+   */
+  private async syncRoutesToPeer(
+    peer: PeerRecord,
+    state: RouteTable
+  ): Promise<{ routeCount: number }> {
     const updates: UpdateMessage['updates'] = []
 
-    const localEnvoyAddress = this.config.node.envoyAddress
-
-    // Advertise all local routes to the new peer.
     for (const route of state.local.routes) {
       updates.push({
         action: 'add',
-        route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
+        route,
         nodePath: [this.config.node.name],
         originNode: this.config.node.name,
       })
     }
 
-    // Advertise internal routes the peer doesn't already know.
     for (const route of state.internal.routes) {
-      // Exclude stale routes — they may no longer be valid.
       if (route.isStale === true) continue
-      // Don't reflect a peer's own routes back at them.
       if (route.peer.name === peer.name) continue
-      // Loop guard: don't advertise paths that already pass through this peer.
       if (route.nodePath.includes(peer.name)) continue
 
-      // Apply route policy if configured.
       if (this.routePolicy !== undefined) {
         const allowed = this.routePolicy.canSend(peer, [route])
         if (allowed.length === 0) continue
       }
 
-      // Multi-hop: envoyPort is already stamped by planPortAllocations.
-      // Rewrite envoyAddress to this node's envoy so downstream peers route through us.
       updates.push({
         action: 'add',
-        route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
+        route: BusTransforms.toDataChannel(route),
         nodePath: [this.config.node.name, ...route.nodePath],
         originNode: route.originNode,
       })
     }
 
     if (updates.length === 0) {
-      logger.info('No routes to sync to peer {peerName}', {
-        'event.name': 'route.sync.empty',
-        'catalyst.orchestrator.peer.name': peer.name,
-      })
-      return
+      return { routeCount: 0 }
     }
 
-    try {
-      await this.transport.sendUpdate(peer, { updates })
-      logger.info('Synced {count} route(s) to peer {peerName}', {
-        'event.name': 'route.sync.completed',
-        'catalyst.orchestrator.peer.name': peer.name,
-        'catalyst.orchestrator.route.count': updates.length,
-      })
-    } catch (error) {
-      logger.warn('Initial route sync to {peerName} failed', {
-        'event.name': 'peer.sync.initial_failed',
-        'catalyst.orchestrator.peer.name': peer.name,
-        error,
-      })
-      // Fire-and-forget: failed initial sync is not fatal; the peer can
-      // request a refresh on reconnect.
-    }
+    await this.transport.sendUpdate(peer, { updates })
+    return { routeCount: updates.length }
   }
 
   // ---------------------------------------------------------------------------
@@ -606,33 +274,27 @@ export class OrchestratorBus {
    * A peer needs a keepalive if: connected, holdTime > 0, and the time since
    * we last sent (tracked ephemerally via lastKeepaliveSent) exceeds holdTime / 3.
    */
-  private async handleKeepalives(
-    state: RouteTable,
-    now: number
-  ): Promise<{ needed: number; sent: number }> {
-    let sent = 0
-    const peersNeeding = state.internal.peers.filter((p) => {
-      if (p.connectionStatus !== 'connected' || p.holdTime <= 0) return false
-      const lastSent = this.lastKeepaliveSent.get(p.name) ?? 0
-      return now - lastSent > p.holdTime / 3
-    })
-
-    const promises = peersNeeding.map(async (peer) => {
-      try {
-        await this.transport.sendKeepalive(peer)
-        this.lastKeepaliveSent.set(peer.name, now)
-        sent++
-        logger.debug('Keepalive sent to {peerName}', {
-          'event.name': 'peer.keepalive.sent',
-          'catalyst.orchestrator.peer.name': peer.name,
-        })
-      } catch {
-        // Fire-and-forget: keepalive failure is not fatal.
-      }
-    })
+  private async handleKeepalives(state: RouteTable, now: number): Promise<void> {
+    const promises = state.internal.peers
+      .filter((p) => {
+        if (p.connectionStatus !== 'connected' || p.holdTime <= 0) return false
+        const lastSent = this.lastKeepaliveSent.get(p.name) ?? 0
+        return now - lastSent > p.holdTime / 3
+      })
+      .map(async (peer) => {
+        try {
+          await this.transport.sendKeepalive(peer)
+          this.lastKeepaliveSent.set(peer.name, now)
+          logger.debug('Keepalive sent to {peerName}', {
+            'event.name': 'peer.keepalive.sent',
+            'catalyst.orchestrator.peer.name': peer.name,
+          })
+        } catch {
+          // Fire-and-forget: keepalive failure is not fatal.
+        }
+      })
 
     await Promise.allSettled(promises)
-    return { needed: peersNeeding.length, sent }
   }
 
   // ---------------------------------------------------------------------------
@@ -645,7 +307,6 @@ export class OrchestratorBus {
     _state: RouteTable
   ): UpdateMessage['updates'] {
     const updates: UpdateMessage['updates'] = []
-    const localEnvoyAddress = this.config.node.envoyAddress
 
     for (const change of plan.routeChanges) {
       const route = change.route
@@ -665,11 +326,9 @@ export class OrchestratorBus {
           if (allowed.length === 0) continue
         }
 
-        // Multi-hop: envoyPort is already stamped by planPortAllocations.
-        // Rewrite envoyAddress to this node's envoy so downstream peers route through us.
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
+          route: BusTransforms.toDataChannel(route),
           nodePath: [this.config.node.name, ...route.nodePath],
           originNode: route.originNode,
         })
@@ -677,7 +336,7 @@ export class OrchestratorBus {
         // Local route change — no loop-detection needed.
         updates.push({
           action: change.type === 'removed' ? 'remove' : 'add',
-          route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
+          route: BusTransforms.toDataChannel(route),
           nodePath: [this.config.node.name],
           originNode: this.config.node.name,
         })
@@ -702,23 +361,8 @@ export const BusGuards = {
 
 /** Data transforms for route serialization. */
 export const BusTransforms = {
-  /**
-   * Strips InternalRoute-only fields, returning only the DataChannelDefinition shape.
-   * envoyPort comes from the route (stamped by planPortAllocations).
-   * envoyAddress can be overridden to this node's address for multi-hop forwarding.
-   */
-  toDataChannel(
-    route: DataChannelDefinition | InternalRoute,
-    overrides?: { envoyAddress?: string }
-  ): DataChannelDefinition {
-    return {
-      name: route.name,
-      protocol: route.protocol,
-      endpoint: route.endpoint,
-      region: route.region,
-      tags: route.tags,
-      envoyPort: route.envoyPort,
-      envoyAddress: overrides?.envoyAddress ?? route.envoyAddress,
-    }
+  /** Strips InternalRoute-only fields, returning only the DataChannelDefinition shape. */
+  toDataChannel(route: DataChannelDefinition | InternalRoute): DataChannelDefinition {
+    return new InternalRouteView(route as InternalRoute).toDataChannel()
   },
 }
