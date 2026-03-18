@@ -34,6 +34,7 @@ v2 defines a `ReconnectManager` with `scheduleReconnect(peer)`, and the `WebSock
 There is no code path in `OrchestratorBus` or `OrchestratorServiceV2` that calls `transport.openPeer()` or `reconnectManager.scheduleReconnect()` after a `LocalPeerCreate` is committed.
 
 **Code references:**
+
 - `apps/orchestrator/src/v2/bus.ts` — no `LocalPeerCreate` case in `handleBGPNotify` / `handlePostCommit`
 - `apps/orchestrator/src/v2/service.ts:105–113` — wraps dispatch to recalculate tick on peer events, but never calls `reconnectManager.scheduleReconnect()`
 
@@ -344,6 +345,7 @@ toDataChannel(route): DataChannelDefinition {
 Neither `syncRoutesToPeer()` nor `buildUpdatesForPeer()` rewrites `envoyPort` before sending.
 
 **Code references:**
+
 - `apps/orchestrator/src/v2/bus.ts:293–337` (`syncRoutesToPeer`)
 - `apps/orchestrator/src/v2/bus.ts:371–414` (`buildUpdatesForPeer`)
 
@@ -459,6 +461,7 @@ v1 also logs peer connection outcomes, route broadcast counts, gateway sync succ
 ### v2 Status
 
 v2 logs are more focused. `OrchestratorBus.dispatch()` has no per-action info log. Logging exists at:
+
 - Transport open success (`ws-transport.ts:83`)
 - Reconnect attempts (`reconnect.ts`)
 - Token operations (`catalyst-service.ts`)
@@ -511,20 +514,20 @@ This is a v2 feature that is half-implemented: the code works but is inaccessibl
 
 ## Summary Table
 
-| Gap ID | Category | v1 Capability | Severity | Effort | Status in v2 |
-|--------|----------|--------------|----------|--------|-------------|
-| GAP-001 | Connection Management | Auto-dial on LocalPeerCreate | **Critical** | M | Missing — no outbound dial initiated from bus or service |
-| GAP-002 | BGP Protocol | Initial sync on InternalProtocolOpen (inbound) | **Critical** | S | Missing — only Connected path syncs |
-| GAP-003 | Connection Management | Close RPC on LocalPeerDelete | **Critical** | S | Missing — no closePeer called |
-| GAP-004 | Validation | peerToken required; node name format check | **Important** | S | peerToken: not enforced in RIB; node name check: absent |
-| GAP-005 | Validation | Descriptive errors (not found, already exists) | **Important** | S | Generic 'No state change' for all no-op cases |
-| GAP-006 | Auth Integration | Fail-open when no auth configured | **Important** | S | Behavior changed to fail-closed (breaking change) |
-| GAP-007 | Configuration | envoyAddress in envoyConfig + peer records | **Important** | M | Field in config type but absent from v2 routing state |
-| GAP-008 | BGP Protocol | envoyPort rewrite for multi-hop transit | **Important** | M | Not performed — upstream port forwarded as-is |
-| GAP-009 | State Management | external field in RouteTable | Minor | S | Field removed from v2 schema |
-| GAP-010 | Error Handling | Token minting no retry | Minor | — | Not a gap — v2 improved (5 retries with backoff) |
-| GAP-011 | Logging | Per-action dispatch logging + BGP event logs | Minor | S | Reduced verbosity — no dispatch trace, no counts |
-| GAP-012 | Configuration | journalPath not wired to config schema | Minor | S | v2 feature half-implemented; TODO comment in code |
+| Gap ID  | Category              | v1 Capability                                  | Severity      | Effort | Status in v2                                             |
+| ------- | --------------------- | ---------------------------------------------- | ------------- | ------ | -------------------------------------------------------- |
+| GAP-001 | Connection Management | Auto-dial on LocalPeerCreate                   | **Critical**  | M      | Missing — no outbound dial initiated from bus or service |
+| GAP-002 | BGP Protocol          | Initial sync on InternalProtocolOpen (inbound) | **Critical**  | S      | Missing — only Connected path syncs                      |
+| GAP-003 | Connection Management | Close RPC on LocalPeerDelete                   | **Critical**  | S      | Missing — no closePeer called                            |
+| GAP-004 | Validation            | peerToken required; node name format check     | **Important** | S      | peerToken: not enforced in RIB; node name check: absent  |
+| GAP-005 | Validation            | Descriptive errors (not found, already exists) | **Important** | S      | Generic 'No state change' for all no-op cases            |
+| GAP-006 | Auth Integration      | Fail-open when no auth configured              | **Important** | S      | Behavior changed to fail-closed (breaking change)        |
+| GAP-007 | Configuration         | envoyAddress in envoyConfig + peer records     | **Important** | M      | Field in config type but absent from v2 routing state    |
+| GAP-008 | BGP Protocol          | envoyPort rewrite for multi-hop transit        | **Important** | M      | Not performed — upstream port forwarded as-is            |
+| GAP-009 | State Management      | external field in RouteTable                   | Minor         | S      | Field removed from v2 schema                             |
+| GAP-010 | Error Handling        | Token minting no retry                         | Minor         | —      | Not a gap — v2 improved (5 retries with backoff)         |
+| GAP-011 | Logging               | Per-action dispatch logging + BGP event logs   | Minor         | S      | Reduced verbosity — no dispatch trace, no counts         |
+| GAP-012 | Configuration         | journalPath not wired to config schema         | Minor         | S      | v2 feature half-implemented; TODO comment in code        |
 
 ---
 
@@ -537,6 +540,7 @@ Dependencies govern the order. Critical gaps block v2 being a functional replace
 These three gaps must be fixed together. They are all about the iBGP session lifecycle: establishing it (GAP-001), exchanging routes on both sides when it opens (GAP-002), and tearing it down cleanly (GAP-003).
 
 **Order within Phase 1:**
+
 1. **GAP-001** — Wire `LocalPeerCreate` to initiate outbound dial via `ReconnectManager`. This is the entry point for all iBGP session work. Without it, GAP-002 is only half-testable.
 2. **GAP-002** — Add `InternalProtocolOpen` sync path in `bus.ts:handleBGPNotify`. Can be implemented independently but should be verified alongside GAP-001 in an integration test.
 3. **GAP-003** — Add `LocalPeerDelete` → `transport.closePeer()` side effect in the bus. Depends on GAP-001 being tested so a live peer exists to close.

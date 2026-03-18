@@ -8,9 +8,11 @@
 ## 1. Core Architecture
 
 ### 1.1 Main Class: CatalystNodeBus
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:130–1038`
 
 The central orchestrator class that:
+
 - Manages state (RouteTable) for local routes, internal peers, and internal routes
 - Implements the dispatch pipeline for actions
 - Handles side effects (BGP notifications, Envoy sync, GraphQL gateway sync)
@@ -18,6 +20,7 @@ The central orchestrator class that:
 - Validates caller tokens via auth service
 
 **Key fields:**
+
 - `state: RouteTable` — Current route table state (local routes, internal peers/routes)
 - `connectionPool: ConnectionPool` — Pools RPC stubs for peer orchestrators and external services
 - `config: OrchestratorConfig` — Node configuration, auth endpoints, Envoy config
@@ -27,20 +30,24 @@ The central orchestrator class that:
 - `lastNotificationPromise?: Promise<void>` — Tracks pending side effects
 
 ### 1.2 Service Wrapper: OrchestratorService
+
 **Location:** `apps/orchestrator/src/v1/service.ts:42–177`
 
 Extends `CatalystService` abstract base class.
 
 **Lifecycle:**
+
 - Inherits from `CatalystService` (config injection, telemetry, lifecycle hooks)
 - `onInitialize()` → Mints node token, sets up token refresh interval, builds CatalystNodeBus, mounts RPC route
 - `onShutdown()` → Clears token refresh interval
 
 **Service metadata:**
+
 - Name: `'orchestrator'`
 - Version: `'0.0.0'`
 
 **Token refresh mechanism:**
+
 - Refresh threshold: 80% of token lifetime
 - Refresh check interval: every 1 hour
 - Token TTL: 7 days (604,800,000 ms)
@@ -52,6 +59,7 @@ Extends `CatalystService` abstract base class.
 ## 2. State Management
 
 ### 2.1 RouteTable Structure
+
 **Type Definition:** `packages/routing/src/v1/state.ts:25–50`
 
 ```typescript
@@ -72,6 +80,7 @@ type RouteTable = {
 **Components:**
 
 #### 2.1.1 Local Routes
+
 - **Type:** `DataChannelDefinition[]`
 - **Contains:** Routes registered on this node
 - **Fields per route:**
@@ -83,6 +92,7 @@ type RouteTable = {
   - `envoyPort` (optional integer, allocated by port allocator)
 
 #### 2.1.2 Internal Peers
+
 - **Type:** `PeerRecord[]`
 - **Contains:** iBGP peer configurations and connection state
 - **Fields per peer:**
@@ -96,6 +106,7 @@ type RouteTable = {
   - `lastConnected` (optional date)
 
 #### 2.1.3 Internal Routes
+
 - **Type:** `InternalRoute[]` (DataChannelDefinition + peer + nodePath)
 - **Contains:** Routes learned from peer orchestrators
 - **Additional fields:**
@@ -103,9 +114,11 @@ type RouteTable = {
   - `nodePath: string[]` — sequence of node names from origin to this node (for loop detection)
 
 ### 2.2 Dispatch Pipeline
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:234–263`
 
 **Flow:**
+
 1. `dispatch(action)` → Receives action
 2. `handleAction(action, state)` → Applies state transformation
 3. If successful → `state = newState`, then fire-and-forget `handleNotify(action, newState, oldState)`
@@ -121,24 +134,27 @@ type RouteTable = {
 
 ### 3.1 Complete Action List
 
-| Action | Constant | Category | Triggered By |
-|--------|----------|----------|--------------|
-| `local:peer:create` | `LocalPeerCreate` | Local | NetworkClient.addPeer() |
-| `local:peer:update` | `LocalPeerUpdate` | Local | NetworkClient.updatePeer() |
-| `local:peer:delete` | `LocalPeerDelete` | Local | NetworkClient.removePeer() |
-| `local:route:create` | `LocalRouteCreate` | Local | DataChannel.addRoute() |
-| `local:route:delete` | `LocalRouteDelete` | Local | DataChannel.removeRoute() |
-| `internal:protocol:open` | `InternalProtocolOpen` | iBGP | IBGPClient.open() |
-| `internal:protocol:close` | `InternalProtocolClose` | iBGP | IBGPClient.close() |
-| `internal:protocol:connected` | `InternalProtocolConnected` | iBGP | Internal: dispatch after successful connection |
-| `internal:protocol:update` | `InternalProtocolUpdate` | iBGP | IBGPClient.update() |
-| `system:tick` | `Tick` | System | (Not implemented in v1, defined in routing package for future use) |
+| Action                        | Constant                    | Category | Triggered By                                                       |
+| ----------------------------- | --------------------------- | -------- | ------------------------------------------------------------------ |
+| `local:peer:create`           | `LocalPeerCreate`           | Local    | NetworkClient.addPeer()                                            |
+| `local:peer:update`           | `LocalPeerUpdate`           | Local    | NetworkClient.updatePeer()                                         |
+| `local:peer:delete`           | `LocalPeerDelete`           | Local    | NetworkClient.removePeer()                                         |
+| `local:route:create`          | `LocalRouteCreate`          | Local    | DataChannel.addRoute()                                             |
+| `local:route:delete`          | `LocalRouteDelete`          | Local    | DataChannel.removeRoute()                                          |
+| `internal:protocol:open`      | `InternalProtocolOpen`      | iBGP     | IBGPClient.open()                                                  |
+| `internal:protocol:close`     | `InternalProtocolClose`     | iBGP     | IBGPClient.close()                                                 |
+| `internal:protocol:connected` | `InternalProtocolConnected` | iBGP     | Internal: dispatch after successful connection                     |
+| `internal:protocol:update`    | `InternalProtocolUpdate`    | iBGP     | IBGPClient.update()                                                |
+| `system:tick`                 | `Tick`                      | System   | (Not implemented in v1, defined in routing package for future use) |
 
 ### 3.2 Action Handlers in handleAction()
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:266–482`
 
 #### 3.2.1 LocalPeerCreate
+
 **Data:** `PeerInfo` (requires `peerToken`)
+
 - **State change:** Append peer with `connectionStatus: 'initializing'`
 - **Validation:**
   - Check if peer already exists (duplicate check)
@@ -146,50 +162,66 @@ type RouteTable = {
 - **Error cases:** Duplicate peer, missing token
 
 #### 3.2.2 LocalPeerUpdate
+
 **Data:** `PeerInfo`
+
 - **State change:** Find peer by name, update fields (endpoint, domains, peerToken, reset connectionStatus to 'initializing')
 - **Validation:** Check peer exists
 - **Error cases:** Peer not found
 
 #### 3.2.3 LocalPeerDelete
+
 **Data:** `{ name: string }`
+
 - **State change:** Remove peer by name
 - **Validation:** Check peer exists
 - **Error cases:** Peer not found
 
 #### 3.2.4 LocalRouteCreate
+
 **Data:** `DataChannelDefinition`
+
 - **State change:** Append route to local.routes
 - **Validation:** Check route name is unique
 - **Error cases:** Route already exists
 
 #### 3.2.5 LocalRouteDelete
+
 **Data:** `DataChannelDefinition`
+
 - **State change:** Remove route by name from local.routes
 - **Validation:** Check route exists
 - **Error cases:** Route not found
 
 #### 3.2.6 InternalProtocolOpen
+
 **Data:** `{ peerInfo: PeerInfo }`
+
 - **State change:** Mark peer as 'connected' (if not already)
 - **Validation:** Check peer exists in local peer list
 - **Semantics:** Inbound connection request from a peer — this node should sync existing routes back
 - **Error cases:** Peer not in local config
 
 #### 3.2.7 InternalProtocolConnected
+
 **Data:** `{ peerInfo: PeerInfo }`
+
 - **State change:** Mark peer as 'connected'
 - **Semantics:** Connection established (result of LocalPeerCreate side effect)
 - **Idempotent:** No-op if already connected
 
 #### 3.2.8 InternalProtocolClose
+
 **Data:** `{ peerInfo: PeerInfo, code: number, reason?: string }`
+
 - **State change:** Remove peer from internal.peers and filter out internal.routes originating from that peer
 - **Semantics:** Peer connection closed — withdraw all routes learned from this peer
 - **Side effects:** Trigger withdrawal propagation to other connected peers
 
 #### 3.2.9 InternalProtocolUpdate
+
 **Data:** `{ peerInfo: PeerInfo, update: UpdateMessageSchema }`
+
 - **Update message format:**
   ```typescript
   { updates: [
@@ -218,9 +250,11 @@ type RouteTable = {
 Three client getter methods, each requiring a token:
 
 #### 4.1.1 getNetworkClient(token: string)
+
 **Returns:** `{ success: true; client: NetworkClient } | { success: false; error: string }`
 
 **Methods on NetworkClient:**
+
 - `addPeer(peer: PeerInfo) → Promise<{ success: true } | { success: false; error: string }>`
   - Dispatches `LocalPeerCreate` action
   - Token validated with action `'PEER_CREATE'`
@@ -235,9 +269,11 @@ Three client getter methods, each requiring a token:
   - No token validation (read-only)
 
 #### 4.1.2 getDataChannelClient(token: string)
+
 **Returns:** `{ success: true; client: DataChannel } | { success: false; error: string }`
 
 **Methods on DataChannel:**
+
 - `addRoute(route: DataChannelDefinition) → Promise<{ success: true } | { success: false; error: string }>`
   - Dispatches `LocalRouteCreate` action
   - Token validated with action `'ROUTE_CREATE'`
@@ -249,9 +285,11 @@ Three client getter methods, each requiring a token:
   - No token validation (read-only)
 
 #### 4.1.3 getIBGPClient(token: string)
+
 **Returns:** `{ success: true; client: IBGPClient } | { success: false; error: string }`
 
 **Methods on IBGPClient:**
+
 - `open(peer: PeerInfo) → Promise<{ success: true } | { success: false; error: string }>`
   - Dispatches `InternalProtocolOpen` action
   - Token validated with action `'IBGP_CONNECT'`
@@ -267,6 +305,7 @@ Three client getter methods, each requiring a token:
 ## 5. BGP Protocol Implementation
 
 ### 5.1 Initial Sync (InternalProtocolOpen / InternalProtocolConnected)
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:556–661`
 
 When a peer connects (either inbound via `open()` or outbound via side effect):
@@ -281,6 +320,7 @@ When a peer connects (either inbound via `open()` or outbound via side effect):
 **Important detail:** Uses peer's local `peerToken` (from state), not `peerInfo.peerToken` from remote (which is remote auth's token for them).
 
 ### 5.2 Delta Fan-Out (LocalRouteCreate / LocalRouteDelete)
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:688–741`
 
 When local routes are added or removed:
@@ -292,6 +332,7 @@ When local routes are added or removed:
 3. **Error handling:** Log error, continue (fire-and-forget)
 
 ### 5.3 Route Propagation (InternalProtocolUpdate)
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:743–802`
 
 When receiving an update from a peer:
@@ -306,11 +347,13 @@ When receiving an update from a peer:
    - Call peer's `IBGPClient.update()`
 
 **Port rewriting for multi-hop:**
+
 - For add-type updates: allocate local egress port
 - Key: `egress_${route.name}_via_${sourcePeerName}`
 - Remote port preserved; local port used as listener
 
 ### 5.4 Withdrawal Propagation (LocalPeerDelete / InternalProtocolClose)
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:907–938`
 
 When a peer is removed or closes:
@@ -321,9 +364,11 @@ When a peer is removed or closes:
 3. **Error handling:** Log, continue
 
 ### 5.5 Loop Detection
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:445–449`
 
 In `handleAction()` for `InternalProtocolUpdate`:
+
 - Check `nodePath.includes(this.config.node.name)`
 - If true: log debug message, skip update (silently drop)
 
@@ -332,32 +377,38 @@ In `handleAction()` for `InternalProtocolUpdate`:
 ## 6. Envoy Integration
 
 ### 6.1 Port Allocation
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:811–895`
 
 **Trigger:** Any route-affecting action (Create/Delete/Update/Close/Open/Connected)
 
 **Local routes:**
+
 - On first allocation: call `portAllocator.allocate(route.name)`
 - On deletion: call `portAllocator.release(route.name)`
 - Update `route.envoyPort` in state
 
 **Internal routes (multi-hop egress):**
+
 - On allocation: `portAllocator.allocate(egress_${name}_via_${peerName})`
 - On peer close: `portAllocator.release(egress_${name}_via_${peerName})`
 - If no envoyPort from upstream: set to allocated port; else preserve upstream port
 
 **PortAllocator interface:**
+
 - `allocate(name): { success, port } | { success: false, error }`
 - `release(name): void`
 - `getPort(name): number | undefined`
 - `getAllocations(): ReadonlyMap<string, number>`
 
 ### 6.2 Envoy Configuration Sync
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:879–895`
 
 **Triggered:** After handleNotify (async, fire-and-forget)
 
 **Payload sent to Envoy service:**
+
 ```typescript
 {
   local: this.state.local.routes,
@@ -377,20 +428,21 @@ In `handleAction()` for `InternalProtocolUpdate`:
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:485–521`
 
 ### 7.1 Trigger and Filter
+
 - Triggered: After any action (via `handleNotify`)
 - Filter routes: By protocol `'http:graphql'` OR `'http:gql'`
 - Include: Both local and internal routes
 
 ### 7.2 Payload
+
 ```typescript
 {
-  services: [
-    { name: route.name, url: route.endpoint! }
-  ]
+  services: [{ name: route.name, url: route.endpoint! }]
 }
 ```
 
 ### 7.3 RPC Call
+
 - Endpoint: `config.gqlGatewayConfig.endpoint`
 - Method: `updateConfig(config)`
 - Error handling: Log error, don't retry
@@ -400,9 +452,11 @@ In `handleAction()` for `InternalProtocolUpdate`:
 ## 8. Authentication & Token Validation
 
 ### 8.1 Auth Service Integration
+
 **Location:** `apps/orchestrator/src/v1/service.ts:111–176`
 
 **Auth service RPC interfaces:**
+
 ```typescript
 interface AuthServiceApi {
   tokens(token: string): Promise<TokensApi | { error: string }>
@@ -416,9 +470,11 @@ interface TokensApi {
 ```
 
 ### 8.2 Node Token Minting
+
 **Location:** `apps/orchestrator/src/v1/service.ts:111–153`
 
 On service initialization:
+
 1. If no auth configured: skip (return)
 2. Connect to auth service via WebSocket RPC
 3. Call `tokensApi.create()`
@@ -442,6 +498,7 @@ On service initialization:
 6. Error handling: Log and throw (service startup fails)
 
 ### 8.3 Token Refresh
+
 **Location:** `apps/orchestrator/src/v1/service.ts:155–176`
 
 **Interval:** Every 1 hour (REFRESH_CHECK_INTERVAL)
@@ -452,11 +509,13 @@ On service initialization:
 - Error handling: Log error, continue (don't throw)
 
 ### 8.4 Caller Token Validation
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:192–232`
 
 **Called by:** `getNetworkClient()`, `getDataChannelClient()`, `getIBGPClient()` before returning client
 
 **Process:**
+
 1. If no auth client configured: return `{ valid: true }` (allow, for testing)
 2. Call `authClient.permissions(callerToken)`
 3. If error: return `{ valid: false, error }`
@@ -471,15 +530,18 @@ On service initialization:
 ## 9. Connection Pool
 
 ### 9.1 ConnectionPool Class
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:77–101`
 
 **Purpose:** Cache RPC stubs to peer orchestrators and external services (Envoy, Gateway)
 
 **Fields:**
+
 - `stubs: Map<string, RpcStub<PublicApi>>` — Cache by endpoint
 - `type: 'ws' | 'http'` — Protocol (default: 'http')
 
 **Methods:**
+
 - `get(endpoint: string | undefined): RpcStub<PublicApi> | undefined`
   - Returns cached stub if exists
   - Creates and caches new stub if not
@@ -488,6 +550,7 @@ On service initialization:
 **Lifetime:** Stubs held until explicitly cleared (no eviction)
 
 ### 9.2 RPC Session Factories
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:69–75`
 
 - `getHttpPeerSession(endpoint)` → `newHttpBatchRpcSession<API>(endpoint)`
@@ -506,16 +569,20 @@ On service initialization:
 ```typescript
 z.object({
   node: NodeConfigSchema.extend({
-    endpoint: z.string() // REQUIRED — orchestrator's own RPC endpoint
+    endpoint: z.string(), // REQUIRED — orchestrator's own RPC endpoint
   }),
-  gqlGatewayConfig: z.object({
-    endpoint: z.string()
-  }).optional(),
-  envoyConfig: z.object({
-    endpoint: z.string(),
-    envoyAddress: z.string().optional(),
-    portRange: z.array(PortEntrySchema).min(1) // At least one port
-  }).optional()
+  gqlGatewayConfig: z
+    .object({
+      endpoint: z.string(),
+    })
+    .optional(),
+  envoyConfig: z
+    .object({
+      endpoint: z.string(),
+      envoyAddress: z.string().optional(),
+      portRange: z.array(PortEntrySchema).min(1), // At least one port
+    })
+    .optional(),
 })
 ```
 
@@ -528,7 +595,7 @@ z.object({
   endpoint: z.string().optional(),
   labels: z.record(z.string(), z.string()).optional(),
   peerToken: z.string().optional(),
-  envoyAddress: z.string().optional()
+  envoyAddress: z.string().optional(),
 })
 ```
 
@@ -536,8 +603,8 @@ z.object({
 
 ```typescript
 z.union([
-  z.number().int().min(1).max(65535),  // Single port
-  z.tuple([port, port])                // Range [start, end]
+  z.number().int().min(1).max(65535), // Single port
+  z.tuple([port, port]), // Range [start, end]
 ])
 ```
 
@@ -546,11 +613,12 @@ z.union([
 ```typescript
 z.object({
   endpoint: z.string(),
-  systemToken: z.string()
+  systemToken: z.string(),
 }).optional()
 ```
 
 **Loaded from environment variables:**
+
 - `CATALYST_NODE_ID` (required)
 - `CATALYST_PEERING_ENDPOINT` (required for orchestrator)
 - `CATALYST_DOMAINS` (comma-separated, optional)
@@ -570,6 +638,7 @@ z.object({
 **Logger instance:** `getLogger(['catalyst', 'orchestrator'])`
 
 **Events logged:**
+
 - **Info level:**
   - Action dispatch: `Dispatching action: ${action.action}`
   - Peer connection attempts/success/close
@@ -584,6 +653,7 @@ z.object({
   - Critical issues: missing peerToken
 
 **Telemetry integration:**
+
 - Service telemetry via `OrchestratorService.telemetry`
 - Token refresh logging
 - Service lifecycle logging (initialize, shutdown)
@@ -593,10 +663,12 @@ z.object({
 ## 12. Error Handling Strategy
 
 ### 12.1 Dispatch Pipeline Errors
+
 - Validation errors (missing peer, duplicate route, etc.) → Return `{ success: false, error: string }`
 - Caller error → HTTP error response (via RPC framework)
 
 ### 12.2 Side Effect Errors (handleNotify)
+
 - BGP notifications: Log error, continue (fire-and-forget)
 - Envoy sync: Log error, continue (fire-and-forget)
 - Gateway sync: Log error, continue (fire-and-forget)
@@ -604,15 +676,18 @@ z.object({
 - **No retry logic:** Errors are one-shot
 
 ### 12.3 Connection Errors
+
 - Failed connection to peer: Log, leave peer in 'initializing' state
 - Failed RPC call: Log, continue (fire-and-forget)
 
 ### 12.4 Auth Errors
+
 - Token validation failure: Return `{ success: false, error }`
 - No auth configured: Allow (development mode)
 - Timeout/connection error: Return `{ success: false, error }`
 
 ### 12.5 Token Refresh Errors
+
 - Refresh failure: Log, continue using existing token
 - Service startup token minting: Throw, fail service initialization
 
@@ -621,18 +696,21 @@ z.object({
 ## 13. Validation Rules
 
 ### 13.1 Node Configuration
+
 **Location:** `apps/orchestrator/src/v1/orchestrator.ts:173–184`
 
 - Node name must end with `.somebiz.local.io`
 - If domains are configured, node name must match at least one domain as suffix
 
 ### 13.2 Route Names
+
 **Location:** `packages/routing/src/v1/datachannel.ts:13–17`
 
 - Length: 1–253 characters
 - Pattern: `/^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/i` (alphanumeric, dots, underscores, hyphens; no leading/trailing)
 
 ### 13.3 Port Range
+
 - Integers 1–65535
 - Ranges specified as [start, end] tuples (inclusive)
 - At least one port must be available
@@ -646,10 +724,11 @@ z.object({
 **Route:** `POST /rpc`
 
 **Handler:**
+
 ```typescript
 this.handler.all('/rpc', (c) =>
   newRpcResponse(c, this._bus.publicApi(), {
-    upgradeWebSocket: getUpgradeWebSocket(c)
+    upgradeWebSocket: getUpgradeWebSocket(c),
   })
 )
 ```
@@ -663,16 +742,19 @@ this.handler.all('/rpc', (c) =>
 ## 15. State Immutability & Consistency
 
 ### 15.1 State Updates
+
 - Dispatch always creates new state object (shallow copy with object spreads)
 - No in-place mutations after committing state
 - Example: `state = { ...state, internal: { ...state.internal, peers: [...] } }`
 
 ### 15.2 Concurrency
+
 - Single-threaded (Node.js event loop)
 - Concurrent dispatch calls would queue via JavaScript runtime
 - No explicit locking
 
 ### 15.3 Side Effects Ordering
+
 1. State committed first
 2. Then `handleNotify()` async operations start (fire-and-forget)
 3. Caller returns immediately (doesn't wait for notifications)
@@ -682,22 +764,26 @@ this.handler.all('/rpc', (c) =>
 ## 16. Known Limitations & Assumptions
 
 ### 16.1 Scalability
+
 - All state in memory (single node)
 - No clustering/replication
 - Action log not implemented in v1
 - No state persistence across restarts
 
 ### 16.2 Performance
+
 - Linear search for peer lookups (small number assumed)
 - Full route table sent to peer on every connect (no delta)
 - No batching of notifications
 
 ### 16.3 Security
+
 - `peerToken` field exposed in route metadata (filtered from public API but present in internal routes)
 - No rate limiting on RPC endpoints
 - Node token expiry only checked periodically (once per hour)
 
 ### 16.4 Reliability
+
 - No retries on failed peer sync
 - No heartbeat/keepalive between peers (besides new connections)
 - Port allocations lost on restart (no persistence)
@@ -707,6 +793,7 @@ this.handler.all('/rpc', (c) =>
 ## 17. External Dependencies
 
 ### 17.1 Packages
+
 - `@catalyst/routing/v1` — Action types, state schemas, message formats
 - `@catalyst/config` — NodeConfigSchema, PortEntry, config loading
 - `@catalyst/telemetry` — Logger, metrics, tracing
@@ -718,6 +805,7 @@ this.handler.all('/rpc', (c) =>
 - `zod` — Schema validation
 
 ### 17.2 RPC Targets
+
 - Auth service (minting tokens, validating permissions)
 - Peer orchestrators (connecting, syncing routes)
 - Envoy service (updating routes)
@@ -730,15 +818,18 @@ this.handler.all('/rpc', (c) =>
 **Location:** `apps/orchestrator/src/v1/index.ts`
 
 **Classes:**
+
 - `CatalystNodeBus` — Core orchestrator
 - `ConnectionPool` — RPC stub cache
 - `OrchestratorService` — Service wrapper
 
 **Functions:**
+
 - `getHttpPeerSession(endpoint)` — Create HTTP RPC session
 - `getWebSocketPeerSession(endpoint)` — Create WebSocket RPC session
 
 **Types:**
+
 - `PublicApi` — RPC API interface
 - `NetworkClient` — Peer management client
 - `DataChannel` — Route management client
@@ -752,28 +843,28 @@ this.handler.all('/rpc', (c) =>
 
 ## 19. Capability Matrix
 
-| Capability | Implemented | Status |
-|------------|-------------|--------|
-| Peer management (CRUD) | ✅ Yes | Full |
-| Local route management (CRUD) | ✅ Yes | Full |
-| iBGP initial sync | ✅ Yes | Full |
-| iBGP delta fan-out | ✅ Yes | Full |
-| Route propagation | ✅ Yes | Full |
-| Loop detection | ✅ Yes | Full |
-| Split-horizon filtering | ✅ Yes | Full |
-| Multi-hop port rewriting | ✅ Yes | Full |
-| Envoy integration | ✅ Yes | Full |
-| GraphQL gateway sync | ✅ Yes | Full |
-| Auth integration | ✅ Yes | Full |
-| Token minting | ✅ Yes | Full |
-| Token refresh | ✅ Yes | Full |
-| Caller validation | ✅ Yes | Full |
-| RPC API | ✅ Yes | Full |
-| Telemetry | ✅ Yes | Basic (logging) |
-| Persistence | ❌ No | N/A |
-| Keepalive/hold timers | ❌ No | N/A |
-| State replication | ❌ No | N/A |
-| Graceful shutdown | ✅ Yes | Partial |
+| Capability                    | Implemented | Status          |
+| ----------------------------- | ----------- | --------------- |
+| Peer management (CRUD)        | ✅ Yes      | Full            |
+| Local route management (CRUD) | ✅ Yes      | Full            |
+| iBGP initial sync             | ✅ Yes      | Full            |
+| iBGP delta fan-out            | ✅ Yes      | Full            |
+| Route propagation             | ✅ Yes      | Full            |
+| Loop detection                | ✅ Yes      | Full            |
+| Split-horizon filtering       | ✅ Yes      | Full            |
+| Multi-hop port rewriting      | ✅ Yes      | Full            |
+| Envoy integration             | ✅ Yes      | Full            |
+| GraphQL gateway sync          | ✅ Yes      | Full            |
+| Auth integration              | ✅ Yes      | Full            |
+| Token minting                 | ✅ Yes      | Full            |
+| Token refresh                 | ✅ Yes      | Full            |
+| Caller validation             | ✅ Yes      | Full            |
+| RPC API                       | ✅ Yes      | Full            |
+| Telemetry                     | ✅ Yes      | Basic (logging) |
+| Persistence                   | ❌ No       | N/A             |
+| Keepalive/hold timers         | ❌ No       | N/A             |
+| State replication             | ❌ No       | N/A             |
+| Graceful shutdown             | ✅ Yes      | Partial         |
 
 ---
 
