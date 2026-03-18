@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { MAX_TAGS_PER_CHANNEL, MAX_ENDPOINT_LENGTH } from './limits.js'
+
+export { MAX_TAGS_PER_CHANNEL, MAX_ENDPOINT_LENGTH }
 
 export const DataChannelProtocolEnum = z.enum([
   'http',
@@ -8,11 +11,6 @@ export const DataChannelProtocolEnum = z.enum([
   'tcp',
 ] as const)
 export type DataChannelProtocol = z.infer<typeof DataChannelProtocolEnum>
-
-/** Maximum number of tags on a data channel definition. */
-export const MAX_TAGS_PER_CHANNEL = 32
-/** Maximum length of an endpoint URL string. */
-export const MAX_ENDPOINT_LENGTH = 2048
 
 export const DataChannelDefinitionSchema = z.object({
   name: z
