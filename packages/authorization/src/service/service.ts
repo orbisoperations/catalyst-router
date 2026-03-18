@@ -78,10 +78,9 @@ export class AuthService extends CatalystService {
       expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
     })
 
-    logger.info('System Admin Token minted: {tokenPreview}', {
-      'event.name': 'auth.system_token.minted',
-      tokenPreview: this._systemToken.slice(0, 12) + '...[redacted]',
-    })
+    // Full token is intentionally logged — container tests, docker-compose
+    // workflows, and CLI scripts extract it from stdout to bootstrap the cluster.
+    void logger.info`System Admin Token minted: ${this._systemToken}`
 
     // Build RPC server
     this._rpcServer = new AuthRpcServer(

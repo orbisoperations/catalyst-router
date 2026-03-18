@@ -164,6 +164,9 @@ importers:
       typescript-eslint:
         specifier: ^8.52.0
         version: 8.56.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+      vitest:
+        specifier: catalog:testing
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   apps/auth:
     dependencies:
@@ -688,10 +691,10 @@ importers:
         version: 1.7.2(jiti@2.6.1)
       '@tak-ps/node-cot':
         specifier: latest
-        version: 14.23.2
+        version: 14.29.0
       '@tak-ps/node-tak':
         specifier: latest
-        version: 11.27.0(@tak-ps/node-cot@14.23.2)
+        version: 12.2.1(@tak-ps/node-cot@14.29.0)
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -2439,12 +2442,12 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@tak-ps/node-cot@14.23.2':
-    resolution: {integrity: sha512-zFnS/w7B3mggMzX8m5ERM0HxFNdW8vhgxATpKrCKZV99IeoAQLkzJkES4ql66cAI6Fo9akFBiVrOEUvYdB6xAQ==}
+  '@tak-ps/node-cot@14.29.0':
+    resolution: {integrity: sha512-3+OQtg7tlsIvHRLq6zQTJhtm9EPS00WfR8s/ZWJ95wFOB+T0o5rXM9VzMaz2720Lk+GdZTzyMnsZZkKHQ8dXaw==}
     engines: {node: '>= 22'}
 
-  '@tak-ps/node-tak@11.27.0':
-    resolution: {integrity: sha512-oEqyU5J4vLwT8mU3pc+R4gr8c+PRlXb26WozQ/sVZzba2xnVMaNEK83isHf4pWuyT/5OW4O4rwJEX8fUlbh8Eg==}
+  '@tak-ps/node-tak@12.2.1':
+    resolution: {integrity: sha512-PrrnDSlzTqLnEM8tr15jIk0c37xTy0ELXPeCzYfg4Vo8NUHPS9UeFpHiB0V4Yns+hRqRpEYlffk0w1/ms2ff8A==}
     engines: {node: '>= 22'}
     hasBin: true
     peerDependencies:
@@ -6594,7 +6597,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@tak-ps/node-cot@14.23.2':
+  '@tak-ps/node-cot@14.29.0':
     dependencies:
       '@openaddresses/batch-error': 2.13.1
       '@orbat-mapper/convert-symbology': 1.0.2
@@ -6624,11 +6627,11 @@ snapshots:
       - bare-abort-controller
       - react-native-b4a
 
-  '@tak-ps/node-tak@11.27.0(@tak-ps/node-cot@14.23.2)':
+  '@tak-ps/node-tak@12.2.1(@tak-ps/node-cot@14.29.0)':
     dependencies:
       '@openaddresses/batch-error': 2.13.1
       '@sinclair/typebox': 0.34.48
-      '@tak-ps/node-cot': 14.23.2
+      '@tak-ps/node-cot': 14.29.0
       ajv: 8.18.0
       form-data: 4.0.5
       mime: 4.1.0
@@ -7087,14 +7090,6 @@ snapshots:
       '@vitest/utils': 4.0.18
       chai: 6.2.2
       tinyrainbow: 3.0.3
-
-  '@vitest/mocker@4.0.18(vite@6.4.1(@types/node@20.19.33)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))':
-    dependencies:
-      '@vitest/spy': 4.0.18
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 6.4.1(@types/node@20.19.33)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   '@vitest/mocker@4.0.18(vite@6.4.1(@types/node@25.3.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
@@ -9040,7 +9035,7 @@ snapshots:
   vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@20.19.33)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       '@vitest/expect': 4.0.18
-      '@vitest/mocker': 4.0.18(vite@6.4.1(@types/node@20.19.33)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@vitest/mocker': 4.0.18(vite@6.4.1(@types/node@25.3.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       '@vitest/pretty-format': 4.0.18
       '@vitest/runner': 4.0.18
       '@vitest/snapshot': 4.0.18

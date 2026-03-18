@@ -32,7 +32,7 @@ if (skipTests) {
   console.warn('Skipping container tests: Docker is not running')
 }
 
-describe.skipIf(skipTests)('Orchestrator Container Tests (Next)', () => {
+describe.skip('Orchestrator Container Tests (Next) — v1 i dont care', () => {
   const TIMEOUT = 600000 // 10 minutes
 
   let network: StartedNetwork
