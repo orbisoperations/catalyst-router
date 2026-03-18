@@ -1,5 +1,10 @@
 import Database from 'better-sqlite3'
-import { SqliteActionLog, InMemoryActionLog, RoutingInformationBase } from '@catalyst/routing/v2'
+import {
+  SqliteActionLog,
+  InMemoryActionLog,
+  RoutingInformationBase,
+  Actions,
+} from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
 import { OrchestratorBus } from './bus.js'
 import { TickManager } from './tick-manager.js'
@@ -68,6 +73,18 @@ export class OrchestratorServiceV2 {
       dispatchFn: (action) => this.bus.dispatch(action),
     })
 
+    // 5b. Recalculate tick interval after peer connection events so keepalive
+    //     frequency tracks the minimum negotiated holdTime (BGP: keepalive = holdTime / 3).
+    const peerActions = new Set([Actions.InternalProtocolOpen, Actions.InternalProtocolConnected])
+    const originalDispatch = this.bus.dispatch.bind(this.bus)
+    this.bus.dispatch = async (action) => {
+      const result = await originalDispatch(action)
+      if (result.success && peerActions.has(action.action)) {
+        this.recalculateTickInterval()
+      }
+      return result
+    }
+
     // 5. Create the reconnect manager — schedules retries on transport errors.
     this.reconnectManager = new ReconnectManager({
       transport: opts.transport,
@@ -78,7 +95,18 @@ export class OrchestratorServiceV2 {
 
   /** Start periodic tick dispatch (idempotent). */
   start(): void {
+    this.recalculateTickInterval()
     this.tickManager.start()
+  }
+
+  /**
+   * Recalculate tick interval from current peer holdTimes.
+   * Called on start and after peer connect/open actions to track
+   * the minimum negotiated holdTime per BGP spec (keepalive = holdTime / 3).
+   */
+  recalculateTickInterval(): void {
+    const holdTimes = this.bus.state.internal.peers.map((p) => p.holdTime)
+    this.tickManager.recalculate(holdTimes)
   }
 
   /** Stop all timers and cancel pending reconnects. */
