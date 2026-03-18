@@ -14,6 +14,7 @@ import { createGatewayClient } from './gateway-client.js'
 import { createEnvoyClient } from './envoy-client.js'
 import { createPortAllocator } from '@catalyst/envoy-service'
 import type { PeerTransport } from './transport.js'
+import type { PeerRecord } from '@catalyst/routing/v2'
 import type { OrchestratorConfig } from '../v1/types.js'
 
 export interface OrchestratorServiceV2Options {
@@ -48,8 +49,13 @@ export class OrchestratorServiceV2 {
   readonly tickManager: TickManager
   readonly reconnectManager: ReconnectManager
   private readonly journal: ActionLog
+  private readonly transport: PeerTransport
+  private nodeToken: string | undefined
 
   constructor(opts: OrchestratorServiceV2Options) {
+    this.transport = opts.transport
+    this.nodeToken = opts.nodeToken
+
     // 1. Create the journal (SQLite on disk or in-memory).
     if (opts.journalPath !== undefined) {
       const db = new Database(opts.journalPath)
@@ -109,6 +115,13 @@ export class OrchestratorServiceV2 {
       if (result.success && peerActions.has(action.action)) {
         this.recalculateTickInterval()
       }
+      // GAP-001: auto-dial on LocalPeerCreate
+      if (result.success && action.action === Actions.LocalPeerCreate) {
+        const peerRecord = result.state.internal.peers.find((p) => p.name === action.data.name)
+        if (peerRecord) {
+          await this.dialPeer(peerRecord)
+        }
+      }
       return result
     }
 
@@ -144,7 +157,28 @@ export class OrchestratorServiceV2 {
 
   /** Propagate a refreshed node token to the bus and reconnect manager. */
   setNodeToken(token: string): void {
+    this.nodeToken = token
     this.bus.setNodeToken(token)
     this.reconnectManager.setNodeToken(token)
+  }
+
+  /**
+   * Attempt to dial a peer via transport.openPeer().
+   * On success, dispatches InternalProtocolConnected to mark the session live.
+   * On failure, delegates to ReconnectManager for exponential backoff retry.
+   * Skips if no endpoint or no nodeToken.
+   */
+  private async dialPeer(peer: PeerRecord): Promise<void> {
+    if (!peer.endpoint || !this.nodeToken) return
+
+    try {
+      await this.transport.openPeer(peer, this.nodeToken)
+      await this.bus.dispatch({
+        action: Actions.InternalProtocolConnected,
+        data: { peerInfo: { name: peer.name, domains: peer.domains } },
+      })
+    } catch {
+      this.reconnectManager.scheduleReconnect(peer)
+    }
   }
 }
