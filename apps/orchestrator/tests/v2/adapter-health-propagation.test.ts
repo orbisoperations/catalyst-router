@@ -21,6 +21,7 @@ const peerBInfo: PeerInfo = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['example.local'],
+  peerToken: 'token-b',
 }
 
 // ---------------------------------------------------------------------------
