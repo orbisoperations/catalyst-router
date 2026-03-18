@@ -82,6 +82,7 @@ describe('auto-dial on LocalPeerCreate', () => {
     const peerNoEndpoint: PeerInfo = {
       name: 'node-c',
       domains: ['auto-dial.local'],
+      peerToken: 'token-c',
     }
 
     await svc.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerNoEndpoint })

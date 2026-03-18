@@ -26,6 +26,7 @@ const peerBInfo: PeerInfo = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['keepalive.local'],
+  peerToken: 'token-b',
 }
 
 /** Connect a peer: LocalPeerCreate + InternalProtocolConnected */
@@ -106,6 +107,7 @@ describe('Keepalive: outbound keepalive sending', () => {
       name: 'node-c',
       endpoint: 'ws://node-c:4000',
       domains: ['keepalive.local'],
+      peerToken: 'token-c',
     }
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
     // Override holdTime via InternalProtocolOpen with holdTime: 0
@@ -239,6 +241,7 @@ describe('Keepalive: hold timer expiry on missed keepalives', () => {
       name: 'node-c',
       endpoint: 'ws://node-c:4000',
       domains: ['keepalive.local'],
+      peerToken: 'token-c',
     }
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
     await bus.dispatch({ action: Actions.InternalProtocolConnected, data: { peerInfo: peerC } })
@@ -290,6 +293,7 @@ describe('Keepalive: hold timer expiry on missed keepalives', () => {
       name: 'node-c',
       endpoint: 'ws://node-c:4000',
       domains: ['keepalive.local'],
+      peerToken: 'token-c',
     }
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerC })
     await bus.dispatch({
