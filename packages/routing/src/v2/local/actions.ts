@@ -38,3 +38,15 @@ export const localRouteDeleteMessageSchema = z.object({
   action: z.literal(Actions.LocalRouteDelete),
   data: DataChannelDefinitionSchema,
 })
+
+export const localRouteHealthUpdateAction = z.literal(Actions.LocalRouteHealthUpdate)
+
+export const localRouteHealthUpdateMessageSchema = z.object({
+  action: z.literal(Actions.LocalRouteHealthUpdate),
+  data: z.object({
+    name: z.string(),
+    healthStatus: z.enum(['up', 'down']),
+    responseTimeMs: z.number().nullable(),
+    lastChecked: z.string(),
+  }),
+})
