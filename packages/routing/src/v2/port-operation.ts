@@ -2,7 +2,7 @@ import type { DataChannelDefinition } from './datachannel.js'
 import type { InternalRoute, RouteTable } from './state.js'
 
 export type PortOperation =
-  | { type: 'allocate'; routeKey: string }
+  | { type: 'allocate'; routeKey: string; port: number }
   | { type: 'release'; routeKey: string; port: number }
 
 export type RouteChange =

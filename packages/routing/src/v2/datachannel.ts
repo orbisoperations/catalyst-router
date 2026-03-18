@@ -25,6 +25,7 @@ export const DataChannelDefinitionSchema = z.object({
   region: z.string().optional(),
   tags: z.array(z.string()).max(MAX_TAGS_PER_CHANNEL).optional(),
   envoyPort: z.number().int().optional(),
+  envoyAddress: z.string().optional(),
 })
 export type DataChannelDefinition = z.infer<typeof DataChannelDefinitionSchema>
 
