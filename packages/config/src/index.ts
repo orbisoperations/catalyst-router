@@ -60,6 +60,13 @@ export const OrchestratorConfigSchema = z.object({
     envoyAddress: z.string().optional(),
     portRange: z.array(PortEntrySchema).min(1),
   }),
+  adapterHealth: z
+    .object({
+      enabled: z.boolean().default(true),
+      intervalMs: z.number().int().min(0).default(30_000),
+      timeoutMs: z.number().int().min(100).default(3_000),
+    })
+    .optional(),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -211,6 +218,10 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       }
     : undefined
 
+  const adapterHealthEnabled = process.env.CATALYST_ADAPTER_HEALTH_ENABLED
+  const adapterHealthInterval = process.env.CATALYST_ADAPTER_HEALTH_INTERVAL_MS
+  const adapterHealthTimeout = process.env.CATALYST_ADAPTER_HEALTH_TIMEOUT_MS
+
   const envoyPortRange = process.env.CATALYST_ENVOY_PORT_RANGE
   const envoyEndpoint = process.env.CATALYST_ENVOY_ENDPOINT
   const envoyConfig =
@@ -239,6 +250,11 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
               }
             : undefined,
         envoyConfig,
+        adapterHealth: {
+          enabled: adapterHealthEnabled !== undefined ? adapterHealthEnabled !== 'false' : true,
+          intervalMs: adapterHealthInterval ? parseInt(adapterHealthInterval, 10) : 30_000,
+          timeoutMs: adapterHealthTimeout ? parseInt(adapterHealthTimeout, 10) : 3_000,
+        },
       }
     : undefined
 
