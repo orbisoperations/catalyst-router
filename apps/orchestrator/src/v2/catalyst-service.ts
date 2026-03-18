@@ -10,7 +10,7 @@ import { AdapterHealthChecker } from './adapter-health.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
-import { RouteTableView } from '@catalyst/routing/v2'
+import { RouteTableView, ActionSchema } from '@catalyst/routing/v2'
 
 /**
  * Auth Service RPC API for token minting.
@@ -144,7 +144,11 @@ export class OrchestratorService extends CatalystService {
       this._healthChecker = new AdapterHealthChecker({
         intervalMs: adapterHealthConfig?.intervalMs ?? 30_000,
         timeoutMs: adapterHealthConfig?.timeoutMs ?? 3_000,
-        dispatchFn: (action) => this._v2.bus.dispatch(action as any).then(() => {}),
+        dispatchFn: (action) => {
+          // Validate action shape matches the Action schema before dispatching
+          const validated = ActionSchema.parse(action)
+          return this._v2.bus.dispatch(validated).then(() => {})
+        },
       })
       // Health checks read a snapshot of routes (safe). Status changes are
       // dispatched into the bus via dispatchFn, which updates the RIB and

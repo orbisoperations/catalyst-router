@@ -1,4 +1,4 @@
-import type { DataChannelDefinition } from '@catalyst/routing/v2'
+import { Actions, type DataChannelDefinition } from '@catalyst/routing/v2'
 
 export interface AdapterHealth {
   healthStatus: 'up' | 'down' | 'unknown'
@@ -46,9 +46,10 @@ export class AdapterHealthChecker {
   }
 
   /**
-   * Apply health data to routes in-place.
-   * Used to stamp health fields onto live local routes so they propagate via iBGP,
-   * and onto snapshots for API responses.
+   * Apply latest health data (including fresh lastChecked/responseTimeMs) to
+   * routes in-place. Used on snapshot clones for API responses — does NOT
+   * affect the RIB or trigger iBGP propagation. Propagation is handled
+   * separately via dispatchFn on status transitions.
    */
   applyHealth(routes: DataChannelDefinition[]): DataChannelDefinition[] {
     for (const route of routes) {
@@ -96,21 +97,15 @@ export class AdapterHealthChecker {
 
     // Skip non-HTTP protocols or missing endpoints
     if (!route.endpoint || !this.isHttpProtocol(route)) {
-      this.healthMap.set(name, {
-        healthStatus: 'unknown',
-        responseTimeMs: null,
-        lastChecked: new Date().toISOString(),
-      })
+      this.setHealth(name, 'unknown', null)
+      this.maybeDispatch(name, prevStatus)
       return
     }
 
     const healthUrl = this.buildHealthUrl(route.endpoint)
     if (!healthUrl) {
-      this.healthMap.set(name, {
-        healthStatus: 'unknown',
-        responseTimeMs: null,
-        lastChecked: new Date().toISOString(),
-      })
+      this.setHealth(name, 'unknown', null)
+      this.maybeDispatch(name, prevStatus)
       return
     }
 
@@ -123,67 +118,59 @@ export class AdapterHealthChecker {
       if (res.status === 404) {
         const prev = this.healthMap.get(name)
         if (prev?.healthStatus === 'up') {
-          // Was healthy before — mark as down, don't suppress future checks
-          this.healthMap.set(name, {
-            healthStatus: 'down',
-            responseTimeMs: null,
-            lastChecked: new Date().toISOString(),
-          })
+          this.setHealth(name, 'down', null)
         } else {
-          // Never been up — no health endpoint, suppress future checks
           this.noHealthEndpoint.add(name)
-          this.healthMap.set(name, {
-            healthStatus: 'unknown',
-            responseTimeMs: null,
-            lastChecked: new Date().toISOString(),
-          })
+          this.setHealth(name, 'unknown', null)
         }
+        this.maybeDispatch(name, prevStatus)
         return
       }
 
       if (res.ok) {
-        this.healthMap.set(name, {
-          healthStatus: 'up',
-          responseTimeMs: Math.round(performance.now() - start),
-          lastChecked: new Date().toISOString(),
-        })
+        this.setHealth(name, 'up', Math.round(performance.now() - start))
       } else {
         const prev = this.healthMap.get(name)
-        this.healthMap.set(name, {
-          healthStatus: prev?.healthStatus === 'up' ? 'down' : 'unknown',
-          responseTimeMs: null,
-          lastChecked: new Date().toISOString(),
-        })
+        this.setHealth(name, prev?.healthStatus === 'up' ? 'down' : 'unknown', null)
       }
     } catch {
       const prev = this.healthMap.get(name)
-      this.healthMap.set(name, {
-        healthStatus: prev?.healthStatus === 'up' ? 'down' : 'unknown',
-        responseTimeMs: null,
-        lastChecked: new Date().toISOString(),
-      })
+      this.setHealth(name, prev?.healthStatus === 'up' ? 'down' : 'unknown', null)
     }
 
-    // Dispatch to bus if health status changed (for iBGP propagation)
+    this.maybeDispatch(name, prevStatus)
+  }
+
+  private setHealth(
+    name: string,
+    healthStatus: 'up' | 'down' | 'unknown',
+    responseTimeMs: number | null
+  ): void {
+    this.healthMap.set(name, {
+      healthStatus,
+      responseTimeMs,
+      lastChecked: new Date().toISOString(),
+    })
+  }
+
+  /** Dispatch to bus if health status changed (for iBGP propagation). */
+  private maybeDispatch(name: string, prevStatus: string | undefined): void {
     const newHealth = this.healthMap.get(name)
-    if (this.options.dispatchFn && newHealth && prevStatus !== newHealth.healthStatus) {
-      this.options
-        .dispatchFn({
-          action: 'local:route:health-update',
-          data: {
-            name,
-            healthStatus: newHealth.healthStatus,
-            responseTimeMs: newHealth.responseTimeMs,
-            lastChecked: newHealth.lastChecked,
-          },
-        })
-        .catch((error) => {
-          console.error(
-            `[AdapterHealthChecker] Failed to dispatch health update for ${name}:`,
-            error
-          )
-        })
-    }
+    if (!this.options.dispatchFn || !newHealth || prevStatus === newHealth.healthStatus) return
+
+    this.options
+      .dispatchFn({
+        action: Actions.LocalRouteHealthUpdate,
+        data: {
+          name,
+          healthStatus: newHealth.healthStatus,
+          responseTimeMs: newHealth.responseTimeMs,
+          lastChecked: newHealth.lastChecked,
+        },
+      })
+      .catch((error) => {
+        console.error(`[AdapterHealthChecker] Failed to dispatch health update for ${name}:`, error)
+      })
   }
 
   private isHttpProtocol(route: DataChannelDefinition): boolean {
