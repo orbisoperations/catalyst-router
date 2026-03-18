@@ -14,6 +14,7 @@ import type { PublicApi, NetworkClient } from '../../orchestrator/src/v1/orchest
 import type { DataChannelProtocol } from '@catalyst/routing'
 import {
   startAuthService,
+  mintPeerToken,
   type AuthServiceContext,
 } from '../../orchestrator/tests/v1/auth-test-helpers.js'
 
@@ -353,7 +354,33 @@ async function setupThreeNodeCluster(protocol: DataChannelProtocol): Promise<Thr
 
   console.log('[setup] All 11 containers started.')
 
-  // ── 8. Peer orchestrators: A <-> B, B <-> C ────────────────────
+  // ── 8. Mint peer-specific tokens ─────────────────────────────────
+  // V2 iBGP identity check requires peerToken.sub to match the connecting
+  // node's name. Mint per-peer tokens instead of using the system admin token.
+  const authPort = auth.container.getMappedPort(5000)
+  const authRpcEndpoint = `ws://127.0.0.1:${authPort}/rpc`
+
+  console.log('[setup] Minting peer tokens...')
+  const peerTokenForA = await mintPeerToken(
+    authRpcEndpoint,
+    systemToken,
+    'node-a.somebiz.local.io',
+    ['somebiz.local.io']
+  )
+  const peerTokenForB = await mintPeerToken(
+    authRpcEndpoint,
+    systemToken,
+    'node-b.somebiz.local.io',
+    ['somebiz.local.io']
+  )
+  const peerTokenForC = await mintPeerToken(
+    authRpcEndpoint,
+    systemToken,
+    'node-c.somebiz.local.io',
+    ['somebiz.local.io']
+  )
+
+  // ── 9. Peer orchestrators: A <-> B, B <-> C ────────────────────
   console.log('[setup] Peering nodes: A <-> B, B <-> C...')
   const clientA = getOrchestratorClient(orchA)
   const clientB = getOrchestratorClient(orchB)
@@ -370,18 +397,19 @@ async function setupThreeNodeCluster(protocol: DataChannelProtocol): Promise<Thr
   const netB = (netBResult as { success: true; client: NetworkClient }).client
   const netC = (netCResult as { success: true; client: NetworkClient }).client
 
-  // Peer A <-> B: B accepts A, then A connects to B
+  // Peer A <-> B: B accepts A, then A connects to B.
+  // peerToken.sub must match the local node that will dial using it.
   await netB.addPeer({
     name: 'node-a.somebiz.local.io',
     endpoint: 'ws://orch-a:3000/rpc',
     domains: ['somebiz.local.io'],
-    peerToken: systemToken,
+    peerToken: peerTokenForB,
   })
   await netA.addPeer({
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://orch-b:3000/rpc',
     domains: ['somebiz.local.io'],
-    peerToken: systemToken,
+    peerToken: peerTokenForA,
   })
 
   // Peer B <-> C: C accepts B, then B connects to C
@@ -389,13 +417,13 @@ async function setupThreeNodeCluster(protocol: DataChannelProtocol): Promise<Thr
     name: 'node-b.somebiz.local.io',
     endpoint: 'ws://orch-b:3000/rpc',
     domains: ['somebiz.local.io'],
-    peerToken: systemToken,
+    peerToken: peerTokenForC,
   })
   await netB.addPeer({
     name: 'node-c.somebiz.local.io',
     endpoint: 'ws://orch-c:3000/rpc',
     domains: ['somebiz.local.io'],
-    peerToken: systemToken,
+    peerToken: peerTokenForB,
   })
 
   // Brief wait for BGP handshake before polling

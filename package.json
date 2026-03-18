@@ -30,9 +30,9 @@
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",
-    "esbuild": "catalog:dev",
     "@commitlint/config-conventional": "^20.3.1",
     "@eslint/js": "^9.39.2",
+    "esbuild": "catalog:dev",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.0.0",
@@ -41,7 +41,8 @@
     "pptxgenjs": "^4.0.1",
     "prettier": "^3.7.4",
     "turbo": "^2.8.10",
-    "typescript-eslint": "^8.52.0"
+    "typescript-eslint": "^8.52.0",
+    "vitest": "catalog:testing"
   },
   "dependencies": {
     "@logtape/logtape": "^2.0.2"

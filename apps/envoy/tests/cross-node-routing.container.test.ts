@@ -13,6 +13,7 @@ import {
 import type { PublicApi, NetworkClient } from '../../orchestrator/src/v1/orchestrator.js'
 import {
   startAuthService,
+  mintPeerToken,
   type AuthServiceContext,
 } from '../../orchestrator/tests/v1/auth-test-helpers.js'
 
@@ -417,7 +418,27 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
 
     console.log('[setup] All 8 containers started.')
 
-    // ── 11. Peer the two orchestrators via RPC ─────────────────────
+    // ── 11. Mint peer-specific tokens ────────────────────────────────
+    // V2 iBGP identity check requires peerToken.sub to match the connecting
+    // node's name. Mint per-peer tokens instead of using the system admin token.
+    const authPort = auth.container.getMappedPort(5000)
+    const authRpcEndpoint = `ws://127.0.0.1:${authPort}/rpc`
+
+    console.log('[setup] Minting peer tokens...')
+    const peerTokenForA = await mintPeerToken(
+      authRpcEndpoint,
+      systemToken,
+      'node-a.somebiz.local.io',
+      ['somebiz.local.io']
+    )
+    const peerTokenForB = await mintPeerToken(
+      authRpcEndpoint,
+      systemToken,
+      'node-b.somebiz.local.io',
+      ['somebiz.local.io']
+    )
+
+    // ── 12. Peer the two orchestrators via RPC ─────────────────────
     console.log('[setup] Peering Node A and Node B...')
     const clientA = getOrchestratorClient(orchA)
     const clientB = getOrchestratorClient(orchB)
@@ -430,18 +451,21 @@ describe.skipIf(skipTests)('Cross-Node Routing: All-Container E2E with Real Envo
     const netA = (netAResult as { success: true; client: NetworkClient }).client
     const netB = (netBResult as { success: true; client: NetworkClient }).client
 
-    // B accepts A, then A connects to B
+    // B accepts A, then A connects to B.
+    // peerToken.sub must match the local node that will dial using it:
+    // B stores A's record with tokenForB (sub=node-b) so B presents it when dialing A.
+    // A stores B's record with tokenForA (sub=node-a) so A presents it when dialing B.
     await netB.addPeer({
       name: 'node-a.somebiz.local.io',
       endpoint: 'ws://orch-a:3000/rpc',
       domains: ['somebiz.local.io'],
-      peerToken: systemToken,
+      peerToken: peerTokenForB,
     })
     await netA.addPeer({
       name: 'node-b.somebiz.local.io',
       endpoint: 'ws://orch-b:3000/rpc',
       domains: ['somebiz.local.io'],
-      peerToken: systemToken,
+      peerToken: peerTokenForA,
     })
 
     // Wait for BGP handshake
