@@ -2,6 +2,9 @@ import { z } from 'zod'
 import { PeerInfoSchema } from '../state.js'
 import { DataChannelDefinitionSchema } from '../datachannel.js'
 import { Actions } from '../action-types.js'
+import { MAX_UPDATES_PER_MESSAGE, MAX_NODE_PATH_HOPS, MAX_NODE_ID_LENGTH } from '../limits.js'
+
+export { MAX_UPDATES_PER_MESSAGE, MAX_NODE_PATH_HOPS, MAX_NODE_ID_LENGTH }
 
 // Re-export for backward compatibility with existing imports
 export const internalProtocolOpenAction = z.literal(Actions.InternalProtocolOpen)
@@ -16,12 +19,6 @@ export const internalProtocolKeepaliveAction = z.literal(Actions.InternalProtoco
  * V2: nodePath is REQUIRED (min 1) and originNode is a new required field.
  * This enforces that every route advertisement carries full path attribution.
  */
-/** Maximum number of route updates in a single iBGP message. */
-export const MAX_UPDATES_PER_MESSAGE = 1000
-/** Maximum number of hops in a route path (loop protection). */
-export const MAX_NODE_PATH_HOPS = 64
-/** Maximum length of a node identifier string. */
-export const MAX_NODE_ID_LENGTH = 253
 
 export const UpdateMessageSchema = z.object({
   updates: z
