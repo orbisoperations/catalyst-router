@@ -49,3 +49,4 @@ test-results/
 *.sqlite3
 *.sqlite-journal
 *.sqlite-wal
+.superpowers/
