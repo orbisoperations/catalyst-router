@@ -16,6 +16,21 @@ import { getLogger, WideEvent } from '@catalyst/telemetry'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
 
+// ---------------------------------------------------------------------------
+// Gateway client interface (for GraphQL gateway config sync)
+// ---------------------------------------------------------------------------
+
+export interface GatewayUpdateResult {
+  success: boolean
+  error?: string
+}
+
+export interface GatewayClient {
+  updateConfig(config: {
+    services: Array<{ name: string; url: string }>
+  }): Promise<GatewayUpdateResult>
+}
+
 const logger = getLogger(['catalyst', 'orchestrator', 'bus'])
 
 // v2-specific StateResult — uses v2 RouteTable (no `external` field)
@@ -30,6 +45,7 @@ export class OrchestratorBus {
   private readonly routePolicy: RoutePolicy | undefined
   private readonly config: OrchestratorConfig
   private nodeToken: string | undefined
+  private readonly gatewayClient: GatewayClient | undefined
   /**
    * Tracks the last time a keepalive was successfully sent to each peer.
    * Ephemeral (not persisted/journaled) — resets to 0 on restart.
@@ -44,11 +60,13 @@ export class OrchestratorBus {
     routePolicy?: RoutePolicy
     nodeToken?: string
     initialState?: RouteTable
+    gatewayClient?: GatewayClient
   }) {
     this.config = opts.config
     this.transport = opts.transport
     this.routePolicy = opts.routePolicy
     this.nodeToken = opts.nodeToken
+    this.gatewayClient = opts.gatewayClient
     this.queue = new ActionQueue()
     this.rib = new RoutingInformationBase({
       nodeId: opts.config.node.name,
@@ -140,6 +158,10 @@ export class OrchestratorBus {
   ): Promise<void> {
     // Use committedState snapshot — NEVER this.rib.state
     await this.handleBGPNotify(action, plan, committedState)
+    // Sync GraphQL route list to gateway after route changes propagate.
+    if (plan.routeChanges.length > 0) {
+      await this.handleGraphqlGatewaySync(committedState)
+    }
     // After BGP propagation, handle keepalive sends for Tick actions.
     // (The no-state-change Tick path in dispatch() handles the common case;
     // this handles Ticks that also caused peer expiry.)
@@ -202,7 +224,62 @@ export class OrchestratorBus {
     })
 
     await Promise.allSettled(promises)
-    event.emit()
+  }
+
+  // ---------------------------------------------------------------------------
+  // GraphQL gateway sync (pushes graphql route list to gateway)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Sync GraphQL routes to the gateway whenever routes change.
+   * Filters all routes (local + internal) by protocol http:graphql or http:gql,
+   * then pushes the full service list via the gateway client.
+   * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
+   */
+  private async handleGraphqlGatewaySync(state: RouteTable): Promise<void> {
+    if (this.gatewayClient === undefined) return
+
+    const graphqlRoutes = [...state.local.routes, ...state.internal.routes].filter(
+      (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
+    )
+
+    if (graphqlRoutes.length === 0) return
+
+    try {
+      await this.gatewayClient.updateConfig({
+        services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
+      })
+    } catch {
+      // Fire-and-forget: gateway sync failure must not disrupt the bus.
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // GraphQL gateway sync (pushes graphql route list to gateway)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Sync GraphQL routes to the gateway whenever routes change.
+   * Filters all routes (local + internal) by protocol http:graphql or http:gql,
+   * then pushes the full service list via the gateway client.
+   * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
+   */
+  private async handleGraphqlGatewaySync(state: RouteTable): Promise<void> {
+    if (this.gatewayClient === undefined) return
+
+    const graphqlRoutes = [...state.local.routes, ...state.internal.routes].filter(
+      (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
+    )
+
+    if (graphqlRoutes.length === 0) return
+
+    try {
+      await this.gatewayClient.updateConfig({
+        services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
+      })
+    } catch {
+      // Fire-and-forget: gateway sync failure must not disrupt the bus.
+    }
   }
 
   // ---------------------------------------------------------------------------

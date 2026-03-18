@@ -7,8 +7,10 @@ import {
 } from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
 import { OrchestratorBus } from './bus.js'
+import type { GatewayClient } from './bus.js'
 import { TickManager } from './tick-manager.js'
 import { ReconnectManager } from './reconnect.js'
+import { createGatewayClient } from './gateway-client.js'
 import type { PeerTransport } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
 
@@ -18,6 +20,8 @@ export interface OrchestratorServiceV2Options {
   nodeToken?: string
   /** File path for a SQLite-backed journal. Omit for an in-memory journal (tests/dev). */
   journalPath?: string
+  /** Optional gateway client override (for testing). Auto-created from config if omitted. */
+  gatewayClient?: GatewayClient
 }
 
 /**
@@ -60,12 +64,19 @@ export class OrchestratorServiceV2 {
 
     // 3. Create the bus with the replayed initial state.
     //    The journal is passed so that new actions are appended going forward.
+    const gatewayClient =
+      opts.gatewayClient ??
+      (opts.config.gqlGatewayConfig?.endpoint
+        ? createGatewayClient(opts.config.gqlGatewayConfig.endpoint)
+        : undefined)
+
     this.bus = new OrchestratorBus({
       config: opts.config,
       transport: opts.transport,
       journal: this.journal,
       nodeToken: opts.nodeToken,
       initialState: tempRib.state,
+      gatewayClient,
     })
 
     // 4. Create the tick manager — drives hold-timer checks on a periodic interval.
