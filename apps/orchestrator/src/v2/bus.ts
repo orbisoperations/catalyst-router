@@ -2,6 +2,7 @@ import {
   RoutingInformationBase,
   ActionQueue,
   Actions,
+  InternalRouteView,
   type Action,
   type RouteTable,
   type PlanResult,

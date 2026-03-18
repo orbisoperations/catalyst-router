@@ -63,6 +63,9 @@ export class InternalRouteView {
       region: this.data.region,
       tags: this.data.tags,
       envoyPort: this.data.envoyPort,
+      healthStatus: this.data.healthStatus,
+      responseTimeMs: this.data.responseTimeMs,
+      lastChecked: this.data.lastChecked,
     }
   }
 }
