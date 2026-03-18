@@ -12,6 +12,17 @@ const peerRecord: PeerRecord = {
   name: 'node-b',
   endpoint: 'ws://node-b:4000',
   domains: ['example.local'],
+  peerToken: 'test-token',
+  connectionStatus: 'closed',
+  holdTime: 90_000,
+  lastSent: 0,
+  lastReceived: 0,
+}
+
+const peerRecordNoToken: PeerRecord = {
+  name: 'node-b',
+  endpoint: 'ws://node-b:4000',
+  domains: ['example.local'],
   connectionStatus: 'closed',
   holdTime: 90_000,
   lastSent: 0,
@@ -36,7 +47,6 @@ describe('ReconnectManager', () => {
     manager = new ReconnectManager({
       transport,
       dispatchFn: dispatch,
-      nodeToken: 'test-token',
     })
   })
 
@@ -60,7 +70,7 @@ describe('ReconnectManager', () => {
     expect(manager.pendingCount).toBe(1)
   })
 
-  it('successful reconnect calls openPeer with nodeToken', async () => {
+  it('successful reconnect calls openPeer with peerToken', async () => {
     manager.scheduleReconnect(peerRecord)
 
     await vi.runAllTimersAsync()
@@ -137,7 +147,6 @@ describe('ReconnectManager', () => {
     const smallManager = new ReconnectManager({
       transport,
       dispatchFn: dispatch,
-      nodeToken: 'test-token',
       maxBackoffMs,
     })
 
@@ -229,14 +238,8 @@ describe('ReconnectManager', () => {
     expect(dispatch).not.toHaveBeenCalled()
   })
 
-  it('skips reconnect when nodeToken is undefined', async () => {
-    const noTokenManager = new ReconnectManager({
-      transport,
-      dispatchFn: dispatch,
-      // no nodeToken
-    })
-
-    noTokenManager.scheduleReconnect(peerRecord)
+  it('skips reconnect when peer has no peerToken', async () => {
+    manager.scheduleReconnect(peerRecordNoToken)
 
     await vi.runAllTimersAsync()
 
@@ -244,47 +247,37 @@ describe('ReconnectManager', () => {
     expect(transport.getCallsFor('openPeer')).toHaveLength(0)
     expect(dispatch).not.toHaveBeenCalled()
     // Timer completed without rescheduling
-    expect(noTokenManager.pendingCount).toBe(0)
-
-    noTokenManager.stopAll()
+    expect(manager.pendingCount).toBe(0)
   })
 
-  it('resumes reconnect after setNodeToken provides a token', async () => {
-    const noTokenManager = new ReconnectManager({
-      transport,
-      dispatchFn: dispatch,
-      // no nodeToken initially
-    })
+  it('reconnect uses peerToken from the peer record', async () => {
+    const peerWithCustomToken: PeerRecord = {
+      ...peerRecord,
+      peerToken: 'custom-peer-token',
+    }
 
-    noTokenManager.scheduleReconnect(peerRecord)
-    await vi.runAllTimersAsync()
-
-    // First attempt skipped — no openPeer calls
-    expect(transport.getCallsFor('openPeer')).toHaveLength(0)
-
-    // Now provide a token and schedule again
-    noTokenManager.setNodeToken('late-token')
-    noTokenManager.scheduleReconnect(peerRecord)
+    manager.scheduleReconnect(peerWithCustomToken)
     await vi.runAllTimersAsync()
 
     const openCalls = transport.getCallsFor('openPeer')
     expect(openCalls).toHaveLength(1)
     if (openCalls[0].method !== 'openPeer') throw new Error('unexpected')
-    expect(openCalls[0].token).toBe('late-token')
-
-    noTokenManager.stopAll()
+    expect(openCalls[0].token).toBe('custom-peer-token')
   })
 
-  it('setNodeToken is used on subsequent reconnect attempts', async () => {
-    manager.setNodeToken('updated-token')
-    manager.scheduleReconnect(peerRecord)
+  it('peer with peerToken reconnects after peer without peerToken is skipped', async () => {
+    // Schedule with no-token peer — should skip
+    manager.scheduleReconnect(peerRecordNoToken)
+    await vi.runAllTimersAsync()
+    expect(transport.getCallsFor('openPeer')).toHaveLength(0)
 
+    // Schedule with a peer that has a token — should succeed
+    manager.scheduleReconnect(peerRecord)
     await vi.runAllTimersAsync()
 
     const openCalls = transport.getCallsFor('openPeer')
     expect(openCalls).toHaveLength(1)
-    const call = openCalls[0]
-    if (call.method !== 'openPeer') throw new Error('unexpected call type')
-    expect(call.token).toBe('updated-token')
+    if (openCalls[0].method !== 'openPeer') throw new Error('unexpected')
+    expect(openCalls[0].token).toBe('test-token')
   })
 })

@@ -173,7 +173,6 @@ export class OrchestratorServiceV2 {
     this.reconnectManager = new ReconnectManager({
       transport: opts.transport,
       dispatchFn: (action) => this.bus.dispatch(action),
-      nodeToken: opts.nodeToken,
     })
   }
 
@@ -205,7 +204,6 @@ export class OrchestratorServiceV2 {
   setNodeToken(token: string): void {
     this.nodeToken = token
     this.bus.setNodeToken(token)
-    this.reconnectManager.setNodeToken(token)
   }
 
   /**
@@ -215,10 +213,10 @@ export class OrchestratorServiceV2 {
    * Skips if no endpoint or no nodeToken.
    */
   private async dialPeer(peer: PeerRecord): Promise<void> {
-    if (!peer.endpoint || !this.nodeToken) return
+    if (!peer.endpoint || !peer.peerToken) return
 
     try {
-      await this.transport.openPeer(peer, this.nodeToken)
+      await this.transport.openPeer(peer, peer.peerToken)
       await this.bus.dispatch({
         action: Actions.InternalProtocolConnected,
         data: { peerInfo: { name: peer.name, domains: peer.domains } },

@@ -1,11 +1,11 @@
-import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import { getLogger, WideEvent } from '@catalyst/telemetry'
+import { newHttpBatchRpcSession, type RpcStub } from 'capnweb'
+import { getLogger } from '@catalyst/telemetry'
 import type { PeerRecord } from '@catalyst/routing/v2'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 
 /**
  * Remote orchestrator's PublicApi shape — the iBGP RPC interface exposed
- * by every orchestrator node over WebSocket.
+ * by every orchestrator node over HTTP batch RPC.
  */
 interface RemotePublicApi {
   getIBGPClient(token: string): Promise<
@@ -13,20 +13,20 @@ interface RemotePublicApi {
         success: true
         client: {
           open(data: {
-            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
+            peerInfo: { name: string; domains: string[] }
             holdTime?: number
           }): Promise<{ success: true } | { success: false; error: string }>
           close(data: {
-            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
+            peerInfo: { name: string; domains: string[] }
             code: number
             reason?: string
           }): Promise<{ success: true } | { success: false; error: string }>
           update(data: {
-            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
+            peerInfo: { name: string; domains: string[] }
             update: UpdateMessage
           }): Promise<{ success: true } | { success: false; error: string }>
           keepalive(data: {
-            peerInfo: { name: string; domains: string[]; envoyAddress?: string }
+            peerInfo: { name: string; domains: string[] }
           }): Promise<{ success: true } | { success: false; error: string }>
         }
       }
@@ -34,16 +34,18 @@ interface RemotePublicApi {
   >
 }
 
-const logger = getLogger(['catalyst', 'orchestrator', 'transport'])
+const logger = getLogger(['catalyst', 'orchestrator', 'transport', 'http'])
 
 /**
- * WebSocket-based PeerTransport using capnweb RPC sessions.
+ * HTTP batch RPC PeerTransport using capnweb HTTP sessions.
  *
- * Maintains a pool of WebSocket stubs keyed by endpoint URL.
- * Each call obtains an iBGP client from the remote peer's PublicApi,
- * authenticated with the local node's token.
+ * Maintains a pool of HTTP stubs keyed by endpoint URL.
+ * Suitable for environments where persistent WebSocket connections are
+ * not available or desired (e.g. behind HTTP-only load balancers).
+ *
+ * Same interface as WebSocketPeerTransport — can be swapped via config.
  */
-export class WebSocketPeerTransport implements PeerTransport {
+export class HttpPeerTransport implements PeerTransport {
   private readonly stubs = new Map<string, RpcStub<RemotePublicApi>>()
   private readonly localNodeInfo: { name: string; domains: string[] }
 
@@ -61,42 +63,29 @@ export class WebSocketPeerTransport implements PeerTransport {
   private getStub(endpoint: string): RpcStub<RemotePublicApi> {
     let stub = this.stubs.get(endpoint)
     if (stub === undefined) {
-      stub = newWebSocketRpcSession<RemotePublicApi>(endpoint)
+      stub = newHttpBatchRpcSession<RemotePublicApi>(endpoint)
       this.stubs.set(endpoint, stub)
     }
     return stub
   }
 
   async openPeer(peer: PeerRecord, token: string): Promise<void> {
-    const event = new WideEvent('transport.open_peer', logger)
-    event.set({
-      'catalyst.orchestrator.peer.name': peer.name,
-      'catalyst.orchestrator.peer.endpoint': peer.endpoint,
-    })
     const stub = this.getStub(this.requireEndpoint(peer))
     const result = await stub.getIBGPClient(token)
     if (!result.success) {
-      const err = new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
-      event.setError(err)
-      event.emit()
-      throw err
+      throw new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
     }
     const openResult = await result.client.open({
       peerInfo: this.localNodeInfo,
       holdTime: peer.holdTime,
     })
     if (!openResult.success) {
-      const err = new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
-      event.setError(err)
-      event.emit()
-      throw err
+      throw new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
     }
-    logger.info('Opened connection to {peerName}', {
-      'event.name': 'peer.session.opened',
+    logger.info('Opened HTTP peer connection to {peerName}', {
+      'event.name': 'peer.connect.opened',
       'catalyst.orchestrator.peer.name': peer.name,
-      'catalyst.orchestrator.peer.endpoint': peer.endpoint,
     })
-    event.emit()
   }
 
   async sendUpdate(peer: PeerRecord, message: UpdateMessage): Promise<void> {
@@ -109,10 +98,13 @@ export class WebSocketPeerTransport implements PeerTransport {
     if (!result.success) {
       throw new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
     }
-    await result.client.update({
+    const updateResult = await result.client.update({
       peerInfo: this.localNodeInfo,
       update: message,
     })
+    if (!updateResult.success) {
+      throw new Error(`Failed to send update to ${peer.name}: ${updateResult.error}`)
+    }
   }
 
   async sendKeepalive(peer: PeerRecord): Promise<void> {
@@ -125,7 +117,10 @@ export class WebSocketPeerTransport implements PeerTransport {
     if (!result.success) {
       throw new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
     }
-    await result.client.keepalive({ peerInfo: this.localNodeInfo })
+    const keepaliveResult = await result.client.keepalive({ peerInfo: this.localNodeInfo })
+    if (!keepaliveResult.success) {
+      throw new Error(`Failed to send keepalive to ${peer.name}: ${keepaliveResult.error}`)
+    }
   }
 
   async closePeer(peer: PeerRecord, code: number, reason?: string): Promise<void> {
@@ -134,7 +129,7 @@ export class WebSocketPeerTransport implements PeerTransport {
     const token = peer.peerToken
     if (!token) {
       logger.warn('No peerToken for {peerName} — closing without notification', {
-        'event.name': 'peer.session.close_unnotified',
+        'event.name': 'peer.close.skipped',
         'catalyst.orchestrator.peer.name': peer.name,
       })
       return
@@ -142,7 +137,18 @@ export class WebSocketPeerTransport implements PeerTransport {
     try {
       const result = await stub.getIBGPClient(token)
       if (result.success) {
-        await result.client.close({ peerInfo: this.localNodeInfo, code, reason })
+        const closeResult = await result.client.close({
+          peerInfo: this.localNodeInfo,
+          code,
+          reason,
+        })
+        if (!closeResult.success) {
+          logger.warn('Failed to close peer {peerName}: {error}', {
+            'event.name': 'peer.close.failed',
+            'catalyst.orchestrator.peer.name': peer.name,
+            error: closeResult.error,
+          })
+        }
       }
     } catch {
       // Best-effort close — if the connection is already down, nothing to do.

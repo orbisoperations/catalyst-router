@@ -7,6 +7,8 @@ import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { OrchestratorServiceV2 } from './service.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
+import { HttpPeerTransport } from './http-transport.js'
+import type { PeerTransport } from './transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
 import { createDashboardRoutes } from '../routes/dashboard.js'
@@ -65,7 +67,7 @@ const REFRESH_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
 // mintNodeToken retry parameters
 const MINT_TOKEN_MAX_ATTEMPTS = 5
 const MINT_TOKEN_BASE_DELAY_MS = 1_000
-const MINT_TOKEN_MAX_DELAY_MS = 30_000
+const _MINT_TOKEN_MAX_DELAY_MS = 30_000
 
 /**
  * V2 orchestrator service, wrapped in CatalystService for Hono server integration.
@@ -118,13 +120,18 @@ export class OrchestratorService extends CatalystService {
       )
     }
 
-    // Build the transport and v2 service
-    const transport = new WebSocketPeerTransport({
-      localNodeInfo: {
-        name: this.config.node.name,
-        domains: this.config.node.domains,
-      },
-    })
+    // Build the transport and v2 service.
+    // Default to WebSocket; HTTP available for environments without persistent connections.
+    const transportType = process.env.CATALYST_TRANSPORT_TYPE === 'http' ? 'http' : 'ws'
+    const localNodeInfo = {
+      name: this.config.node.name,
+      domains: this.config.node.domains,
+      envoyAddress: this.config.node.envoyAddress,
+    }
+    const transport: PeerTransport =
+      transportType === 'http'
+        ? new HttpPeerTransport({ localNodeInfo })
+        : new WebSocketPeerTransport({ localNodeInfo })
 
     const orchestratorConfig = {
       node: {
@@ -138,8 +145,7 @@ export class OrchestratorService extends CatalystService {
       config: orchestratorConfig,
       transport,
       nodeToken: this._nodeToken,
-      // TODO: add journalPath to OrchestratorConfigSchema for persistent journal
-      // journalPath: undefined → uses in-memory journal
+      journal: this.config.orchestrator?.journal,
     })
 
     // Build the token validator
@@ -196,7 +202,7 @@ export class OrchestratorService extends CatalystService {
 
   private async mintNodeToken(
     maxAttempts = MINT_TOKEN_MAX_ATTEMPTS,
-    baseDelayMs = MINT_TOKEN_BASE_DELAY_MS
+    _baseDelayMs = MINT_TOKEN_BASE_DELAY_MS
   ): Promise<void> {
     if (!this.config.orchestrator?.auth) {
       this.telemetry.logger.info('No auth service configured -- skipping node token mint', {
@@ -211,7 +217,7 @@ export class OrchestratorService extends CatalystService {
       'catalyst.orchestrator.auth.endpoint': endpoint,
     })
 
-    let lastError: unknown
+    let _lastError: unknown
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const authClient = newWebSocketRpcSession<AuthRpcApi>(endpoint)
@@ -239,22 +245,23 @@ export class OrchestratorService extends CatalystService {
         this._tokenIssuedAt = now
         this._tokenExpiresAt = now + TOKEN_TTL_MS
 
-      this.telemetry.logger.info('Node token minted for {nodeName} (expires {expiresAt})', {
-        'event.name': 'node.token.minted',
-        'catalyst.orchestrator.node.name': this.config.node.name,
-        'token.expires_at': this._tokenExpiresAt.toISOString(),
-      })
+        this.telemetry.logger.info('Node token minted for {nodeName} (expires {expiresAt})', {
+          'event.name': 'node.token.minted',
+          'catalyst.orchestrator.node.name': this.config.node.name,
+          'token.expires_at': this._tokenExpiresAt.toISOString(),
+        })
 
-      // Propagate token to the v2 service if already initialized
-      if (this._v2) {
-        this._v2.setNodeToken(this._nodeToken)
+        // Propagate token to the v2 service if already initialized
+        if (this._v2) {
+          this._v2.setNodeToken(this._nodeToken)
+        }
+      } catch (error) {
+        this.telemetry.logger.error('Failed to mint node token', {
+          'event.name': 'node.token.mint_failed',
+          error,
+        })
+        throw error
       }
-    } catch (error) {
-      this.telemetry.logger.error('Failed to mint node token: {error}', {
-        'event.name': 'node.token.mint_failed',
-        error,
-      })
-      throw error
     }
   }
 
@@ -277,7 +284,10 @@ export class OrchestratorService extends CatalystService {
           'event.name': 'node.token.refreshed',
         })
       } catch (error) {
-        this.telemetry.logger.error`Failed to refresh node token: ${error}`
+        this.telemetry.logger.error('Failed to refresh node token', {
+          'event.name': 'node.token.refresh.failed',
+          error,
+        })
       }
     }
   }
@@ -292,8 +302,8 @@ interface BuildTokenValidatorOptions {
   allowNoAuth: boolean
   config: { node: { name: string; domains: string[] } }
   logger: {
-    warn: (t: TemplateStringsArray, ...v: unknown[]) => void
-    error: (t: TemplateStringsArray, ...v: unknown[]) => void
+    warn: (message: string, attrs?: Record<string, unknown>) => void
+    error: (message: string, attrs?: Record<string, unknown>) => void
   }
 }
 
@@ -327,7 +337,11 @@ export function buildTokenValidator({
       try {
         const permissionsApi = await authClient.permissions(token)
         if ('error' in permissionsApi) {
-          logger.warn`Token validation failed for action ${action}: ${permissionsApi.error}`
+          logger.warn('Token validation failed for action {action}', {
+            'event.name': 'auth.token.validation.failed',
+            'catalyst.orchestrator.action': action,
+            error: permissionsApi.error,
+          })
           return { valid: false, error: 'Authorization failed' }
         }
 
@@ -340,7 +354,11 @@ export function buildTokenValidator({
         })
 
         if (!result.success) {
-          logger.warn`Authorization denied for action ${action}: ${result.errorType}`
+          logger.warn('Authorization denied for action {action}', {
+            'event.name': 'auth.authorization.denied',
+            'catalyst.orchestrator.action': action,
+            'catalyst.orchestrator.error_type': result.errorType,
+          })
           return { valid: false, error: 'Authorization failed' }
         }
 
@@ -350,7 +368,11 @@ export function buildTokenValidator({
 
         return { valid: true }
       } catch (error) {
-        logger.error`Token validation error for action ${action}: ${error}`
+        logger.error('Token validation error for action {action}', {
+          'event.name': 'auth.token.validation.error',
+          'catalyst.orchestrator.action': action,
+          error,
+        })
         return { valid: false, error: 'Authorization failed' }
       }
     },

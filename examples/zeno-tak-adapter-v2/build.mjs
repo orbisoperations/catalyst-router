@@ -6,7 +6,7 @@ await esbuild.build({
   entryPoints: ['src/index.ts'],
   bundle: true,
   platform: 'node',
-  target: 'esnext',
+  target: 'node22',
   format: 'esm',
   outdir: 'dist',
   plugins: [wasmLoader({ mode: 'embedded' })],

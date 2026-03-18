@@ -1,8 +1,8 @@
 /**
  * Tests for GAP-001: auto-dial on LocalPeerCreate.
  *
- * When a peer is created via LocalPeerCreate and the service has a nodeToken
- * and the peer has an endpoint, the service should automatically call
+ * When a peer is created via LocalPeerCreate and the peer has an endpoint
+ * and a peerToken, the service should automatically call
  * transport.openPeer() to establish the connection.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -49,7 +49,7 @@ describe('auto-dial on LocalPeerCreate', () => {
     vi.useRealTimers()
   })
 
-  it('LocalPeerCreate calls transport.openPeer with the node token', async () => {
+  it('LocalPeerCreate calls transport.openPeer with the peer token', async () => {
     svc = new OrchestratorServiceV2({ config, transport, nodeToken: 'test-token' })
 
     await svc.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
@@ -58,7 +58,7 @@ describe('auto-dial on LocalPeerCreate', () => {
     expect(openCalls).toHaveLength(1)
     expect(openCalls[0]).toMatchObject({
       method: 'openPeer',
-      token: 'test-token',
+      token: 'token-b',
     })
     // Verify it was called with the correct peer name
     if (openCalls[0].method === 'openPeer') {
@@ -91,10 +91,16 @@ describe('auto-dial on LocalPeerCreate', () => {
     expect(openCalls).toHaveLength(0)
   })
 
-  it('LocalPeerCreate with no nodeToken does NOT call openPeer', async () => {
-    svc = new OrchestratorServiceV2({ config, transport })
+  it('LocalPeerCreate with no peerToken does NOT call openPeer', async () => {
+    svc = new OrchestratorServiceV2({ config, transport, nodeToken: 'test-token' })
 
-    await svc.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    const peerNoToken: PeerInfo = {
+      name: 'node-d',
+      endpoint: 'ws://node-d:4000',
+      domains: ['auto-dial.local'],
+    }
+
+    await svc.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerNoToken })
 
     const openCalls = transport.getCallsFor('openPeer')
     expect(openCalls).toHaveLength(0)

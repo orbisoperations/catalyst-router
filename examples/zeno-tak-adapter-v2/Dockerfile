@@ -54,7 +54,7 @@ RUN ARCH=$(uname -m) && \
     find /tmp/zenoh-ts -name '*.so' -exec cp {} /usr/local/lib/ \; && \
     rm -rf /tmp/zenoh-ts /tmp/zenoh-ts.zip && \
     echo "remote-api plugin installed:" && \
-    find /usr/local/lib -name '*remote_api*' -ls
+    find /usr/local/lib -name '*remote_api*'
 
 # Install Node.js runtime dependencies for the bundled app
 RUN corepack enable
