@@ -7,6 +7,9 @@ export interface DataChannelDefinition {
   region?: string
   tags?: string[]
   envoyPort?: number
+  healthStatus?: 'up' | 'down' | 'unknown'
+  responseTimeMs?: number | null
+  lastChecked?: string
 }
 
 export interface PeerRecord {
@@ -20,6 +23,7 @@ export interface PeerRecord {
 export interface InternalRoute extends DataChannelDefinition {
   peer: { name: string; endpoint?: string; domains: string[] }
   nodePath: string[]
+  originNode?: string
 }
 
 export interface RouterState {
