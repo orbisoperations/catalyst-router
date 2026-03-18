@@ -135,8 +135,14 @@ export class OrchestratorBus {
         return { success: false, error: 'peerToken is required when creating a peer' }
       }
 
+      // Step 1b: Inbound route policy — filter received routes before planning.
+      const filteredAction = this.applyInboundPolicy(action)
+      if (filteredAction === undefined) {
+        return { success: false, error: 'All routes rejected by inbound policy' }
+      }
+
       // Step 2: Plan — pure state transition, no side effects.
-      const ribPlan = this.rib.plan(action, this.rib.state)
+      const ribPlan = this.rib.plan(filteredAction, this.rib.state)
 
       if (!this.rib.stateChanged(ribPlan)) {
         // Tick with no expired peers: keepalives still need to fire.
@@ -192,6 +198,40 @@ export class OrchestratorBus {
       event.emit()
       return { success: true, state: committed, action }
     })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inbound route policy (filters received routes before planning)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Apply inbound route policy to InternalProtocolUpdate actions.
+   * Returns the action with filtered routes, or undefined if all routes
+   * were rejected (caller should short-circuit with no state change).
+   * Non-update actions pass through unchanged.
+   */
+  private applyInboundPolicy(action: Action): Action | undefined {
+    if (action.action !== Actions.InternalProtocolUpdate) return action
+    if (this.routePolicy === undefined) return action
+
+    const peer = this.rib.state.internal.peers.find((p) => p.name === action.data.peerInfo.name)
+    if (peer === undefined) return action
+
+    const updates = action.data.update.updates
+    const routes = updates.map((u) => u.route)
+    const allowed = this.routePolicy.canReceive(peer, routes)
+    const allowedNames = new Set(allowed.map((r) => r.name))
+
+    const filteredUpdates = updates.filter((u) => allowedNames.has(u.route.name))
+    if (filteredUpdates.length === 0) return undefined
+
+    return {
+      ...action,
+      data: {
+        ...action.data,
+        update: { updates: filteredUpdates },
+      },
+    }
   }
 
   // ---------------------------------------------------------------------------
