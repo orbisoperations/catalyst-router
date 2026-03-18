@@ -19,6 +19,10 @@ import type { PlanResult, PortOperation, RouteChange } from '../port-operation.j
 type LocalPeerDeleteData = Extract<Action, { action: typeof Actions.LocalPeerDelete }>['data']
 type LocalRouteCreateData = Extract<Action, { action: typeof Actions.LocalRouteCreate }>['data']
 type LocalRouteDeleteData = Extract<Action, { action: typeof Actions.LocalRouteDelete }>['data']
+type LocalRouteHealthUpdateData = Extract<
+  Action,
+  { action: typeof Actions.LocalRouteHealthUpdate }
+>['data']
 type InternalProtocolOpenData = Extract<
   Action,
   { action: typeof Actions.InternalProtocolOpen }
@@ -105,6 +109,8 @@ export class RoutingInformationBase {
         return this.planLocalRouteCreate(action.data, state)
       case Actions.LocalRouteDelete:
         return this.planLocalRouteDelete(action.data, state)
+      case Actions.LocalRouteHealthUpdate:
+        return this.planLocalRouteHealthUpdate(action.data, state)
       case Actions.InternalProtocolOpen:
         return this.planInternalProtocolOpen(action.data, state)
       case Actions.InternalProtocolConnected:
@@ -256,6 +262,43 @@ export class RoutingInformationBase {
       newState,
       portOps,
       routeChanges: [{ type: 'removed', route }],
+    }
+  }
+
+  private planLocalRouteHealthUpdate(
+    data: LocalRouteHealthUpdateData,
+    state: RouteTable
+  ): PlanResult {
+    const idx = state.local.routes.findIndex((r) => r.name === data.name)
+    if (idx === -1) return noChange(state)
+
+    const existing = state.local.routes[idx]
+
+    // No-op if health fields are identical (prevent iBGP churn)
+    if (
+      existing.healthStatus === data.healthStatus &&
+      existing.responseTimeMs === data.responseTimeMs &&
+      existing.lastChecked === data.lastChecked
+    ) {
+      return noChange(state)
+    }
+
+    const updated = {
+      ...existing,
+      healthStatus: data.healthStatus,
+      responseTimeMs: data.responseTimeMs,
+      lastChecked: data.lastChecked,
+    }
+    const routes = state.local.routes.map((r, i) => (i === idx ? updated : r))
+    const newState: RouteTable = {
+      ...state,
+      local: { ...state.local, routes },
+    }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges: [{ type: 'updated', route: updated }],
     }
   }
 
