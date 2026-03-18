@@ -1,5 +1,8 @@
 import type { ActionLog } from '@catalyst/routing/v2'
 import type { RouteTable } from '@catalyst/routing/v2'
+import { getLogger, WideEvent } from '@catalyst/telemetry'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'compaction'])
 
 export interface CompactionManagerOptions {
   /** The journal to compact. */
@@ -12,8 +15,6 @@ export interface CompactionManagerOptions {
   minEntries?: number
   /** Entries to retain after snapshot for debugging. Default: 100. */
   tailSize?: number
-  /** Optional logger. */
-  logger?: Pick<Console, 'info' | 'warn' | 'error'>
 }
 
 /**
@@ -34,7 +35,6 @@ export class CompactionManager {
   private readonly intervalMs: number
   private readonly minEntries: number
   private readonly tailSize: number
-  private readonly logger?: Pick<Console, 'info' | 'warn' | 'error'>
   private timer: ReturnType<typeof setInterval> | undefined
 
   constructor(opts: CompactionManagerOptions) {
@@ -43,7 +43,6 @@ export class CompactionManager {
     this.intervalMs = opts.intervalMs ?? 86_400_000
     this.minEntries = opts.minEntries ?? 1000
     this.tailSize = opts.tailSize ?? 100
-    this.logger = opts.logger
   }
 
   /** Start periodic compaction. No-op if intervalMs is 0 or already running. */
@@ -51,7 +50,7 @@ export class CompactionManager {
     if (this.intervalMs === 0 || this.timer !== undefined) return
     this.timer = setInterval(() => {
       this.compact().catch((err) => {
-        this.logger?.error('[CompactionManager] compaction failed:', err)
+        logger.error('Compaction cycle failed', { 'event.name': 'compaction.failed', error: err })
       })
     }, this.intervalMs)
   }
@@ -81,8 +80,13 @@ export class CompactionManager {
    * Returns a summary of what was done.
    */
   async compact(): Promise<CompactionResult> {
+    const event = new WideEvent('orchestrator.compaction', logger)
     const lastSeq = this.journal.lastSeq()
+    event.set('catalyst.orchestrator.journal.last_seq', lastSeq)
+
     if (lastSeq === 0) {
+      event.set('catalyst.orchestrator.compaction.skipped', true)
+      event.emit()
       return { skipped: true, reason: 'empty journal' }
     }
 
@@ -90,6 +94,8 @@ export class CompactionManager {
     const entriesSinceSnapshot = existingSnapshot ? lastSeq - existingSnapshot.atSeq : lastSeq
 
     if (entriesSinceSnapshot < this.minEntries) {
+      event.set('catalyst.orchestrator.compaction.skipped', true)
+      event.emit()
       return {
         skipped: true,
         reason: `only ${entriesSinceSnapshot} entries since last snapshot (threshold: ${this.minEntries})`,
@@ -99,14 +105,10 @@ export class CompactionManager {
     // Step 1: Snapshot
     const state = this.getState()
     this.journal.snapshot(lastSeq, state)
-    this.logger?.info(`[CompactionManager] snapshot written at seq ${lastSeq}`)
 
     // Step 2: Prune, retaining tailSize entries
     const pruneBeforeSeq = Math.max(1, lastSeq - this.tailSize + 1)
     const pruned = this.journal.prune(pruneBeforeSeq)
-    this.logger?.info(
-      `[CompactionManager] pruned ${pruned} entries (retained tail from seq ${pruneBeforeSeq})`
-    )
 
     // Step 3: Vacuum if supported (SQLite)
     if (
@@ -114,8 +116,13 @@ export class CompactionManager {
       typeof (this.journal as { vacuum: unknown }).vacuum === 'function'
     ) {
       ;(this.journal as { vacuum(): void }).vacuum()
-      this.logger?.info('[CompactionManager] vacuum completed')
     }
+
+    event.set({
+      'catalyst.orchestrator.compaction.snapshot_seq': lastSeq,
+      'catalyst.orchestrator.compaction.pruned': pruned,
+    })
+    event.emit()
 
     return { skipped: false, snapshotAtSeq: lastSeq, pruned }
   }

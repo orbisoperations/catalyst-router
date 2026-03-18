@@ -14,9 +14,12 @@ import { CompactionManager } from './compaction.js'
 import { createGatewayClient } from './gateway-client.js'
 import { createEnvoyClient } from './envoy-client.js'
 import { createPortAllocator } from '@catalyst/envoy-service'
+import { getLogger, WideEvent } from '@catalyst/telemetry'
 import type { PeerTransport } from './transport.js'
 import type { PeerRecord } from '@catalyst/routing/v2'
 import type { OrchestratorConfig } from '../v1/types.js'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'service'])
 
 export interface JournalConfig {
   /** "sqlite" for persistent storage, "memory" for ephemeral. Default: "memory". */
@@ -79,6 +82,9 @@ export class OrchestratorServiceV2 {
       path: opts.journalPath,
     }
 
+    const recoveryEvent = new WideEvent('orchestrator.journal_recovery', logger)
+    recoveryEvent.set('catalyst.orchestrator.journal.mode', journalConfig.mode ?? 'memory')
+
     // 1. Create the journal (SQLite on disk or in-memory).
     if (journalConfig.mode === 'sqlite') {
       if (!journalConfig.path) {
@@ -95,11 +101,13 @@ export class OrchestratorServiceV2 {
     const tempRib = new RoutingInformationBase({ nodeId: opts.config.node.name })
     const snapshot = this.journal.getSnapshot()
     let replayAfterSeq = 0
+    let replayCount = 0
 
     if (snapshot) {
       // Restore from snapshot — apply snapshot state to the temp RIB.
       Object.assign(tempRib.state, snapshot.state)
       replayAfterSeq = snapshot.atSeq
+      recoveryEvent.set('catalyst.orchestrator.journal.snapshot_seq', snapshot.atSeq)
     }
 
     for (const entry of this.journal.replay(replayAfterSeq)) {
@@ -107,7 +115,10 @@ export class OrchestratorServiceV2 {
       if (tempRib.stateChanged(plan)) {
         tempRib.commit(plan, entry.action)
       }
+      replayCount++
     }
+    recoveryEvent.set('catalyst.orchestrator.journal.replayed_entries', replayCount)
+    recoveryEvent.emit()
 
     // 3. Create the bus with the replayed initial state.
     //    The journal is passed so that new actions are appended going forward.
@@ -215,13 +226,18 @@ export class OrchestratorServiceV2 {
   private async dialPeer(peer: PeerRecord): Promise<void> {
     if (!peer.endpoint || !peer.peerToken) return
 
+    const event = new WideEvent('orchestrator.auto_dial', logger)
+    event.set('catalyst.orchestrator.peer.name', peer.name)
     try {
       await this.transport.openPeer(peer, peer.peerToken)
       await this.bus.dispatch({
         action: Actions.InternalProtocolConnected,
         data: { peerInfo: { name: peer.name, domains: peer.domains } },
       })
+      event.emit()
     } catch {
+      event.set('catalyst.orchestrator.auto_dial.outcome', 'reconnect_scheduled')
+      event.emit()
       this.reconnectManager.scheduleReconnect(peer)
     }
   }

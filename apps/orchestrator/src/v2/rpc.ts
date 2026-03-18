@@ -8,7 +8,7 @@ import type {
 } from '@catalyst/routing/v2'
 import type { z } from 'zod'
 import { decodeJwt } from 'jose'
-import { getLogger } from '@catalyst/telemetry'
+import { getLogger, WideEvent } from '@catalyst/telemetry'
 import type { OrchestratorBus } from './bus.js'
 
 const logger = getLogger(['catalyst', 'orchestrator', 'rpc'])
@@ -78,10 +78,18 @@ export async function createNetworkClient(
   token: string,
   validator: TokenValidator
 ): Promise<{ success: true; client: NetworkClient } | { success: false; error: string }> {
+  const event = new WideEvent('orchestrator.rpc_auth', logger)
+  event.set({
+    'catalyst.orchestrator.rpc.client_type': 'NetworkClient',
+    'catalyst.orchestrator.rpc.action': 'PEER_CREATE',
+  })
   const validation = await validator.validateToken(token, 'PEER_CREATE')
   if (!validation.valid) {
+    event.setError(new Error(validation.error))
+    event.emit()
     return { success: false, error: validation.error }
   }
+  event.emit()
 
   return {
     success: true,
@@ -116,10 +124,18 @@ export async function createDataChannelClient(
   token: string,
   validator: TokenValidator
 ): Promise<{ success: true; client: DataChannel } | { success: false; error: string }> {
+  const event = new WideEvent('orchestrator.rpc_auth', logger)
+  event.set({
+    'catalyst.orchestrator.rpc.client_type': 'DataChannelClient',
+    'catalyst.orchestrator.rpc.action': 'ROUTE_CREATE',
+  })
   const validation = await validator.validateToken(token, 'ROUTE_CREATE')
   if (!validation.valid) {
+    event.setError(new Error(validation.error))
+    event.emit()
     return { success: false, error: validation.error }
   }
+  event.emit()
 
   return {
     success: true,
@@ -180,15 +196,25 @@ export async function createIBGPClient(
   token: string,
   validator: TokenValidator
 ): Promise<{ success: true; client: IBGPClient } | { success: false; error: string }> {
+  const event = new WideEvent('orchestrator.rpc_auth', logger)
+  event.set({
+    'catalyst.orchestrator.rpc.client_type': 'IBGPClient',
+    'catalyst.orchestrator.rpc.action': 'IBGP_CONNECT',
+  })
   const validation = await validator.validateToken(token, 'IBGP_CONNECT')
   if (!validation.valid) {
+    event.setError(new Error(validation.error))
+    event.emit()
     return { success: false, error: validation.error }
   }
 
   const identity = extractPeerIdentity(token)
   if (!identity.success) {
+    event.setError(new Error(identity.error))
+    event.emit()
     return { success: false, error: identity.error }
   }
+  event.emit()
 
   const peerIdentity = identity.identity
 
