@@ -59,30 +59,22 @@ export class GatewayGraphqlServer {
   ): Promise<{ success: true } | { success: false; error: string }> {
     const event = new WideEvent('gateway.reload', this.logger)
     event.set('gateway.service_count', config.services.length)
-    this.logger.info('Reloading gateway with {serviceCount} services', {
-      'event.name': 'gateway.reload.started',
-      'gateway.service_count': config.services.length,
-      serviceCount: config.services.length,
-    })
     try {
       const subschemas = await Promise.all(
         config.services.map(async (service) => {
-          // Check if the service exposes an SDL
           await this.validateServiceSdl(service.url, service.token)
-
+          event.log.info('SDL validated for {url}', {
+            'subgraph.url': service.url,
+            url: service.url,
+          })
           const executor = this.createRemoteExecutor(service.url, service.token)
           const schema = await this.fetchRemoteSchema(executor)
-          return {
-            schema,
-            executor,
-          }
+          return { schema, executor }
         })
       )
 
       if (subschemas.length === 0) {
-        this.logger.warn('No services configured, using default schema', {
-          'event.name': 'gateway.reload.empty',
-        })
+        event.set('gateway.zero_services', true)
         this.createYogaInstance([
           {
             typeDefs: 'type Query { status: String }',
@@ -91,21 +83,10 @@ export class GatewayGraphqlServer {
             },
           },
         ])
-        const durationMs = event.durationMs
-        this.reloadCounter.add(1, { result: 'success' })
-        this.reloadDuration.record(durationMs / 1000)
-        const newCount = 0
-        this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
-        this.currentSubgraphCount = newCount
-        event.emit()
-        return { success: true }
+      } else {
+        const stitchedSchema = stitchSchemas({ subschemas })
+        this.createYogaInstance({ schema: stitchedSchema })
       }
-
-      const stitchedSchema = stitchSchemas({
-        subschemas,
-      })
-
-      this.createYogaInstance({ schema: stitchedSchema })
 
       const durationMs = event.durationMs
       this.reloadCounter.add(1, { result: 'success' })
@@ -114,32 +95,19 @@ export class GatewayGraphqlServer {
       this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
       this.currentSubgraphCount = newCount
 
-      this.logger.info('Gateway reloaded successfully in {durationMs}ms', {
-        'event.name': 'gateway.reloaded',
-        'gateway.duration_ms': durationMs,
-        durationMs,
-      })
       event.set({
         'gateway.duration_ms': durationMs,
         'gateway.subgraph_count': subschemas.length,
       })
-      event.emit()
       return { success: true }
     } catch (error: unknown) {
       const durationMs = event.durationMs
       this.reloadCounter.add(1, { result: 'failure' })
       this.reloadDuration.record(durationMs / 1000)
-
-      const message = error instanceof Error ? error.message : String(error)
-      this.logger.error('Gateway reload failed: {errorMessage}', {
-        'event.name': 'gateway.reload.failed',
-        'exception.message': message,
-        errorMessage: message,
-      })
       event.setError(error)
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    } finally {
       event.emit()
-      // We do NOT update the yoga instance here, effectively keeping the last known good config.
-      return { success: false, error: message }
     }
   }
 
@@ -271,23 +239,9 @@ export class GatewayGraphqlServer {
             throw new Error('Service returned empty or invalid SDL')
           }
 
-          this.logger.info('SDL validated for {serviceName}', {
-            'event.name': 'gateway.subgraph.sdl_validated',
-            'subgraph.name': url,
-            valid: true,
-            serviceName: url,
-          })
           span.end()
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error)
-          this.logger.warn('SDL validation failed for {serviceName}: {error}', {
-            'event.name': 'gateway.subgraph.sdl_validated',
-            'subgraph.name': url,
-            valid: false,
-            'exception.message': message,
-            serviceName: url,
-            error: message,
-          })
           span.recordException(error as Error)
           span.setStatus({
             code: SpanStatusCode.ERROR,
