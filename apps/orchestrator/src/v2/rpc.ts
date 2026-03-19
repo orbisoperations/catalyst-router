@@ -1,5 +1,5 @@
 import { Actions, PeerView, InternalRouteView } from '@catalyst/routing/v2'
-import type { PeerInfo, DataChannelDefinition, UpdateMessageSchema } from '@catalyst/routing/v2'
+import type { PeerInfo, DataChannelDefinition, RouteChange, UpdateMessageSchema } from '@catalyst/routing/v2'
 import type { PublicPeer, PublicInternalRoute } from '@catalyst/routing/v2'
 import type { z } from 'zod'
 import { decodeJwt } from 'jose'
@@ -42,6 +42,15 @@ export interface DataChannel {
     route: Pick<DataChannelDefinition, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
   listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: PublicInternalRoute[] }>
+  /**
+   * Subscribe to route change deltas. The callback fires after every commit
+   * that produces route changes, enabling sub-100ms relay configuration
+   * instead of polling.
+   *
+   * Returns an unsubscribe function. The caller MUST call it on WebSocket
+   * close to prevent leaked subscriptions.
+   */
+  watchRoutes(callback: (changes: RouteChange[]) => void): () => void
 }
 
 export interface IBGPClient {
@@ -154,6 +163,10 @@ export async function createDataChannelClient(
           local: bus.state.local.routes,
           internal: bus.state.internal.routes.map((r) => new InternalRouteView(r).toPublic()),
         }
+      },
+
+      watchRoutes(callback: (changes: RouteChange[]) => void): () => void {
+        return bus.subscribeRouteChanges(callback)
       },
     },
   }
