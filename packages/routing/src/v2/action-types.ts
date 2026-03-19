@@ -11,6 +11,7 @@ export const Actions = {
   // Local route management
   LocalRouteCreate: 'local:route:create',
   LocalRouteDelete: 'local:route:delete',
+  LocalRouteHealthUpdate: 'local:route:health-update',
 
   // Internal protocol (peering)
   InternalProtocolOpen: 'internal:protocol:open',
