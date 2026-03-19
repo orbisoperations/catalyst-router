@@ -26,11 +26,18 @@ export interface StreamAccessEvaluator {
   ): 'allow' | 'deny'
 }
 
+export interface AuthMetrics {
+  authRequests: { add(value: number, attributes?: Record<string, string>): void }
+  authFailures: { add(value: number, attributes?: Record<string, string>): void }
+  authDuration: { record(value: number, attributes?: Record<string, string>): void }
+}
+
 export interface AuthHookOptions {
   tokenValidator: TokenValidator
   streamAccess: StreamAccessEvaluator
   nodeId: string
   domainId: string
+  metrics?: AuthMetrics
 }
 
 const LOCALHOST_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -54,10 +61,11 @@ const SAFE_PATH_RE = /^[a-zA-Z0-9._-]+$/
  * Bearer header — the relay manager tunnels it via sourcePass.
  */
 export function createAuthHook(options: AuthHookOptions): Hono {
-  const { tokenValidator, streamAccess, nodeId, domainId } = options
+  const { tokenValidator, streamAccess, nodeId, domainId, metrics } = options
   const app = new Hono()
 
   app.post('/video-stream/auth', async (c) => {
+    const start = performance.now()
     const body = await c.req.json().catch(() => null)
     const parsed = MediaMtxAuthRequestSchema.safeParse(body)
 
@@ -76,12 +84,18 @@ export function createAuthHook(options: AuthHookOptions): Hono {
       return c.json({ error: 'invalid_request', reason: 'Path contains unsafe characters' }, 400)
     }
 
+    metrics?.authRequests.add(1, { action: req.action })
+
     if (req.action === 'publish') {
-      return handlePublish(c, req)
+      const res = handlePublish(c, req)
+      metrics?.authDuration.record((performance.now() - start) / 1000, { action: 'publish' })
+      return res
     }
 
     // read or playback
-    return handleRead(c, req)
+    const res = await handleRead(c, req)
+    metrics?.authDuration.record((performance.now() - start) / 1000, { action: req.action })
+    return res
   })
 
   function handlePublish(
@@ -99,6 +113,7 @@ export function createAuthHook(options: AuthHookOptions): Hono {
       return c.json({}, 200)
     }
 
+    metrics?.authFailures.add(1, { action: 'publish', reason: 'remote_publish' })
     logger.warn('Remote publish denied from {ip} on {streamPath}', {
       'event.name': 'video.auth.remote_publish_denied',
       ip: req.ip,
@@ -114,6 +129,7 @@ export function createAuthHook(options: AuthHookOptions): Hono {
     // Extract JWT: prefer `token` field, fall back to `password` for relay reads
     const jwt = req.token || req.password
     if (!jwt) {
+      metrics?.authFailures.add(1, { action: req.action, reason: 'no_token' })
       logger.warn('Auth denied: {action} on {streamPath} from {ip}', {
         'event.name': 'video.auth.denied',
         action: req.action,
@@ -129,6 +145,7 @@ export function createAuthHook(options: AuthHookOptions): Hono {
     try {
       result = await tokenValidator.validate(jwt)
     } catch {
+      metrics?.authFailures.add(1, { action: req.action, reason: 'auth_unreachable' })
       logger.error('Auth evaluation failed for {action} on {streamPath}: {error}', {
         'event.name': 'video.auth.error',
         action: req.action,
@@ -139,6 +156,7 @@ export function createAuthHook(options: AuthHookOptions): Hono {
     }
 
     if (!result.valid) {
+      metrics?.authFailures.add(1, { action: req.action, reason: 'invalid_token' })
       logger.warn('Auth denied: {action} on {streamPath} from {ip}', {
         'event.name': 'video.auth.denied',
         action: req.action,
@@ -152,6 +170,7 @@ export function createAuthHook(options: AuthHookOptions): Hono {
 
     const decision = streamAccess.evaluate(result.payload, { nodeId, domainId })
     if (decision === 'deny') {
+      metrics?.authFailures.add(1, { action: req.action, reason: 'cedar_deny' })
       logger.warn('Auth denied: {action} on {streamPath} from {ip}', {
         'event.name': 'video.auth.denied',
         action: req.action,

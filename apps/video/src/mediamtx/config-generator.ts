@@ -71,7 +71,7 @@ export function generateMediaMtxConfig(config: VideoConfig, servicePort: number)
 
     // Prometheus metrics
     metrics: true,
-    metricsAddress: `:${config.metricsPort}`,
+    metricsAddress: `127.0.0.1:${config.metricsPort}`,
 
     // Protocol listeners
     rtsp: true,

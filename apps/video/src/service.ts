@@ -7,10 +7,14 @@ import { ProcessManager } from './mediamtx/process-manager.js'
 import { ControlApiClient } from './mediamtx/control-api-client.js'
 import { createAuthHook } from './hooks/auth.js'
 import { createLifecycleHooks } from './hooks/lifecycle.js'
-import { StreamRouteManager } from './routes/stream-route-manager.js'
-import { ReconnectingClient } from './rpc/reconnecting-client.js'
-import { TokenRefreshScheduler } from './rpc/token-refresh.js'
-import { RelayManager } from './routes/relay-manager.js'
+import {
+  StreamRouteManager,
+  type StreamRouteManagerOptions,
+} from './routes/stream-route-manager.js'
+import { ReconnectingClient, type ReconnectingClientOptions } from './rpc/reconnecting-client.js'
+import { TokenRefreshScheduler, type TokenRefreshOptions } from './rpc/token-refresh.js'
+import { RelayManager, type RelayManagerOptions } from './routes/relay-manager.js'
+import { createVideoMetrics } from './metrics.js'
 import { newWebSocketRpcSession } from 'capnweb'
 import { decodeJwt } from 'jose'
 import {
@@ -27,6 +31,7 @@ import { tmpdir } from 'node:os'
 
 export interface VideoStreamServiceOptions extends CatalystServiceOptions {
   videoConfig: VideoConfig
+  deps?: VideoServiceDeps
 }
 
 interface AuthRpcApi {
@@ -67,6 +72,32 @@ interface DataChannel {
   watchRoutes(callback: (changes: RouteChange[]) => void): () => void
 }
 
+export interface VideoServiceDeps {
+  createControlApiClient?: (
+    options: ConstructorParameters<typeof ControlApiClient>[0]
+  ) => ControlApiClient
+  createProcessManager?: (
+    options: ConstructorParameters<typeof ProcessManager>[0]
+  ) => ProcessManager
+  createStreamRouteManager?: (options: StreamRouteManagerOptions) => StreamRouteManager
+  createRelayManager?: (options: RelayManagerOptions) => RelayManager
+  createReconnectingClient?: (options: ReconnectingClientOptions) => ReconnectingClient
+  createTokenScheduler?: (options: TokenRefreshOptions) => TokenRefreshScheduler
+  rpcSessionFactory?: typeof newWebSocketRpcSession
+  fetchImpl?: typeof fetch
+}
+
+const defaultVideoServiceDeps: Required<VideoServiceDeps> = {
+  createControlApiClient: (options) => new ControlApiClient(options),
+  createProcessManager: (options) => new ProcessManager(options),
+  createStreamRouteManager: (options) => new StreamRouteManager(options),
+  createRelayManager: (options) => new RelayManager(options),
+  createReconnectingClient: (options) => new ReconnectingClient(options),
+  createTokenScheduler: (options) => new TokenRefreshScheduler(options),
+  rpcSessionFactory: newWebSocketRpcSession,
+  fetchImpl: fetch,
+}
+
 /**
  * Video streaming service that orchestrates MediaMTX as a sidecar process.
  *
@@ -80,6 +111,7 @@ export class VideoStreamService extends CatalystService {
   readonly info = { name: 'video', version: '0.0.0' }
   readonly handler = new Hono()
   readonly videoConfig: VideoConfig
+  private readonly deps: Required<VideoServiceDeps>
   private processManager?: ProcessManager
   private controlApiClient?: ControlApiClient
   private routeManager?: StreamRouteManager
@@ -89,13 +121,16 @@ export class VideoStreamService extends CatalystService {
   private relayManager?: RelayManager
   private currentToken?: string
   private dataChannel?: DataChannel
+  private stoppingProcess = false
 
   constructor(options: VideoStreamServiceOptions) {
     super(options)
     this.videoConfig = options.videoConfig
+    this.deps = { ...defaultVideoServiceDeps, ...options.deps }
   }
 
   protected async onInitialize(): Promise<void> {
+    this.stoppingProcess = false
     this.handler.get('/', (c) => c.text('Catalyst Video Service is running.'))
 
     this.handler.get('/health', (c) => {
@@ -127,9 +162,12 @@ export class VideoStreamService extends CatalystService {
     })
 
     // Initialize Control API client
-    this.controlApiClient = new ControlApiClient({
+    this.controlApiClient = this.deps.createControlApiClient({
       baseUrl: `http://127.0.0.1:${this.videoConfig.apiPort}`,
     })
+
+    // Create OTEL metrics instruments
+    const metrics = createVideoMetrics()
 
     // Wire auth hook with real Cedar STREAM_VIEW evaluation
     const domainId = this.config.node.domains?.[0] ?? 'default'
@@ -139,7 +177,7 @@ export class VideoStreamService extends CatalystService {
         validate: async (token) => {
           try {
             const authBase = this.videoConfig.authEndpoint.replace(/^ws/, 'http')
-            const res = await fetch(`${authBase}/verify`, {
+            const res = await this.deps.fetchImpl(`${authBase}/verify`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ token }),
@@ -174,11 +212,12 @@ export class VideoStreamService extends CatalystService {
       },
       nodeId: this.config.node.name,
       domainId,
+      metrics,
     })
     this.handler.route('/', authHook)
 
     // Wire lifecycle hooks with route manager — registrar delegates to DataChannel
-    this.routeManager = new StreamRouteManager({
+    this.routeManager = this.deps.createStreamRouteManager({
       registrar: {
         addRoute: async (route) => {
           if (!this.dataChannel) throw new Error('Not connected to orchestrator')
@@ -204,12 +243,13 @@ export class VideoStreamService extends CatalystService {
       advertiseAddress: this.videoConfig.advertiseAddress ?? 'localhost',
       rtspPort: this.videoConfig.rtspPort,
       maxStreams: this.videoConfig.maxStreams,
+      metrics,
     })
     const lifecycleHooks = createLifecycleHooks({ routeManager: this.routeManager })
     this.handler.route('/', lifecycleHooks)
 
     // Wire RelayManager — RouteSubscription delegates to DataChannel
-    this.relayManager = new RelayManager({
+    this.relayManager = this.deps.createRelayManager({
       routeSource: {
         watchRoutes: (cb) => {
           if (!this.dataChannel) throw new Error('Not connected to orchestrator')
@@ -223,11 +263,12 @@ export class VideoStreamService extends CatalystService {
       controlApi: this.controlApiClient!,
       localNodeName: this.config.node.name,
       getRelayToken: () => this.currentToken!,
+      metrics,
     })
 
     // Token minting — connect to auth service for DATA_CUSTODIAN token
     const mintToken = async (): Promise<string> => {
-      const authClient = newWebSocketRpcSession<AuthRpcApi>(this.videoConfig.authEndpoint)
+      const authClient = this.deps.rpcSessionFactory<AuthRpcApi>(this.videoConfig.authEndpoint)
       const tokensApi = await authClient.tokens(this.videoConfig.systemToken)
 
       if ('error' in tokensApi) {
@@ -254,7 +295,7 @@ export class VideoStreamService extends CatalystService {
 
     // DataChannel connection — connect to orchestrator PublicApi
     const connectToOrchestrator = async (): Promise<DataChannel> => {
-      const stub = newWebSocketRpcSession<OrchestratorPublicApi>(
+      const stub = this.deps.rpcSessionFactory<OrchestratorPublicApi>(
         this.videoConfig.orchestratorEndpoint
       )
       const result = await stub.getDataChannelClient(this.currentToken!)
@@ -266,7 +307,7 @@ export class VideoStreamService extends CatalystService {
     }
 
     // ReconnectingClient lifecycle: mintToken → connect → relayManager.start → reconcile
-    this.rpcClient = new ReconnectingClient({
+    this.rpcClient = this.deps.createReconnectingClient({
       mintToken,
       connect: async () => {
         const dc = await connectToOrchestrator()
@@ -309,7 +350,7 @@ export class VideoStreamService extends CatalystService {
     })
 
     // TokenRefreshScheduler — hourly check, refresh at 80% TTL
-    this.tokenScheduler = new TokenRefreshScheduler({
+    this.tokenScheduler = this.deps.createTokenScheduler({
       getExpiry: () => {
         if (!this.currentToken) return undefined
         const { exp } = decodeJwt(this.currentToken)
@@ -338,13 +379,14 @@ export class VideoStreamService extends CatalystService {
     this.tokenScheduler.start()
 
     // Start MediaMTX process
-    this.processManager = new ProcessManager({
+    this.processManager = this.deps.createProcessManager({
       binaryPath: process.env.MEDIAMTX_PATH ?? 'mediamtx',
       configPath: this.configPath,
     })
 
     let hasStartedOnce = false
     this.processManager.on('started', (pid) => {
+      metrics.mediamtxRunning.add(1)
       this.telemetry.logger.info('MediaMTX process started (pid: {pid})', {
         'event.name': 'video.mediamtx.started',
         pid,
@@ -367,6 +409,10 @@ export class VideoStreamService extends CatalystService {
     })
 
     this.processManager.on('exited', (exitCode, signal) => {
+      metrics.mediamtxRunning.add(-1)
+      if (!this.stoppingProcess) {
+        metrics.mediamtxCrashes.add(1)
+      }
       this.telemetry.logger.warn('MediaMTX process exited (code: {exitCode})', {
         'event.name': 'video.mediamtx.exited',
         exitCode,
@@ -375,6 +421,7 @@ export class VideoStreamService extends CatalystService {
     })
 
     this.processManager.on('restarting', (attempt, maxAttempts) => {
+      metrics.mediamtxRestarts.add(1)
       this.telemetry.logger.warn('Restarting MediaMTX (attempt {attempt}/{maxAttempts})', {
         'event.name': 'video.mediamtx.restarting',
         attempt,
@@ -431,6 +478,7 @@ export class VideoStreamService extends CatalystService {
     this.rpcClient?.stop()
 
     // Step 4: Stop MediaMTX process (SIGTERM then SIGKILL)
+    this.stoppingProcess = true
     await this.processManager?.stop()
 
     this.telemetry.logger.info('VideoStreamService stopped', {
