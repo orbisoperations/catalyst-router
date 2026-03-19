@@ -14,7 +14,7 @@ import { CompactionManager } from './compaction.js'
 import { createGatewayClient } from './gateway-client.js'
 import { createEnvoyClient } from './envoy-client.js'
 import { createPortAllocator } from '@catalyst/envoy-service'
-import { getLogger, WideEvent } from '@catalyst/telemetry'
+import { getLogger, WideEvent, withWideEvent } from '@catalyst/telemetry'
 import type { PeerTransport } from './transport.js'
 import type { PeerRecord } from '@catalyst/routing/v2'
 import type { OrchestratorConfig } from '../v1/types.js'
@@ -82,6 +82,8 @@ export class OrchestratorServiceV2 {
       path: opts.journalPath,
     }
 
+    // Sync constructor — withWideEvent (async) can't be used here.
+    // Manual try/catch/finally guarantees emission.
     const recoveryEvent = new WideEvent('orchestrator.journal_recovery', logger)
     recoveryEvent.set('catalyst.orchestrator.journal.mode', journalConfig.mode ?? 'memory')
 
@@ -99,26 +101,32 @@ export class OrchestratorServiceV2 {
     // 2. Recover state: snapshot-first, then replay only the tail.
     //    Uses a temporary RIB (no journal) so we don't double-append on replay.
     const tempRib = new RoutingInformationBase({ nodeId: opts.config.node.name })
-    const snapshot = this.journal.getSnapshot()
-    let replayAfterSeq = 0
-    let replayCount = 0
+    try {
+      const snapshot = this.journal.getSnapshot()
+      let replayAfterSeq = 0
+      let replayCount = 0
 
-    if (snapshot) {
-      // Restore from snapshot — apply snapshot state to the temp RIB.
-      Object.assign(tempRib.state, snapshot.state)
-      replayAfterSeq = snapshot.atSeq
-      recoveryEvent.set('catalyst.orchestrator.journal.snapshot_seq', snapshot.atSeq)
-    }
-
-    for (const entry of this.journal.replay(replayAfterSeq)) {
-      const plan = tempRib.plan(entry.action, tempRib.state)
-      if (tempRib.stateChanged(plan)) {
-        tempRib.commit(plan, entry.action)
+      if (snapshot) {
+        // Restore from snapshot — apply snapshot state to the temp RIB.
+        Object.assign(tempRib.state, snapshot.state)
+        replayAfterSeq = snapshot.atSeq
+        recoveryEvent.set('catalyst.orchestrator.journal.snapshot_seq', snapshot.atSeq)
       }
-      replayCount++
+
+      for (const entry of this.journal.replay(replayAfterSeq)) {
+        const plan = tempRib.plan(entry.action, tempRib.state)
+        if (tempRib.stateChanged(plan)) {
+          tempRib.commit(plan, entry.action)
+        }
+        replayCount++
+      }
+      recoveryEvent.set('catalyst.orchestrator.journal.replayed_entries', replayCount)
+    } catch (err) {
+      recoveryEvent.setError(err)
+      throw err
+    } finally {
+      recoveryEvent.emit()
     }
-    recoveryEvent.set('catalyst.orchestrator.journal.replayed_entries', replayCount)
-    recoveryEvent.emit()
 
     // 3. Create the bus with the replayed initial state.
     //    The journal is passed so that new actions are appended going forward.
@@ -226,19 +234,18 @@ export class OrchestratorServiceV2 {
   private async dialPeer(peer: PeerRecord): Promise<void> {
     if (!peer.endpoint || !peer.peerToken) return
 
-    const event = new WideEvent('orchestrator.auto_dial', logger)
-    event.set('catalyst.orchestrator.peer.name', peer.name)
-    try {
-      await this.transport.openPeer(peer, peer.peerToken)
-      await this.bus.dispatch({
-        action: Actions.InternalProtocolConnected,
-        data: { peerInfo: { name: peer.name, domains: peer.domains } },
-      })
-      event.emit()
-    } catch {
-      event.set('catalyst.orchestrator.auto_dial.outcome', 'reconnect_scheduled')
-      event.emit()
-      this.reconnectManager.scheduleReconnect(peer)
-    }
+    await withWideEvent('orchestrator.auto_dial', logger, async (event) => {
+      event.set('catalyst.orchestrator.peer.name', peer.name)
+      try {
+        await this.transport.openPeer(peer, peer.peerToken!)
+        await this.bus.dispatch({
+          action: Actions.InternalProtocolConnected,
+          data: { peerInfo: { name: peer.name, domains: peer.domains } },
+        })
+      } catch {
+        event.set('catalyst.orchestrator.auto_dial.outcome', 'reconnect_scheduled')
+        this.reconnectManager.scheduleReconnect(peer)
+      }
+    })
   }
 }
