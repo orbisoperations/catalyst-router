@@ -1,5 +1,5 @@
 import { newWebSocketRpcSession, type RpcStub } from 'capnweb'
-import { getLogger, WideEvent } from '@catalyst/telemetry'
+import { getLogger, withWideEvent } from '@catalyst/telemetry'
 import type { PeerRecord } from '@catalyst/routing/v2'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 
@@ -68,35 +68,29 @@ export class WebSocketPeerTransport implements PeerTransport {
   }
 
   async openPeer(peer: PeerRecord, token: string): Promise<void> {
-    const event = new WideEvent('transport.open_peer', logger)
-    event.set({
-      'catalyst.orchestrator.peer.name': peer.name,
-      'catalyst.orchestrator.peer.endpoint': peer.endpoint,
+    await withWideEvent('transport.open_peer', logger, async (event) => {
+      event.set({
+        'catalyst.orchestrator.peer.name': peer.name,
+        'catalyst.orchestrator.peer.endpoint': peer.endpoint,
+      })
+      const stub = this.getStub(this.requireEndpoint(peer))
+      const result = await stub.getIBGPClient(token)
+      if (!result.success) {
+        throw new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
+      }
+      const openResult = await result.client.open({
+        peerInfo: this.localNodeInfo,
+        holdTime: peer.holdTime,
+      })
+      if (!openResult.success) {
+        throw new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
+      }
+      logger.info('Opened connection to {peerName}', {
+        'event.name': 'peer.session.opened',
+        'catalyst.orchestrator.peer.name': peer.name,
+        'catalyst.orchestrator.peer.endpoint': peer.endpoint,
+      })
     })
-    const stub = this.getStub(this.requireEndpoint(peer))
-    const result = await stub.getIBGPClient(token)
-    if (!result.success) {
-      const err = new Error(`Failed to get iBGP client for ${peer.name}: ${result.error}`)
-      event.setError(err)
-      event.emit()
-      throw err
-    }
-    const openResult = await result.client.open({
-      peerInfo: this.localNodeInfo,
-      holdTime: peer.holdTime,
-    })
-    if (!openResult.success) {
-      const err = new Error(`Failed to open peer ${peer.name}: ${openResult.error}`)
-      event.setError(err)
-      event.emit()
-      throw err
-    }
-    logger.info('Opened connection to {peerName}', {
-      'event.name': 'peer.session.opened',
-      'catalyst.orchestrator.peer.name': peer.name,
-      'catalyst.orchestrator.peer.endpoint': peer.endpoint,
-    })
-    event.emit()
   }
 
   async sendUpdate(peer: PeerRecord, message: UpdateMessage): Promise<void> {
