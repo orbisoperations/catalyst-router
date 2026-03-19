@@ -160,6 +160,43 @@ export class StreamRouteManager {
     return this.activeRoutes.size
   }
 
+  /**
+   * Withdraw all active routes from the orchestrator and reset state.
+   * Used on MediaMTX degraded/restart and orderly shutdown.
+   * Best-effort: individual withdrawal failures are logged but don't block.
+   */
+  async withdrawAll(): Promise<void> {
+    // Cancel all pending timers first
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer)
+    }
+    this.pending.clear()
+
+    const paths = [...this.activeRoutes]
+    if (paths.length === 0) return
+
+    logger.info('Withdrawing {count} active route(s)', {
+      'event.name': 'video.route.withdraw_all',
+      count: paths.length,
+    })
+
+    const results = await Promise.allSettled(
+      paths.map(async (path) => {
+        await this.registrar.removeRoute(path)
+        this.activeRoutes.delete(path)
+      })
+    )
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.warn('Failed to withdraw route: {error}', {
+          'event.name': 'video.route.withdraw_failed',
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        })
+      }
+    }
+  }
+
   /** Shutdown: cancel all pending timers. */
   shutdown(): void {
     for (const pending of this.pending.values()) {
