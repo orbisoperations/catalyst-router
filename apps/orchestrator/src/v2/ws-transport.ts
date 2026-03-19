@@ -123,24 +123,38 @@ export class WebSocketPeerTransport implements PeerTransport {
   }
 
   async closePeer(peer: PeerRecord, code: number, reason?: string): Promise<void> {
-    const endpoint = this.requireEndpoint(peer)
-    const stub = this.getStub(endpoint)
-    const token = peer.peerToken
-    if (!token) {
-      logger.warn('No peerToken for {peerName} — closing without notification', {
-        'event.name': 'peer.session.close_unnotified',
+    await withWideEvent('transport.close_peer', logger, async (event) => {
+      event.set({
         'catalyst.orchestrator.peer.name': peer.name,
+        'catalyst.orchestrator.transport.close_code': code,
+        'catalyst.orchestrator.transport.close_reason': reason,
       })
-      return
-    }
-    try {
-      const result = await stub.getIBGPClient(token)
-      if (result.success) {
-        await result.client.close({ peerInfo: this.localNodeInfo, code, reason })
+      const endpoint = this.requireEndpoint(peer)
+      const stub = this.getStub(endpoint)
+      const token = peer.peerToken
+      if (!token) {
+        logger.warn('No peerToken for {peerName} — closing without notification', {
+          'event.name': 'peer.session.close_unnotified',
+          'catalyst.orchestrator.peer.name': peer.name,
+        })
+        event.set('catalyst.orchestrator.transport.close_skipped', true)
+        return
       }
-    } catch {
-      // Best-effort close — if the connection is already down, nothing to do.
-    }
-    this.stubs.delete(endpoint)
+      try {
+        const result = await stub.getIBGPClient(token)
+        if (result.success) {
+          await result.client.close({ peerInfo: this.localNodeInfo, code, reason })
+        }
+      } catch (error) {
+        // Best-effort close — if the connection is already down, nothing to do.
+        event.setError(error)
+        logger.debug('Best-effort close failed for {peerName}', {
+          'event.name': 'peer.close.best_effort_failed',
+          'catalyst.orchestrator.peer.name': peer.name,
+          error,
+        })
+      }
+      this.stubs.delete(endpoint)
+    })
   }
 }
