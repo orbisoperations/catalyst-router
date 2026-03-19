@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
+import { getLogger } from '@catalyst/telemetry'
 import type { MediaMtxAuthRequest } from '../mediamtx/types.js'
 import { MediaMtxAuthRequestSchema } from '../mediamtx/types.js'
+
+const logger = getLogger(['catalyst', 'video', 'auth'])
 
 /**
  * JWT validation function — injected so the hook is auth-provider agnostic.
@@ -59,6 +62,10 @@ export function createAuthHook(options: AuthHookOptions): Hono {
     const parsed = MediaMtxAuthRequestSchema.safeParse(body)
 
     if (!parsed.success) {
+      logger.warn('Invalid hook payload rejected', {
+        'event.name': 'video.auth.invalid_payload',
+        error: parsed.error.message,
+      })
       return c.json({ error: 'invalid_request', reason: 'Malformed auth payload' }, 400)
     }
 
@@ -82,9 +89,21 @@ export function createAuthHook(options: AuthHookOptions): Hono {
     req: MediaMtxAuthRequest
   ) {
     if (LOCALHOST_IPS.has(req.ip)) {
+      logger.debug('Auth allowed: {action} on {streamPath}', {
+        'event.name': 'video.auth.allowed',
+        action: req.action,
+        streamPath: req.path,
+        protocol: req.protocol,
+        ip: req.ip,
+      })
       return c.json({}, 200)
     }
 
+    logger.warn('Remote publish denied from {ip} on {streamPath}', {
+      'event.name': 'video.auth.remote_publish_denied',
+      ip: req.ip,
+      streamPath: req.path,
+    })
     return c.json({ error: 'permission_denied', reason: 'Remote publish not allowed' }, 403)
   }
 
@@ -95,6 +114,14 @@ export function createAuthHook(options: AuthHookOptions): Hono {
     // Extract JWT: prefer `token` field, fall back to `password` for relay reads
     const jwt = req.token || req.password
     if (!jwt) {
+      logger.warn('Auth denied: {action} on {streamPath} from {ip}', {
+        'event.name': 'video.auth.denied',
+        action: req.action,
+        streamPath: req.path,
+        protocol: req.protocol,
+        ip: req.ip,
+        reason: 'no_token',
+      })
       return c.json({ error: 'unauthorized', reason: 'No token provided' }, 401)
     }
 
@@ -102,19 +129,47 @@ export function createAuthHook(options: AuthHookOptions): Hono {
     try {
       result = await tokenValidator.validate(jwt)
     } catch {
-      // Auth service unreachable — fail closed
+      logger.error('Auth evaluation failed for {action} on {streamPath}: {error}', {
+        'event.name': 'video.auth.error',
+        action: req.action,
+        streamPath: req.path,
+        error: 'Authorization service unreachable',
+      })
       return c.json({ error: 'system_error', reason: 'Authorization service unreachable' }, 503)
     }
 
     if (!result.valid) {
+      logger.warn('Auth denied: {action} on {streamPath} from {ip}', {
+        'event.name': 'video.auth.denied',
+        action: req.action,
+        streamPath: req.path,
+        protocol: req.protocol,
+        ip: req.ip,
+        reason: result.error,
+      })
       return c.json({ error: 'unauthorized', reason: result.error }, 401)
     }
 
     const decision = streamAccess.evaluate(result.payload, { nodeId, domainId })
     if (decision === 'deny') {
+      logger.warn('Auth denied: {action} on {streamPath} from {ip}', {
+        'event.name': 'video.auth.denied',
+        action: req.action,
+        streamPath: req.path,
+        protocol: req.protocol,
+        ip: req.ip,
+        reason: 'cedar_deny',
+      })
       return c.json({ error: 'permission_denied', reason: 'Cedar policy denied STREAM_VIEW' }, 403)
     }
 
+    logger.debug('Auth allowed: {action} on {streamPath}', {
+      'event.name': 'video.auth.allowed',
+      action: req.action,
+      streamPath: req.path,
+      protocol: req.protocol,
+      ip: req.ip,
+    })
     return c.json({}, 200)
   }
 
