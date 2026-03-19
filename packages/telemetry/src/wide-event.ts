@@ -1,5 +1,31 @@
 import type { Logger } from '@logtape/logtape'
 
+/**
+ * Execute an async operation with guaranteed WideEvent emission.
+ *
+ * Creates a WideEvent, passes it to the callback, and guarantees `.emit()` is
+ * called via `finally` — even if the callback throws. On error, `.setError()`
+ * is called before re-throwing so the emitted event captures failure details.
+ *
+ * This is the primary API for creating wide events. Prefer this over
+ * `new WideEvent()` to eliminate the risk of lost telemetry on unexpected throws.
+ */
+export async function withWideEvent<T>(
+  eventName: string,
+  logger: Logger,
+  fn: (event: WideEvent) => Promise<T>
+): Promise<T> {
+  const event = new WideEvent(eventName, logger)
+  try {
+    return await fn(event)
+  } catch (err) {
+    event.setError(err)
+    throw err
+  } finally {
+    event.emit()
+  }
+}
+
 /** Logger proxy that injects the parent WideEvent's `event.name` into every log call. */
 export interface EventLogger {
   debug(message: string, properties?: Record<string, unknown>): void
