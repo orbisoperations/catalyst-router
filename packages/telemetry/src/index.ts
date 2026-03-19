@@ -48,7 +48,7 @@ export type { InstrumentUpgradeOptions } from './middleware/capnweb-transport.js
 // ---------------------------------------------------------------------------
 // Wide event builder
 // ---------------------------------------------------------------------------
-export { WideEvent } from './wide-event.js'
+export { WideEvent, withWideEvent } from './wide-event.js'
 
 // ---------------------------------------------------------------------------
 // Builder + DI

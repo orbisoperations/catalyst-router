@@ -1,6 +1,6 @@
 import type { ActionLog } from '@catalyst/routing/v2'
 import type { RouteTable } from '@catalyst/routing/v2'
-import { getLogger, WideEvent } from '@catalyst/telemetry'
+import { getLogger, withWideEvent } from '@catalyst/telemetry'
 
 const logger = getLogger(['catalyst', 'orchestrator', 'compaction'])
 
@@ -80,51 +80,49 @@ export class CompactionManager {
    * Returns a summary of what was done.
    */
   async compact(): Promise<CompactionResult> {
-    const event = new WideEvent('orchestrator.compaction', logger)
-    const lastSeq = this.journal.lastSeq()
-    event.set('catalyst.orchestrator.journal.last_seq', lastSeq)
+    return withWideEvent('orchestrator.compaction', logger, async (event) => {
+      const lastSeq = this.journal.lastSeq()
+      event.set('catalyst.orchestrator.journal.last_seq', lastSeq)
 
-    if (lastSeq === 0) {
-      event.set('catalyst.orchestrator.compaction.skipped', true)
-      event.emit()
-      return { skipped: true, reason: 'empty journal' }
-    }
-
-    const existingSnapshot = this.journal.getSnapshot()
-    const entriesSinceSnapshot = existingSnapshot ? lastSeq - existingSnapshot.atSeq : lastSeq
-
-    if (entriesSinceSnapshot < this.minEntries) {
-      event.set('catalyst.orchestrator.compaction.skipped', true)
-      event.emit()
-      return {
-        skipped: true,
-        reason: `only ${entriesSinceSnapshot} entries since last snapshot (threshold: ${this.minEntries})`,
+      if (lastSeq === 0) {
+        event.set('catalyst.orchestrator.compaction.skipped', true)
+        return { skipped: true, reason: 'empty journal' } as CompactionResult
       }
-    }
 
-    // Step 1: Snapshot
-    const state = this.getState()
-    this.journal.snapshot(lastSeq, state)
+      const existingSnapshot = this.journal.getSnapshot()
+      const entriesSinceSnapshot = existingSnapshot ? lastSeq - existingSnapshot.atSeq : lastSeq
 
-    // Step 2: Prune, retaining tailSize entries
-    const pruneBeforeSeq = Math.max(1, lastSeq - this.tailSize + 1)
-    const pruned = this.journal.prune(pruneBeforeSeq)
+      if (entriesSinceSnapshot < this.minEntries) {
+        event.set('catalyst.orchestrator.compaction.skipped', true)
+        return {
+          skipped: true,
+          reason: `only ${entriesSinceSnapshot} entries since last snapshot (threshold: ${this.minEntries})`,
+        } as CompactionResult
+      }
 
-    // Step 3: Vacuum if supported (SQLite)
-    if (
-      'vacuum' in this.journal &&
-      typeof (this.journal as { vacuum: unknown }).vacuum === 'function'
-    ) {
-      ;(this.journal as { vacuum(): void }).vacuum()
-    }
+      // Step 1: Snapshot
+      const state = this.getState()
+      this.journal.snapshot(lastSeq, state)
 
-    event.set({
-      'catalyst.orchestrator.compaction.snapshot_seq': lastSeq,
-      'catalyst.orchestrator.compaction.pruned': pruned,
+      // Step 2: Prune, retaining tailSize entries
+      const pruneBeforeSeq = Math.max(1, lastSeq - this.tailSize + 1)
+      const pruned = this.journal.prune(pruneBeforeSeq)
+
+      // Step 3: Vacuum if supported (SQLite)
+      if (
+        'vacuum' in this.journal &&
+        typeof (this.journal as { vacuum: unknown }).vacuum === 'function'
+      ) {
+        ;(this.journal as { vacuum(): void }).vacuum()
+      }
+
+      event.set({
+        'catalyst.orchestrator.compaction.snapshot_seq': lastSeq,
+        'catalyst.orchestrator.compaction.pruned': pruned,
+      })
+
+      return { skipped: false, snapshotAtSeq: lastSeq, pruned }
     })
-    event.emit()
-
-    return { skipped: false, snapshotAtSeq: lastSeq, pruned }
   }
 }
 

@@ -3,7 +3,7 @@ import { newWebSocketRpcSession } from 'capnweb'
 import { Principal } from '@catalyst/authorization'
 import { CatalystService } from '@catalyst/service'
 import type { CatalystServiceOptions } from '@catalyst/service'
-import { WideEvent } from '@catalyst/telemetry'
+import { withWideEvent } from '@catalyst/telemetry'
 import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { OrchestratorServiceV2 } from './service.js'
@@ -230,20 +230,17 @@ export class OrchestratorService extends CatalystService {
     maxAttempts = MINT_TOKEN_MAX_ATTEMPTS,
     _baseDelayMs = MINT_TOKEN_BASE_DELAY_MS
   ): Promise<void> {
-    const event = new WideEvent('orchestrator.token_mint', this.telemetry.logger)
+    await withWideEvent('orchestrator.token_mint', this.telemetry.logger, async (event) => {
+      if (!this.config.orchestrator?.auth) {
+        event.set('catalyst.orchestrator.token_mint.skipped', true)
+        return
+      }
 
-    if (!this.config.orchestrator?.auth) {
-      event.set('catalyst.orchestrator.token_mint.skipped', true)
-      event.emit()
-      return
-    }
+      const { endpoint, systemToken } = this.config.orchestrator.auth
+      event.set('catalyst.orchestrator.auth.endpoint', endpoint)
 
-    const { endpoint, systemToken } = this.config.orchestrator.auth
-    event.set('catalyst.orchestrator.auth.endpoint', endpoint)
-
-    let _lastError: unknown
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
+      let _lastError: unknown
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const authClient = newWebSocketRpcSession<AuthRpcApi>(endpoint)
         const tokensApi = await authClient.tokens(systemToken)
 
@@ -270,18 +267,13 @@ export class OrchestratorService extends CatalystService {
         this._tokenExpiresAt = now + TOKEN_TTL_MS
 
         event.set('catalyst.orchestrator.auth.expires_at', this._tokenExpiresAt)
-        event.emit()
 
         // Propagate token to the v2 service if already initialized
         if (this._v2) {
           this._v2.setNodeToken(this._nodeToken)
         }
-      } catch (error) {
-        event.setError(error)
-        event.emit()
-        throw error
       }
-    }
+    })
   }
 
   private async refreshNodeTokenIfNeeded(): Promise<void> {
@@ -294,14 +286,9 @@ export class OrchestratorService extends CatalystService {
     const refreshTime = this._tokenIssuedAt + totalLifetime * REFRESH_THRESHOLD
 
     if (now >= refreshTime) {
-      const event = new WideEvent('orchestrator.token_refresh', this.telemetry.logger)
-      try {
+      await withWideEvent('orchestrator.token_refresh', this.telemetry.logger, async () => {
         await this.mintNodeToken()
-        event.emit()
-      } catch (error) {
-        event.setError(error)
-        event.emit()
-      }
+      })
     }
   }
 }

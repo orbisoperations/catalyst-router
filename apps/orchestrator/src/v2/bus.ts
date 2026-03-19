@@ -13,7 +13,8 @@ import {
   type DataChannelDefinition,
 } from '@catalyst/routing/v2'
 import type { ActionLog } from '@catalyst/routing/v2'
-import { getLogger, WideEvent } from '@catalyst/telemetry'
+import type { WideEvent } from '@catalyst/telemetry'
+import { getLogger, withWideEvent } from '@catalyst/telemetry'
 import type { PeerTransport, UpdateMessage } from './transport.js'
 import type { OrchestratorConfig } from '../v1/types.js'
 
@@ -124,92 +125,91 @@ export class OrchestratorBus {
 
   async dispatch(action: Action): Promise<StateResult> {
     return this.queue.enqueue(async () => {
-      const event = new WideEvent('orchestrator.action', logger)
-      event.set({
-        'catalyst.orchestrator.action.type': action.action,
-        'catalyst.orchestrator.node.name': this.config.node.name,
-      })
-      // Step 1: Validate — reject invalid actions before planning.
-      if (action.action === Actions.LocalPeerCreate && !action.data.peerToken?.trim()) {
-        return { success: false, error: 'peerToken is required when creating a peer' }
-      }
+      return await withWideEvent('orchestrator.action', logger, async (event) => {
+        event.set({
+          'catalyst.orchestrator.action.type': action.action,
+          'catalyst.orchestrator.node.name': this.config.node.name,
+        })
+        // Step 1: Validate — reject invalid actions before planning.
+        if (action.action === Actions.LocalPeerCreate && !action.data.peerToken?.trim()) {
+          return { success: false, error: 'peerToken is required when creating a peer' }
+        }
 
-      // Step 1b: Inbound route policy — filter received routes before planning.
-      const filteredAction = this.applyInboundPolicy(action)
-      if (filteredAction === undefined) {
-        return { success: false, error: 'All routes rejected by inbound policy' }
-      }
+        // Step 1b: Inbound route policy — filter received routes before planning.
+        const filteredAction = this.applyInboundPolicy(action)
+        if (filteredAction === undefined) {
+          return { success: false, error: 'All routes rejected by inbound policy' }
+        }
 
-      // Step 2: Plan — pure state transition, no side effects.
-      const ribPlan = this.rib.plan(filteredAction, this.rib.state)
+        // Step 2: Plan — pure state transition, no side effects.
+        const ribPlan = this.rib.plan(filteredAction, this.rib.state)
 
-      if (!this.rib.stateChanged(ribPlan)) {
-        // Tick with no expired peers: keepalives still need to fire.
-        if (action.action === Actions.Tick) {
-          const ka = await this.handleKeepalives(this.rib.state, action.data.now)
+        if (!this.rib.stateChanged(ribPlan)) {
+          // Tick with no expired peers: keepalives still need to fire.
+          if (action.action === Actions.Tick) {
+            const ka = await this.handleKeepalives(this.rib.state, action.data.now)
+            event.set({
+              'catalyst.orchestrator.keepalive.needed': ka.needed,
+              'catalyst.orchestrator.keepalive.sent': ka.sent,
+            })
+          }
+          event.set('catalyst.orchestrator.action.state_changed', false)
+          return { success: false, error: 'No state change' }
+        }
+
+        // Step 3: Port allocation — release/allocate ports, stamp on newState.
+        //         Runs between plan and commit so committed state has ports.
+        const plan = this.planPortAllocations(ribPlan)
+
+        // Enrich dispatch event with port allocation summary.
+        const portsAllocated = plan.portOps.filter((op) => op.type === 'allocate').length
+        const portsReleased = plan.portOps.filter((op) => op.type === 'release').length
+        if (portsAllocated > 0 || portsReleased > 0) {
           event.set({
-            'catalyst.orchestrator.keepalive.needed': ka.needed,
-            'catalyst.orchestrator.keepalive.sent': ka.sent,
+            'catalyst.orchestrator.port.allocated': portsAllocated,
+            'catalyst.orchestrator.port.released': portsReleased,
           })
         }
-        event.set('catalyst.orchestrator.action.state_changed', false)
-        event.emit()
-        return { success: false, error: 'No state change' }
-      }
 
-      // Step 3: Port allocation — release/allocate ports, stamp on newState.
-      //         Runs between plan and commit so committed state has ports.
-      const plan = this.planPortAllocations(ribPlan)
+        // Step 4: Commit — apply state + journal.
+        const committed = this.rib.commit(plan, action)
 
-      // Enrich dispatch event with port allocation summary.
-      const portsAllocated = plan.portOps.filter((op) => op.type === 'allocate').length
-      const portsReleased = plan.portOps.filter((op) => op.type === 'release').length
-      if (portsAllocated > 0 || portsReleased > 0) {
+        // Step 5: Notify — propagate to peers, push to envoy/gateway.
+
         event.set({
-          'catalyst.orchestrator.port.allocated': portsAllocated,
-          'catalyst.orchestrator.port.released': portsReleased,
-        })
-      }
-
-      // Step 4: Commit — apply state + journal.
-      const committed = this.rib.commit(plan, action)
-
-      // Step 5: Notify — propagate to peers, push to envoy/gateway.
-
-      event.set({
-        'catalyst.orchestrator.action.state_changed': true,
-        'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
-        'catalyst.orchestrator.route.total':
-          committed.local.routes.length + committed.internal.routes.length,
-      })
-
-      if (plan.routeChanges.length > 0) {
-        const counts = { added: 0, removed: 0, modified: 0 }
-        for (const c of plan.routeChanges) {
-          if (c.type === 'added') counts.added++
-          else if (c.type === 'removed') counts.removed++
-          else counts.modified++
-        }
-        event.set({
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-        })
-        logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
-          'event.name': 'route.table.changed',
-          'catalyst.orchestrator.route.added': counts.added,
-          'catalyst.orchestrator.route.removed': counts.removed,
-          'catalyst.orchestrator.route.modified': counts.modified,
-          'catalyst.orchestrator.route.trigger': action.action,
+          'catalyst.orchestrator.action.state_changed': true,
+          'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
           'catalyst.orchestrator.route.total':
             committed.local.routes.length + committed.internal.routes.length,
         })
-      }
 
-      await this.handlePostCommit(action, plan, committed, event)
+        if (plan.routeChanges.length > 0) {
+          const counts = { added: 0, removed: 0, modified: 0 }
+          for (const c of plan.routeChanges) {
+            if (c.type === 'added') counts.added++
+            else if (c.type === 'removed') counts.removed++
+            else counts.modified++
+          }
+          event.set({
+            'catalyst.orchestrator.route.added': counts.added,
+            'catalyst.orchestrator.route.removed': counts.removed,
+            'catalyst.orchestrator.route.modified': counts.modified,
+          })
+          logger.info('Route table changed: +{added} -{removed} ~{modified} (trigger={trigger})', {
+            'event.name': 'route.table.changed',
+            'catalyst.orchestrator.route.added': counts.added,
+            'catalyst.orchestrator.route.removed': counts.removed,
+            'catalyst.orchestrator.route.modified': counts.modified,
+            'catalyst.orchestrator.route.trigger': action.action,
+            'catalyst.orchestrator.route.total':
+              committed.local.routes.length + committed.internal.routes.length,
+          })
+        }
 
-      event.emit()
-      return { success: true, state: committed, action }
+        await this.handlePostCommit(action, plan, committed, event)
+
+        return { success: true, state: committed, action }
+      })
     })
   }
 
@@ -292,17 +292,17 @@ export class OrchestratorBus {
       const peerName = action.data.peerInfo.name
       const peer = connectedPeers.find((p) => p.name === peerName)
       if (peer !== undefined) {
-        const event = new WideEvent('orchestrator.peer_sync', logger)
-        event.set({
-          'catalyst.orchestrator.peer.name': peerName,
-          'catalyst.orchestrator.sync.type': 'full',
+        await withWideEvent('orchestrator.peer_sync', logger, async (event) => {
+          event.set({
+            'catalyst.orchestrator.peer.name': peerName,
+            'catalyst.orchestrator.sync.type': 'full',
+          })
+          logger.info('Peer {peerName} connected, syncing full route table', {
+            'event.name': 'peer.sync.started',
+            'catalyst.orchestrator.peer.name': peerName,
+          })
+          await this.syncRoutesToPeer(peer, state)
         })
-        logger.info('Peer {peerName} connected, syncing full route table', {
-          'event.name': 'peer.sync.started',
-          'catalyst.orchestrator.peer.name': peerName,
-        })
-        await this.syncRoutesToPeer(peer, state)
-        event.emit()
       }
       return
     }
@@ -324,29 +324,30 @@ export class OrchestratorBus {
     // Route changes: propagate deltas to every connected peer.
     if (plan.routeChanges.length === 0) return
 
-    const event = new WideEvent('orchestrator.route_propagation', logger)
-    event.set({
-      'catalyst.orchestrator.peer.connected_count': connectedPeers.length,
-      'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
-    })
+    await withWideEvent('orchestrator.route_propagation', logger, async (event) => {
+      event.set({
+        'catalyst.orchestrator.peer.connected_count': connectedPeers.length,
+        'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
+      })
 
-    const promises = connectedPeers.map(async (peer) => {
-      try {
-        const updates = this.buildUpdatesForPeer(peer, plan, state)
-        if (updates.length > 0) {
-          await this.transport.sendUpdate(peer, { updates })
+      const promises = connectedPeers.map(async (peer) => {
+        try {
+          const updates = this.buildUpdatesForPeer(peer, plan, state)
+          if (updates.length > 0) {
+            await this.transport.sendUpdate(peer, { updates })
+          }
+        } catch (error) {
+          logger.warn('Failed to send route updates to {peerName}', {
+            'event.name': 'peer.sync.failed',
+            'catalyst.orchestrator.peer.name': peer.name,
+            error,
+          })
+          // Fire-and-forget: one peer failure must not affect others.
         }
-      } catch (error) {
-        logger.warn('Failed to send route updates to {peerName}', {
-          'event.name': 'peer.sync.failed',
-          'catalyst.orchestrator.peer.name': peer.name,
-          error,
-        })
-        // Fire-and-forget: one peer failure must not affect others.
-      }
-    })
+      })
 
-    await Promise.allSettled(promises)
+      await Promise.allSettled(promises)
+    })
   }
 
   // ---------------------------------------------------------------------------
@@ -368,16 +369,14 @@ export class OrchestratorBus {
 
     if (graphqlRoutes.length === 0) return
 
-    const event = new WideEvent('orchestrator.gateway_sync', logger)
-    event.set('catalyst.orchestrator.gateway.route_count', graphqlRoutes.length)
     try {
-      await this.gatewayClient.updateConfig({
-        services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
+      await withWideEvent('orchestrator.gateway_sync', logger, async (event) => {
+        event.set('catalyst.orchestrator.gateway.route_count', graphqlRoutes.length)
+        await this.gatewayClient!.updateConfig({
+          services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
+        })
       })
-      event.emit()
-    } catch (err) {
-      event.setError(err)
-      event.emit()
+    } catch {
       // Fire-and-forget: gateway sync failure must not disrupt the bus.
     }
   }
@@ -506,23 +505,21 @@ export class OrchestratorBus {
   private async handleEnvoySync(_plan: PlanResult, state: RouteTable): Promise<void> {
     if (this.envoyClient === undefined) return
 
-    const event = new WideEvent('orchestrator.envoy_sync', logger)
-    event.set({
-      'catalyst.orchestrator.envoy.local_count': state.local.routes.length,
-      'catalyst.orchestrator.envoy.internal_count': state.internal.routes.length,
-    })
     try {
-      await this.envoyClient.updateRoutes({
-        local: state.local.routes,
-        internal: state.internal.routes,
-        portAllocations: this.portAllocator
-          ? Object.fromEntries(this.portAllocator.getAllocations())
-          : undefined,
+      await withWideEvent('orchestrator.envoy_sync', logger, async (event) => {
+        event.set({
+          'catalyst.orchestrator.envoy.local_count': state.local.routes.length,
+          'catalyst.orchestrator.envoy.internal_count': state.internal.routes.length,
+        })
+        await this.envoyClient!.updateRoutes({
+          local: state.local.routes,
+          internal: state.internal.routes,
+          portAllocations: this.portAllocator
+            ? Object.fromEntries(this.portAllocator.getAllocations())
+            : undefined,
+        })
       })
-      event.emit()
-    } catch (err) {
-      event.setError(err)
-      event.emit()
+    } catch {
       // Fire-and-forget: envoy sync failure must not disrupt the bus.
     }
   }
