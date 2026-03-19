@@ -236,51 +236,38 @@ export class CatalystNodeBus extends RpcTarget {
       'catalyst.orchestrator.action.type': sentAction.action,
       'catalyst.orchestrator.node.name': this.config.node.name,
     })
-
-    this.logger.info('Dispatching action: {action}', {
-      'event.name': 'orchestrator.action.dispatched',
-      action: sentAction.action,
-    })
-
-    const prevState = this.state
-
-    // Log detailed data for route creation to debug
     if (sentAction.action === Actions.LocalRouteCreate) {
-      this.logger.debug('Route create data: {data}', {
-        'event.name': 'orchestrator.action.debug',
-        data: JSON.stringify(sentAction.data),
-      })
+      event.set('catalyst.orchestrator.action.data', JSON.stringify(sentAction.data))
     }
 
-    const result = await this.handleAction(sentAction, this.state)
-    if (result.success) {
-      this.state = result.state
-      // Fire and forget side effects to avoid deadlocks in distributed calls
+    try {
+      const prevState = this.state
 
-      // Note: Hono's waitUntil is not available here easily as we are in the core class.
-      // The catch below handles unhandled rejections for the side effect chain.
-      // Ideally in a serverless evironment we would use ctx.waitUntil.
-      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState).catch(
-        (e) => {
-          this.logger.error('Error in handleNotify for {action}: {error}', {
-            'event.name': 'orchestrator.notify.failed',
-            action: sentAction.action,
-            error: e,
-          })
-        }
-      )
-      event.emit()
-      return { success: true }
-    } else {
-      this.logger.error('Action failed: {action} - {error}', {
-        'event.name': 'orchestrator.action.failed',
-        action: sentAction.action,
-        error: result.error,
-      })
-      event.setError(result.error)
+      const result = await this.handleAction(sentAction, this.state)
+      if (result.success) {
+        this.state = result.state
+        // Fire-and-forget: handleNotify can recursively call dispatch(), so
+        // awaiting it here would deadlock. Failures are logged but non-fatal.
+        this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState).catch(
+          (e) => {
+            this.logger.error('Error in handleNotify for {action}: {error}', {
+              'event.name': 'orchestrator.notify.failed',
+              action: sentAction.action,
+              error: e,
+            })
+          }
+        )
+        return { success: true }
+      } else {
+        event.setError(result.error)
+        return result
+      }
+    } catch (error) {
+      event.setError(error)
+      throw error
+    } finally {
       event.emit()
     }
-    return result
   }
 
   async handleAction(
