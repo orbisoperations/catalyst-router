@@ -156,6 +156,7 @@ export class RoutingInformationBase {
     const newPeer: PeerRecord = {
       ...data,
       connectionStatus: 'initializing',
+      lastConnected: 0,
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,

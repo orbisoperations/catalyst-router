@@ -91,7 +91,12 @@ export const OrchestratorConfigSchema = z.object({
       /** Number of entries to retain after snapshot for debugging. Default: 100. */
       tailSize: z.number().min(0).default(100),
     })
-    .default({}),
+    .default({
+      mode: 'memory' as const,
+      compactionIntervalMs: 86_400_000,
+      minEntries: 1000,
+      tailSize: 100,
+    }),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
