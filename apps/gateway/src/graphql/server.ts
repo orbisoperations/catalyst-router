@@ -3,7 +3,7 @@ import { createYoga, createSchema } from 'graphql-yoga'
 import { stitchSchemas } from '@graphql-tools/stitch'
 import { context, propagation, SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import type { Counter, Histogram, UpDownCounter } from '@opentelemetry/api'
-import { TelemetryBuilder, WideEvent } from '@catalyst/telemetry'
+import { TelemetryBuilder, withWideEvent } from '@catalyst/telemetry'
 import type { ServiceTelemetry } from '@catalyst/telemetry'
 
 import type { AsyncExecutor, Executor } from '@graphql-tools/utils'
@@ -57,58 +57,57 @@ export class GatewayGraphqlServer {
   async reload(
     config: GatewayConfig
   ): Promise<{ success: true } | { success: false; error: string }> {
-    const event = new WideEvent('gateway.reload', this.logger)
-    event.set('gateway.service_count', config.services.length)
-    try {
-      const subschemas = await Promise.all(
-        config.services.map(async (service) => {
-          await this.validateServiceSdl(service.url, service.token)
-          event.log.info('SDL validated for {url}', {
-            'subgraph.url': service.url,
-            url: service.url,
+    return withWideEvent('gateway.reload', this.logger, async (event) => {
+      event.set('gateway.service_count', config.services.length)
+      try {
+        const subschemas = await Promise.all(
+          config.services.map(async (service) => {
+            await this.validateServiceSdl(service.url, service.token)
+            event.log.info('SDL validated for {url}', {
+              'subgraph.url': service.url,
+              url: service.url,
+            })
+            const executor = this.createRemoteExecutor(service.url, service.token)
+            const schema = await this.fetchRemoteSchema(executor)
+            return { schema, executor }
           })
-          const executor = this.createRemoteExecutor(service.url, service.token)
-          const schema = await this.fetchRemoteSchema(executor)
-          return { schema, executor }
-        })
-      )
+        )
 
-      if (subschemas.length === 0) {
-        event.set('gateway.zero_services', true)
-        this.createYogaInstance([
-          {
-            typeDefs: 'type Query { status: String }',
-            resolvers: {
-              Query: { status: () => 'No services configured.' },
+        if (subschemas.length === 0) {
+          event.set('gateway.zero_services', true)
+          this.createYogaInstance([
+            {
+              typeDefs: 'type Query { status: String }',
+              resolvers: {
+                Query: { status: () => 'No services configured.' },
+              },
             },
-          },
-        ])
-      } else {
-        const stitchedSchema = stitchSchemas({ subschemas })
-        this.createYogaInstance({ schema: stitchedSchema })
+          ])
+        } else {
+          const stitchedSchema = stitchSchemas({ subschemas })
+          this.createYogaInstance({ schema: stitchedSchema })
+        }
+
+        const durationMs = event.durationMs
+        this.reloadCounter.add(1, { result: 'success' })
+        this.reloadDuration.record(durationMs / 1000)
+        const newCount = subschemas.length
+        this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
+        this.currentSubgraphCount = newCount
+
+        event.set({
+          'gateway.duration_ms': durationMs,
+          'gateway.subgraph_count': subschemas.length,
+        })
+        return { success: true }
+      } catch (error: unknown) {
+        const durationMs = event.durationMs
+        this.reloadCounter.add(1, { result: 'failure' })
+        this.reloadDuration.record(durationMs / 1000)
+        event.setError(error)
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
       }
-
-      const durationMs = event.durationMs
-      this.reloadCounter.add(1, { result: 'success' })
-      this.reloadDuration.record(durationMs / 1000)
-      const newCount = subschemas.length
-      this.activeSubgraphs.add(newCount - this.currentSubgraphCount)
-      this.currentSubgraphCount = newCount
-
-      event.set({
-        'gateway.duration_ms': durationMs,
-        'gateway.subgraph_count': subschemas.length,
-      })
-      return { success: true }
-    } catch (error: unknown) {
-      const durationMs = event.durationMs
-      this.reloadCounter.add(1, { result: 'failure' })
-      this.reloadDuration.record(durationMs / 1000)
-      event.setError(error)
-      return { success: false, error: error instanceof Error ? error.message : String(error) }
-    } finally {
-      event.emit()
-    }
+    })
   }
 
   fetch(request: Request, env: unknown, ctx: unknown) {

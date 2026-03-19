@@ -11,7 +11,7 @@ import {
   type UpdateMessageSchema,
 } from '@catalyst/routing/v1'
 export type { PeerInfo, InternalRoute }
-import { getLogger, WideEvent } from '@catalyst/telemetry'
+import { getLogger, withWideEvent } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import { createPortAllocator, type PortAllocator } from '@catalyst/envoy-service'
 import {
@@ -231,16 +231,15 @@ export class CatalystNodeBus extends RpcTarget {
   async dispatch(
     sentAction: Action
   ): Promise<{ success: true } | { success: false; error: string }> {
-    const event = new WideEvent('orchestrator.action', this.logger)
-    event.set({
-      'catalyst.orchestrator.action.type': sentAction.action,
-      'catalyst.orchestrator.node.name': this.config.node.name,
-    })
-    if (sentAction.action === Actions.LocalRouteCreate) {
-      event.set('catalyst.orchestrator.action.data', JSON.stringify(sentAction.data))
-    }
+    return withWideEvent('orchestrator.action', this.logger, async (event) => {
+      event.set({
+        'catalyst.orchestrator.action.type': sentAction.action,
+        'catalyst.orchestrator.node.name': this.config.node.name,
+      })
+      if (sentAction.action === Actions.LocalRouteCreate) {
+        event.set('catalyst.orchestrator.action.data', JSON.stringify(sentAction.data))
+      }
 
-    try {
       const prevState = this.state
 
       const result = await this.handleAction(sentAction, this.state)
@@ -262,12 +261,7 @@ export class CatalystNodeBus extends RpcTarget {
         event.setError(result.error)
         return result
       }
-    } catch (error) {
-      event.setError(error)
-      throw error
-    } finally {
-      event.emit()
-    }
+    })
   }
 
   async handleAction(
