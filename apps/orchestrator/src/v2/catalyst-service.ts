@@ -154,8 +154,8 @@ export class OrchestratorService extends CatalystService {
     const adapterHealthConfig = this.config.orchestrator?.adapterHealth
     if (adapterHealthConfig?.enabled !== false) {
       this._healthChecker = new AdapterHealthChecker({
-        intervalMs: adapterHealthConfig?.intervalMs ?? 30_000,
-        timeoutMs: adapterHealthConfig?.timeoutMs ?? 3_000,
+        intervalMs: adapterHealthConfig?.intervalMs,
+        timeoutMs: adapterHealthConfig?.timeoutMs,
         dispatchFn: (action) => {
           // Validate action shape matches the Action schema before dispatching
           const validated = ActionSchema.parse(action)

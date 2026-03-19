@@ -242,7 +242,8 @@ export class OrchestratorServiceV2 {
           action: Actions.InternalProtocolConnected,
           data: { peerInfo: { name: peer.name, domains: peer.domains } },
         })
-      } catch {
+      } catch (err) {
+        event.setError(err)
         event.set('catalyst.orchestrator.auto_dial.outcome', 'reconnect_scheduled')
         this.reconnectManager.scheduleReconnect(peer)
       }

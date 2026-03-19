@@ -1,4 +1,7 @@
 import { Actions, type DataChannelDefinition } from '@catalyst/routing/v2'
+import { getLogger } from '@catalyst/telemetry'
+
+const logger = getLogger(['catalyst', 'orchestrator', 'health'])
 
 export interface AdapterHealth {
   healthStatus: 'up' | 'down'
@@ -6,20 +9,31 @@ export interface AdapterHealth {
   lastChecked: string
 }
 
+/** Defaults match the Zod schema in @catalyst/config (single source of truth). */
+const DEFAULT_INTERVAL_MS = 30_000
+const DEFAULT_TIMEOUT_MS = 3_000
+
 interface AdapterHealthCheckerOptions {
-  intervalMs: number
-  timeoutMs: number
+  intervalMs?: number
+  timeoutMs?: number
   dispatchFn?: (action: { action: string; data: Record<string, unknown> }) => Promise<unknown>
 }
 
 export class AdapterHealthChecker {
-  private readonly options: AdapterHealthCheckerOptions
+  private readonly options: Required<
+    Pick<AdapterHealthCheckerOptions, 'intervalMs' | 'timeoutMs'>
+  > &
+    Pick<AdapterHealthCheckerOptions, 'dispatchFn'>
   private readonly healthMap = new Map<string, AdapterHealth>()
   private interval: ReturnType<typeof setInterval> | undefined
   private running = false
 
   constructor(options: AdapterHealthCheckerOptions) {
-    this.options = options
+    this.options = {
+      intervalMs: options.intervalMs ?? DEFAULT_INTERVAL_MS,
+      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      dispatchFn: options.dispatchFn,
+    }
   }
 
   /** Start periodic health checks against the provided route source. */
@@ -28,7 +42,10 @@ export class AdapterHealthChecker {
     this.interval = setInterval(() => {
       if (this.running) return
       this.checkAll(getRoutes()).catch((error) => {
-        console.error('[AdapterHealthChecker] Unexpected error during health check cycle:', error)
+        logger.error('Unexpected error during health check cycle', {
+          'event.name': 'health.check.error',
+          error,
+        })
       })
     }, this.options.intervalMs)
   }
@@ -146,7 +163,11 @@ export class AdapterHealthChecker {
         },
       })
       .catch((error) => {
-        console.error(`[AdapterHealthChecker] Failed to dispatch health update for ${name}:`, error)
+        logger.error('Failed to dispatch health update for {name}', {
+          'event.name': 'health.dispatch.error',
+          'catalyst.orchestrator.route.name': name,
+          error,
+        })
       })
   }
 
