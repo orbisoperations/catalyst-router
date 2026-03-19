@@ -1,0 +1,145 @@
+/**
+ * Stream route manager with per-path debounced create/delete.
+ *
+ * Each stream path has its own pending timer. When ready fires, the
+ * manager waits `debounceMs` before executing the route creation.
+ * If a not-ready arrives during that window, the create is cancelled.
+ * Same applies in reverse — a not-ready schedules deletion, and a
+ * subsequent ready cancels it.
+ *
+ * This prevents route churn during camera reconnections (ready/not-ready
+ * within milliseconds) from propagating unnecessary updates across the mesh.
+ */
+
+export interface RouteRegistrar {
+  addRoute(route: {
+    name: string
+    protocol: 'media'
+    endpoint: string
+    tags: string[]
+  }): Promise<void>
+  removeRoute(name: string): Promise<void>
+}
+
+export interface PathMetadataProvider {
+  getPathMetadata(path: string): Promise<{ tracks: string[]; sourceType: string } | null>
+}
+
+export interface StreamRouteManagerOptions {
+  registrar: RouteRegistrar
+  metadataProvider: PathMetadataProvider
+  advertiseAddress: string
+  rtspPort: number
+  maxStreams: number
+  debounceMs?: number
+}
+
+interface PendingAction {
+  type: 'ready' | 'not-ready'
+  timer: ReturnType<typeof setTimeout>
+}
+
+export class StreamRouteManager {
+  private readonly registrar: RouteRegistrar
+  private readonly metadataProvider: PathMetadataProvider
+  private readonly advertiseAddress: string
+  private readonly rtspPort: number
+  private readonly maxStreams: number
+  private readonly debounceMs: number
+
+  /** Active routes (post-debounce, registered with orchestrator). */
+  private readonly activeRoutes = new Set<string>()
+  /** Pending debounce timers, keyed by path. */
+  private readonly pending = new Map<string, PendingAction>()
+
+  constructor(options: StreamRouteManagerOptions) {
+    this.registrar = options.registrar
+    this.metadataProvider = options.metadataProvider
+    this.advertiseAddress = options.advertiseAddress
+    this.rtspPort = options.rtspPort
+    this.maxStreams = options.maxStreams
+    this.debounceMs = options.debounceMs ?? 1000
+  }
+
+  async handleReady(path: string, meta: { sourceType: string; sourceId: string }): Promise<void> {
+    // Cancel any pending not-ready for this path
+    const existing = this.pending.get(path)
+    if (existing) {
+      clearTimeout(existing.timer)
+      this.pending.delete(path)
+    }
+
+    // Already active — no-op (idempotent)
+    if (this.activeRoutes.has(path)) return
+
+    // Max streams enforcement
+    if (this.activeRoutes.size >= this.maxStreams) {
+      throw new Error(`Max streams limit reached (${this.maxStreams}). Rejecting stream: ${path}`)
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(async () => {
+        this.pending.delete(path)
+        try {
+          const metadata = await this.metadataProvider.getPathMetadata(path)
+          const tags = metadata
+            ? [...metadata.tracks.map((t) => `track:${t}`), `source-type:${meta.sourceType}`]
+            : [`source-type:${meta.sourceType}`]
+
+          await this.registrar.addRoute({
+            name: path,
+            protocol: 'media',
+            endpoint: `rtsp://${this.advertiseAddress}:${this.rtspPort}/${path}`,
+            tags,
+          })
+          this.activeRoutes.add(path)
+          resolve()
+        } catch (err) {
+          reject(err)
+        }
+      }, this.debounceMs)
+
+      this.pending.set(path, { type: 'ready', timer })
+    })
+  }
+
+  async handleNotReady(path: string): Promise<void> {
+    // Cancel any pending ready for this path
+    const existing = this.pending.get(path)
+    if (existing) {
+      clearTimeout(existing.timer)
+      this.pending.delete(path)
+    }
+
+    // Not active — no-op
+    if (!this.activeRoutes.has(path)) return
+
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(async () => {
+        this.pending.delete(path)
+        try {
+          await this.registrar.removeRoute(path)
+          this.activeRoutes.delete(path)
+          resolve()
+        } catch (err) {
+          reject(err)
+        }
+      }, this.debounceMs)
+
+      this.pending.set(path, { type: 'not-ready', timer })
+    })
+  }
+
+  /** Get the number of active streams. */
+  get streamCount(): number {
+    return this.activeRoutes.size
+  }
+
+  /** Shutdown: cancel all pending timers. */
+  shutdown(): void {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer)
+    }
+    this.pending.clear()
+  }
+}
