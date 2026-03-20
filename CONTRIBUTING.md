@@ -135,7 +135,7 @@ your implementation, not as an afterthought.
 - **Integration tests**: `*.integration.test.ts` -- for cross-package boundaries
 - **Topology tests**: `*.topology.test.ts` -- for orchestrator and peering flows
 - **Container tests**: `*.container.test.ts` -- for end-to-end Docker-based
-  validation (requires `CATALYST_CONTAINER_TESTS_ENABLED=true`)
+  validation (run via `pnpm test:integration`)
 
 Run tests with:
 

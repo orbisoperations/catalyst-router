@@ -110,7 +110,7 @@ export const AuthConfigSchema = z.object({
         .default(24 * 60 * 60 * 1000)
         .optional(), // 24 hours
     })
-    .default({}),
+    .prefault({}),
 })
 
 export type AuthConfig = z.infer<typeof AuthConfigSchema>

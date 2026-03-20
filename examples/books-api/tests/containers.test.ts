@@ -20,7 +20,7 @@ if (skipTests) {
 
 describe.skipIf(skipTests)('Example GraphQL Servers', () => {
   // Increase timeout for image build
-  const TIMEOUT = 120000
+  const TIMEOUT = 300000
 
   describe('Books Service', () => {
     let startedContainer: StartedTestContainer
