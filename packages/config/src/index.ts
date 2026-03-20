@@ -92,12 +92,7 @@ export const OrchestratorConfigSchema = z.object({
       /** Number of entries to retain after snapshot for debugging. Default: 100. */
       tailSize: z.number().min(0).default(100),
     })
-    .default({
-      mode: 'memory' as const,
-      compactionIntervalMs: 86_400_000,
-      minEntries: 1000,
-      tailSize: 100,
-    }),
+    .prefault({}),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -124,7 +119,7 @@ export const AuthConfigSchema = z.object({
         .default(24 * 60 * 60 * 1000)
         .optional(), // 24 hours
     })
-    .default({}),
+    .prefault({}),
 })
 
 export type AuthConfig = z.infer<typeof AuthConfigSchema>

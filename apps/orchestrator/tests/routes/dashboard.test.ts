@@ -13,6 +13,13 @@ const defaultEnvoyConfig = {
   portRange: [[10000, 10100]] as [number, number][],
 }
 
+const defaultJournal = {
+  mode: 'memory' as const,
+  compactionIntervalMs: 86_400_000,
+  minEntries: 1000,
+  tailSize: 100,
+}
+
 function makeConfig(overrides: Partial<CatalystConfig> = {}): CatalystConfig {
   return {
     node: {
@@ -22,6 +29,8 @@ function makeConfig(overrides: Partial<CatalystConfig> = {}): CatalystConfig {
     },
     port: 3000,
     orchestrator: {
+      allowNoAuth: false,
+      journal: defaultJournal,
       envoyConfig: defaultEnvoyConfig,
       ...(overrides.orchestrator ?? {}),
     },
@@ -263,6 +272,8 @@ describe('Dashboard routes', () => {
 
       const config = makeConfig({
         orchestrator: {
+          allowNoAuth: false,
+          journal: defaultJournal,
           envoyConfig: {
             endpoint: 'ws://envoy:9000',
             portRange: [[10000, 10100]],
@@ -291,6 +302,8 @@ describe('Dashboard routes', () => {
 
       const config = makeConfig({
         orchestrator: {
+          allowNoAuth: false,
+          journal: defaultJournal,
           envoyConfig: defaultEnvoyConfig,
           auth: {
             endpoint: 'ws://auth:5000',
@@ -345,6 +358,8 @@ describe('Dashboard routes', () => {
 
       const config = makeConfig({
         orchestrator: {
+          allowNoAuth: false,
+          journal: defaultJournal,
           envoyConfig: defaultEnvoyConfig,
           gqlGatewayConfig: { endpoint: 'ws://gateway:6000' },
         },
