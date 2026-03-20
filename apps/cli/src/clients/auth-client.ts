@@ -18,12 +18,13 @@ export interface CreateTokenRequest {
 
 export interface TokenRecord {
   jti: string
-  sub: string
-  iat: number
-  exp: number
+  expiry: number
+  sans: string[]
+  entityId: string
+  entityName: string
+  entityType: string
   revoked: boolean
-  san?: string
-  certificateFingerprint?: string
+  cfn?: string
 }
 
 export interface ValidateTokenResponse {

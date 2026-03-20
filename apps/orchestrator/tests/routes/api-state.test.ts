@@ -20,6 +20,7 @@ function makeRouteTable(): RouteTable {
           domains: ['example.local'],
           connectionStatus: 'connected' as const,
           peerToken: 'secret-token-1',
+          lastConnected: 0,
           holdTime: 90_000,
           lastSent: 100,
           lastReceived: 200,
