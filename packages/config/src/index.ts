@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 
 /**
@@ -139,6 +140,48 @@ export const DashboardConfigSchema = z.object({
 export type DashboardConfig = z.infer<typeof DashboardConfigSchema>
 
 /**
+ * Load dashboard links from file or env var.
+ *
+ * Precedence:
+ * 1. CATALYST_DASHBOARD_LINKS_FILE → read file, throw on missing/invalid
+ * 2. CATALYST_DASHBOARD_LINKS → parse inline JSON, throw on invalid
+ * 3. Neither set → undefined
+ */
+export function loadDashboardLinks(): DashboardConfig['links'] | undefined {
+  const filePath = process.env.CATALYST_DASHBOARD_LINKS_FILE
+  if (filePath) {
+    let raw: string
+    try {
+      raw = readFileSync(filePath, 'utf-8')
+    } catch (err) {
+      throw new Error(
+        `CATALYST_DASHBOARD_LINKS_FILE: cannot read ${filePath}: ${(err as Error).message}`
+      )
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new Error(`CATALYST_DASHBOARD_LINKS_FILE: invalid JSON in ${filePath}`)
+    }
+    return DashboardConfigSchema.shape.links.parse(parsed)
+  }
+
+  const envVar = process.env.CATALYST_DASHBOARD_LINKS
+  if (envVar) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(envVar)
+    } catch {
+      throw new Error('CATALYST_DASHBOARD_LINKS: invalid JSON')
+    }
+    return DashboardConfigSchema.shape.links.parse(parsed)
+  }
+
+  return undefined
+}
+
+/**
  * Top-level Catalyst System Configuration
  */
 export const CatalystConfigSchema = z.object({
@@ -217,17 +260,38 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
         }
       : undefined
 
-  const dashboardLinks = process.env.CATALYST_DASHBOARD_LINKS
-  let dashboard: { links: Record<string, string> } | undefined
-  if (dashboardLinks) {
-    try {
-      dashboard = { links: JSON.parse(dashboardLinks) as Record<string, string> }
-    } catch (err) {
-      throw new Error(
-        `CATALYST_DASHBOARD_LINKS is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
-      )
-    }
-  }
+  const links = loadDashboardLinks()
+  const dashboard = links ? { links } : undefined
+
+  // Only include orchestrator config when envoyConfig is available (i.e. the env vars are set)
+  const orchestrator = envoyConfig
+    ? {
+        gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
+          ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
+          : undefined,
+        auth:
+          process.env.CATALYST_AUTH_ENDPOINT && process.env.CATALYST_SYSTEM_TOKEN
+            ? {
+                endpoint: process.env.CATALYST_AUTH_ENDPOINT,
+                systemToken: process.env.CATALYST_SYSTEM_TOKEN,
+              }
+            : undefined,
+        envoyConfig,
+        journal: {
+          mode: process.env.CATALYST_JOURNAL_MODE || undefined,
+          path: process.env.CATALYST_JOURNAL_PATH || undefined,
+          compactionIntervalMs: process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS
+            ? Number(process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS)
+            : undefined,
+          minEntries: process.env.CATALYST_JOURNAL_MIN_ENTRIES
+            ? Number(process.env.CATALYST_JOURNAL_MIN_ENTRIES)
+            : undefined,
+          tailSize: process.env.CATALYST_JOURNAL_TAIL_SIZE
+            ? Number(process.env.CATALYST_JOURNAL_TAIL_SIZE)
+            : undefined,
+        },
+      }
+    : undefined
 
   return CatalystConfigSchema.parse({
     port: Number(process.env.PORT) || 3000,
@@ -239,32 +303,7 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       envoyAddress: process.env.CATALYST_ENVOY_ADDRESS || undefined,
     },
     envoy,
-    orchestrator: {
-      gqlGatewayConfig: process.env.CATALYST_GQL_GATEWAY_ENDPOINT
-        ? { endpoint: process.env.CATALYST_GQL_GATEWAY_ENDPOINT }
-        : undefined,
-      auth:
-        process.env.CATALYST_AUTH_ENDPOINT && process.env.CATALYST_SYSTEM_TOKEN
-          ? {
-              endpoint: process.env.CATALYST_AUTH_ENDPOINT,
-              systemToken: process.env.CATALYST_SYSTEM_TOKEN,
-            }
-          : undefined,
-      envoyConfig,
-      journal: {
-        mode: process.env.CATALYST_JOURNAL_MODE || undefined,
-        path: process.env.CATALYST_JOURNAL_PATH || undefined,
-        compactionIntervalMs: process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS
-          ? Number(process.env.CATALYST_JOURNAL_COMPACTION_INTERVAL_MS)
-          : undefined,
-        minEntries: process.env.CATALYST_JOURNAL_MIN_ENTRIES
-          ? Number(process.env.CATALYST_JOURNAL_MIN_ENTRIES)
-          : undefined,
-        tailSize: process.env.CATALYST_JOURNAL_TAIL_SIZE
-          ? Number(process.env.CATALYST_JOURNAL_TAIL_SIZE)
-          : undefined,
-      },
-    },
+    orchestrator,
     auth: {
       keysDb: process.env.CATALYST_AUTH_KEYS_DB,
       tokensDb: process.env.CATALYST_AUTH_TOKENS_DB,
