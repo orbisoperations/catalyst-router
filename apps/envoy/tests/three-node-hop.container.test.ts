@@ -285,7 +285,7 @@ async function setupThreeNodeCluster(protocol: DataChannelProtocol): Promise<Thr
     return new GenericContainer(ENVOY_PROXY_IMAGE)
       .withNetwork(network)
       .withNetworkAliases(alias)
-      .withExposedPorts(ENVOY_LISTENER_PORT, 9901)
+      .withExposedPorts(9901)
       .withCopyContentToContainer([{ content: bootstrap, target: '/etc/envoy/envoy.yaml' }])
       .withCommand(['-c', '/etc/envoy/envoy.yaml', '--log-level', 'info'])
       .withWaitStrategy(Wait.forHttp('/server_info', 9901))
