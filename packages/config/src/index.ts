@@ -62,34 +62,13 @@ export const OrchestratorConfigSchema = z.object({
       portRange: z.array(PortEntrySchema).min(1),
     })
     .optional(),
-  /**
-   * When true, allow all operations when no auth service is configured.
-   * Defaults to false (fail-closed). Only use in development/testing.
-   */
   allowNoAuth: z.boolean().default(false),
-  /**
-   * Journal configuration for action log persistence and compaction.
-   *
-   * Modes:
-   * - "memory" (default): In-memory journal, no persistence. For dev/testing.
-   * - "sqlite": SQLite-backed journal with periodic snapshot + truncate compaction.
-   *
-   * Example (production):
-   * ```json
-   * { "mode": "sqlite", "path": "/data/journal.db" }
-   * ```
-   */
   journal: z
     .object({
-      /** "sqlite" for persistent storage, "memory" for ephemeral (default). */
       mode: z.enum(['sqlite', 'memory']).default('memory'),
-      /** SQLite file path. Required when mode is "sqlite". */
       path: z.string().optional(),
-      /** Compaction interval in milliseconds. Default: 24 hours. 0 disables compaction. */
       compactionIntervalMs: z.number().min(0).default(86_400_000),
-      /** Minimum journal entries accumulated before compaction triggers. Default: 1000. */
       minEntries: z.number().min(0).default(1000),
-      /** Number of entries to retain after snapshot for debugging. Default: 100. */
       tailSize: z.number().min(0).default(100),
     })
     .default({
@@ -98,6 +77,13 @@ export const OrchestratorConfigSchema = z.object({
       minEntries: 1000,
       tailSize: 100,
     }),
+  adapterHealth: z
+    .object({
+      enabled: z.boolean().default(true),
+      intervalMs: z.number().int().min(0).default(30_000),
+      timeoutMs: z.number().int().min(100).default(3_000),
+    })
+    .optional(),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>
@@ -249,6 +235,10 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
       }
     : undefined
 
+  const adapterHealthEnabled = process.env.CATALYST_ADAPTER_HEALTH_ENABLED
+  const adapterHealthInterval = process.env.CATALYST_ADAPTER_HEALTH_INTERVAL_MS
+  const adapterHealthTimeout = process.env.CATALYST_ADAPTER_HEALTH_TIMEOUT_MS
+
   const envoyPortRange = process.env.CATALYST_ENVOY_PORT_RANGE
   const envoyEndpoint = process.env.CATALYST_ENVOY_ENDPOINT
   const envoyConfig =
@@ -289,6 +279,11 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
           tailSize: process.env.CATALYST_JOURNAL_TAIL_SIZE
             ? Number(process.env.CATALYST_JOURNAL_TAIL_SIZE)
             : undefined,
+        },
+        adapterHealth: {
+          enabled: adapterHealthEnabled !== undefined ? adapterHealthEnabled !== 'false' : true,
+          intervalMs: adapterHealthInterval ? parseInt(adapterHealthInterval, 10) : 30_000,
+          timeoutMs: adapterHealthTimeout ? parseInt(adapterHealthTimeout, 10) : 3_000,
         },
       }
     : undefined
