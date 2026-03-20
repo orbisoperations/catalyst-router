@@ -171,7 +171,10 @@ export class OrchestratorServiceV2 {
 
     // 6b. Recalculate tick interval after peer connection events so keepalive
     //     frequency tracks the minimum negotiated holdTime (BGP: keepalive = holdTime / 3).
-    const peerActions = new Set([Actions.InternalProtocolOpen, Actions.InternalProtocolConnected])
+    const peerActions: Set<string> = new Set([
+      Actions.InternalProtocolOpen,
+      Actions.InternalProtocolConnected,
+    ])
     const originalDispatch = this.bus.dispatch.bind(this.bus)
     this.bus.dispatch = async (action) => {
       const result = await originalDispatch(action)

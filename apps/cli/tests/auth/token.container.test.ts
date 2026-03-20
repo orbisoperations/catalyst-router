@@ -19,15 +19,13 @@ const isDockerRunning = () => {
   }
 }
 
-const skipTests = !isDockerRunning() || !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+const skipTests = !isDockerRunning()
 if (skipTests) {
-  console.warn(
-    'Skipping token container tests: Docker not running or CATALYST_CONTAINER_TESTS_ENABLED not set'
-  )
+  console.warn('Skipping token container tests: Docker not running')
 }
 
 describe.skipIf(skipTests)('Token Commands Container Tests', () => {
-  const TIMEOUT = 300000 // 5 minutes
+  const TIMEOUT = 600000 // 10 minutes
   const authImage = 'catalyst-auth:next-topology-e2e'
   const repoRoot = path.resolve(__dirname, '../../../../')
 
@@ -51,6 +49,7 @@ describe.skipIf(skipTests)('Token Commands Container Tests', () => {
 
     // Start auth service
     console.log('Starting auth service...')
+    const authLogs: string[] = []
     auth = await new GenericContainer(authImage)
       .withNetwork(network)
       .withNetworkAliases('auth')
@@ -62,20 +61,26 @@ describe.skipIf(skipTests)('Token Commands Container Tests', () => {
         CATALYST_BOOTSTRAP_TTL: '3600000',
         CATALYST_NODE_ID: 'auth-node',
       })
-      .withWaitStrategy(Wait.forLogMessage('Auth service started'))
+      .withWaitStrategy(
+        Wait.forAll([Wait.forLogMessage('System Admin Token minted:'), Wait.forListeningPorts()])
+      )
+      .withLogConsumer((stream: NodeJS.ReadableStream) => {
+        stream.on('data', (chunk: Buffer) => authLogs.push(chunk.toString()))
+      })
       .start()
 
-    // Extract system token from logs
-    const authLogs = await auth.logs()
-    let logsData = ''
-    for await (const chunk of authLogs) {
-      logsData += chunk.toString()
+    // Extract system token from captured logs
+    for (let i = 0; i < 20; i++) {
+      const tokenMatch = authLogs.join('').match(/System Admin Token minted: (eyJ[^\s]+)/)
+      if (tokenMatch) {
+        systemToken = tokenMatch[1]
+        break
+      }
+      await new Promise((r) => setTimeout(r, 100))
     }
-    const tokenMatch = logsData.match(/System Admin Token minted: (eyJ[^\s]+)/)
-    if (!tokenMatch) {
+    if (!systemToken) {
       throw new Error('Failed to extract system token from auth logs')
     }
-    systemToken = tokenMatch[1]
     console.log('Extracted system token:', systemToken.substring(0, 20) + '...')
   }, TIMEOUT)
 
@@ -127,7 +132,7 @@ describe.skipIf(skipTests)('Token Commands Container Tests', () => {
       // List tokens
       const tokensList = await tokensApi.list({})
       expect(tokensList.length).toBeGreaterThan(0)
-      const mintedToken = tokensList.find((t) => t.sub === 'test-user')
+      const mintedToken = tokensList.find((t) => t.entityId === 'test-user')
       expect(mintedToken).toBeDefined()
 
       // Revoke token

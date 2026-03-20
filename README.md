@@ -88,17 +88,6 @@ End-to-end tests that spin up actual node containers using Docker and `testconta
 pnpm run test:container
 ```
 
-### Docker Environment Setup
-
-Container-based tests are disabled by default to prevent environment-related failures. To enable them, you must have a working Docker installation and set the following environment variable:
-
-```bash
-export CATALYST_CONTAINER_TESTS_ENABLED=true
-```
-
-> [!TIP]
-> You can add `export CATALYST_CONTAINER_TESTS_ENABLED=true` to your shell profile (~/.zshrc or ~/.bashrc) if you frequently run integration tests.
-
 ### Running Tests by Package
 
 Apps live in `apps/` and libraries in `packages/`. You can run tests individually:

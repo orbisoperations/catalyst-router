@@ -19,11 +19,9 @@ const isDockerRunning = () => {
   }
 }
 
-const skipTests = !isDockerRunning() || !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+const skipTests = !isDockerRunning()
 if (skipTests) {
-  console.warn(
-    'Skipping peer container tests: Docker not running or CATALYST_CONTAINER_TESTS_ENABLED not set'
-  )
+  console.warn('Skipping peer container tests: Docker not running')
 }
 
 describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
@@ -117,7 +115,7 @@ describe.skipIf(skipTests)('Peer Commands Container Tests', () => {
         CATALYST_AUTH_ENDPOINT: `ws://auth:5000/rpc`,
         CATALYST_SYSTEM_TOKEN: systemToken,
       })
-      .withWaitStrategy(Wait.forLogMessage('NEXT_ORCHESTRATOR_STARTED'))
+      .withWaitStrategy(Wait.forLogMessage('Orchestrator v2 running as'))
       .withLogConsumer((stream: NodeJS.ReadableStream) => {
         stream.on('data', (chunk: Buffer) => {
           process.stdout.write(`[orchestrator] ${chunk.toString()}`)

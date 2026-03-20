@@ -4,9 +4,7 @@ import { GenericContainer, Wait, Network } from 'testcontainers'
 import path from 'path'
 import { newWebSocketRpcSession } from 'capnweb'
 
-const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
-
-describe.skipIf(skipTests)('Gateway Container Integration', () => {
+describe('Gateway Container Integration', () => {
   const TIMEOUT = 180000 // 3 minutes for builds
   // Containers
   let booksContainer: StartedTestContainer
@@ -63,6 +61,9 @@ describe.skipIf(skipTests)('Gateway Container Integration', () => {
       gatewayContainer = await image
         .withNetwork(network)
         .withExposedPorts(4000)
+        .withEnvironment({
+          CATALYST_NODE_ID: 'gateway-test',
+        })
         .withWaitStrategy(Wait.forHttp('/', 4000))
         .start()
 
