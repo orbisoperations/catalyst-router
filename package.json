@@ -20,7 +20,7 @@
     "rpi:config": "pnpm exec tsx apps/rpi-config/src/index.ts",
     "test": "vitest run",
     "test:unit": "vitest run --reporter=verbose",
-    "test:integration": "vitest run --reporter=verbose",
+    "test:integration": "turbo run test:integration --concurrency=1",
     "test:container": "vitest run"
   },
   "pnpm": {
