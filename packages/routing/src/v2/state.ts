@@ -1,4 +1,5 @@
 import type { DataChannelDefinition } from './datachannel.js'
+import { routeKey } from './datachannel.js'
 import { z } from 'zod'
 import { NodeConfigSchema } from '@catalyst/config'
 
@@ -26,17 +27,22 @@ export type InternalRoute = DataChannelDefinition & {
 
 export type RouteTable = {
   local: {
-    routes: DataChannelDefinition[]
+    routes: Map<string, DataChannelDefinition>
   }
   internal: {
-    peers: PeerRecord[]
-    routes: InternalRoute[]
+    peers: Map<string, PeerRecord>
+    routes: Map<string, Map<string, InternalRoute>>
   }
 }
 
 export function newRouteTable(): RouteTable {
   return {
-    local: { routes: [] },
-    internal: { peers: [], routes: [] },
+    local: { routes: new Map() },
+    internal: { peers: new Map(), routes: new Map() },
   }
+}
+
+/** Composite key for internal routes in the nested Map. */
+export function internalRouteKey(route: Pick<InternalRoute, 'name' | 'originNode'>): string {
+  return `${routeKey(route)}:${route.originNode}`
 }

@@ -26,7 +26,7 @@ export const DataChannelDefinitionSchema = z.object({
   envoyAddress: z.string().optional(),
   healthStatus: z.enum(['up', 'down']).optional(),
   responseTimeMs: z.number().nullable().optional(),
-  lastChecked: z.string().optional(),
+  lastCheckedAt: z.string().datetime().optional(),
 })
 export type DataChannelDefinition = z.infer<typeof DataChannelDefinitionSchema>
 

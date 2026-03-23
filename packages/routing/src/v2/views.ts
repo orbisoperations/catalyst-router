@@ -54,11 +54,17 @@ export function internalRouteToDataChannel(route: InternalRoute): DataChannelDef
 
 /** Returns the full route table safe for API exposure. */
 export function routeTableToPublic(state: RouteTable): PublicRouteTable {
+  const internalRoutes: PublicInternalRoute[] = []
+  for (const innerMap of state.internal.routes.values()) {
+    for (const r of innerMap.values()) {
+      internalRoutes.push(internalRouteToPublic(r))
+    }
+  }
   return {
     routes: {
-      local: state.local.routes,
-      internal: state.internal.routes.map(internalRouteToPublic),
+      local: [...state.local.routes.values()],
+      internal: internalRoutes,
     },
-    peers: state.internal.peers.map(peerToPublic),
+    peers: [...state.internal.peers.values()].map(peerToPublic),
   }
 }
