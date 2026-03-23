@@ -1,4 +1,4 @@
-import type { DataChannelDefinition, DataChannelProtocol } from '@catalyst/routing'
+import type { DataChannelDefinition, DataChannelProtocol } from '@catalyst/routing/v2'
 import type { XdsSnapshot } from './snapshot-cache.js'
 
 // ---------------------------------------------------------------------------
