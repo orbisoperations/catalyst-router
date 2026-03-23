@@ -11,7 +11,7 @@ import {
   type UpdateMessageSchema,
 } from '@catalyst/routing/v1'
 export type { PeerInfo, InternalRoute }
-import { getLogger, WideEvent } from '@catalyst/telemetry'
+import { getLogger, withWideEvent } from '@catalyst/telemetry'
 import { type OrchestratorConfig, OrchestratorConfigSchema } from './types.js'
 import { createPortAllocator, type PortAllocator } from '@catalyst/envoy-service'
 import {
@@ -231,43 +231,44 @@ export class CatalystNodeBus extends RpcTarget {
   async dispatch(
     sentAction: Action
   ): Promise<{ success: true } | { success: false; error: string }> {
-    const event = new WideEvent('orchestrator.action', this.logger)
-    event.set({
-      'catalyst.orchestrator.action.type': sentAction.action,
-      'catalyst.orchestrator.node.name': this.config.node.name,
-    })
-    if (sentAction.action === Actions.LocalRouteCreate) {
-      event.set('catalyst.orchestrator.action.data', JSON.stringify(sentAction.data))
-    }
+    let prevState: RouteTable | undefined
 
-    try {
-      const prevState = this.state
-
-      const result = await this.handleAction(sentAction, this.state)
-      if (result.success) {
-        this.state = result.state
-        // Fire-and-forget: handleNotify can recursively call dispatch(), so
-        // awaiting it here would deadlock. Failures are logged but non-fatal.
-        this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState).catch(
-          (e) => {
-            this.logger.error('Error in handleNotify for {action}: {error}', {
-              'event.name': 'orchestrator.notify.failed',
-              action: sentAction.action,
-              error: e,
-            })
-          }
-        )
-        return { success: true }
-      } else {
-        event.setError(result.error)
-        return result
+    const result = await withWideEvent('orchestrator.action', this.logger, async (event) => {
+      event.set({
+        'catalyst.orchestrator.action.type': sentAction.action,
+        'catalyst.orchestrator.node.name': this.config.node.name,
+      })
+      if (sentAction.action === Actions.LocalRouteCreate) {
+        event.set('catalyst.orchestrator.action.data', JSON.stringify(sentAction.data))
       }
-    } catch (error) {
-      event.setError(error)
-      throw error
-    } finally {
-      event.emit()
+
+      prevState = this.state
+
+      const actionResult = await this.handleAction(sentAction, this.state)
+      if (actionResult.success) {
+        this.state = actionResult.state
+        return { success: true as const }
+      } else {
+        event.setError(actionResult.error)
+        return actionResult
+      }
+    })
+
+    // Fire-and-forget OUTSIDE withWideEvent: handleNotify recursively calls
+    // dispatch(), so it must run at the top level to preserve async timing.
+    if (result.success) {
+      this.lastNotificationPromise = this.handleNotify(sentAction, this.state, prevState!).catch(
+        (e) => {
+          this.logger.error('Error in handleNotify for {action}: {error}', {
+            'event.name': 'orchestrator.notify.failed',
+            action: sentAction.action,
+            error: e,
+          })
+        }
+      )
     }
+
+    return result
   }
 
   async handleAction(

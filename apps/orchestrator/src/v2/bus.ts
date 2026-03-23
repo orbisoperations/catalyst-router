@@ -361,7 +361,8 @@ export class OrchestratorBus {
    * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
    */
   private async handleGraphqlGatewaySync(state: RouteTable): Promise<void> {
-    if (this.gatewayClient === undefined) return
+    const client = this.gatewayClient
+    if (client === undefined) return
 
     const graphqlRoutes = [...state.local.routes, ...state.internal.routes].filter(
       (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
@@ -372,7 +373,7 @@ export class OrchestratorBus {
     try {
       await withWideEvent('orchestrator.gateway_sync', logger, async (event) => {
         event.set('catalyst.orchestrator.gateway.route_count', graphqlRoutes.length)
-        await this.gatewayClient!.updateConfig({
+        await client.updateConfig({
           services: graphqlRoutes.map((r) => ({ name: r.name, url: r.endpoint! })),
         })
       })
@@ -503,7 +504,8 @@ export class OrchestratorBus {
    * Fire-and-forget: errors are swallowed to avoid disrupting the dispatch pipeline.
    */
   private async handleEnvoySync(_plan: PlanResult, state: RouteTable): Promise<void> {
-    if (this.envoyClient === undefined) return
+    const client = this.envoyClient
+    if (client === undefined) return
 
     try {
       await withWideEvent('orchestrator.envoy_sync', logger, async (event) => {
@@ -511,7 +513,7 @@ export class OrchestratorBus {
           'catalyst.orchestrator.envoy.local_count': state.local.routes.length,
           'catalyst.orchestrator.envoy.internal_count': state.internal.routes.length,
         })
-        await this.envoyClient!.updateRoutes({
+        await client.updateRoutes({
           local: state.local.routes,
           internal: state.internal.routes,
           portAllocations: this.portAllocator

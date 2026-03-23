@@ -282,8 +282,8 @@ export function loadDefaultConfig(options: ConfigLoadOptions = {}): CatalystConf
         },
         adapterHealth: {
           enabled: adapterHealthEnabled !== undefined ? adapterHealthEnabled !== 'false' : true,
-          intervalMs: adapterHealthInterval ? parseInt(adapterHealthInterval, 10) : 30_000,
-          timeoutMs: adapterHealthTimeout ? parseInt(adapterHealthTimeout, 10) : 3_000,
+          intervalMs: adapterHealthInterval ? parseInt(adapterHealthInterval, 10) : undefined,
+          timeoutMs: adapterHealthTimeout ? parseInt(adapterHealthTimeout, 10) : undefined,
         },
       }
     : undefined

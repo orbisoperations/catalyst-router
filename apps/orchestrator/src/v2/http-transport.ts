@@ -152,8 +152,9 @@ export class HttpPeerTransport implements PeerTransport {
             event.setError(new Error(closeResult.error))
           }
         }
-      } catch {
+      } catch (err) {
         // Best-effort close — if the connection is already down, nothing to do.
+        event.setError(err)
       }
       this.stubs.delete(endpoint)
     })

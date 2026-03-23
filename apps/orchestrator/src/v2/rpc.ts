@@ -177,8 +177,11 @@ function extractPeerIdentity(
       return { success: false, error: 'JWT missing sub claim' }
     }
     return { success: true, identity: sub }
-  } catch {
-    return { success: false, error: 'Failed to decode peer JWT' }
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to decode peer JWT: ${err instanceof Error ? err.message : String(err)}`,
+    }
   }
 }
 
