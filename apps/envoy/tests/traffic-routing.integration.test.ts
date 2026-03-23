@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { serve } from '@hono/node-server'
 import * as grpc from '@grpc/grpc-js'
+import { createServer } from 'node:net'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService, Principal } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
@@ -10,8 +11,29 @@ import { mintTokenHandler } from '../../cli/src/handlers/auth-token-handlers.js'
 import { createRouteHandler } from '../../cli/src/handlers/node-route-handlers.js'
 import { getProtoRoot, LISTENER_TYPE_URL, CLUSTER_TYPE_URL } from '../src/xds/proto-encoding.js'
 
+const TEST_HOST = '127.0.0.1'
 const ADS_SERVICE_PATH =
   '/envoy.service.discovery.v3.AggregatedDiscoveryService/StreamAggregatedResources'
+
+async function allocatePort(): Promise<number> {
+  const probe = createServer()
+  await new Promise<void>((resolve, reject) => {
+    probe.once('error', reject)
+    probe.listen(0, TEST_HOST, () => resolve())
+  })
+  const address = probe.address()
+  if (!address || typeof address === 'string') {
+    await new Promise<void>((resolve, reject) =>
+      probe.close((err) => (err ? reject(err) : resolve()))
+    )
+    throw new Error('Failed to allocate a test port')
+  }
+  const { port } = address
+  await new Promise<void>((resolve, reject) =>
+    probe.close((err) => (err ? reject(err) : resolve()))
+  )
+  return port
+}
 
 /**
  * Traffic routing integration test: Full pipeline with xDS verification.
@@ -51,6 +73,7 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     authServer = catalystHonoServer(authService.handler, {
       services: [authService],
       port: 0,
+      hostname: TEST_HOST,
     })
     await authServer.start()
     const authPort = authServer.port
@@ -60,17 +83,15 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     booksServer = serve({
       fetch: booksModule.default.fetch,
       port: 0,
+      hostname: TEST_HOST,
     })
 
     // ── 3. Start Envoy Service (with ADS gRPC) ────────────────────
-    // Pre-allocate the xDS port
-    const tempXds = serve({ fetch: () => new Response(''), port: 0 })
-    xdsPort = (tempXds.address() as { port: number }).port
-    tempXds.close()
+    xdsPort = await allocatePort()
 
     const envoyConfig = CatalystConfigSchema.parse({
       node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
-      envoy: { adminPort: 9901, xdsPort, bindAddress: '0.0.0.0' },
+      envoy: { adminPort: 9901, xdsPort, bindAddress: TEST_HOST },
       port: 0,
     })
     envoyService = await EnvoyService.create({ config: envoyConfig })
@@ -78,29 +99,28 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     envoyServer = catalystHonoServer(envoyService.handler, {
       services: [envoyService],
       port: 0,
+      hostname: TEST_HOST,
     })
     await envoyServer.start()
     const envoyPort = envoyServer.port
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
-    const tempOrch = serve({ fetch: () => new Response(''), port: 0 })
-    const orchPort = (tempOrch.address() as { port: number }).port
-    tempOrch.close()
+    const orchPort = await allocatePort()
 
     const orchConfig = CatalystConfigSchema.parse({
       node: {
         name: 'node-a.somebiz.local.io',
         domains: ['somebiz.local.io'],
-        endpoint: `ws://localhost:${orchPort}/rpc`,
+        endpoint: `ws://${TEST_HOST}:${orchPort}/rpc`,
       },
       orchestrator: {
         ibgp: { secret: 'test-secret' },
         auth: {
-          endpoint: `ws://localhost:${authPort}/rpc`,
+          endpoint: `ws://${TEST_HOST}:${authPort}/rpc`,
           systemToken,
         },
         envoyConfig: {
-          endpoint: `ws://localhost:${envoyPort}/api`,
+          endpoint: `ws://${TEST_HOST}:${envoyPort}/api`,
           portRange: [[10000, 10100]],
         },
       },
@@ -111,6 +131,7 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     orchServer = catalystHonoServer(orchService.handler, {
       services: [orchService],
       port: orchPort,
+      hostname: TEST_HOST,
     })
     await orchServer.start()
 
@@ -127,7 +148,7 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
       principal: Principal.ADMIN,
       name: 'Test CLI',
       type: 'service',
-      authUrl: `ws://localhost:${ports.auth}/rpc`,
+      authUrl: `ws://${TEST_HOST}:${ports.auth}/rpc`,
       token: systemToken,
     })
     if (!mintResult.success) {
@@ -147,9 +168,9 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     // Create the route via CLI handler
     const result = await createRouteHandler({
       name: 'books-api',
-      endpoint: `http://localhost:${ports.books}/graphql`,
+      endpoint: `http://${TEST_HOST}:${ports.books}/graphql`,
       protocol: 'http:graphql',
-      orchestratorUrl: `ws://localhost:${ports.orchestrator}/rpc`,
+      orchestratorUrl: `ws://${TEST_HOST}:${ports.orchestrator}/rpc`,
       token: cliToken,
       logLevel: 'info',
     })
@@ -159,7 +180,7 @@ describe('Traffic Routing: Full Pipeline with ADS gRPC', () => {
     await new Promise((r) => setTimeout(r, 300))
 
     // Connect a gRPC client to the ADS server (simulating Envoy)
-    const client = new grpc.Client(`localhost:${xdsPort}`, grpc.credentials.createInsecure())
+    const client = new grpc.Client(`${TEST_HOST}:${xdsPort}`, grpc.credentials.createInsecure())
 
     const root = getProtoRoot()
     const ResponseType = root.lookupType('envoy.service.discovery.v3.DiscoveryResponse')

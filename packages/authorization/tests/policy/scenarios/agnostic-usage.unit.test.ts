@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { EntityBuilder } from '../../../src/policy/src/entity-builder.js'
 import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodModel.js'
 
-describe('Model-Agnostic Usage Integration', () => {
-  // --- Scenario 1: Orchestrator Route Integration (Mocked Schema) ---
+describe('Model-Agnostic Usage Scenarios', () => {
+  // --- Scenario 1: Orchestrator Route Schema (Mocked) ---
   // This mimics importing DataChannelDefinitionSchema from 'orchestrator'
   const MockDataChannelProtocolEnum = z.enum([
     'http',
@@ -52,7 +52,7 @@ describe('Model-Agnostic Usage Integration', () => {
     expect(routeEntity?.attrs.region).toBe('us-east-1')
   })
 
-  // --- Scenario 2: Auth User Integration (Mocked Schema) ---
+  // --- Scenario 2: Auth User Schema (Mocked) ---
   // This mimics importing UserSchema from 'auth'
   const MockUserSchema = z.object({
     id: z.string().startsWith('usr_'),

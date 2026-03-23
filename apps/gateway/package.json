@@ -8,9 +8,10 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --passWithNoTests container integration",
-    "test:rpc": "tsx scripts/test-rpc.ts"
+    "test:unit": "vitest run unit.test.ts --passWithNoTests",
+    "test:integration": "vitest run integration.test.ts --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000",
+    "test:rpc": "tsx scripts/test-rpc.ts",
+    "test:container": "vitest run container.test.ts --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=300000 --hookTimeout=300000"
   },
   "dependencies": {
     "@graphql-tools/delegate": "catalog:",

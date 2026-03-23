@@ -1,42 +1,53 @@
 # Testing
 
+The canonical classification and migration plan now live in `docs/test-classification-unified.md`.
+
 ## Test Tiers
 
-| Tier        | File pattern            | What it covers                       | Script                  |
-| ----------- | ----------------------- | ------------------------------------ | ----------------------- |
-| Unit        | `*.test.ts`             | Core logic, no external dependencies | `pnpm test:unit`        |
-| Integration | `*.integration.test.ts` | Cross-package boundaries             | `pnpm test:integration` |
-| Topology    | `*.topology.test.ts`    | Orchestrator and peering flows       | `pnpm test:integration` |
-| Container   | `*.container.test.ts`   | End-to-end Docker-based validation   | `pnpm test:integration` |
+| Tier        | File pattern                      | What it covers                                                                                  | Script                  |
+| ----------- | --------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------- |
+| Unit        | `*.unit.test.ts`                  | In-process logic, mocks, in-memory state, no real OS resources                                  | `pnpm test:unit`        |
+| Integration | `*.integration.test.ts`           | Real localhost ports, filesystem, subprocesses, or other local-machine resources without Docker | `pnpm test:integration` |
+| Container   | `*.container.test.ts`             | Docker/Testcontainers, image builds, container networking                                       | `pnpm test:container`   |
+| Browser E2E | `apps/web-ui/tests/e2e/*.spec.ts` | Playwright browser flows                                                                        | `pnpm test:e2e`         |
 
 ## Running Tests
 
 ```bash
-# Unit tests only (fast, no Docker)
+# Fast default lanes
+pnpm test
+
+# Unit only
 pnpm test:unit
 
-# Container / integration tests (requires Docker)
+# Local-resource integration only
 pnpm test:integration
 
-# Single package
-cd apps/auth && pnpm test:unit
+# Docker-backed tests
+pnpm test:container
+
+# Browser tests
+pnpm test:e2e
 ```
+
+Package-local wrappers use the same suffix-based filters, so `cd apps/auth && pnpm test:integration` matches the root lane semantics.
 
 ## How Test Separation Works
 
-Tests are separated at the **script level**, not with runtime environment variables.
+Lane discovery is now filename-driven and explicit:
 
-- `test:unit` excludes files matching `*{integration,container}*` via vitest's `--exclude` flag
-- `test:integration` includes only files in `container` and `integration` directories
+- `test:unit` runs `unit.test.ts`
+- `test:integration` runs `integration.test.ts`
+- `test:container` runs `container.test.ts`
+- Playwright stays outside Vitest under `apps/web-ui/tests/e2e/*.spec.ts`
 
-This means container tests are never loaded during `pnpm test:unit` — no env var guards needed in test files.
+The root commands are the source of truth. Integration and container lanes run serially with longer Vitest timeouts because they start real services and, in the container lane, may build Docker images.
 
-CI runs these as separate jobs: the `test-unit` job runs `turbo run test:unit`, and the `test-container` job runs `turbo run test:integration`.
+Directory names are not lane selectors. Avoid semantic folders named `integration`, `container`, or `e2e` unless the tests inside actually belong to that execution lane. Use neutral names like `scenarios`, `robustness`, or `security` for topical grouping.
 
 ## Container Tests
 
-Container tests use [testcontainers](https://node.testcontainers.org/) to spin up Docker containers for integration testing.
+Container tests use [testcontainers](https://node.testcontainers.org/) and require a working Docker daemon.
 
-**Prerequisites:** A running Docker daemon. The cli container tests check for this automatically via `isDockerRunning()` and skip gracefully if Docker is unavailable.
-
-**Timeouts:** Container tests set long timeouts (3-10 minutes) because they build Docker images. If a container test times out locally, check that Docker has enough resources allocated.
+- Many container suites use `describe.skipIf(...)` when Docker is unavailable, so discovery may differ from runnable test count on machines without Docker.
+- Container lanes use extended test and hook timeouts because image builds and startup can take several minutes.

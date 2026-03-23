@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { serve } from '@hono/node-server'
 import * as grpc from '@grpc/grpc-js'
+import { createServer } from 'node:net'
 import { createSnapshotCache } from '../src/xds/snapshot-cache.js'
 import { XdsControlPlane } from '../src/xds/control-plane.js'
 import { buildIngressListener, buildLocalCluster } from '../src/xds/resources.js'
@@ -11,15 +11,36 @@ import {
   encodeDiscoveryResponse,
 } from '../src/xds/proto-encoding.js'
 
+const TEST_HOST = '127.0.0.1'
 const ADS_SERVICE_PATH =
   '/envoy.service.discovery.v3.AggregatedDiscoveryService/StreamAggregatedResources'
+
+async function allocatePort(): Promise<number> {
+  const probe = createServer()
+  await new Promise<void>((resolve, reject) => {
+    probe.once('error', reject)
+    probe.listen(0, TEST_HOST, () => resolve())
+  })
+  const address = probe.address()
+  if (!address || typeof address === 'string') {
+    await new Promise<void>((resolve, reject) =>
+      probe.close((err) => (err ? reject(err) : resolve()))
+    )
+    throw new Error('Failed to allocate a test port')
+  }
+  const { port } = address
+  await new Promise<void>((resolve, reject) =>
+    probe.close((err) => (err ? reject(err) : resolve()))
+  )
+  return port
+}
 
 /**
  * Create a raw gRPC client for the ADS service.
  * Uses @grpc/grpc-js directly to simulate an Envoy proxy connecting.
  */
 function createAdsClient(port: number): grpc.Client {
-  return new grpc.Client(`localhost:${port}`, grpc.credentials.createInsecure())
+  return new grpc.Client(`${TEST_HOST}:${port}`, grpc.credentials.createInsecure())
 }
 
 /**
@@ -102,13 +123,11 @@ describe('ADS gRPC Control Plane', () => {
   const cache = createSnapshotCache()
 
   beforeAll(async () => {
-    // Use a random available port
-    const tempServer = serve({ fetch: () => new Response(''), port: 0 })
-    port = (tempServer.address() as { port: number }).port
-    tempServer.close()
+    port = await allocatePort()
 
     controlPlane = new XdsControlPlane({
       port,
+      bindAddress: TEST_HOST,
       snapshotCache: cache,
     })
     await controlPlane.start()
@@ -126,7 +145,7 @@ describe('ADS gRPC Control Plane', () => {
         buildIngressListener({
           channelName: 'books-api',
           port: 10001,
-          bindAddress: '0.0.0.0',
+          bindAddress: TEST_HOST,
         }),
       ],
       clusters: [
@@ -186,12 +205,12 @@ describe('ADS gRPC Control Plane', () => {
           buildIngressListener({
             channelName: 'books-api',
             port: 10001,
-            bindAddress: '0.0.0.0',
+            bindAddress: TEST_HOST,
           }),
           buildIngressListener({
             channelName: 'movies-api',
             port: 10002,
-            bindAddress: '0.0.0.0',
+            bindAddress: TEST_HOST,
           }),
         ],
         clusters: [

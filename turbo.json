@@ -5,6 +5,12 @@
     "test:unit": {},
     "test:integration": {
       "cache": false
+    },
+    "test:container": {
+      "cache": false
+    },
+    "test:e2e": {
+      "cache": false
     }
   }
 }
