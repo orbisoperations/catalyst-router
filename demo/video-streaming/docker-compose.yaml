@@ -1,0 +1,179 @@
+# Video Streaming 2-Node Demo — Catalyst Mesh RTSP Relay
+#
+# Architecture (6 containers):
+#   Node A (Publisher): auth-a, orch-a, video-a (camera source)
+#   Node B (Consumer):  auth-b, orch-b, video-b (relay viewer)
+#
+# Traffic flow:
+#   Camera -> video-a (MediaMTX) -> orch-a (iBGP) -> orch-b -> video-b (relay)
+#   Viewer -> video-b:8554 -> (on-demand pull) -> video-a:8554
+#
+# Usage:
+#   docker compose -f demo/video-streaming/docker-compose.yaml up --build
+
+services:
+  # ============================================================
+  # Node A (Publisher): auth + orchestrator + video
+  # ============================================================
+
+  auth-a:
+    build:
+      context: ../..
+      dockerfile: apps/auth/Dockerfile
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=node-a.video.local
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      stack-a:
+
+  orch-a:
+    build:
+      context: ../..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3001:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-a.video.local
+      - CATALYST_PEERING_ENDPOINT=ws://orch-a:3000/rpc
+      - CATALYST_DOMAINS=video.local
+      - CATALYST_AUTH_ENDPOINT=ws://auth-a:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      auth-a:
+        condition: service_healthy
+    networks:
+      stack-a:
+      mesh:
+        aliases:
+          - orch-a
+
+  video-a:
+    build:
+      context: ../..
+      dockerfile: apps/video/Dockerfile
+    ports:
+      - '3010:3000' # HTTP (hooks + health)
+      - '8554:8554' # RTSP (camera publish + relay source)
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-a.video.local
+      - CATALYST_VIDEO_ENABLED=true
+      - CATALYST_VIDEO_RTSP_PORT=8554
+      - CATALYST_VIDEO_ADVERTISE_ADDRESS=video-a
+      - CATALYST_VIDEO_MAX_STREAMS=50
+      - CATALYST_ORCHESTRATOR_ENDPOINT=ws://orch-a:3000/rpc
+      - CATALYST_AUTH_ENDPOINT=ws://auth-a:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      orch-a:
+        condition: service_healthy
+    networks:
+      stack-a:
+      mesh:
+        aliases:
+          - video-a
+
+  # ============================================================
+  # Node B (Consumer): auth + orchestrator + video (relay)
+  # ============================================================
+
+  auth-b:
+    build:
+      context: ../..
+      dockerfile: apps/auth/Dockerfile
+    environment:
+      - PORT=5000
+      - CATALYST_NODE_ID=node-b.video.local
+      - 'CATALYST_AUTH_KEYS_DB=:memory:'
+      - 'CATALYST_AUTH_TOKENS_DB=:memory:'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      stack-b:
+
+  orch-b:
+    build:
+      context: ../..
+      dockerfile: apps/orchestrator/Dockerfile
+    ports:
+      - '3002:3000'
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-b.video.local
+      - CATALYST_PEERING_ENDPOINT=ws://orch-b:3000/rpc
+      - CATALYST_DOMAINS=video.local
+      - CATALYST_AUTH_ENDPOINT=ws://auth-b:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      auth-b:
+        condition: service_healthy
+    networks:
+      stack-b:
+      mesh:
+        aliases:
+          - orch-b
+
+  video-b:
+    build:
+      context: ../..
+      dockerfile: apps/video/Dockerfile
+    ports:
+      - '3011:3000' # HTTP (hooks + health)
+      - '8555:8554' # RTSP (relay viewer access)
+    environment:
+      - PORT=3000
+      - CATALYST_NODE_ID=node-b.video.local
+      - CATALYST_VIDEO_ENABLED=true
+      - CATALYST_VIDEO_RTSP_PORT=8554
+      - CATALYST_VIDEO_ADVERTISE_ADDRESS=video-b
+      - CATALYST_VIDEO_MAX_STREAMS=50
+      - CATALYST_ORCHESTRATOR_ENDPOINT=ws://orch-b:3000/rpc
+      - CATALYST_AUTH_ENDPOINT=ws://auth-b:5000/rpc
+      - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      orch-b:
+        condition: service_healthy
+    networks:
+      stack-b:
+      mesh:
+        aliases:
+          - video-b
+
+networks:
+  stack-a:
+    driver: bridge
+  stack-b:
+    driver: bridge
+  mesh:
+    driver: bridge

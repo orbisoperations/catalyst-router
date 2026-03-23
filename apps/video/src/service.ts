@@ -5,6 +5,9 @@ import type { VideoConfig } from './config.js'
 import { generateMediaMtxConfig, serializeMediaMtxConfig } from './mediamtx/config-generator.js'
 import { ProcessManager } from './mediamtx/process-manager.js'
 import { ControlApiClient } from './mediamtx/control-api-client.js'
+import { createAuthHook } from './hooks/auth.js'
+import { createLifecycleHooks } from './hooks/lifecycle.js'
+import { StreamRouteManager } from './routes/stream-route-manager.js'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -28,6 +31,7 @@ export class VideoStreamService extends CatalystService {
   readonly videoConfig: VideoConfig
   private processManager?: ProcessManager
   private controlApiClient?: ControlApiClient
+  private routeManager?: StreamRouteManager
   private configPath?: string
 
   constructor(options: VideoStreamServiceOptions) {
@@ -70,6 +74,50 @@ export class VideoStreamService extends CatalystService {
     this.controlApiClient = new ControlApiClient({
       baseUrl: `http://127.0.0.1:${this.videoConfig.apiPort}`,
     })
+
+    // Wire auth hook — stub token validator and Cedar evaluator for now
+    const domainId = this.config.node.domains?.[0] ?? 'default'
+    const authHook = createAuthHook({
+      tokenValidator: {
+        validate: async (token) => {
+          try {
+            const authBase = this.videoConfig.authEndpoint.replace(/^ws/, 'http')
+            const res = await fetch(`${authBase}/verify`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token }),
+            })
+            if (!res.ok) return { valid: false, error: 'invalid_token' }
+            const payload = (await res.json()) as Record<string, unknown>
+            return { valid: true, payload }
+          } catch {
+            return { valid: false, error: 'auth_service_unreachable' }
+          }
+        },
+      },
+      streamAccess: { evaluate: () => 'allow' },
+      nodeId: this.config.node.name,
+      domainId,
+    })
+    this.handler.route('/', authHook)
+
+    // Wire lifecycle hooks with route manager
+    this.routeManager = new StreamRouteManager({
+      registrar: {
+        addRoute: async () => {
+          /* TODO: Wire to orchestrator DataChannel */
+        },
+        removeRoute: async () => {
+          /* TODO: Wire to orchestrator DataChannel */
+        },
+      },
+      metadataProvider: { getPathMetadata: async () => null },
+      advertiseAddress: this.videoConfig.advertiseAddress ?? 'localhost',
+      rtspPort: this.videoConfig.rtspPort,
+      maxStreams: this.videoConfig.maxStreams,
+    })
+    const lifecycleHooks = createLifecycleHooks({ routeManager: this.routeManager })
+    this.handler.route('/', lifecycleHooks)
 
     // Start MediaMTX process
     this.processManager = new ProcessManager({
@@ -115,6 +163,7 @@ export class VideoStreamService extends CatalystService {
   }
 
   protected async onShutdown(): Promise<void> {
+    this.routeManager?.shutdown()
     await this.processManager?.stop()
 
     this.telemetry.logger.info('VideoStreamService stopped', {
