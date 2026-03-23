@@ -14,6 +14,7 @@
     "test:integration": "vitest run --passWithNoTests container integration"
   },
   "dependencies": {
+    "@catalyst/authorization": "workspace:*",
     "@catalyst/config": "workspace:*",
     "@catalyst/routing": "workspace:*",
     "@catalyst/service": "workspace:*",

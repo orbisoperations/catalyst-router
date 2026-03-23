@@ -50,6 +50,17 @@ export class ControlApiClient {
   }
 
   /**
+   * Update an existing relay path configuration.
+   * PATCH /v3/config/paths/patch/{name}
+   */
+  async patchPath(
+    name: string,
+    config: Partial<MediaMtxRelayPathConfig>
+  ): Promise<ApiResult<void>> {
+    return this.patch(`/v3/config/paths/patch/${encodeURIComponent(name)}`, config)
+  }
+
+  /**
    * Remove a relay path when a remote route is withdrawn.
    * DELETE /v3/config/paths/delete/{name}
    */
@@ -74,6 +85,22 @@ export class ControlApiClient {
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!response.ok) {
+        return { ok: false, error: `HTTP ${response.status}`, status: response.status }
+      }
+      return { ok: true, data: undefined }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private async patch(path: string, body: unknown): Promise<ApiResult<void>> {
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })

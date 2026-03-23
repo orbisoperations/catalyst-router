@@ -210,10 +210,12 @@ export class RelayManager {
     const internalRoute = route as InternalRoute
     if (internalRoute.originNode === this.localNodeName) return
 
-    if (change.type === 'added' || change.type === 'updated') {
+    if (change.type === 'added') {
       if (!route.endpoint) return
-      // Fire-and-forget: relay path creation is best-effort
       void this.addRelay(route.name, route.endpoint)
+    } else if (change.type === 'updated') {
+      if (!route.endpoint) return
+      void this.updateRelay(route.name, route.endpoint)
     } else if (change.type === 'removed') {
       void this.removeRelay(route.name)
     }
@@ -247,6 +249,39 @@ export class RelayManager {
     } else {
       logger.error('Failed to create relay path for {streamPath}: {error}', {
         'event.name': 'video.relay.create_failed',
+        streamPath: name,
+        endpoint,
+        error: result.error,
+      })
+    }
+  }
+
+  private async updateRelay(name: string, endpoint: string): Promise<void> {
+    const validation = validateRelayEndpoint(endpoint, this.knownPeerHosts)
+    if (!validation.safe) return
+
+    // If not tracked yet, treat as add
+    if (!this.activeRelays.has(name)) {
+      return this.addRelay(name, endpoint)
+    }
+
+    const relayToken = this.getRelayToken()
+    const result = await this.controlApi.patchPath(name, {
+      source: endpoint,
+      sourceUser: 'relay',
+      sourcePass: relayToken,
+    })
+
+    if (result.ok) {
+      this.activeRelays.set(name, endpoint)
+      logger.info('Relay path updated for {streamPath}', {
+        'event.name': 'video.relay.updated',
+        streamPath: name,
+        endpoint,
+      })
+    } else {
+      logger.error('Failed to update relay path for {streamPath}: {error}', {
+        'event.name': 'video.relay.update_failed',
         streamPath: name,
         endpoint,
         error: result.error,

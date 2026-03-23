@@ -13,6 +13,13 @@ import { TokenRefreshScheduler } from './rpc/token-refresh.js'
 import { RelayManager } from './routes/relay-manager.js'
 import { newWebSocketRpcSession } from 'capnweb'
 import { decodeJwt } from 'jose'
+import {
+  AuthorizationEngine,
+  CATALYST_SCHEMA,
+  ALL_POLICIES,
+  jwtToEntity,
+  type CatalystPolicyDomain,
+} from '@catalyst/authorization'
 import type { DataChannelDefinition, InternalRoute, RouteChange } from '@catalyst/routing/v2'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -124,8 +131,9 @@ export class VideoStreamService extends CatalystService {
       baseUrl: `http://127.0.0.1:${this.videoConfig.apiPort}`,
     })
 
-    // Wire auth hook — stub token validator and Cedar evaluator for now
+    // Wire auth hook with real Cedar STREAM_VIEW evaluation
     const domainId = this.config.node.domains?.[0] ?? 'default'
+    const cedarEngine = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
     const authHook = createAuthHook({
       tokenValidator: {
         validate: async (token) => {
@@ -144,7 +152,26 @@ export class VideoStreamService extends CatalystService {
           }
         },
       },
-      streamAccess: { evaluate: () => 'allow' },
+      streamAccess: {
+        evaluate: (payload, resource) => {
+          const entity = jwtToEntity(payload)
+          const builder = cedarEngine.entityBuilderFactory.createEntityBuilder()
+          builder.entity('CATALYST::Route', resource.nodeId).setAttributes({
+            nodeId: resource.nodeId,
+            domainId: resource.domainId,
+          })
+          const entities = [entity, ...builder.build().getAll()]
+          const result = cedarEngine.isAuthorized({
+            principal: entity.uid,
+            action: 'CATALYST::Action::STREAM_VIEW',
+            resource: { type: 'CATALYST::Route', id: resource.nodeId },
+            entities,
+            context: {},
+          })
+          if (result.type === 'failure') return 'deny'
+          return result.decision
+        },
+      },
       nodeId: this.config.node.name,
       domainId,
     })
@@ -164,7 +191,16 @@ export class VideoStreamService extends CatalystService {
           if (!result.success) throw new Error(result.error)
         },
       },
-      metadataProvider: { getPathMetadata: async () => null },
+      metadataProvider: {
+        getPathMetadata: async (path) => {
+          const result = await this.controlApiClient!.getPath(path)
+          if (!result.ok || !result.data) return null
+          return {
+            tracks: result.data.tracks ?? [],
+            sourceType: result.data.source?.type ?? 'unknown',
+          }
+        },
+      },
       advertiseAddress: this.videoConfig.advertiseAddress ?? 'localhost',
       rtspPort: this.videoConfig.rtspPort,
       maxStreams: this.videoConfig.maxStreams,
@@ -307,11 +343,27 @@ export class VideoStreamService extends CatalystService {
       configPath: this.configPath,
     })
 
+    let hasStartedOnce = false
     this.processManager.on('started', (pid) => {
       this.telemetry.logger.info('MediaMTX process started (pid: {pid})', {
         'event.name': 'video.mediamtx.started',
         pid,
       })
+      // After a crash-restart, withdraw stale routes. The runOnReady hooks
+      // will re-register any paths that become active on the new process.
+      if (hasStartedOnce && this.routeManager && this.routeManager.streamCount > 0) {
+        this.telemetry.logger.info('MediaMTX restarted — reconciling stale routes', {
+          'event.name': 'video.route.reconcile_after_restart',
+          staleCount: this.routeManager.streamCount,
+        })
+        this.routeManager.withdrawAll().catch((err) => {
+          this.telemetry.logger.error('Failed to reconcile routes after restart: {error}', {
+            'event.name': 'video.route.reconcile_failed',
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
+      }
+      hasStartedOnce = true
     })
 
     this.processManager.on('exited', (exitCode, signal) => {
@@ -334,6 +386,13 @@ export class VideoStreamService extends CatalystService {
       this.telemetry.logger.fatal('VideoStreamService degraded after restart failures', {
         'event.name': 'video.service.degraded',
       })
+      // Withdraw all stale routes — MediaMTX is down, streams are gone
+      this.routeManager?.withdrawAll().catch((err) => {
+        this.telemetry.logger.error('Failed to withdraw routes on degraded: {error}', {
+          'event.name': 'video.route.withdraw_degraded_failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
     })
 
     await this.processManager.start()
@@ -345,10 +404,33 @@ export class VideoStreamService extends CatalystService {
   }
 
   protected async onShutdown(): Promise<void> {
+    // Step 1: Stop accepting new hooks (token scheduler + relay manager)
     this.tokenScheduler?.stop()
     this.relayManager?.shutdown()
+
+    // Step 2: Best-effort withdraw all stream routes (3-second timeout)
+    if (this.routeManager && this.routeManager.streamCount > 0) {
+      try {
+        await Promise.race([
+          this.routeManager.withdrawAll(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Route withdrawal timed out')), 3000)
+          ),
+        ])
+      } catch (err) {
+        this.telemetry.logger.warn('Route withdrawal on shutdown incomplete: {error}', {
+          'event.name': 'video.route.shutdown_withdraw_timeout',
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    } else {
+      this.routeManager?.shutdown()
+    }
+
+    // Step 3: Close RPC connections
     this.rpcClient?.stop()
-    this.routeManager?.shutdown()
+
+    // Step 4: Stop MediaMTX process (SIGTERM then SIGKILL)
     await this.processManager?.stop()
 
     this.telemetry.logger.info('VideoStreamService stopped', {

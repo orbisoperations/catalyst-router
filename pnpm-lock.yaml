@@ -528,6 +528,9 @@ importers:
 
   apps/video:
     dependencies:
+      '@catalyst/authorization':
+        specifier: workspace:*
+        version: link:../../packages/authorization
       '@catalyst/config':
         specifier: workspace:*
         version: link:../../packages/config
