@@ -24,7 +24,7 @@ export type PeerEntity = {
 
 export type RouteEntity = {
   name: string
-  protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc' | 'tcp'
+  protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc' | 'tcp' | 'media'
   endpoint?: string | undefined
   region?: string | undefined
   tags?: string[] | undefined
@@ -87,6 +87,13 @@ export enum Action {
   ROUTE_LIST = 'ROUTE_LIST',
   IBGP_LIST = 'IBGP_LIST',
   GATEWAY_CONFIG_UPDATE = 'GATEWAY_CONFIG_UPDATE',
+  /**
+   * View video streams. Separate from ROUTE_LIST so video access can be
+   * granted independently from HTTP route listing. Without this separation,
+   * any user who can list HTTP routes automatically gets video stream access.
+   * Ref: F-04, R3.
+   */
+  STREAM_VIEW = 'STREAM_VIEW',
 }
 
 /**
@@ -112,6 +119,11 @@ export const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     Action.PEER_LIST,
     Action.IBGP_LIST,
   ],
-  [Role.DATA_CUSTODIAN]: [Action.ROUTE_CREATE, Action.ROUTE_DELETE, Action.ROUTE_LIST],
-  [Role.USER]: [Action.LOGIN, Action.PEER_LIST, Action.ROUTE_LIST],
+  [Role.DATA_CUSTODIAN]: [
+    Action.ROUTE_CREATE,
+    Action.ROUTE_DELETE,
+    Action.ROUTE_LIST,
+    Action.STREAM_VIEW,
+  ],
+  [Role.USER]: [Action.LOGIN, Action.PEER_LIST, Action.ROUTE_LIST, Action.STREAM_VIEW],
 }

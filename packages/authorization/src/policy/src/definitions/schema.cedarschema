@@ -144,4 +144,11 @@ namespace CATALYST {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
         resource: AdminPanel
     };
+
+    // STREAM_VIEW is separate from ROUTE_LIST so video access can be granted
+    // independently from HTTP route listing (F-04).
+    action STREAM_VIEW appliesTo {
+        principal: [ADMIN, DATA_CUSTODIAN, USER],
+        resource: [Route, AdminPanel]
+    };
 }
