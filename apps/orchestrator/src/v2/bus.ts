@@ -7,6 +7,7 @@ import {
   type RouteTable,
   type PlanResult,
   type PortOperation,
+  type RouteChange,
   type RoutePolicy,
   type InternalRoute,
   type PeerRecord,
@@ -66,6 +67,8 @@ export type StateResult =
   | { success: true; state: RouteTable; action: Action }
   | { success: false; error: string; state?: RouteTable }
 
+export type RouteChangeSubscriber = (changes: RouteChange[]) => void
+
 export class OrchestratorBus {
   readonly rib: RoutingInformationBase
   private readonly queue: ActionQueue
@@ -82,6 +85,12 @@ export class OrchestratorBus {
    * Keyed by peer name.
    */
   private readonly lastKeepaliveSent = new Map<string, number>()
+
+  /**
+   * Route change subscribers. Each receives RouteChange[] deltas after every
+   * commit that produces route changes. Subscribers are removed on unsubscribe.
+   */
+  private readonly routeSubscribers = new Set<RouteChangeSubscriber>()
 
   constructor(opts: {
     config: OrchestratorConfig
@@ -120,6 +129,17 @@ export class OrchestratorBus {
 
   setNodeToken(token: string): void {
     this.nodeToken = token
+  }
+
+  /**
+   * Subscribe to route change deltas. Returns an unsubscribe function.
+   * Called after every commit that produces route changes.
+   */
+  subscribeRouteChanges(subscriber: RouteChangeSubscriber): () => void {
+    this.routeSubscribers.add(subscriber)
+    return () => {
+      this.routeSubscribers.delete(subscriber)
+    }
   }
 
   async dispatch(action: Action): Promise<StateResult> {
@@ -267,6 +287,7 @@ export class OrchestratorBus {
     if (plan.routeChanges.length > 0 || plan.portOps.length > 0) {
       await this.handleEnvoySync(plan, committedState)
     }
+    this.notifyRouteSubscribers(plan)
     // After BGP propagation, handle keepalive sends for Tick actions.
     // (The no-state-change Tick path in dispatch() handles the common case;
     // this handles Ticks that also caused peer expiry.)
@@ -276,6 +297,21 @@ export class OrchestratorBus {
         'catalyst.orchestrator.keepalive.needed': ka.needed,
         'catalyst.orchestrator.keepalive.sent': ka.sent,
       })
+    }
+  }
+
+  private notifyRouteSubscribers(plan: PlanResult): void {
+    if (plan.routeChanges.length === 0 || this.routeSubscribers.size === 0) return
+
+    for (const subscriber of this.routeSubscribers) {
+      try {
+        subscriber(plan.routeChanges)
+      } catch (err) {
+        logger.warn('Route subscriber threw: {error}', {
+          'event.name': 'route.subscriber.error',
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
     }
   }
 
