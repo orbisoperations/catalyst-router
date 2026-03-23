@@ -50,7 +50,7 @@ describe('AdapterHealthChecker', () => {
     expect(health?.healthStatus).toBe('up')
     expect(health?.responseTimeMs).toBeTypeOf('number')
     expect(health?.responseTimeMs).toBeGreaterThanOrEqual(0)
-    expect(health?.lastChecked).toBeTypeOf('string')
+    expect(health?.lastCheckedAt).toBeTypeOf('string')
   })
 
   // -------------------------------------------------------------------------
@@ -224,7 +224,7 @@ describe('AdapterHealthChecker', () => {
     expect(result).toBe(routes) // same array reference
     expect(routes[0].healthStatus).toBe('up')
     expect(routes[0].responseTimeMs).toBeTypeOf('number')
-    expect(routes[0].lastChecked).toBeTypeOf('string')
+    expect(routes[0].lastCheckedAt).toBeTypeOf('string')
   })
 
   // -------------------------------------------------------------------------

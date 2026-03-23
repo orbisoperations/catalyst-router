@@ -166,7 +166,7 @@ describe('Topology: Linear A↔B↔C', () => {
     await topo.propagate('node-a', 'node-b')
 
     const stateB = topo.get('node-b').bus.state
-    expect(stateB.internal.routes.some((r) => r.name === 'service-x')).toBe(true)
+    expect([...stateB.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(true)
   })
 
   it('route created at A propagates B→C with nodePath [node-b, node-a]', async () => {
@@ -178,7 +178,7 @@ describe('Topology: Linear A↔B↔C', () => {
     await topo.propagate('node-b', 'node-c')
 
     const stateC = topo.get('node-c').bus.state
-    const route = stateC.internal.routes.find((r) => r.name === 'service-x')
+    const route = [...stateC.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-x')
     expect(route).toBeDefined()
     // node-b prepends itself when forwarding: ['node-b', 'node-a']
     expect(route?.nodePath).toEqual(['node-b', 'node-a'])
@@ -198,8 +198,8 @@ describe('Topology: Linear A↔B↔C', () => {
 
     const stateB = topo.get('node-b').bus.state
     const stateC = topo.get('node-c').bus.state
-    expect(stateB.internal.routes.some((r) => r.name === 'service-x')).toBe(false)
-    expect(stateC.internal.routes.some((r) => r.name === 'service-x')).toBe(false)
+    expect([...stateB.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(false)
+    expect([...stateC.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(false)
   })
 
   it('route withdrawal reaches C with action=remove', async () => {
@@ -243,10 +243,10 @@ describe('Topology: Triangle A↔B, A↔C, B↔C', () => {
     await topo.propagate('node-a', 'node-b')
     await topo.propagate('node-a', 'node-c')
 
-    expect(topo.get('node-b').bus.state.internal.routes.some((r) => r.name === 'service-x')).toBe(
+    expect([...topo.get('node-b').bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(
       true
     )
-    expect(topo.get('node-c').bus.state.internal.routes.some((r) => r.name === 'service-x')).toBe(
+    expect([...topo.get('node-c').bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(
       true
     )
   })
@@ -258,18 +258,18 @@ describe('Topology: Triangle A↔B, A↔C, B↔C', () => {
     await topo.propagate('node-a', 'node-c')
 
     // Record C's current nodePath (direct from A: ['node-a'])
-    const directRoute = topo
+    const directRoute = [...topo
       .get('node-c')
-      .bus.state.internal.routes.find((r) => r.name === 'service-x')
+      .bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-x')
     expect(directRoute?.nodePath).toEqual(['node-a'])
 
     // B now forwards to C — longer path ['node-b', 'node-a']
     // C should keep the shorter existing path
     await topo.propagate('node-b', 'node-c')
 
-    const routeAtC = topo
+    const routeAtC = [...topo
       .get('node-c')
-      .bus.state.internal.routes.find((r) => r.name === 'service-x')
+      .bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-x')
     expect(routeAtC).toBeDefined()
     // Best-path selection: existing ['node-a'] is shorter — unchanged
     expect(routeAtC?.nodePath).toEqual(['node-a'])
@@ -295,7 +295,7 @@ describe('Topology: Triangle A↔B, A↔C, B↔C', () => {
       data: { peerInfo: makePeerInfo('node-a'), code: CloseCodes.NORMAL },
     })
 
-    expect(topo.get('node-c').bus.state.internal.routes.some((r) => r.name === 'service-x')).toBe(
+    expect([...topo.get('node-c').bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(
       false
     )
   })
@@ -334,7 +334,7 @@ describe('Topology: Initial sync — retroactive route learning', () => {
     await topo.propagate('node-b', 'node-a')
 
     const stateA = topo.get('node-a').bus.state
-    const routeNames = stateA.internal.routes.map((r) => r.name)
+    const routeNames = [...stateA.internal.routes.values()].flatMap((m) => [...m.values()]).map((r) => r.name)
     expect(routeNames).toContain('service-x')
     expect(routeNames).toContain('service-y')
   })
@@ -369,8 +369,8 @@ describe('Topology: Loop prevention', () => {
 
     // A must have service-x only in local, not in internal
     const stateA = topo.get('node-a').bus.state
-    expect(stateA.local.routes.some((r) => r.name === 'service-x')).toBe(true)
-    expect(stateA.internal.routes.some((r) => r.name === 'service-x')).toBe(false)
+    expect(stateA.local.routes.has('service-x')).toBe(true)
+    expect([...stateA.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(false)
   })
 })
 

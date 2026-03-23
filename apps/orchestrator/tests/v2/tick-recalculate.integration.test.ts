@@ -148,14 +148,14 @@ describe('Hold-timer expiry does NOT auto-reconnect (documents intentional desig
   })
 
   it('expired peer closes but reconnectManager has no pending reconnects', async () => {
-    const peer = svc.bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peer = svc.bus.state.internal.peers.get('node-b')!
     expect(peer.connectionStatus).toBe('connected')
 
     // Expire the peer via Tick
     const expiryNow = peer.lastReceived + 3_001
     await svc.bus.dispatch({ action: Actions.Tick, data: { now: expiryNow } })
 
-    const peerAfter = svc.bus.state.internal.peers.find((p) => p.name === 'node-b')
+    const peerAfter = svc.bus.state.internal.peers.get('node-b')
     expect(peerAfter?.connectionStatus).toBe('closed')
 
     // ReconnectManager should NOT have auto-scheduled a reconnect

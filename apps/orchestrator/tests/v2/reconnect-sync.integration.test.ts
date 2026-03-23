@@ -76,7 +76,7 @@ describe('ReconnectManager → Bus → initial sync chain', () => {
     transport.reset()
 
     // Get the peer record for scheduling reconnect
-    const peerRecord = svc.bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peerRecord = svc.bus.state.internal.peers.get('node-b')!
     expect(peerRecord.connectionStatus).toBe('closed')
 
     // Schedule reconnect
@@ -110,7 +110,7 @@ describe('ReconnectManager → Bus → initial sync chain', () => {
       data: { peerInfo: peerB, code: CloseCodes.TRANSPORT_ERROR },
     })
 
-    const peerRecord = svc.bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peerRecord = svc.bus.state.internal.peers.get('node-b')!
     svc.reconnectManager.scheduleReconnect(peerRecord)
 
     // Advance past backoff
@@ -133,7 +133,7 @@ describe('ReconnectManager → Bus → initial sync chain', () => {
       data: { peerInfo: peerB, code: CloseCodes.TRANSPORT_ERROR },
     })
 
-    const peerRecord = svc2.bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const peerRecord = svc2.bus.state.internal.peers.get('node-b')!
     svc2.reconnectManager.scheduleReconnect(peerRecord)
 
     // Advance past backoff

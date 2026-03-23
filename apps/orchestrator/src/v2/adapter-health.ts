@@ -6,34 +6,23 @@ const logger = getLogger(['catalyst', 'orchestrator', 'health'])
 export interface AdapterHealth {
   healthStatus: 'up' | 'down'
   responseTimeMs: number | null
-  lastChecked: string
+  lastCheckedAt: string
 }
 
-/** Defaults match the Zod schema in @catalyst/config (single source of truth). */
-const DEFAULT_INTERVAL_MS = 30_000
-const DEFAULT_TIMEOUT_MS = 3_000
-
 interface AdapterHealthCheckerOptions {
-  intervalMs?: number
-  timeoutMs?: number
+  intervalMs: number
+  timeoutMs: number
   dispatchFn?: (action: { action: string; data: Record<string, unknown> }) => Promise<unknown>
 }
 
 export class AdapterHealthChecker {
-  private readonly options: Required<
-    Pick<AdapterHealthCheckerOptions, 'intervalMs' | 'timeoutMs'>
-  > &
-    Pick<AdapterHealthCheckerOptions, 'dispatchFn'>
+  private readonly options: AdapterHealthCheckerOptions
   private readonly healthMap = new Map<string, AdapterHealth>()
   private interval: ReturnType<typeof setInterval> | undefined
   private running = false
 
   constructor(options: AdapterHealthCheckerOptions) {
-    this.options = {
-      intervalMs: options.intervalMs ?? DEFAULT_INTERVAL_MS,
-      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      dispatchFn: options.dispatchFn,
-    }
+    this.options = options
   }
 
   /** Start periodic health checks against the provided route source. */
@@ -71,7 +60,7 @@ export class AdapterHealthChecker {
       if (health) {
         route.healthStatus = health.healthStatus
         route.responseTimeMs = health.responseTimeMs
-        route.lastChecked = health.lastChecked
+        route.lastCheckedAt = health.lastCheckedAt
       }
     }
     return routes
@@ -143,7 +132,7 @@ export class AdapterHealthChecker {
     this.healthMap.set(name, {
       healthStatus,
       responseTimeMs,
-      lastChecked: new Date().toISOString(),
+      lastCheckedAt: new Date().toISOString(),
     })
   }
 
@@ -159,7 +148,7 @@ export class AdapterHealthChecker {
           name,
           healthStatus: newHealth.healthStatus,
           responseTimeMs: newHealth.responseTimeMs,
-          lastChecked: newHealth.lastChecked,
+          lastCheckedAt: newHealth.lastCheckedAt,
         },
       })
       .catch((error) => {
