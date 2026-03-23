@@ -7,12 +7,13 @@ import { WideEvent } from '@catalyst/telemetry'
 import { Hono } from 'hono'
 import { getUpgradeWebSocket } from '@catalyst/service'
 import { OrchestratorServiceV2 } from './service.js'
+import { AdapterHealthChecker } from './adapter-health.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { HttpPeerTransport } from './http-transport.js'
 import type { PeerTransport } from './transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
-import { RouteTableView } from '@catalyst/routing/v2'
+import { RouteTableView, ActionSchema } from '@catalyst/routing/v2'
 
 /**
  * Auth Service RPC API for token minting.
@@ -84,6 +85,7 @@ export class OrchestratorService extends CatalystService {
   readonly handler = new Hono()
 
   private _v2!: OrchestratorServiceV2
+  private _healthChecker: AdapterHealthChecker | undefined
   private _nodeToken: string | undefined
   private _tokenIssuedAt: number | undefined
   private _tokenExpiresAt: number | undefined
@@ -149,6 +151,23 @@ export class OrchestratorService extends CatalystService {
       journal: this.config.orchestrator?.journal,
     })
 
+    const adapterHealthConfig = this.config.orchestrator?.adapterHealth
+    if (adapterHealthConfig?.enabled !== false) {
+      this._healthChecker = new AdapterHealthChecker({
+        intervalMs: adapterHealthConfig?.intervalMs ?? 30_000,
+        timeoutMs: adapterHealthConfig?.timeoutMs ?? 3_000,
+        dispatchFn: (action) => {
+          // Validate action shape matches the Action schema before dispatching
+          const validated = ActionSchema.parse(action)
+          return this._v2.bus.dispatch(validated).then(() => {})
+        },
+      })
+      // Health checks read a snapshot of routes (safe). Status changes are
+      // dispatched into the bus via dispatchFn, which updates the RIB and
+      // triggers iBGP propagation to peers.
+      this._healthChecker.start(() => this._v2.bus.getStateSnapshot().local.routes)
+    }
+
     // Build the token validator
     const validator = this.buildValidator()
 
@@ -174,6 +193,9 @@ export class OrchestratorService extends CatalystService {
     const bus = this._v2.bus
     this.handler.get('/api/state', (c) => {
       const snapshot = bus.getStateSnapshot()
+      if (this._healthChecker) {
+        this._healthChecker.applyHealth(snapshot.local.routes)
+      }
       return c.json(new RouteTableView(snapshot).toPublic())
     })
 
@@ -187,6 +209,7 @@ export class OrchestratorService extends CatalystService {
   }
 
   protected async onShutdown(): Promise<void> {
+    this._healthChecker?.stop()
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval)
       this._refreshInterval = undefined
