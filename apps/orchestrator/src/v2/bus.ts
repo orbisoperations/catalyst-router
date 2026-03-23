@@ -719,6 +719,9 @@ export const BusTransforms = {
       tags: route.tags,
       envoyPort: route.envoyPort,
       envoyAddress: overrides?.envoyAddress ?? route.envoyAddress,
+      healthStatus: route.healthStatus,
+      responseTimeMs: route.responseTimeMs,
+      lastChecked: route.lastChecked,
     }
   },
 }
