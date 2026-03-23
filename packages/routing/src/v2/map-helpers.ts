@@ -43,6 +43,7 @@ export function nestedMapDelete<K1, K2, V>(
 ): Map<K1, Map<K2, V>> {
   const inner = map.get(outerKey)
   if (inner === undefined) return map
+  if (!inner.has(innerKey)) return map
   const next = new Map(map)
   const innerCopy = new Map(inner)
   innerCopy.delete(innerKey)
