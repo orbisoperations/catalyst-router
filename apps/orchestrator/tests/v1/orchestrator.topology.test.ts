@@ -298,9 +298,7 @@ describe('Orchestrator Topology Tests', () => {
 
     // A should have it in local
     expect(
-      (nodeA as unknown as { state: RouteTable }).state.local.routes.some(
-        (r) => r.name === 'loop-test'
-      )
+      (nodeA as unknown as { state: RouteTable }).state.local.routes.some((r) => r.name === 'loop-test')
     ).toBe(true)
 
     // A should NOT have it in internal (despite C offering it)

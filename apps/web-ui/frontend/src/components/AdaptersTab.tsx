@@ -60,8 +60,8 @@ function formatResponseTime(ms?: number | null): string {
 function oldestLastChecked(rows: AdapterRow[]): string | null {
   let oldest: string | null = null
   for (const row of rows) {
-    if (row.lastChecked) {
-      if (!oldest || row.lastChecked < oldest) oldest = row.lastChecked
+    if (row.lastCheckedAt) {
+      if (!oldest || row.lastCheckedAt < oldest) oldest = row.lastCheckedAt
     }
   }
   return oldest

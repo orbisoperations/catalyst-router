@@ -83,7 +83,7 @@ describe('Port allocation planning', () => {
     if (!result.success) return
 
     // Port should be stamped directly on the route in committed state
-    const route = result.state.local.routes.find((r) => r.name === 'svc-alpha')
+    const route = result.state.local.routes.get('svc-alpha')
     expect(route).toBeDefined()
     expect(route!.envoyPort).toBe(10000)
   })
@@ -127,7 +127,7 @@ describe('Port allocation planning', () => {
     if (!result.success) return
 
     // Egress port should be stamped on the internal route
-    const internalRoute = result.state.internal.routes.find((r) => r.name === 'svc-remote')
+    const internalRoute = [...result.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'svc-remote')
     expect(internalRoute).toBeDefined()
     expect(internalRoute!.envoyPort).toBeDefined()
 
@@ -183,11 +183,11 @@ describe('Port allocation planning', () => {
     if (!result.success) return
 
     // svc-alpha keeps its original port
-    const alpha = result.state.local.routes.find((r) => r.name === 'svc-alpha')
+    const alpha = result.state.local.routes.get('svc-alpha')
     expect(alpha!.envoyPort).toBe(10000)
 
     // svc-beta gets the next port
-    const beta = result.state.local.routes.find((r) => r.name === 'svc-beta')
+    const beta = result.state.local.routes.get('svc-beta')
     expect(beta!.envoyPort).toBe(10001)
   })
 
@@ -207,7 +207,7 @@ describe('Port allocation planning', () => {
     if (!result.success) return
 
     // No port stamped when no allocator is configured
-    const route = result.state.local.routes.find((r) => r.name === 'svc-alpha')
+    const route = result.state.local.routes.get('svc-alpha')
     expect(route!.envoyPort).toBeUndefined()
   })
 })

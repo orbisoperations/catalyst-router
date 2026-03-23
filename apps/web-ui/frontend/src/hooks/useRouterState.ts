@@ -9,7 +9,7 @@ export interface DataChannelDefinition {
   envoyPort?: number
   healthStatus?: 'up' | 'down'
   responseTimeMs?: number | null
-  lastChecked?: string
+  lastCheckedAt?: string
 }
 
 export interface PeerRecord {

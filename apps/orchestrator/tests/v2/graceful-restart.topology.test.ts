@@ -61,7 +61,7 @@ describe('Graceful restart: TRANSPORT_ERROR marks routes stale', () => {
       },
     })
 
-    expect(bus.state.internal.routes.some((r) => r.name === 'service-x')).toBe(true)
+    expect([...bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(true)
 
     // Transport error (e.g. WebSocket dropped)
     await bus.dispatch({
@@ -70,7 +70,7 @@ describe('Graceful restart: TRANSPORT_ERROR marks routes stale', () => {
     })
 
     // Route must still exist but flagged as stale
-    const route = bus.state.internal.routes.find((r) => r.name === 'service-x')
+    const route = [...bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-x')
     expect(route).toBeDefined()
     expect(route?.isStale).toBe(true)
   })
@@ -129,7 +129,7 @@ describe('Graceful restart: TRANSPORT_ERROR marks routes stale', () => {
     })
 
     // Route must be gone completely
-    expect(bus.state.internal.routes.some((r) => r.name === 'service-x')).toBe(false)
+    expect([...bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-x')).toBe(false)
   })
 })
 
@@ -165,7 +165,7 @@ describe('Graceful restart: reconnect clears stale routes', () => {
       action: Actions.InternalProtocolClose,
       data: { peerInfo: peerB, code: CloseCodes.TRANSPORT_ERROR },
     })
-    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')?.isStale).toBe(true)
+    expect([...bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-x')?.isStale).toBe(true)
 
     // Reconnect
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
@@ -183,7 +183,7 @@ describe('Graceful restart: reconnect clears stale routes', () => {
     })
 
     // Stale flag must be cleared
-    const route = bus.state.internal.routes.find((r) => r.name === 'service-x')
+    const route = [...bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-x')
     expect(route).toBeDefined()
     expect(route?.isStale).toBe(false)
   })
@@ -216,7 +216,7 @@ describe('Graceful restart: stale routes excluded from initial sync', () => {
       data: { peerInfo: makePeer('node-c'), code: CloseCodes.TRANSPORT_ERROR },
     })
 
-    const staleRoute = bus.state.internal.routes.find((r) => r.name === 'service-x')
+    const staleRoute = [...bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-x')
     expect(staleRoute?.isStale).toBe(true)
 
     // Now B connects — stale route must NOT appear in the initial sync

@@ -48,7 +48,7 @@ describe('OrchestratorBus — peerToken validation on LocalPeerCreate', () => {
     }
 
     // Peer must NOT be added to state
-    expect(bus.state.internal.peers).toHaveLength(0)
+    expect(bus.state.internal.peers.size).toBe(0)
   })
 
   it('rejects LocalPeerCreate with empty string peerToken', async () => {
@@ -69,7 +69,7 @@ describe('OrchestratorBus — peerToken validation on LocalPeerCreate', () => {
       expect(result.error).toContain('peerToken')
     }
 
-    expect(bus.state.internal.peers).toHaveLength(0)
+    expect(bus.state.internal.peers.size).toBe(0)
   })
 
   it('accepts LocalPeerCreate with valid peerToken', async () => {
@@ -87,8 +87,8 @@ describe('OrchestratorBus — peerToken validation on LocalPeerCreate', () => {
 
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.state.internal.peers).toHaveLength(1)
-      expect(result.state.internal.peers[0].name).toBe('node-b')
+      expect(result.state.internal.peers.size).toBe(1)
+      expect(result.state.internal.peers.get('node-b')?.name).toBe('node-b')
     }
   })
 })

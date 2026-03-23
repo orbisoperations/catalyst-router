@@ -139,9 +139,9 @@ describe('snapshot-based recovery', () => {
     // Recovery should work from snapshot + tail
     const recovered = recoverFromJournal(journal)
 
-    expect(recovered.local.routes).toHaveLength(21)
-    expect(recovered.local.routes.map((r) => r.name)).toContain('post-compact')
-    expect(recovered.local.routes.map((r) => r.name)).toContain('route-0')
+    expect(recovered.local.routes.size).toBe(21)
+    expect([...recovered.local.routes.values()].map((r) => r.name)).toContain('post-compact')
+    expect([...recovered.local.routes.values()].map((r) => r.name)).toContain('route-0')
   })
 
   it('recovery from snapshot alone (no tail entries)', () => {
@@ -160,8 +160,8 @@ describe('snapshot-based recovery', () => {
     journal.prune(2) // prune everything
 
     const recovered = recoverFromJournal(journal)
-    expect(recovered.local.routes).toHaveLength(1)
-    expect(recovered.local.routes[0].name).toBe('alpha')
+    expect(recovered.local.routes.size).toBe(1)
+    expect(recovered.local.routes.get('alpha')?.name).toBe('alpha')
   })
 
   it('recovery without snapshot replays from beginning', () => {
@@ -177,7 +177,7 @@ describe('snapshot-based recovery', () => {
 
     // No snapshot — full replay from beginning
     const recovered = recoverFromJournal(journal)
-    expect(recovered.local.routes).toHaveLength(1)
-    expect(recovered.local.routes[0].name).toBe('alpha')
+    expect(recovered.local.routes.size).toBe(1)
+    expect(recovered.local.routes.get('alpha')?.name).toBe('alpha')
   })
 })

@@ -133,7 +133,7 @@ describe('Bidirectional keepalive exchange', () => {
   })
 
   it('keepalive from A resets B hold timer for A — preventing expiry', async () => {
-    const peerAonB = b.bus.state.internal.peers.find((p) => p.name === 'node-a')!
+    const peerAonB = b.bus.state.internal.peers.get('node-a')!
     expect(peerAonB.holdTime).toBe(HOLD_TIME)
     expect(peerAonB.lastReceived).toBe(T0)
 
@@ -145,7 +145,7 @@ describe('Bidirectional keepalive exchange', () => {
     // Deliver A's keepalive to B — this updates B's lastReceived for A to Date.now() = t1
     await propagateKeepalives(a, b)
 
-    const peerAonBUpdated = b.bus.state.internal.peers.find((p) => p.name === 'node-a')!
+    const peerAonBUpdated = b.bus.state.internal.peers.get('node-a')!
     expect(peerAonBUpdated.lastReceived).toBe(t1)
 
     // Tick B at original expiry time (T0 + holdTime + 1).
@@ -154,19 +154,19 @@ describe('Bidirectional keepalive exchange', () => {
     const wouldExpireOriginal = T0 + HOLD_TIME + 1
     await b.bus.dispatch({ action: Actions.Tick, data: { now: wouldExpireOriginal } })
 
-    const peerAonBAfter = b.bus.state.internal.peers.find((p) => p.name === 'node-a')
+    const peerAonBAfter = b.bus.state.internal.peers.get('node-a')
     expect(peerAonBAfter?.connectionStatus).toBe('connected')
   })
 
   it('hold timer expires when keepalives stop flowing', async () => {
-    const peerAonB = b.bus.state.internal.peers.find((p) => p.name === 'node-a')!
+    const peerAonB = b.bus.state.internal.peers.get('node-a')!
     expect(peerAonB.holdTime).toBe(HOLD_TIME)
 
     // Tick past hold timer without any keepalives
     const expiryTime = T0 + HOLD_TIME + 1
     await b.bus.dispatch({ action: Actions.Tick, data: { now: expiryTime } })
 
-    const peerAonBAfter = b.bus.state.internal.peers.find((p) => p.name === 'node-a')
+    const peerAonBAfter = b.bus.state.internal.peers.get('node-a')
     expect(peerAonBAfter?.connectionStatus).toBe('closed')
   })
 
@@ -192,8 +192,8 @@ describe('Bidirectional keepalive exchange', () => {
     const totalElapsed = interval * 4
     expect(totalElapsed).toBeGreaterThan(HOLD_TIME) // sanity: we're past expiry window
 
-    const peerBonAFinal = a.bus.state.internal.peers.find((p) => p.name === 'node-b')
-    const peerAonBFinal = b.bus.state.internal.peers.find((p) => p.name === 'node-a')
+    const peerBonAFinal = a.bus.state.internal.peers.get('node-b')
+    const peerAonBFinal = b.bus.state.internal.peers.get('node-a')
 
     expect(peerBonAFinal?.connectionStatus).toBe('connected')
     expect(peerAonBFinal?.connectionStatus).toBe('connected')
