@@ -13,7 +13,7 @@ import { HttpPeerTransport } from './http-transport.js'
 import type { PeerTransport } from './transport.js'
 import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
 import type { TokenValidator } from './rpc.js'
-import { RouteTableView, ActionSchema } from '@catalyst/routing/v2'
+import { routeTableToPublic, ActionSchema } from '@catalyst/routing/v2'
 
 /**
  * Auth Service RPC API for token minting.
@@ -152,10 +152,10 @@ export class OrchestratorService extends CatalystService {
     })
 
     const adapterHealthConfig = this.config.orchestrator?.adapterHealth
-    if (adapterHealthConfig?.enabled !== false) {
+    if (adapterHealthConfig && adapterHealthConfig.enabled !== false) {
       this._healthChecker = new AdapterHealthChecker({
-        intervalMs: adapterHealthConfig?.intervalMs,
-        timeoutMs: adapterHealthConfig?.timeoutMs,
+        intervalMs: adapterHealthConfig.intervalMs,
+        timeoutMs: adapterHealthConfig.timeoutMs,
         dispatchFn: (action) => {
           // Validate action shape matches the Action schema before dispatching
           const validated = ActionSchema.parse(action)
@@ -196,7 +196,7 @@ export class OrchestratorService extends CatalystService {
       if (this._healthChecker) {
         this._healthChecker.applyHealth(snapshot.local.routes)
       }
-      return c.json(new RouteTableView(snapshot).toPublic())
+      return c.json(routeTableToPublic(snapshot))
     })
 
     // Start tick manager
@@ -286,9 +286,14 @@ export class OrchestratorService extends CatalystService {
     const refreshTime = this._tokenIssuedAt + totalLifetime * REFRESH_THRESHOLD
 
     if (now >= refreshTime) {
-      await withWideEvent('orchestrator.token_refresh', this.telemetry.logger, async () => {
-        await this.mintNodeToken()
-      })
+      try {
+        await withWideEvent('orchestrator.token_refresh', this.telemetry.logger, async () => {
+          await this.mintNodeToken()
+        })
+      } catch {
+        // Swallowed: mintNodeToken failure is logged by withWideEvent.
+        // The next interval tick will retry.
+      }
     }
   }
 }

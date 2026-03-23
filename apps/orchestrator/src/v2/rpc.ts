@@ -1,11 +1,11 @@
+import { Actions, peerToPublic, internalRouteToPublic } from '@catalyst/routing/v2'
 import type {
-  DataChannelDefinition,
-  InternalRoute,
   PeerInfo,
-  PublicPeer,
+  DataChannelDefinition,
   UpdateMessageSchema,
+  PublicPeer,
+  PublicInternalRoute,
 } from '@catalyst/routing/v2'
-import { Actions, InternalRouteView, PeerView } from '@catalyst/routing/v2'
 import { getLogger, withWideEvent } from '@catalyst/telemetry'
 import { decodeJwt } from 'jose'
 import type { z } from 'zod'
@@ -45,7 +45,7 @@ export interface DataChannel {
   removeRoute(
     route: Pick<DataChannelDefinition, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
-  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
+  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: PublicInternalRoute[] }>
 }
 
 export interface IBGPClient {
@@ -112,7 +112,7 @@ export async function createNetworkClient(
         },
 
         async listPeers() {
-          return bus.state.internal.peers.map((p) => new PeerView(p).toPublic())
+          return bus.state.internal.peers.map(peerToPublic)
         },
       },
     }
@@ -155,7 +155,7 @@ export async function createDataChannelClient(
         async listRoutes() {
           return {
             local: bus.state.local.routes,
-            internal: bus.state.internal.routes.map((r) => new InternalRouteView(r).toPublic()),
+            internal: bus.state.internal.routes.map(internalRouteToPublic),
           }
         },
       },
