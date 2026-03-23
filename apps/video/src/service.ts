@@ -14,6 +14,8 @@ import {
 import { ReconnectingClient, type ReconnectingClientOptions } from './rpc/reconnecting-client.js'
 import { TokenRefreshScheduler, type TokenRefreshOptions } from './rpc/token-refresh.js'
 import { RelayManager, type RelayManagerOptions } from './routes/relay-manager.js'
+import { SessionRegistry } from './session/session-registry.js'
+import { TokenRevalidator, type TokenRevalidatorOptions } from './session/token-revalidator.js'
 import { createVideoMetrics } from './metrics.js'
 import { newWebSocketRpcSession } from 'capnweb'
 import { decodeJwt } from 'jose'
@@ -83,6 +85,8 @@ export interface VideoServiceDeps {
   createRelayManager?: (options: RelayManagerOptions) => RelayManager
   createReconnectingClient?: (options: ReconnectingClientOptions) => ReconnectingClient
   createTokenScheduler?: (options: TokenRefreshOptions) => TokenRefreshScheduler
+  createSessionRegistry?: () => SessionRegistry
+  createTokenRevalidator?: (options: TokenRevalidatorOptions) => TokenRevalidator
   rpcSessionFactory?: typeof newWebSocketRpcSession
   fetchImpl?: typeof fetch
 }
@@ -94,6 +98,8 @@ const defaultVideoServiceDeps: Required<VideoServiceDeps> = {
   createRelayManager: (options) => new RelayManager(options),
   createReconnectingClient: (options) => new ReconnectingClient(options),
   createTokenScheduler: (options) => new TokenRefreshScheduler(options),
+  createSessionRegistry: () => new SessionRegistry(),
+  createTokenRevalidator: (options) => new TokenRevalidator(options),
   rpcSessionFactory: newWebSocketRpcSession,
   fetchImpl: fetch,
 }
@@ -121,6 +127,8 @@ export class VideoStreamService extends CatalystService {
   private relayManager?: RelayManager
   private currentToken?: string
   private dataChannel?: DataChannel
+  private tokenRevalidator?: TokenRevalidator
+  private livenessTimer?: ReturnType<typeof setInterval>
   private stoppingProcess = false
 
   constructor(options: VideoStreamServiceOptions) {
@@ -169,6 +177,9 @@ export class VideoStreamService extends CatalystService {
     // Create OTEL metrics instruments
     const metrics = createVideoMetrics()
 
+    // Create session registry for subscriber tracking (revalidation sweep)
+    const sessionRegistry = this.deps.createSessionRegistry!()
+
     // Wire auth hook with real Cedar STREAM_VIEW evaluation
     const domainId = this.config.node.domains?.[0] ?? 'default'
     const cedarEngine = new AuthorizationEngine<CatalystPolicyDomain>(CATALYST_SCHEMA, ALL_POLICIES)
@@ -213,20 +224,45 @@ export class VideoStreamService extends CatalystService {
       nodeId: this.config.node.name,
       domainId,
       metrics,
+      sessionRegistry,
     })
     this.handler.route('/', authHook)
+
+    // Detect transport-level failures in DataChannel RPC calls and trigger
+    // reconnection. Only exceptions from the RPC layer (dead WebSocket, network
+    // error) indicate transport failure. Discriminated union { success: false }
+    // results are application errors and do NOT trigger reconnect.
+    const handleTransportError = (err: unknown): void => {
+      this.telemetry.logger.warn('DataChannel RPC failed, triggering reconnect: {error}', {
+        'event.name': 'video.rpc.transport_error',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      this.rpcClient?.onDisconnect()
+    }
 
     // Wire lifecycle hooks with route manager — registrar delegates to DataChannel
     this.routeManager = this.deps.createStreamRouteManager({
       registrar: {
         addRoute: async (route) => {
           if (!this.dataChannel) throw new Error('Not connected to orchestrator')
-          const result = await this.dataChannel.addRoute(route)
+          let result: { success: true } | { success: false; error: string }
+          try {
+            result = await this.dataChannel.addRoute(route)
+          } catch (err) {
+            handleTransportError(err)
+            throw err
+          }
           if (!result.success) throw new Error(result.error)
         },
         removeRoute: async (name) => {
           if (!this.dataChannel) throw new Error('Not connected to orchestrator')
-          const result = await this.dataChannel.removeRoute({ name })
+          let result: { success: true } | { success: false; error: string }
+          try {
+            result = await this.dataChannel.removeRoute({ name })
+          } catch (err) {
+            handleTransportError(err)
+            throw err
+          }
           if (!result.success) throw new Error(result.error)
         },
       },
@@ -245,7 +281,13 @@ export class VideoStreamService extends CatalystService {
       maxStreams: this.videoConfig.maxStreams,
       metrics,
     })
-    const lifecycleHooks = createLifecycleHooks({ routeManager: this.routeManager })
+    const lifecycleHooks = createLifecycleHooks({
+      routeManager: this.routeManager,
+      sessionRegistry,
+      onLastSubscriberLeft: (path) => {
+        this.tokenRevalidator?.addPendingEviction(path)
+      },
+    })
     this.handler.route('/', lifecycleHooks)
 
     // Wire RelayManager — RouteSubscription delegates to DataChannel
@@ -253,16 +295,34 @@ export class VideoStreamService extends CatalystService {
       routeSource: {
         watchRoutes: (cb) => {
           if (!this.dataChannel) throw new Error('Not connected to orchestrator')
-          return this.dataChannel.watchRoutes(cb)
+          try {
+            return this.dataChannel.watchRoutes(cb)
+          } catch (err) {
+            handleTransportError(err)
+            throw err
+          }
         },
-        listRoutes: () => {
+        listRoutes: async () => {
           if (!this.dataChannel) throw new Error('Not connected to orchestrator')
-          return this.dataChannel.listRoutes()
+          try {
+            return await this.dataChannel.listRoutes()
+          } catch (err) {
+            handleTransportError(err)
+            throw err
+          }
         },
       },
       controlApi: this.controlApiClient!,
       localNodeName: this.config.node.name,
       getRelayToken: () => this.currentToken!,
+      metrics,
+    })
+
+    // Wire TokenRevalidator — periodic sweep + relay cleanup callback
+    this.tokenRevalidator = this.deps.createTokenRevalidator!({
+      registry: sessionRegistry,
+      controlApi: this.controlApiClient!,
+      onPathSubscribersEvicted: (path) => this.relayManager!.onSubscribersEvicted(path),
       metrics,
     })
 
@@ -362,9 +422,15 @@ export class VideoStreamService extends CatalystService {
         return iat ? iat * 1000 : undefined
       },
       refresh: async () => {
-        const token = await mintToken()
-        const { exp } = decodeJwt(token)
-        return (exp ?? 0) * 1000
+        // Trigger a full reconnect cycle: doConnect() is the single mint owner
+        // (mintToken → connect → reconcile). This replaces the stale DataChannel
+        // RPC session with one authenticated by the fresh token.
+        this.rpcClient?.reconnect().catch((err) => {
+          this.telemetry.logger.error('DataChannel reconnect after token refresh failed: {error}', {
+            'event.name': 'video.rpc.token_refresh_reconnect_failed',
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
       },
     })
 
@@ -444,6 +510,27 @@ export class VideoStreamService extends CatalystService {
 
     await this.processManager.start()
 
+    // Start session revalidation sweep after MediaMTX is running
+    this.tokenRevalidator?.start()
+
+    // Periodic liveness probe: detect dead DataChannel during idle periods.
+    // watchRoutes() silently stops delivering events when the WebSocket dies —
+    // there's no error callback. This probe catches that by calling listRoutes()
+    // through the transport-error-detecting wrapper every 60 seconds.
+    this.livenessTimer = setInterval(async () => {
+      if (!this.dataChannel || !this.rpcClient?.connected) return
+      try {
+        await Promise.race([
+          this.dataChannel.listRoutes(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Liveness probe timeout')), 10_000)
+          ),
+        ])
+      } catch (err) {
+        handleTransportError(err)
+      }
+    }, 60_000)
+
     this.telemetry.logger.info('VideoStreamService started on {nodeId}', {
       'event.name': 'video.service.started',
       nodeId: this.config.node.name,
@@ -451,8 +538,13 @@ export class VideoStreamService extends CatalystService {
   }
 
   protected async onShutdown(): Promise<void> {
-    // Step 1: Stop accepting new hooks (token scheduler + relay manager)
+    // Step 1: Stop accepting new hooks (token scheduler + relay manager + revalidator + probe)
     this.tokenScheduler?.stop()
+    this.tokenRevalidator?.stop()
+    if (this.livenessTimer) {
+      clearInterval(this.livenessTimer)
+      this.livenessTimer = undefined
+    }
     this.relayManager?.shutdown()
 
     // Step 2: Best-effort withdraw all stream routes (3-second timeout)

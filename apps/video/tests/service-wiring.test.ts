@@ -15,9 +15,11 @@ vi.mock('../src/metrics.js', () => ({
     relayActive: { add() {} },
     relaySetupDuration: { record() {} },
     relaySetups: { add() {} },
-    authChecks: { add() {} },
-    authLatency: { record() {} },
+    authRequests: { add() {} },
+    authDuration: { record() {} },
     authFailures: { add() {} },
+    sessionKicks: { add() {} },
+    revalidationSweeps: { add() {} },
   }),
 }))
 
@@ -113,6 +115,7 @@ function makeFakeRelayManager() {
     start: vi.fn().mockResolvedValue(undefined),
     reconcile: vi.fn().mockResolvedValue(undefined),
     shutdown: vi.fn(),
+    onSubscribersEvicted: vi.fn(),
     relayCount: 0,
   }
 }
@@ -232,6 +235,205 @@ describe('VideoStreamService wiring', () => {
       ).listRoutes()
     ).resolves.toEqual(listRoutesResult)
     expect(dataChannel.listRoutes).toHaveBeenCalledTimes(1)
+
+    await service.shutdown()
+  })
+
+  it('creates SessionRegistry and TokenRevalidator via DI factories', async () => {
+    const config = makeCatalystConfig()
+    const videoConfig = makeVideoConfig()
+
+    const fakeRegistry = { add: vi.fn(), remove: vi.fn(), clear: vi.fn(), size: 0 }
+    const fakeRevalidator = { start: vi.fn(), stop: vi.fn() }
+
+    const deps = {
+      createStreamRouteManager: vi.fn(() => makeFakeRouteManager()),
+      createRelayManager: vi.fn(() => makeFakeRelayManager()),
+      createReconnectingClient: vi.fn(() => ({
+        on: vi.fn(),
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+      })),
+      createTokenScheduler: vi.fn(() => ({
+        start: vi.fn(),
+        stop: vi.fn(),
+      })),
+      createSessionRegistry: vi.fn(() => fakeRegistry),
+      createTokenRevalidator: vi.fn(() => fakeRevalidator),
+    }
+
+    const service = await VideoStreamService.create({
+      config,
+      videoConfig,
+      telemetry,
+      deps,
+    } as any)
+
+    expect(deps.createSessionRegistry).toHaveBeenCalledTimes(1)
+    expect(deps.createTokenRevalidator).toHaveBeenCalledTimes(1)
+
+    // Revalidator should have been started after MediaMTX
+    expect(fakeRevalidator.start).toHaveBeenCalledTimes(1)
+
+    // Verify onPathSubscribersEvicted callback is wired
+    const revalidatorOpts = deps.createTokenRevalidator.mock.calls[0][0] as Record<string, unknown>
+    expect(revalidatorOpts.onPathSubscribersEvicted).toBeTypeOf('function')
+
+    await service.shutdown()
+
+    // Revalidator should be stopped on shutdown
+    expect(fakeRevalidator.stop).toHaveBeenCalledTimes(1)
+  })
+
+  it('refresh callback triggers rpcClient.reconnect instead of minting', async () => {
+    const config = makeCatalystConfig()
+    const videoConfig = makeVideoConfig()
+
+    const reconnectSpy = vi.fn().mockResolvedValue(undefined)
+    let capturedRefreshCallback: (() => Promise<number | void>) | undefined
+
+    const deps = {
+      createStreamRouteManager: vi.fn(() => makeFakeRouteManager()),
+      createRelayManager: vi.fn(() => makeFakeRelayManager()),
+      createReconnectingClient: vi.fn(() => ({
+        on: vi.fn(),
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+        reconnect: reconnectSpy,
+      })),
+      createTokenScheduler: vi.fn((opts: Record<string, unknown>) => {
+        capturedRefreshCallback = opts.refresh as () => Promise<number | void>
+        return { start: vi.fn(), stop: vi.fn() }
+      }),
+      createSessionRegistry: vi.fn(() => ({ add: vi.fn(), remove: vi.fn(), clear: vi.fn(), size: 0 })),
+      createTokenRevalidator: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+    }
+
+    const service = await VideoStreamService.create({
+      config,
+      videoConfig,
+      telemetry,
+      deps,
+    } as any)
+
+    expect(capturedRefreshCallback).toBeDefined()
+
+    // Trigger the refresh callback — should call reconnect, not mint
+    await capturedRefreshCallback!()
+
+    expect(reconnectSpy).toHaveBeenCalledTimes(1)
+
+    await service.shutdown()
+  })
+
+  it('triggers onDisconnect when DataChannel addRoute throws (transport failure)', async () => {
+    const config = makeCatalystConfig()
+    const videoConfig = makeVideoConfig()
+
+    const onDisconnectSpy = vi.fn()
+    const dataChannel = {
+      addRoute: vi.fn().mockRejectedValue(new Error('WebSocket closed')),
+      removeRoute: vi.fn().mockResolvedValue({ success: true }),
+      listRoutes: vi.fn().mockResolvedValue({ local: [], internal: [] }),
+      watchRoutes: vi.fn(() => vi.fn()),
+    }
+
+    let streamRouteManagerOptions: Record<string, unknown> | undefined
+
+    const deps = {
+      createStreamRouteManager: vi.fn((options: Record<string, unknown>) => {
+        streamRouteManagerOptions = options
+        return makeFakeRouteManager()
+      }),
+      createRelayManager: vi.fn(() => makeFakeRelayManager()),
+      createReconnectingClient: vi.fn(() => ({
+        on: vi.fn(),
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+        onDisconnect: onDisconnectSpy,
+        connected: true,
+      })),
+      createTokenScheduler: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+      createSessionRegistry: vi.fn(() => ({ add: vi.fn(), remove: vi.fn(), clear: vi.fn(), size: 0, getByPath: vi.fn().mockReturnValue([]) })),
+      createTokenRevalidator: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), addPendingEviction: vi.fn() })),
+    }
+
+    const service = await VideoStreamService.create({
+      config,
+      videoConfig,
+      telemetry,
+      deps,
+    } as any)
+
+    ;(service as any).dataChannel = dataChannel
+    ;(service as any).rpcClient = { onDisconnect: onDisconnectSpy, connected: true, stop: vi.fn() }
+
+    const registrar = streamRouteManagerOptions!.registrar as {
+      addRoute(route: { name: string; protocol: 'media'; endpoint: string; tags: string[] }): Promise<void>
+    }
+
+    // addRoute should throw AND trigger onDisconnect
+    await expect(
+      registrar.addRoute({ name: 'cam', protocol: 'media', endpoint: 'rtsp://x', tags: [] })
+    ).rejects.toThrow('WebSocket closed')
+
+    expect(onDisconnectSpy).toHaveBeenCalledTimes(1)
+
+    await service.shutdown()
+  })
+
+  it('does NOT trigger onDisconnect for application-level errors (success: false)', async () => {
+    const config = makeCatalystConfig()
+    const videoConfig = makeVideoConfig()
+
+    const onDisconnectSpy = vi.fn()
+    const dataChannel = {
+      addRoute: vi.fn().mockResolvedValue({ success: false, error: 'route already exists' }),
+      removeRoute: vi.fn().mockResolvedValue({ success: true }),
+      listRoutes: vi.fn().mockResolvedValue({ local: [], internal: [] }),
+      watchRoutes: vi.fn(() => vi.fn()),
+    }
+
+    let streamRouteManagerOptions: Record<string, unknown> | undefined
+
+    const deps = {
+      createStreamRouteManager: vi.fn((options: Record<string, unknown>) => {
+        streamRouteManagerOptions = options
+        return makeFakeRouteManager()
+      }),
+      createRelayManager: vi.fn(() => makeFakeRelayManager()),
+      createReconnectingClient: vi.fn(() => ({
+        on: vi.fn(),
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+        onDisconnect: onDisconnectSpy,
+        connected: true,
+      })),
+      createTokenScheduler: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+      createSessionRegistry: vi.fn(() => ({ add: vi.fn(), remove: vi.fn(), clear: vi.fn(), size: 0, getByPath: vi.fn().mockReturnValue([]) })),
+      createTokenRevalidator: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), addPendingEviction: vi.fn() })),
+    }
+
+    const service = await VideoStreamService.create({
+      config,
+      videoConfig,
+      telemetry,
+      deps,
+    } as any)
+
+    ;(service as any).dataChannel = dataChannel
+    ;(service as any).rpcClient = { onDisconnect: onDisconnectSpy, connected: true, stop: vi.fn() }
+
+    const registrar = streamRouteManagerOptions!.registrar as {
+      addRoute(route: { name: string; protocol: 'media'; endpoint: string; tags: string[] }): Promise<void>
+    }
+
+    // Application error — should throw but NOT trigger onDisconnect
+    await expect(
+      registrar.addRoute({ name: 'cam', protocol: 'media', endpoint: 'rtsp://x', tags: [] })
+    ).rejects.toThrow('route already exists')
+
+    expect(onDisconnectSpy).not.toHaveBeenCalled()
 
     await service.shutdown()
   })

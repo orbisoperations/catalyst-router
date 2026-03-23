@@ -28,6 +28,7 @@ function makeMockControlApi(): ControlApiClient {
     listPaths: vi.fn().mockResolvedValue({ ok: true, data: { pageCount: 0, items: [] } }),
     getPath: vi.fn().mockResolvedValue({ ok: true, data: {} }),
     addPath: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
+    patchPath: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
     deletePath: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
   } as unknown as ControlApiClient
 }
@@ -346,11 +347,14 @@ describe('RelayManager', () => {
       routeSource.triggerChanges([{ type: 'added', route }])
       await vi.waitFor(() => expect(manager.relayCount).toBe(1))
 
-      // Trigger same route again
+      // Trigger same route again — idempotency guard skips the duplicate
       routeSource.triggerChanges([{ type: 'added', route }])
-      await vi.waitFor(() => expect(controlApi.addPath).toHaveBeenCalledTimes(2))
 
-      // addPath is called twice (fire-and-forget), but relayCount stays 1
+      // Wait a tick to ensure the handler had a chance to run
+      await new Promise((r) => setTimeout(r, 50))
+
+      // addPath called only once (duplicate was skipped)
+      expect(controlApi.addPath).toHaveBeenCalledTimes(1)
       expect(manager.relayCount).toBe(1)
     })
 
@@ -400,6 +404,125 @@ describe('RelayManager', () => {
           expect.objectContaining({ sourcePass: 'jwt-v2' })
         )
       })
+    })
+  })
+
+  describe('deferred changes during in-flight add', () => {
+    it('replays an updated delta after addPath completes', async () => {
+      let resolveAdd: () => void
+      const addPromise = new Promise<void>((r) => { resolveAdd = r })
+      ;(controlApi.addPath as ReturnType<typeof vi.fn>).mockImplementation(
+        () => addPromise.then(() => ({ ok: true, data: undefined }))
+      )
+
+      await manager.start()
+
+      const route = makeInternalRoute({ endpoint: 'rtsp://10.0.1.5:8554/cam-1' })
+      routeSource.triggerChanges([{ type: 'added', route }])
+
+      // While addPath is in flight, an updated arrives with new endpoint
+      const updatedRoute = makeInternalRoute({ endpoint: 'rtsp://10.0.1.6:8554/cam-1' })
+      routeSource.triggerChanges([{ type: 'updated', route: updatedRoute }])
+
+      // Complete the original add
+      resolveAdd!()
+      await vi.waitFor(() => expect(manager.relayCount).toBe(1))
+
+      // The deferred update should have been replayed — patchPath called
+      await vi.waitFor(() =>
+        expect(controlApi.patchPath).toHaveBeenCalledWith(
+          'cam-1',
+          expect.objectContaining({ source: 'rtsp://10.0.1.6:8554/cam-1' })
+        )
+      )
+    })
+
+    it('replays a removed delta after addPath completes', async () => {
+      let resolveAdd: () => void
+      const addPromise = new Promise<void>((r) => { resolveAdd = r })
+      ;(controlApi.addPath as ReturnType<typeof vi.fn>).mockImplementation(
+        () => addPromise.then(() => ({ ok: true, data: undefined }))
+      )
+
+      await manager.start()
+
+      const route = makeInternalRoute()
+      routeSource.triggerChanges([{ type: 'added', route }])
+
+      // While addPath is in flight, a removed arrives
+      routeSource.triggerChanges([{ type: 'removed', route }])
+
+      // Complete the original add
+      resolveAdd!()
+      await vi.waitFor(() => expect(controlApi.addPath).toHaveBeenCalled())
+
+      // The deferred removal should fire — deletePath called
+      await vi.waitFor(() => expect(controlApi.deletePath).toHaveBeenCalledWith('cam-1'))
+      expect(manager.relayCount).toBe(0)
+    })
+  })
+
+  describe('route updates', () => {
+    it('patches relay path when endpoint changes via updated event', async () => {
+      await manager.start()
+
+      const route = makeInternalRoute({ endpoint: 'rtsp://10.0.1.5:8554/cam-1' })
+      routeSource.triggerChanges([{ type: 'added', route }])
+      await vi.waitFor(() => expect(manager.relayCount).toBe(1))
+
+      const updatedRoute = makeInternalRoute({ endpoint: 'rtsp://10.0.1.6:8554/cam-1' })
+      routeSource.triggerChanges([{ type: 'updated', route: updatedRoute }])
+      await vi.waitFor(() =>
+        expect(controlApi.patchPath).toHaveBeenCalledWith(
+          'cam-1',
+          expect.objectContaining({ source: 'rtsp://10.0.1.6:8554/cam-1' })
+        )
+      )
+    })
+  })
+
+  describe('onSubscribersEvicted', () => {
+    it('deletes relay path when path is in activeRelays', async () => {
+      await manager.start()
+
+      const route = makeInternalRoute()
+      routeSource.triggerChanges([{ type: 'added', route }])
+      await vi.waitFor(() => expect(manager.relayCount).toBe(1))
+
+      const result = await manager.onSubscribersEvicted('cam-1')
+
+      expect(result).toBe(true)
+      expect(controlApi.deletePath).toHaveBeenCalledWith('cam-1')
+      expect(manager.relayCount).toBe(0)
+    })
+
+    it('returns true for path not in activeRelays (not ours)', async () => {
+      await manager.start()
+
+      const result = await manager.onSubscribersEvicted('unknown-path')
+
+      expect(result).toBe(true)
+      expect(controlApi.deletePath).not.toHaveBeenCalled()
+    })
+
+    it('returns false when deletePath fails transiently', async () => {
+      await manager.start()
+
+      const route = makeInternalRoute()
+      routeSource.triggerChanges([{ type: 'added', route }])
+      await vi.waitFor(() => expect(manager.relayCount).toBe(1))
+
+      ;(controlApi.deletePath as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        error: 'HTTP 503',
+        status: 503,
+      })
+
+      const result = await manager.onSubscribersEvicted('cam-1')
+
+      expect(result).toBe(false)
+      // Relay still tracked — will be retried
+      expect(manager.relayCount).toBe(1)
     })
   })
 
@@ -460,6 +583,34 @@ describe('RelayManager', () => {
 
       // 404 is treated as success — relay is cleaned up
       expect(manager.relayCount).toBe(0)
+    })
+
+    it('does not call deletePath or decrement metrics for untracked route removal', async () => {
+      const relayMetrics = {
+        relayActive: { add: vi.fn() },
+        relaySetupDuration: { record: vi.fn() },
+        relaySetups: { add: vi.fn() },
+      }
+      const tracked = new RelayManager({
+        routeSource,
+        controlApi,
+        localNodeName: 'node-a',
+        getRelayToken: () => 'jwt',
+        knownPeerHosts: new Set(['10.0.1.5']),
+        metrics: relayMetrics,
+      })
+      await tracked.start()
+
+      // Remove a route we never added
+      const unknownRoute = makeInternalRoute({ name: 'never-tracked' })
+      routeSource.triggerChanges([{ type: 'removed', route: unknownRoute }])
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      // Should not call deletePath at all for untracked names
+      expect(controlApi.deletePath).not.toHaveBeenCalled()
+      // Metric should not go negative
+      expect(relayMetrics.relayActive.add).not.toHaveBeenCalledWith(-1)
     })
   })
 

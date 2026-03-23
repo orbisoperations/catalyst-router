@@ -12,8 +12,8 @@ export interface TokenRefreshOptions {
   getExpiry: () => number | undefined
   /** Function to get the token's issued-at time (ms since epoch). */
   getIssuedAt: () => number | undefined
-  /** Function to mint a fresh token, returning the new expiry. */
-  refresh: () => Promise<number>
+  /** Function to refresh credentials. May return the new expiry or void. */
+  refresh: () => Promise<number | void>
   /** TTL fraction at which to trigger refresh (default: 0.8 = 80%). */
   refreshThreshold?: number
   /** Check interval in ms (default: 3600000 = 1 hour). */
@@ -24,7 +24,7 @@ export class TokenRefreshScheduler {
   private timer: ReturnType<typeof setInterval> | null = null
   private readonly getExpiry: () => number | undefined
   private readonly getIssuedAt: () => number | undefined
-  private readonly refresh: () => Promise<number>
+  private readonly refresh: () => Promise<number | void>
   private readonly refreshThreshold: number
   private readonly checkIntervalMs: number
 

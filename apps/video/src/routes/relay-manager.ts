@@ -140,6 +140,10 @@ export class RelayManager {
 
   /** Track active relay paths to support reconciliation and idempotency. */
   private readonly activeRelays = new Map<string, string>() // routeName → endpoint
+  /** Queue of deferred changes received while addPath() is in flight for a name. */
+  private readonly deferredChanges = new Map<string, RouteChange>()
+  /** Guard against concurrent addRelay calls for the same name. */
+  private readonly pendingAdds = new Set<string>()
   private unsubscribe: (() => void) | null = null
 
   constructor(options: RelayManagerOptions) {
@@ -188,10 +192,13 @@ export class RelayManager {
       }
     }
 
-    // Add relays that are missing
+    // Add missing relays and update relays whose endpoint changed
     for (const [name, route] of desired) {
-      if (!this.activeRelays.has(name)) {
+      const currentEndpoint = this.activeRelays.get(name)
+      if (currentEndpoint === undefined) {
         await this.addRelay(name, route.endpoint!)
+      } else if (currentEndpoint !== route.endpoint) {
+        await this.updateRelay(name, route.endpoint!)
       }
     }
   }
@@ -219,6 +226,13 @@ export class RelayManager {
     const internalRoute = route as InternalRoute
     if (internalRoute.originNode === this.localNodeName) return
 
+    // If an addPath() is in flight for this name, defer the change.
+    // It will be replayed after the add completes.
+    if (this.pendingAdds.has(route.name)) {
+      this.deferredChanges.set(route.name, change)
+      return
+    }
+
     if (change.type === 'added') {
       if (!route.endpoint) return
       void this.addRelay(route.name, route.endpoint)
@@ -231,8 +245,18 @@ export class RelayManager {
   }
 
   private async addRelay(name: string, endpoint: string): Promise<void> {
+    // Guard: if already tracked with the same endpoint, skip (idempotent).
+    if (this.activeRelays.get(name) === endpoint) return
+    // Guard: if an addPath call is already in flight for this name, skip.
+    // Prevents concurrent addPath() calls from near-simultaneous delta events.
+    if (this.pendingAdds.has(name)) return
+    this.pendingAdds.add(name)
+
     const validation = validateRelayEndpoint(endpoint, this.knownPeerHosts)
-    if (!validation.safe) return
+    if (!validation.safe) {
+      this.pendingAdds.delete(name)
+      return
+    }
 
     const start = performance.now()
     this.metrics?.relaySetups.add(1)
@@ -248,6 +272,8 @@ export class RelayManager {
       sourceUser: 'relay',
       sourcePass: relayToken,
     })
+
+    this.pendingAdds.delete(name)
 
     if (result.ok) {
       this.activeRelays.set(name, endpoint)
@@ -266,6 +292,13 @@ export class RelayManager {
         endpoint,
         error: result.error,
       })
+    }
+
+    // Replay any deferred change that arrived while addPath() was in flight
+    const deferred = this.deferredChanges.get(name)
+    if (deferred) {
+      this.deferredChanges.delete(name)
+      this.handleChange(deferred)
     }
   }
 
@@ -303,6 +336,8 @@ export class RelayManager {
   }
 
   private async removeRelay(name: string): Promise<void> {
+    if (!this.activeRelays.has(name)) return
+
     const result = await this.controlApi.deletePath(name)
     if (result.ok || result.status === 404) {
       this.activeRelays.delete(name)
@@ -317,6 +352,33 @@ export class RelayManager {
   /** Number of active relay paths. */
   get relayCount(): number {
     return this.activeRelays.size
+  }
+
+  /**
+   * Called by TokenRevalidator when all subscriber sessions on a path have been
+   * evicted. If this path is a relay we own (in activeRelays), tear it down.
+   * Local-publish paths are NOT in activeRelays, so they are never affected.
+   */
+  async onSubscribersEvicted(path: string): Promise<boolean> {
+    if (!this.activeRelays.has(path)) return true // not ours or already cleaned
+
+    const result = await this.controlApi.deletePath(path)
+    if (result.ok || result.status === 404) {
+      this.activeRelays.delete(path)
+      this.metrics?.relayActive.add(-1)
+      logger.info('Relay path removed after subscriber eviction: {streamPath}', {
+        'event.name': 'video.relay.evicted',
+        streamPath: path,
+      })
+      return true
+    }
+
+    logger.warn('Failed to delete relay path after eviction: {streamPath}: {error}', {
+      'event.name': 'video.relay.eviction_failed',
+      streamPath: path,
+      error: result.error,
+    })
+    return false
   }
 
   /** Stop subscribing and clean up. Does NOT remove relay paths from MediaMTX. */

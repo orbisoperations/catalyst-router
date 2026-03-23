@@ -31,6 +31,7 @@ export interface MediaMtxConfig {
     runOnReady: string
     runOnReadyRestart: string
     runOnNotReady: string
+    runOnUnread: string
     overridePublisher: boolean
   }
 }
@@ -102,6 +103,7 @@ export function generateMediaMtxConfig(config: VideoConfig, servicePort: number)
       runOnReady: `curl -sf -X POST -H "Content-Type: application/json" -d '{"path":"$MTX_PATH","sourceType":"$MTX_SOURCE_TYPE","sourceId":"$MTX_SOURCE_ID"}' ${hookBase}/ready`,
       runOnReadyRestart: 'yes',
       runOnNotReady: `curl -sf -X POST -H "Content-Type: application/json" -d '{"path":"$MTX_PATH","sourceType":"$MTX_SOURCE_TYPE","sourceId":"$MTX_SOURCE_ID"}' ${hookBase}/not-ready`,
+      runOnUnread: `curl -sf -X POST -H "Content-Type: application/json" -d '{"path":"$MTX_PATH","readerId":"$MTX_READER_ID","readerType":"$MTX_READER_TYPE"}' ${hookBase}/unread`,
       overridePublisher: true,
     },
   }
@@ -164,6 +166,7 @@ export function serializeMediaMtxConfig(config: MediaMtxConfig): string {
   lines.push(`  runOnReady: "${escapeYaml(config.pathDefaults.runOnReady)}"`)
   lines.push(`  runOnReadyRestart: ${config.pathDefaults.runOnReadyRestart}`)
   lines.push(`  runOnNotReady: "${escapeYaml(config.pathDefaults.runOnNotReady)}"`)
+  lines.push(`  runOnUnread: "${escapeYaml(config.pathDefaults.runOnUnread)}"`)
   lines.push(`  overridePublisher: ${config.pathDefaults.overridePublisher}`)
   lines.push('')
 

@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { getLogger } from '@catalyst/telemetry'
-import { MediaMtxHookPayloadSchema } from '../mediamtx/types.js'
+import { MediaMtxHookPayloadSchema, MediaMtxUnreadHookPayloadSchema } from '../mediamtx/types.js'
 import type { StreamRouteManager } from '../routes/stream-route-manager.js'
+import type { SessionRegistry } from '../session/session-registry.js'
 
 const logger = getLogger(['catalyst', 'video', 'publish'])
 
@@ -9,6 +10,8 @@ const LOCALHOST_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 export interface LifecycleHookOptions {
   routeManager: StreamRouteManager
+  sessionRegistry?: SessionRegistry
+  onLastSubscriberLeft?: (path: string) => void
 }
 
 /**
@@ -101,6 +104,48 @@ export function createLifecycleHooks(options: LifecycleHookOptions): Hono {
         500
       )
     }
+  })
+
+  app.post('/video-stream/hooks/unread', async (c) => {
+    const clientIp =
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      c.req.header('x-real-ip') ||
+      '127.0.0.1'
+
+    if (!LOCALHOST_IPS.has(clientIp)) {
+      return c.json({ success: false, error: 'Hook calls must originate from localhost' }, 403)
+    }
+
+    const body = await c.req.json().catch(() => null)
+    const parsed = MediaMtxUnreadHookPayloadSchema.safeParse(body)
+
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: 'Invalid hook payload', details: parsed.error.issues },
+        400
+      )
+    }
+
+    if (options.sessionRegistry) {
+      const existed = options.sessionRegistry.remove(parsed.data.readerId)
+      if (existed) {
+        logger.info('Subscriber disconnected: {readerId} on {streamPath}', {
+          'event.name': 'video.session.unread',
+          readerId: parsed.data.readerId,
+          streamPath: parsed.data.path,
+          readerType: parsed.data.readerType,
+        })
+        // If this was the last subscriber on the path, notify for relay cleanup
+        if (
+          options.onLastSubscriberLeft &&
+          options.sessionRegistry.getByPath(parsed.data.path).length === 0
+        ) {
+          options.onLastSubscriberLeft(parsed.data.path)
+        }
+      }
+    }
+
+    return c.json({ success: true })
   })
 
   return app
