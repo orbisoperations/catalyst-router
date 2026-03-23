@@ -25,7 +25,7 @@ describe('generateMediaMtxConfig', () => {
     expect(mtx.rtmpAddress).toBe(':1935')
     expect(mtx.hlsAddress).toBe(':8888')
     expect(mtx.apiAddress).toBe('127.0.0.1:9997')
-    expect(mtx.metricsAddress).toBe(':9998')
+    expect(mtx.metricsAddress).toBe('127.0.0.1:9998')
   })
 
   it('maps custom ports to MediaMTX addresses', () => {
@@ -42,7 +42,7 @@ describe('generateMediaMtxConfig', () => {
     expect(mtx.rtmpAddress).toBe(':2935')
     expect(mtx.hlsAddress).toBe(':9888')
     expect(mtx.apiAddress).toBe('127.0.0.1:9998')
-    expect(mtx.metricsAddress).toBe(':9999')
+    expect(mtx.metricsAddress).toBe('127.0.0.1:9999')
   })
 
   it('disables SRT — streamid too short for JWT', () => {

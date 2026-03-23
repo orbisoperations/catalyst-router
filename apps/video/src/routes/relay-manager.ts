@@ -31,6 +31,12 @@ export interface RouteSubscription {
   listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
 }
 
+export interface RelayMetrics {
+  relayActive: { add(value: number): void }
+  relaySetupDuration: { record(value: number): void }
+  relaySetups: { add(value: number): void }
+}
+
 export interface RelayManagerOptions {
   routeSource: RouteSubscription
   controlApi: ControlApiClient
@@ -40,6 +46,7 @@ export interface RelayManagerOptions {
   getRelayToken: () => string
   /** Known peer endpoint hosts, used for SSRF validation. */
   knownPeerHosts?: Set<string>
+  metrics?: RelayMetrics
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +136,7 @@ export class RelayManager {
   private readonly localNodeName: string
   private readonly getRelayToken: () => string
   private readonly knownPeerHosts: Set<string>
+  private readonly metrics?: RelayMetrics
 
   /** Track active relay paths to support reconciliation and idempotency. */
   private readonly activeRelays = new Map<string, string>() // routeName → endpoint
@@ -140,6 +148,7 @@ export class RelayManager {
     this.localNodeName = options.localNodeName
     this.getRelayToken = options.getRelayToken
     this.knownPeerHosts = options.knownPeerHosts ?? new Set()
+    this.metrics = options.metrics
   }
 
   /**
@@ -225,6 +234,8 @@ export class RelayManager {
     const validation = validateRelayEndpoint(endpoint, this.knownPeerHosts)
     if (!validation.safe) return
 
+    const start = performance.now()
+    this.metrics?.relaySetups.add(1)
     const relayToken = this.getRelayToken()
     const result = await this.controlApi.addPath(name, {
       source: endpoint,
@@ -240,6 +251,8 @@ export class RelayManager {
 
     if (result.ok) {
       this.activeRelays.set(name, endpoint)
+      this.metrics?.relayActive.add(1)
+      this.metrics?.relaySetupDuration.record((performance.now() - start) / 1000)
       logger.info('Relay path created for {streamPath} from {sourceNode}', {
         'event.name': 'video.relay.created',
         streamPath: name,
@@ -293,6 +306,7 @@ export class RelayManager {
     const result = await this.controlApi.deletePath(name)
     if (result.ok || result.status === 404) {
       this.activeRelays.delete(name)
+      this.metrics?.relayActive.add(-1)
       logger.info('Stale relay path removed: {streamPath}', {
         'event.name': 'video.relay.removed',
         streamPath: name,

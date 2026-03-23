@@ -29,6 +29,13 @@ export interface PathMetadataProvider {
   getPathMetadata(path: string): Promise<{ tracks: string[]; sourceType: string } | null>
 }
 
+export interface StreamMetrics {
+  streamActive: { add(value: number): void }
+  streamPublishes: { add(value: number): void }
+  streamDisconnects: { add(value: number): void }
+  routeOperations: { add(value: number, attributes?: Record<string, string>): void }
+}
+
 export interface StreamRouteManagerOptions {
   registrar: RouteRegistrar
   metadataProvider: PathMetadataProvider
@@ -36,6 +43,7 @@ export interface StreamRouteManagerOptions {
   rtspPort: number
   maxStreams: number
   debounceMs?: number
+  metrics?: StreamMetrics
 }
 
 interface PendingAction {
@@ -50,6 +58,7 @@ export class StreamRouteManager {
   private readonly rtspPort: number
   private readonly maxStreams: number
   private readonly debounceMs: number
+  private readonly metrics?: StreamMetrics
 
   /** Active routes (post-debounce, registered with orchestrator). */
   private readonly activeRoutes = new Set<string>()
@@ -63,6 +72,7 @@ export class StreamRouteManager {
     this.rtspPort = options.rtspPort
     this.maxStreams = options.maxStreams
     this.debounceMs = options.debounceMs ?? 1000
+    this.metrics = options.metrics
   }
 
   async handleReady(path: string, meta: { sourceType: string; sourceId: string }): Promise<void> {
@@ -104,6 +114,9 @@ export class StreamRouteManager {
             tags,
           })
           this.activeRoutes.add(path)
+          this.metrics?.streamActive.add(1)
+          this.metrics?.streamPublishes.add(1)
+          this.metrics?.routeOperations.add(1, { operation: 'add' })
           logger.info('Route registered for {streamPath}', {
             'event.name': 'video.route.added',
             streamPath: path,
@@ -141,6 +154,9 @@ export class StreamRouteManager {
         try {
           await this.registrar.removeRoute(path)
           this.activeRoutes.delete(path)
+          this.metrics?.streamActive.add(-1)
+          this.metrics?.streamDisconnects.add(1)
+          this.metrics?.routeOperations.add(1, { operation: 'remove' })
           logger.info('Route removed for {streamPath}', {
             'event.name': 'video.route.removed',
             streamPath: path,
