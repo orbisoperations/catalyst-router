@@ -4,6 +4,8 @@ import { catalystHonoServer } from '@catalyst/service'
 import type { GatewayUpdateResult } from '../src/rpc/server.js'
 import { createRpcHandler, GatewayRpcServer } from '../src/rpc/server.js'
 
+const TEST_HOST = '127.0.0.1'
+
 describe('RPC Integration', () => {
   let server: ReturnType<typeof catalystHonoServer>
   let port: number
@@ -20,7 +22,7 @@ describe('RPC Integration', () => {
     const rpcServer = new GatewayRpcServer(updateCallback)
     const app = createRpcHandler(rpcServer)
 
-    server = catalystHonoServer(app, { port: 0 })
+    server = catalystHonoServer(app, { port: 0, hostname: TEST_HOST })
     await server.start()
     port = server.port
   })
@@ -31,7 +33,7 @@ describe('RPC Integration', () => {
 
   it('should connect and update config successfully', async () => {
     // Connect client
-    ws = new WebSocket(`ws://localhost:${port}/`)
+    ws = new WebSocket(`ws://${TEST_HOST}:${port}/`)
     await new Promise<void>((resolve, reject) => {
       ws.addEventListener('open', () => resolve())
       ws.addEventListener('error', (e) => reject(e))
@@ -56,7 +58,7 @@ describe('RPC Integration', () => {
   it('should handle invalid configSchema', async () => {
     updateCallback.mockClear()
     // connect again for clean state or reuse
-    ws = new WebSocket(`ws://localhost:${port}/`)
+    ws = new WebSocket(`ws://${TEST_HOST}:${port}/`)
     await new Promise<void>((resolve) => ws.addEventListener('open', () => resolve()))
     rpcClient = newWebSocketRpcSession(ws as unknown as WebSocket)
 
@@ -84,7 +86,7 @@ describe('RPC Integration', () => {
       return { success: false, error: 'Configuration rejected' }
     })
 
-    ws = new WebSocket(`ws://localhost:${port}/`)
+    ws = new WebSocket(`ws://${TEST_HOST}:${port}/`)
     await new Promise<void>((resolve) => ws.addEventListener('open', () => resolve()))
     rpcClient = newWebSocketRpcSession(ws as unknown as WebSocket)
 

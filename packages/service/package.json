@@ -10,9 +10,10 @@
   },
   "scripts": {
     "test": "vitest run",
-    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
-    "test:integration": "vitest run --passWithNoTests container integration",
+    "test:unit": "vitest run unit.test.ts --passWithNoTests",
+    "test:integration": "vitest run integration.test.ts --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000",
     "typecheck": "tsc --noEmit",
+    "test:container": "vitest run container.test.ts --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=300000 --hookTimeout=300000",
     "lint": "eslint ."
   },
   "dependencies": {

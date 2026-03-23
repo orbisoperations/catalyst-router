@@ -29,6 +29,7 @@ import type { PeerInfo } from '@catalyst/routing/v2'
 // ---------------------------------------------------------------------------
 
 const TEST_SECRET = new TextEncoder().encode('test-secret-for-ws-integration')
+const TEST_HOST = '127.0.0.1'
 
 const allowAllValidator: TokenValidator = {
   async validateToken() {
@@ -76,7 +77,7 @@ async function createTestNode(name: string): Promise<TestNode> {
   })
 
   const config: OrchestratorConfig = {
-    node: { name, endpoint: `ws://localhost:0/rpc`, domains: ['ws-test.local'] },
+    node: { name, endpoint: `ws://${TEST_HOST}:0/rpc`, domains: ['ws-test.local'] },
   }
 
   const bus = new OrchestratorBus({
@@ -98,10 +99,10 @@ async function createTestNode(name: string): Promise<TestNode> {
     )
   })
 
-  const server = catalystHonoServer(app, { port: 0 })
+  const server = catalystHonoServer(app, { port: 0, hostname: TEST_HOST })
   await server.start()
   const port = server.port
-  const endpoint = `ws://localhost:${port}/rpc`
+  const endpoint = `ws://${TEST_HOST}:${port}/rpc`
 
   config.node.endpoint = endpoint
 
@@ -208,7 +209,7 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
     const tokenA = await makeJwt('node-a')
     const peerA: PeerInfo = {
       name: 'node-a',
-      endpoint: 'ws://localhost:0/rpc',
+      endpoint: `ws://${TEST_HOST}:0/rpc`,
       domains: ['ws-test.local'],
       peerToken: tokenA,
     }
@@ -246,7 +247,7 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
 
     const peerRecord = {
       name: 'node-ghost',
-      endpoint: 'ws://localhost:19999/rpc',
+      endpoint: `ws://${TEST_HOST}:19999/rpc`,
       domains: ['ws-test.local'],
       connectionStatus: 'initializing' as const,
       lastConnected: 0,

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { serve } from '@hono/node-server'
 import { newWebSocketRpcSession } from 'capnweb'
+import { createServer } from 'node:net'
 import { CatalystConfigSchema } from '@catalyst/config'
 import { AuthService, Principal } from '@catalyst/authorization'
 import { catalystHonoServer, type CatalystHonoServer } from '@catalyst/service'
@@ -13,8 +14,30 @@ import {
 } from '../../cli/src/handlers/node-route-handlers.js'
 import type { EnvoyRpcServer } from '../src/rpc/server.js'
 
+const TEST_HOST = '127.0.0.1'
+
+async function allocatePort(): Promise<number> {
+  const probe = createServer()
+  await new Promise<void>((resolve, reject) => {
+    probe.once('error', reject)
+    probe.listen(0, TEST_HOST, () => resolve())
+  })
+  const address = probe.address()
+  if (!address || typeof address === 'string') {
+    await new Promise<void>((resolve, reject) =>
+      probe.close((err) => (err ? reject(err) : resolve()))
+    )
+    throw new Error('Failed to allocate a test port')
+  }
+  const { port } = address
+  await new Promise<void>((resolve, reject) =>
+    probe.close((err) => (err ? reject(err) : resolve()))
+  )
+  return port
+}
+
 /**
- * End-to-end integration test: Auth -> Orchestrator -> Envoy -> Books API
+ * Control-plane integration test: Auth -> CLI -> Orchestrator -> Envoy -> Books API
  *
  * Starts 4 real Node.js servers in-process:
  * 1. Auth service (in-memory DBs, mints system admin token)
@@ -24,7 +47,7 @@ import type { EnvoyRpcServer } from '../src/rpc/server.js'
  *
  * Uses CLI handlers with real auth tokens to exercise the full control plane.
  */
-describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
+describe('CLI Control-Plane Flow with Auth', () => {
   // Servers — catalystHonoServer for services with WebSocket RPC,
   // raw serve() for books-api (no WebSocket needed)
   let authServer: CatalystHonoServer
@@ -55,6 +78,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     authServer = catalystHonoServer(authService.handler, {
       services: [authService],
       port: 0,
+      hostname: TEST_HOST,
     })
     await authServer.start()
     const authPort = authServer.port
@@ -64,12 +88,13 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     booksServer = serve({
       fetch: booksModule.default.fetch,
       port: 0,
+      hostname: TEST_HOST,
     })
 
     // ── 3. Start Envoy Service ─────────────────────────────────────
     const envoyConfig = CatalystConfigSchema.parse({
       node: { name: 'envoy-node', domains: ['somebiz.local.io'] },
-      envoy: { adminPort: 9901, xdsPort: 18000, bindAddress: '0.0.0.0' },
+      envoy: { adminPort: 9901, xdsPort: 18000, bindAddress: TEST_HOST },
       port: 0,
     })
     envoyService = await EnvoyService.create({ config: envoyConfig })
@@ -77,30 +102,29 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     envoyServer = catalystHonoServer(envoyService.handler, {
       services: [envoyService],
       port: 0,
+      hostname: TEST_HOST,
     })
     await envoyServer.start()
     const envoyPort = envoyServer.port
 
     // ── 4. Start Orchestrator ──────────────────────────────────────
     // Pre-allocate a port for the orchestrator so we can set node.endpoint
-    const tempServer = serve({ fetch: () => new Response(''), port: 0 })
-    const orchPort = (tempServer.address() as { port: number }).port
-    tempServer.close()
+    const orchPort = await allocatePort()
 
     const orchConfig = CatalystConfigSchema.parse({
       node: {
         name: 'node-a.somebiz.local.io', // Must end with domain suffix
         domains: ['somebiz.local.io'],
-        endpoint: `ws://localhost:${orchPort}/rpc`,
+        endpoint: `ws://${TEST_HOST}:${orchPort}/rpc`,
       },
       orchestrator: {
         ibgp: { secret: 'test-secret' },
         auth: {
-          endpoint: `ws://localhost:${authPort}/rpc`,
+          endpoint: `ws://${TEST_HOST}:${authPort}/rpc`,
           systemToken,
         },
         envoyConfig: {
-          endpoint: `ws://localhost:${envoyPort}/api`,
+          endpoint: `ws://${TEST_HOST}:${envoyPort}/api`,
           portRange: [[10000, 10100]],
         },
       },
@@ -111,6 +135,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     orchServer = catalystHonoServer(orchService.handler, {
       services: [orchService],
       port: orchPort,
+      hostname: TEST_HOST,
     })
     await orchServer.start()
 
@@ -127,7 +152,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
       principal: Principal.ADMIN,
       name: 'Test CLI',
       type: 'service',
-      authUrl: `ws://localhost:${ports.auth}/rpc`,
+      authUrl: `ws://${TEST_HOST}:${ports.auth}/rpc`,
       token: systemToken,
     })
 
@@ -155,9 +180,9 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
   it('publishes books-api as data channel via CLI handler', async () => {
     const result = await createRouteHandler({
       name: 'books-api',
-      endpoint: `http://localhost:${ports.books}/graphql`,
+      endpoint: `http://${TEST_HOST}:${ports.books}/graphql`,
       protocol: 'http:graphql',
-      orchestratorUrl: `ws://localhost:${ports.orchestrator}/rpc`,
+      orchestratorUrl: `ws://${TEST_HOST}:${ports.orchestrator}/rpc`,
       token: cliToken,
       logLevel: 'info',
     })
@@ -173,7 +198,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     await new Promise((r) => setTimeout(r, 200))
 
     const result = await listRoutesHandler({
-      orchestratorUrl: `ws://localhost:${ports.orchestrator}/rpc`,
+      orchestratorUrl: `ws://${TEST_HOST}:${ports.orchestrator}/rpc`,
       token: cliToken,
       logLevel: 'info',
     })
@@ -188,7 +213,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     expect(booksRoute).toBeDefined()
     expect(booksRoute?.source).toBe('local')
     expect(booksRoute?.protocol).toBe('http:graphql')
-    expect(booksRoute?.endpoint).toBe(`http://localhost:${ports.books}/graphql`)
+    expect(booksRoute?.endpoint).toBe(`http://${TEST_HOST}:${ports.books}/graphql`)
 
     // envoyPort should be allocated in the 10000-10100 range
     if (booksRoute && 'envoyPort' in booksRoute) {
@@ -203,7 +228,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
     await new Promise((r) => setTimeout(r, 200))
 
     // Connect to envoy service RPC and check routes
-    const ws = new WebSocket(`ws://localhost:${ports.envoy}/api`)
+    const ws = new WebSocket(`ws://${TEST_HOST}:${ports.envoy}/api`)
     await new Promise<void>((resolve, reject) => {
       ws.addEventListener('open', () => resolve())
       ws.addEventListener('error', (e) => reject(e))
@@ -215,7 +240,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
 
     const booksRoute = routes.local.find((r: { name: string }) => r.name === 'books-api')
     expect(booksRoute).toBeDefined()
-    expect(booksRoute?.endpoint).toBe(`http://localhost:${ports.books}/graphql`)
+    expect(booksRoute?.endpoint).toBe(`http://${TEST_HOST}:${ports.books}/graphql`)
     expect(booksRoute?.protocol).toBe('http:graphql')
 
     // envoyPort should be set by the orchestrator's port allocator
@@ -228,7 +253,7 @@ describe('E2E: CLI -> Orchestrator -> Envoy Service (with Auth)', () => {
   })
 
   it('books-api GraphQL endpoint responds with books data', async () => {
-    const response = await fetch(`http://localhost:${ports.books}/graphql`, {
+    const response = await fetch(`http://${TEST_HOST}:${ports.books}/graphql`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: '{ books { title author } }' }),
