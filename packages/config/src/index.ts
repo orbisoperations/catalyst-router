@@ -83,7 +83,7 @@ export const OrchestratorConfigSchema = z.object({
       intervalMs: z.number().int().min(0).default(30_000),
       timeoutMs: z.number().int().min(100).default(3_000),
     })
-    .optional(),
+    .default({}),
 })
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>

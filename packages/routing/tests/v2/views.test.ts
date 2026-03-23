@@ -33,25 +33,32 @@ function makeInternalRoute(overrides: Partial<InternalRoute> = {}): InternalRout
 }
 
 function makeRouteTable(): RouteTable {
+  const routeA = makeInternalRoute()
+  const routeB = makeInternalRoute({
+    name: 'route-b',
+    peer: { name: 'peer-2', domains: ['example.com'] },
+    nodePath: ['peer-2'],
+    originNode: 'peer-2',
+    isStale: true,
+  })
   return {
     local: {
-      routes: [{ name: 'local-route', protocol: 'http' as const, endpoint: 'http://local:8080' }],
+      routes: new Map([
+        [
+          'local-route',
+          { name: 'local-route', protocol: 'http' as const, endpoint: 'http://local:8080' },
+        ],
+      ]),
     },
     internal: {
-      peers: [
-        makePeerRecord({ peerToken: 'secret-1' }),
-        makePeerRecord({ name: 'peer-2', peerToken: 'secret-2' }),
-      ],
-      routes: [
-        makeInternalRoute(),
-        makeInternalRoute({
-          name: 'route-b',
-          peer: { name: 'peer-2', domains: ['example.com'] },
-          nodePath: ['peer-2'],
-          originNode: 'peer-2',
-          isStale: true,
-        }),
-      ],
+      peers: new Map([
+        ['peer-1', makePeerRecord({ peerToken: 'secret-1' })],
+        ['peer-2', makePeerRecord({ name: 'peer-2', peerToken: 'secret-2' })],
+      ]),
+      routes: new Map([
+        ['peer-1', new Map([[`${routeA.name}:${routeA.originNode}`, routeA]])],
+        ['peer-2', new Map([[`${routeB.name}:${routeB.originNode}`, routeB]])],
+      ]),
     },
   }
 }
@@ -128,7 +135,7 @@ describe('routeTableToPublic', () => {
       expect(route).not.toHaveProperty('isStale')
     }
 
-    expect(pub.routes.local).toEqual(makeRouteTable().local.routes)
+    expect(pub.routes.local).toEqual([...makeRouteTable().local.routes.values()])
   })
 
   it('preserves data integrity', () => {
