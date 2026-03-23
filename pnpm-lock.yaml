@@ -543,6 +543,9 @@ importers:
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.9.0
+      capnweb:
+        specifier: 'catalog:'
+        version: 0.4.0
       hono:
         specifier: 'catalog:'
         version: 4.12.0
