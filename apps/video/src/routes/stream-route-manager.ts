@@ -11,6 +11,10 @@
  * within milliseconds) from propagating unnecessary updates across the mesh.
  */
 
+import { getLogger } from '@catalyst/telemetry'
+
+const logger = getLogger(['catalyst', 'video', 'publish'])
+
 export interface RouteRegistrar {
   addRoute(route: {
     name: string
@@ -77,6 +81,12 @@ export class StreamRouteManager {
       throw new Error(`Max streams limit reached (${this.maxStreams}). Rejecting stream: ${path}`)
     }
 
+    logger.debug('Debouncing stream event for {streamPath}', {
+      'event.name': 'video.stream.debounced',
+      streamPath: path,
+      debounceMs: this.debounceMs,
+    })
+
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(async () => {
         this.pending.delete(path)
@@ -86,15 +96,26 @@ export class StreamRouteManager {
             ? [...metadata.tracks.map((t) => `track:${t}`), `source-type:${meta.sourceType}`]
             : [`source-type:${meta.sourceType}`]
 
+          const endpoint = `rtsp://${this.advertiseAddress}:${this.rtspPort}/${path}`
           await this.registrar.addRoute({
             name: path,
             protocol: 'media',
-            endpoint: `rtsp://${this.advertiseAddress}:${this.rtspPort}/${path}`,
+            endpoint,
             tags,
           })
           this.activeRoutes.add(path)
+          logger.info('Route registered for {streamPath}', {
+            'event.name': 'video.route.added',
+            streamPath: path,
+            endpoint,
+          })
           resolve()
         } catch (err) {
+          logger.error('Failed to register route for {streamPath}: {error}', {
+            'event.name': 'video.route.add_failed',
+            streamPath: path,
+            error: err instanceof Error ? err.message : String(err),
+          })
           reject(err)
         }
       }, this.debounceMs)
@@ -120,6 +141,10 @@ export class StreamRouteManager {
         try {
           await this.registrar.removeRoute(path)
           this.activeRoutes.delete(path)
+          logger.info('Route removed for {streamPath}', {
+            'event.name': 'video.route.removed',
+            streamPath: path,
+          })
           resolve()
         } catch (err) {
           reject(err)
