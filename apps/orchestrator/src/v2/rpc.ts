@@ -1,10 +1,10 @@
-import { Actions, PeerView, InternalRouteView } from '@catalyst/routing/v2'
+import { Actions, peerToPublic, internalRouteToPublic } from '@catalyst/routing/v2'
 import type {
   PeerInfo,
-  PeerRecord,
   DataChannelDefinition,
-  InternalRoute,
   UpdateMessageSchema,
+  PublicPeer,
+  PublicInternalRoute,
 } from '@catalyst/routing/v2'
 import type { z } from 'zod'
 import { decodeJwt } from 'jose'
@@ -35,7 +35,7 @@ export interface NetworkClient {
   removePeer(
     peer: Pick<PeerInfo, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
-  listPeers(): Promise<PeerRecord[]>
+  listPeers(): Promise<PublicPeer[]>
 }
 
 export interface DataChannel {
@@ -45,7 +45,7 @@ export interface DataChannel {
   removeRoute(
     route: Pick<DataChannelDefinition, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
-  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: InternalRoute[] }>
+  listRoutes(): Promise<{ local: DataChannelDefinition[]; internal: PublicInternalRoute[] }>
 }
 
 export interface IBGPClient {
@@ -112,7 +112,7 @@ export async function createNetworkClient(
         },
 
         async listPeers() {
-          return bus.state.internal.peers.map((p) => new PeerView(p).toPublic())
+          return bus.state.internal.peers.map(peerToPublic)
         },
       },
     }
@@ -155,7 +155,7 @@ export async function createDataChannelClient(
         async listRoutes() {
           return {
             local: bus.state.local.routes,
-            internal: bus.state.internal.routes.map((r) => new InternalRouteView(r).toPublic()),
+            internal: bus.state.internal.routes.map(internalRouteToPublic),
           }
         },
       },

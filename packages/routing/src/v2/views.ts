@@ -18,70 +18,42 @@ export type PublicRouteTable = {
   peers: PublicPeer[]
 }
 
-/** Wraps a PeerRecord for safe API exposure. */
-export class PeerView {
-  constructor(private readonly data: PeerRecord) {}
+/** Returns peer data safe for API exposure (credentials + bookkeeping stripped). */
+export function peerToPublic(peer: PeerRecord): PublicPeer {
+  const { peerToken: _token, holdTime: _hold, lastSent: _sent, lastReceived: _recv, ...rest } =
+    peer
+  return rest
+}
 
-  get name(): string {
-    return this.data.name
-  }
+/** Returns route safe for API exposure (peer credentials + isStale stripped). */
+export function internalRouteToPublic(route: InternalRoute): PublicInternalRoute {
+  const { peerToken: _, ...safePeer } = route.peer
+  const { isStale: _stale, ...rest } = route
+  return { ...rest, peer: safePeer }
+}
 
-  /** Returns peer data safe for API exposure (credentials + bookkeeping stripped). */
-  toPublic(): PublicPeer {
-    const {
-      peerToken: _token,
-      holdTime: _hold,
-      lastSent: _sent,
-      lastReceived: _recv,
-      ...rest
-    } = this.data
-    return rest
+/** Returns only DataChannelDefinition fields (strips peer, nodePath, originNode, isStale). */
+export function internalRouteToDataChannel(route: InternalRoute): DataChannelDefinition {
+  return {
+    name: route.name,
+    protocol: route.protocol,
+    endpoint: route.endpoint,
+    region: route.region,
+    tags: route.tags,
+    envoyPort: route.envoyPort,
+    healthStatus: route.healthStatus,
+    responseTimeMs: route.responseTimeMs,
+    lastCheckedAt: route.lastCheckedAt,
   }
 }
 
-/** Wraps an InternalRoute for safe API exposure and transport transforms. */
-export class InternalRouteView {
-  constructor(private readonly data: InternalRoute) {}
-
-  get name(): string {
-    return this.data.name
-  }
-
-  /** Returns route safe for API exposure (peer credentials + isStale stripped). */
-  toPublic(): PublicInternalRoute {
-    const { peerToken: _, ...safePeer } = this.data.peer
-    const { isStale: _stale, ...rest } = this.data
-    return { ...rest, peer: safePeer }
-  }
-
-  /** Returns only DataChannelDefinition fields (strips peer, nodePath, originNode, isStale). */
-  toDataChannel(): DataChannelDefinition {
-    return {
-      name: this.data.name,
-      protocol: this.data.protocol,
-      endpoint: this.data.endpoint,
-      region: this.data.region,
-      tags: this.data.tags,
-      envoyPort: this.data.envoyPort,
-      healthStatus: this.data.healthStatus,
-      responseTimeMs: this.data.responseTimeMs,
-      lastChecked: this.data.lastChecked,
-    }
-  }
-}
-
-/** Wraps a RouteTable for safe API exposure. */
-export class RouteTableView {
-  constructor(private readonly state: RouteTable) {}
-
-  /** Returns the full route table safe for API exposure. */
-  toPublic(): PublicRouteTable {
-    return {
-      routes: {
-        local: this.state.local.routes,
-        internal: this.state.internal.routes.map((r) => new InternalRouteView(r).toPublic()),
-      },
-      peers: this.state.internal.peers.map((p) => new PeerView(p).toPublic()),
-    }
+/** Returns the full route table safe for API exposure. */
+export function routeTableToPublic(state: RouteTable): PublicRouteTable {
+  return {
+    routes: {
+      local: state.local.routes,
+      internal: state.internal.routes.map(internalRouteToPublic),
+    },
+    peers: state.internal.peers.map(peerToPublic),
   }
 }
