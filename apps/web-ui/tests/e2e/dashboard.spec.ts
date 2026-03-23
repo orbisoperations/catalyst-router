@@ -70,7 +70,7 @@ test.describe('Dashboard E2E', () => {
     expect(bodyText).not.toContain('isStale')
   })
 
-  test('Adapters tab shows local routes', async ({ page }) => {
+  test('Adapters tab shows data channels table', async ({ page }) => {
     await page.goto('/')
 
     // Click on Adapters tab
@@ -79,10 +79,10 @@ test.describe('Dashboard E2E', () => {
     // Wait for adapters to load
     await expect(page.getByText('loading adapters...')).toBeHidden({ timeout: 10000 })
 
-    // Should show local routes section
-    await expect(page.getByText('Local Routes')).toBeVisible()
+    // Should show table with data channel headers and route data
+    await expect(page.getByText('Data channel')).toBeVisible()
     await expect(page.getByText('books-api')).toBeVisible()
-    await expect(page.getByText('http:graphql')).toBeVisible()
+    await expect(page.getByText('http:graphql').first()).toBeVisible()
   })
 
   test('tab switching works correctly', async ({ page }) => {
@@ -95,7 +95,7 @@ test.describe('Dashboard E2E', () => {
     // Switch to Adapters
     await page.getByRole('button', { name: 'Adapters' }).click()
     await expect(page.getByText('loading adapters...')).toBeHidden({ timeout: 10000 })
-    await expect(page.getByText('Local Routes')).toBeVisible()
+    await expect(page.getByText('Data channel')).toBeVisible()
 
     // Switch back to Services
     await page.getByRole('button', { name: 'Services' }).click()
