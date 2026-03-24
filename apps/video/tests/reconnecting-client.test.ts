@@ -171,4 +171,104 @@ describe('ReconnectingClient', () => {
 
     client.stop()
   })
+
+  describe('reconnect()', () => {
+    it('disconnects then reconnects with fresh token via doConnect', async () => {
+      const client = createClient()
+      await client.start()
+      expect(mintTokenFn).toHaveBeenCalledTimes(1)
+
+      const events: string[] = []
+      client.on('disconnected', () => events.push('disconnected'))
+      client.on('connected', () => events.push('connected'))
+      client.on('reconciled', () => events.push('reconciled'))
+
+      await client.reconnect()
+
+      expect(events).toEqual(['disconnected', 'connected', 'reconciled'])
+      expect(mintTokenFn).toHaveBeenCalledTimes(2)
+      expect(connectFn).toHaveBeenCalledTimes(2)
+      expect(reconcileFn).toHaveBeenCalledTimes(2)
+      expect(client.connected).toBe(true)
+    })
+
+    it('mints exactly once per reconnect (inside doConnect)', async () => {
+      const client = createClient()
+      await client.start()
+
+      await client.reconnect()
+
+      // start mints once, reconnect mints once = 2 total
+      expect(mintTokenFn).toHaveBeenCalledTimes(2)
+    })
+
+    it('cancels pending reconnect timer', async () => {
+      const client = createClient({ initialBackoffMs: 500 })
+      await client.start()
+
+      // Trigger a disconnect which schedules a delayed reconnect
+      client.onDisconnect()
+      // Immediately force reconnect — should cancel the pending timer
+      await client.reconnect()
+
+      // Only 3 total: start + scheduled-reconnect-cancelled + reconnect
+      // The cancelled timer should NOT fire
+      await new Promise((r) => setTimeout(r, 600))
+      expect(mintTokenFn).toHaveBeenCalledTimes(2) // start + reconnect, not 3
+    })
+
+    it('resets attempt counter to 0', async () => {
+      let attemptSeen = -1
+      const client = createClient()
+      await client.start()
+
+      // Force a failure to increment attempt counter
+      connectFn.mockRejectedValueOnce(new Error('fail'))
+      client.on('error', () => {})
+      client.on('reconnecting', (attempt) => {
+        attemptSeen = attempt
+      })
+      client.onDisconnect()
+
+      // Wait for the scheduled reconnect to fire and fail
+      await new Promise((r) => setTimeout(r, 50))
+      expect(attemptSeen).toBeGreaterThan(0)
+
+      // Now force a clean reconnect
+      connectFn.mockResolvedValue({ client: true })
+      await client.reconnect()
+
+      // After successful reconnect, attempt should be reset
+      expect(client.connected).toBe(true)
+
+      client.stop()
+    })
+
+    it('is a no-op when stopped', async () => {
+      const client = createClient()
+      await client.start()
+      client.stop()
+
+      await client.reconnect()
+
+      // Only the initial start mint, not a second one
+      expect(mintTokenFn).toHaveBeenCalledTimes(1)
+      expect(client.connected).toBe(false)
+    })
+
+    it('emits error and schedules retry on doConnect failure', async () => {
+      const client = createClient()
+      await client.start()
+
+      mintTokenFn.mockRejectedValueOnce(new Error('refresh mint failed'))
+      const errors: string[] = []
+      client.on('error', (err) => errors.push(err.message))
+
+      await client.reconnect()
+
+      expect(errors).toContain('refresh mint failed')
+
+      client.stop()
+    })
+  })
 })

@@ -63,6 +63,42 @@ export interface MediaMtxPathsListResponse {
 }
 
 /**
+ * MediaMTX unread hook payload (runOnUnread).
+ *
+ * Sent via curl from MediaMTX's runOnUnread shell command when a subscriber
+ * disconnects. Used to deregister the session from the SessionRegistry.
+ */
+export const MediaMtxUnreadHookPayloadSchema = z.object({
+  path: z.string().regex(/^[a-zA-Z0-9._-]+$/),
+  readerId: z.string().regex(/^[a-zA-Z0-9._-]+$/),
+  readerType: z.string().regex(/^[a-zA-Z0-9._-]+$/),
+})
+
+export type MediaMtxUnreadHookPayload = z.infer<typeof MediaMtxUnreadHookPayloadSchema>
+
+/**
+ * MediaMTX session/connection item from list API responses.
+ *
+ * RTSP sessions (GET /v3/rtspsessions/list) and RTMP connections
+ * (GET /v3/rtmpconns/list) include an `id` field. HLS muxers
+ * (GET /v3/hlsmuxers/list) only have `path` — no per-session id.
+ */
+export interface MediaMtxSessionItem {
+  id?: string
+  state?: string
+  path: string
+}
+
+/**
+ * Paginated session list response from MediaMTX session/connection/muxer APIs.
+ */
+export interface MediaMtxSessionsListResponse {
+  pageCount: number
+  itemCount: number
+  items: MediaMtxSessionItem[]
+}
+
+/**
  * Relay path creation request body for POST /v3/config/paths/add/{name}.
  */
 export interface MediaMtxRelayPathConfig {

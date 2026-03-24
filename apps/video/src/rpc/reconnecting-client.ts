@@ -38,6 +38,7 @@ export class ReconnectingClient extends EventEmitter<ReconnectingClientEvents> {
   private _client: unknown = null
   private _connected = false
   private _stopped = false
+  private _connecting = false
   private attempt = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private readonly connect: () => Promise<unknown>
@@ -79,9 +80,36 @@ export class ReconnectingClient extends EventEmitter<ReconnectingClientEvents> {
     }
   }
 
+  /**
+   * Force an immediate disconnect + reconnect cycle.
+   *
+   * Used when the DATA_CUSTODIAN token is refreshed to establish a new
+   * DataChannel session with the fresh token. Unlike onDisconnect() (which
+   * schedules a delayed reconnect with backoff), this method reconnects
+   * immediately with the attempt counter reset to 0.
+   *
+   * doConnect() is the single mint owner: mintToken() → connect() → reconcile().
+   */
+  async reconnect(): Promise<void> {
+    if (this._stopped) return
+
+    this._connected = false
+    this._client = null
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
+    this.attempt = 0
+    this.emit('disconnected')
+
+    await this.doConnect()
+  }
+
   /** Called by the transport layer when the connection drops. */
   onDisconnect(): void {
-    if (this._stopped) return
+    if (this._stopped || this._connecting) return
     this._connected = false
     this._client = null
     this.emit('disconnected')
@@ -89,7 +117,8 @@ export class ReconnectingClient extends EventEmitter<ReconnectingClientEvents> {
   }
 
   private async doConnect(): Promise<void> {
-    if (this._stopped) return
+    if (this._stopped || this._connecting) return
+    this._connecting = true
 
     try {
       await this.mintToken()
@@ -103,11 +132,14 @@ export class ReconnectingClient extends EventEmitter<ReconnectingClientEvents> {
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)))
       this.scheduleReconnect()
+    } finally {
+      this._connecting = false
     }
   }
 
   private scheduleReconnect(): void {
     if (this._stopped) return
+    if (this.reconnectTimer) return // already scheduled
 
     this.attempt++
     const delay = Math.min(this.initialBackoffMs * Math.pow(2, this.attempt - 1), this.maxBackoffMs)

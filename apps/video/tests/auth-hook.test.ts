@@ -1,9 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
+import { SignJWT } from 'jose'
 import {
   createAuthHook,
   type TokenValidator,
   type StreamAccessEvaluator,
 } from '../src/hooks/auth.js'
+import { SessionRegistry } from '../src/session/session-registry.js'
+
+/** Create a real decodable JWT with an exp claim for session registration tests. */
+async function makeRealJwt(exp?: number): Promise<string> {
+  const secret = new TextEncoder().encode('test-secret-at-least-32-bytes!!')
+  return new SignJWT({ sub: 'user-1', principal: 'CATALYST::USER', entity: { id: 'u1', name: 'alice' } })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime(exp ?? Math.floor(Date.now() / 1000) + 900)
+    .sign(secret)
+}
 
 function makeValidator(overrides?: Partial<TokenValidator>): TokenValidator {
   return {
@@ -380,6 +391,91 @@ describe('Auth Hook — POST /video-stream/auth', () => {
         body: JSON.stringify(authRequest({ protocol: 'websocket' })),
       })
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('session registration', () => {
+    it('registers session on successful read auth', async () => {
+      const registry = new SessionRegistry()
+      const realJwt = await makeRealJwt()
+      const validator = makeValidator()
+      const evaluator = makeEvaluator()
+      const app = createAuthHook({
+        tokenValidator: validator,
+        streamAccess: evaluator,
+        nodeId: 'test-node',
+        domainId: 'test-domain',
+        sessionRegistry: registry,
+      })
+
+      const res = await app.request('/video-stream/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authRequest({ action: 'read', token: realJwt })),
+      })
+
+      expect(res.status).toBe(200)
+      expect(registry.size).toBe(1)
+      const entry = registry.get('conn-123')
+      expect(entry).toBeDefined()
+      expect(entry!.path).toBe('cam-front')
+      expect(entry!.protocol).toBe('rtsp')
+      expect(entry!.exp).toBeTypeOf('number')
+      expect(entry!.exp).toBeGreaterThan(Date.now())
+    })
+
+    it('does not register session when auth is denied', async () => {
+      const registry = new SessionRegistry()
+      const validator = makeValidator()
+      const evaluator = makeEvaluator('deny')
+      const app = createAuthHook({
+        tokenValidator: validator,
+        streamAccess: evaluator,
+        nodeId: 'test-node',
+        domainId: 'test-domain',
+        sessionRegistry: registry,
+      })
+
+      const res = await app.request('/video-stream/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authRequest({ action: 'read' })),
+      })
+
+      expect(res.status).toBe(403)
+      expect(registry.size).toBe(0)
+    })
+
+    it('does not register session for publish action', async () => {
+      const registry = new SessionRegistry()
+      const app = createAuthHook({
+        tokenValidator: makeValidator(),
+        streamAccess: makeEvaluator(),
+        nodeId: 'test-node',
+        domainId: 'test-domain',
+        sessionRegistry: registry,
+      })
+
+      const res = await app.request('/video-stream/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authRequest({ action: 'publish', ip: '127.0.0.1' })),
+      })
+
+      expect(res.status).toBe(200)
+      expect(registry.size).toBe(0)
+    })
+
+    it('does not register when registry is not provided', async () => {
+      const { app } = makeHook() // no sessionRegistry
+      const res = await app.request('/video-stream/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authRequest({ action: 'read' })),
+      })
+
+      expect(res.status).toBe(200)
+      // No crash — registry is optional
     })
   })
 })

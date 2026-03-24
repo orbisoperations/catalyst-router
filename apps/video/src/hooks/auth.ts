@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
 import { getLogger } from '@catalyst/telemetry'
+import { decodeJwt } from 'jose'
 import type { MediaMtxAuthRequest } from '../mediamtx/types.js'
 import { MediaMtxAuthRequestSchema } from '../mediamtx/types.js'
+import type { SessionRegistry } from '../session/session-registry.js'
 
 const logger = getLogger(['catalyst', 'video', 'auth'])
 
@@ -38,6 +40,7 @@ export interface AuthHookOptions {
   nodeId: string
   domainId: string
   metrics?: AuthMetrics
+  sessionRegistry?: SessionRegistry
 }
 
 const LOCALHOST_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -189,6 +192,25 @@ export function createAuthHook(options: AuthHookOptions): Hono {
       protocol: req.protocol,
       ip: req.ip,
     })
+
+    // Best-effort session registration for revalidation sweep.
+    // Only stores exp + metadata — raw JWT is NOT retained (Constitution XV).
+    if (options.sessionRegistry && req.id) {
+      try {
+        const decoded = decodeJwt(jwt)
+        options.sessionRegistry.add({
+          id: req.id,
+          path: req.path,
+          protocol: req.protocol,
+          exp: (decoded.exp ?? 0) * 1000,
+          recordedAt: Date.now(),
+        })
+      } catch {
+        // decodeJwt failed — token was already validated by tokenValidator,
+        // so this is a malformed exp claim. Don't block the auth response.
+      }
+    }
+
     return c.json({}, 200)
   }
 

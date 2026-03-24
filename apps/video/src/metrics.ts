@@ -33,6 +33,9 @@ export interface VideoMetrics {
   relaySetups: Counter
   // Route ops
   routeOperations: Counter
+  // Session revalidation
+  sessionKicks: Counter
+  revalidationSweeps: Counter
 }
 
 export function createVideoMetrics(): VideoMetrics {
@@ -106,6 +109,16 @@ export function createVideoMetrics(): VideoMetrics {
     routeOperations: meter.createCounter('video.route.operations', {
       description: 'Route create/delete operations',
       unit: '{operation}',
+    }),
+
+    // Session revalidation
+    sessionKicks: meter.createCounter('video.session.kicks', {
+      description: 'Expired/revoked sessions kicked by revalidation sweep',
+      unit: '{kick}',
+    }),
+    revalidationSweeps: meter.createCounter('video.revalidation.sweeps', {
+      description: 'Revalidation sweep passes executed',
+      unit: '{sweep}',
     }),
   }
 }

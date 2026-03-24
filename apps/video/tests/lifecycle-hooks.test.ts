@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createLifecycleHooks } from '../src/hooks/lifecycle.js'
 import type { StreamRouteManager } from '../src/routes/stream-route-manager.js'
+import { SessionRegistry } from '../src/session/session-registry.js'
 
 function makeRouteManager(): StreamRouteManager {
   return {
@@ -325,6 +326,104 @@ describe('Lifecycle Hooks', () => {
         body: 'not json',
       })
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('POST /video-stream/hooks/unread', () => {
+    it('removes session from registry by readerId', async () => {
+      const registry = new SessionRegistry()
+      registry.add({ id: 'reader-abc', path: 'cam-front', protocol: 'rtsp', exp: Date.now() + 60000, recordedAt: Date.now() })
+
+      const app = createLifecycleHooks({ routeManager: makeRouteManager(), sessionRegistry: registry })
+
+      const res = await app.request('/video-stream/hooks/unread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'cam-front', readerId: 'reader-abc', readerType: 'rtspSession' }),
+      })
+
+      expect(res.status).toBe(200)
+      expect(registry.get('reader-abc')).toBeUndefined()
+    })
+
+    it('returns 200 when registry is not provided', async () => {
+      const app = createLifecycleHooks({ routeManager: makeRouteManager() })
+
+      const res = await app.request('/video-stream/hooks/unread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'cam-front', readerId: 'reader-abc', readerType: 'rtspSession' }),
+      })
+
+      expect(res.status).toBe(200)
+    })
+
+    it('rejects invalid payload', async () => {
+      const app = createLifecycleHooks({ routeManager: makeRouteManager(), sessionRegistry: new SessionRegistry() })
+
+      const res = await app.request('/video-stream/hooks/unread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: '../etc/passwd', readerId: 'x', readerType: 'y' }),
+      })
+
+      expect(res.status).toBe(400)
+    })
+
+    it('rejects non-localhost requests', async () => {
+      const app = createLifecycleHooks({ routeManager: makeRouteManager(), sessionRegistry: new SessionRegistry() })
+
+      const res = await app.request('/video-stream/hooks/unread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.0.0.1' },
+        body: JSON.stringify({ path: 'cam-front', readerId: 'reader-abc', readerType: 'rtspSession' }),
+      })
+
+      expect(res.status).toBe(403)
+    })
+
+    it('calls onLastSubscriberLeft when last session on a path is removed', async () => {
+      const registry = new SessionRegistry()
+      registry.add({ id: 'only-viewer', path: 'relay-cam', protocol: 'rtsp', exp: Date.now() + 60000, recordedAt: Date.now() })
+
+      const onLastSub = vi.fn()
+      const app = createLifecycleHooks({
+        routeManager: makeRouteManager(),
+        sessionRegistry: registry,
+        onLastSubscriberLeft: onLastSub,
+      })
+
+      const res = await app.request('/video-stream/hooks/unread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'relay-cam', readerId: 'only-viewer', readerType: 'rtspSession' }),
+      })
+
+      expect(res.status).toBe(200)
+      expect(registry.size).toBe(0)
+      expect(onLastSub).toHaveBeenCalledWith('relay-cam')
+    })
+
+    it('does NOT call onLastSubscriberLeft when other sessions remain on the path', async () => {
+      const registry = new SessionRegistry()
+      registry.add({ id: 'viewer-1', path: 'relay-cam', protocol: 'rtsp', exp: Date.now() + 60000, recordedAt: Date.now() })
+      registry.add({ id: 'viewer-2', path: 'relay-cam', protocol: 'rtsp', exp: Date.now() + 60000, recordedAt: Date.now() })
+
+      const onLastSub = vi.fn()
+      const app = createLifecycleHooks({
+        routeManager: makeRouteManager(),
+        sessionRegistry: registry,
+        onLastSubscriberLeft: onLastSub,
+      })
+
+      await app.request('/video-stream/hooks/unread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'relay-cam', readerId: 'viewer-1', readerType: 'rtspSession' }),
+      })
+
+      expect(onLastSub).not.toHaveBeenCalled()
+      expect(registry.size).toBe(1)
     })
   })
 })

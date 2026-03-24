@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { TokenRefreshScheduler } from '../src/rpc/token-refresh.js'
 
 describe('TokenRefreshScheduler', () => {
-  let refreshFn: ReturnType<typeof vi.fn> & (() => Promise<number>)
+  let refreshFn: ReturnType<typeof vi.fn> & (() => Promise<number | void>)
   const ttl = 7 * 24 * 3600 * 1000 // 7 days
   let issuedAt: number | undefined
   let expiry: number | undefined
