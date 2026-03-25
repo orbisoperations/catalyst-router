@@ -18,10 +18,11 @@
     "compile:orchestrator:docker": "docker build -f apps/orchestrator/Dockerfile -t catalyst-orchestrator .",
     "compile:all:docker": "pnpm run compile:auth:docker && pnpm run compile:gateway:docker && pnpm run compile:orchestrator:docker",
     "rpi:config": "pnpm exec tsx apps/rpi-config/src/index.ts",
-    "test": "vitest run",
-    "test:unit": "vitest run --reporter=verbose",
-    "test:integration": "turbo run test:integration --concurrency=1",
-    "test:container": "vitest run"
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test:unit": "vitest run unit.test.ts --reporter=verbose --passWithNoTests",
+    "test:integration": "vitest run integration.test.ts --reporter=verbose --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000",
+    "test:container": "vitest run container.test.ts --reporter=verbose --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=300000 --hookTimeout=300000",
+    "test:e2e": "pnpm --filter @catalyst/web-ui test:e2e"
   },
   "pnpm": {
     "overrides": {

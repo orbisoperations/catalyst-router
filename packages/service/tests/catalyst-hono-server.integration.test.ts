@@ -3,6 +3,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import { CatalystHonoServer, catalystHonoServer } from '../src/catalyst-hono-server.js'
 
+const TEST_HOST = '127.0.0.1'
+
 // Use high ephemeral ports to avoid conflicts with running services
 let nextPort = 19_100
 function getPort(): number {
@@ -27,10 +29,10 @@ describe('CatalystHonoServer', () => {
   it('starts and responds to /health', async () => {
     const port = getPort()
     const handler = new Hono()
-    const server = tracked(new CatalystHonoServer(handler, { port }))
+    const server = tracked(new CatalystHonoServer(handler, { port, hostname: TEST_HOST }))
     await server.start()
 
-    const res = await fetch(`http://localhost:${port}/health`)
+    const res = await fetch(`http://${TEST_HOST}:${port}/health`)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.status).toBe('ok')
@@ -41,10 +43,10 @@ describe('CatalystHonoServer', () => {
     const handler = new Hono()
     handler.get('/ping', (c) => c.text('pong'))
 
-    const server = tracked(new CatalystHonoServer(handler, { port }))
+    const server = tracked(new CatalystHonoServer(handler, { port, hostname: TEST_HOST }))
     await server.start()
 
-    const res = await fetch(`http://localhost:${port}/ping`)
+    const res = await fetch(`http://${TEST_HOST}:${port}/ping`)
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('pong')
   })
@@ -55,12 +57,15 @@ describe('CatalystHonoServer', () => {
     const mockService = { info: { name: 'test-svc', version: '1.0.0' }, shutdown: async () => {} }
 
     const server = tracked(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      new CatalystHonoServer(handler, { port, services: [mockService as any] })
+      new CatalystHonoServer(handler, {
+        port,
+        hostname: TEST_HOST,
+        services: [mockService as any],
+      })
     )
     await server.start()
 
-    const res = await fetch(`http://localhost:${port}/health`)
+    const res = await fetch(`http://${TEST_HOST}:${port}/health`)
     const body = await res.json()
     expect(body.services).toEqual(['test-svc'])
   })
@@ -68,7 +73,7 @@ describe('CatalystHonoServer', () => {
   it('rejects if start() is called while already running', async () => {
     const port = getPort()
     const handler = new Hono()
-    const server = tracked(new CatalystHonoServer(handler, { port }))
+    const server = tracked(new CatalystHonoServer(handler, { port, hostname: TEST_HOST }))
     await server.start()
 
     await expect(server.start()).rejects.toThrow(/already running/)
@@ -79,7 +84,7 @@ describe('CatalystHonoServer', () => {
 
     // Occupy the port with a raw TCP server
     const blocker = createServer()
-    await new Promise<void>((resolve) => blocker.listen(port, resolve))
+    await new Promise<void>((resolve) => blocker.listen(port, TEST_HOST, resolve))
 
     // Mock process.exit and suppress the uncaught exception vitest captures
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
@@ -88,7 +93,7 @@ describe('CatalystHonoServer', () => {
 
     try {
       const handler = new Hono()
-      const server = new CatalystHonoServer(handler, { port })
+      const server = new CatalystHonoServer(handler, { port, hostname: TEST_HOST })
       // Don't await — EADDRINUSE fires asynchronously via the error handler
       server.start().catch(() => {})
 
@@ -110,24 +115,24 @@ describe('CatalystHonoServer', () => {
   it('can be stopped and restarted', async () => {
     const port = getPort()
     const handler = new Hono()
-    const server = tracked(new CatalystHonoServer(handler, { port }))
+    const server = tracked(new CatalystHonoServer(handler, { port, hostname: TEST_HOST }))
 
     await server.start()
-    const res1 = await fetch(`http://localhost:${port}/health`)
+    const res1 = await fetch(`http://${TEST_HOST}:${port}/health`)
     expect(res1.status).toBe(200)
 
     await server.stop()
 
     // Should be able to start again after stop
     await server.start()
-    const res2 = await fetch(`http://localhost:${port}/health`)
+    const res2 = await fetch(`http://${TEST_HOST}:${port}/health`)
     expect(res2.status).toBe(200)
   })
 
   it('stop is idempotent', async () => {
     const port = getPort()
     const handler = new Hono()
-    const server = tracked(new CatalystHonoServer(handler, { port }))
+    const server = tracked(new CatalystHonoServer(handler, { port, hostname: TEST_HOST }))
     await server.start()
 
     await server.stop()

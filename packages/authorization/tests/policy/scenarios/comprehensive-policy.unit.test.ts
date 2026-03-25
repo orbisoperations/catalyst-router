@@ -4,7 +4,7 @@ import { AuthorizationEngine } from '../../../src/policy/src/authorization-engin
 import { EntityBuilderFactory } from '../../../src/policy/src/entity-builder.js'
 import { GenericZodModel } from '../../../src/policy/src/providers/GenericZodModel.js'
 
-describe('Full E2E Verification', () => {
+describe('Comprehensive Policy Scenarios', () => {
   // 1. Define Domain
   type ECommerceDomain = [
     {
