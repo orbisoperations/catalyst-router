@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catalyst — From Services to Environment</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  /* ── Redline markup styles ── */
+  del, .redline-del { text-decoration: line-through; opacity: 0.5; background: rgba(239, 68, 68, 0.15); padding: 0 2px; border-radius: 2px; }
+  ins, .redline-ins { text-decoration: none; background: rgba(34, 197, 94, 0.18); padding: 0 2px; border-radius: 2px; }
+  .redline-note { display: block; margin: 8px 0; padding: 8px 12px; background: rgba(250, 204, 21, 0.08); border-left: 3px solid rgba(250, 204, 21, 0.4); font-size: 11px; color: #fcd34d; border-radius: 0 6px 6px 0; }
+  .redline-block-del { opacity: 0.4; border: 1px dashed rgba(239, 68, 68, 0.4) !important; position: relative; }
+  .redline-block-del::after { content: 'REMOVED'; position: absolute; top: 4px; right: 8px; font-size: 9px; font-weight: 700; color: #f87171; letter-spacing: 1px; background: rgba(239, 68, 68, 0.15); padding: 2px 6px; border-radius: 3px; }
+  .redline-block-ins { border: 1px dashed rgba(34, 197, 94, 0.4) !important; position: relative; }
+  .redline-block-ins::after { content: 'ADDED'; position: absolute; top: 4px; right: 8px; font-size: 9px; font-weight: 700; color: #4ade80; letter-spacing: 1px; background: rgba(34, 197, 94, 0.15); padding: 2px 6px; border-radius: 3px; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0a0e1a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 48px 32px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+  .header .tag {
+    display: inline-block;
+    background: rgba(99, 179, 237, 0.12);
+    color: #63b3ed;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+  .header h1 {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #e2e8f0, #63b3ed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+  .header p {
+    font-size: 16px;
+    color: #94a3b8;
+    max-width: 640px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* Comparison layout */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    align-items: start;
+    gap: 0;
+    margin-bottom: 56px;
+  }
+
+  .arrow-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 140px;
+  }
+  .arrow-col svg { opacity: 0.4; }
+
+  .arch-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+  }
+  .arch-card.before { border-color: rgba(239, 68, 68, 0.15); }
+  .arch-card.after  { border-color: rgba(34, 197, 94, 0.2); }
+
+  .arch-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .before .arch-label { color: #f87171; }
+  .after  .arch-label { color: #4ade80; }
+
+  .arch-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .arch-subtitle {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 24px;
+  }
+
+  /* Plane rows */
+  .plane {
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .plane:last-child { margin-bottom: 0; }
+
+  .plane-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .plane-label .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* Control / Management plane */
+  .plane.control  { background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.15); }
+  .plane.control .plane-label { color: #a78bfa; }
+  .plane.control .dot { background: #a78bfa; }
+
+  /* Data plane */
+  .plane.data { background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.15); }
+  .plane.data .plane-label { color: #60a5fa; }
+  .plane.data .dot { background: #60a5fa; }
+
+  /* Application plane */
+  .plane.app { background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.15); }
+  .plane.app .plane-label { color: #4ade80; }
+  .plane.app .dot { background: #4ade80; }
+
+  /* Service chips */
+  .services {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .svc {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    white-space: nowrap;
+  }
+  .svc.public {
+    border-color: rgba(250, 204, 21, 0.3);
+    background: rgba(250, 204, 21, 0.08);
+    color: #fde68a;
+  }
+  .svc.private {
+    border-color: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+  }
+  .svc.new {
+    border-color: rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.08);
+    color: #86efac;
+  }
+  .svc.moved {
+    border-color: rgba(251, 191, 36, 0.3);
+    background: rgba(251, 191, 36, 0.06);
+    color: #fcd34d;
+  }
+
+  /* Interaction model callout */
+  .interaction {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #94a3b8;
+  }
+  .before .interaction {
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.1);
+  }
+  .after .interaction {
+    background: rgba(34, 197, 94, 0.06);
+    border: 1px solid rgba(34, 197, 94, 0.1);
+  }
+  .interaction strong {
+    color: #e2e8f0;
+    font-weight: 600;
+  }
+
+  /* ---- NEW: Full-width "After" architecture detail ---- */
+  .detail-section {
+    margin-bottom: 56px;
+  }
+  .detail-section h2 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: #e2e8f0;
+  }
+
+  /* Big 3-plane diagram */
+  .planes-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+  }
+
+  .plane-row {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 16px;
+    align-items: start;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 6px;
+  }
+  .plane-row:last-child { margin-bottom: 0; }
+
+  .plane-row.mgmt  { background: rgba(139, 92, 246, 0.06); border: 1px solid rgba(139, 92, 246, 0.12); }
+  .plane-row.data2  { background: rgba(59, 130, 246, 0.06); border: 1px solid rgba(59, 130, 246, 0.12); }
+  .plane-row.app2  { background: rgba(34, 197, 94, 0.06); border: 1px solid rgba(34, 197, 94, 0.12); }
+
+  .plane-name {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .plane-row.mgmt .plane-name { color: #a78bfa; }
+  .plane-row.data2 .plane-name { color: #60a5fa; }
+  .plane-row.app2 .plane-name { color: #4ade80; }
+
+  .plane-desc {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .plane-services {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .svc-block {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 120px;
+  }
+  .svc-block .svc-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-bottom: 3px;
+  }
+  .svc-block .svc-detail {
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+  .svc-block.pub-svc {
+    border-color: rgba(250, 204, 21, 0.25);
+    background: rgba(250, 204, 21, 0.05);
+  }
+  .svc-block.pub-svc .svc-name { color: #fde68a; }
+
+  /* Connections / flow */
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+  .flow-row .line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  }
+
+  /* Deployment models */
+  .deploy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 32px;
+  }
+  .deploy-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .deploy-card h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .deploy-card p {
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.6;
+  }
+  .deploy-card .icon {
+    font-size: 18px;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #64748b;
+  }
+  .legend-item .chip {
+    width: 32px;
+    height: 14px;
+    border-radius: 4px;
+  }
+  .legend-item .chip.pub { background: rgba(250, 204, 21, 0.2); border: 1px solid rgba(250, 204, 21, 0.3); }
+  .legend-item .chip.priv { background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.15); }
+  .legend-item .chip.new-c { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); }
+
+  /* Blurb section */
+  .blurb {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 32px;
+    margin-top: 48px;
+  }
+  .blurb h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .blurb p {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #94a3b8;
+    margin-bottom: 14px;
+  }
+  .blurb p:last-child { margin-bottom: 0; }
+  .blurb strong { color: #e2e8f0; }
+
+  /* Network flow diagram */
+  .network-flow {
+    margin-top: 32px;
+    padding: 24px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+  }
+  .network-flow h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: #e2e8f0;
+  }
+
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 16px 0;
+    flex-wrap: wrap;
+  }
+  .flow-node {
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 100px;
+  }
+  .flow-node.client {
+    background: rgba(251, 146, 60, 0.1);
+    border: 1px solid rgba(251, 146, 60, 0.25);
+    color: #fdba74;
+  }
+  .flow-node.dns {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+  }
+  .flow-node.envoy {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+  }
+  .flow-node.peer {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    color: #c4b5fd;
+  }
+  .flow-node.service-node {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: #86efac;
+  }
+  .flow-arrow {
+    color: #475569;
+    font-size: 11px;
+    padding: 0 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .flow-arrow .arr { font-size: 16px; }
+  .flow-arrow .lbl { font-size: 9px; color: #64748b; white-space: nowrap; }
+
+  /* ---- Addendum: K8s Deployment ---- */
+  .addendum-header {
+    text-align: center; margin: 64px 0 48px;
+    padding-top: 48px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .addendum-header .tag {
+    display: inline-block; background: rgba(251,146,60,0.12); color: #fb923c;
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 6px 14px; border-radius: 20px; margin-bottom: 16px;
+  }
+  .addendum-header h2 {
+    font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #e2e8f0, #fb923c);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px;
+  }
+  .addendum-header p {
+    font-size: 15px; color: #94a3b8; max-width: 700px; margin: 0 auto; line-height: 1.6;
+  }
+
+  /* K8s namespace diagram */
+  .k8s-diagram {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 28px; margin-bottom: 32px; position: relative;
+  }
+  .k8s-diagram h3 {
+    font-size: 16px; font-weight: 700; margin-bottom: 4px;
+  }
+  .k8s-diagram .k8s-sub {
+    font-size: 12px; color: #64748b; margin-bottom: 20px;
+  }
+
+  .ns-block {
+    border-radius: 12px; padding: 18px; margin-bottom: 12px;
+  }
+  .ns-block:last-child { margin-bottom: 0; }
+  .ns-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .ns-label code {
+    font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 10px;
+    background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 3px;
+    font-weight: 500; letter-spacing: 0;
+  }
+
+  .ns-mgmt { background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.12); }
+  .ns-mgmt .ns-label { color: #a78bfa; }
+  .ns-data { background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.12); }
+  .ns-data .ns-label { color: #60a5fa; }
+  .ns-app { background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.12); }
+  .ns-app .ns-label { color: #4ade80; }
+  .ns-infra { background: rgba(251,146,60,0.06); border: 1px solid rgba(251,146,60,0.12); }
+  .ns-infra .ns-label { color: #fb923c; }
+
+  /* Pod cards */
+  .pods-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;
+  }
+  .pod-card {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 14px; position: relative;
+  }
+  .pod-card .pod-name {
+    font-size: 13px; font-weight: 700; color: #e2e8f0; margin-bottom: 2px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pod-card .pod-product {
+    font-size: 11px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;
+  }
+  .pod-card .pod-detail {
+    font-size: 10px; color: #64748b; line-height: 1.5;
+  }
+  .pod-card .pod-detail code {
+    font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 9px;
+    background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;
+  }
+
+  /* Product badge */
+  .prod-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 9px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 4px;
+  }
+  .prod-badge.oss { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .prod-badge.custom { background: rgba(139,92,246,0.15); color: #c4b5fd; }
+  .prod-badge.cncf { background: rgba(59,130,246,0.15); color: #93c5fd; }
+
+  /* Variant comparison */
+  .variant-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px;
+  }
+  .variant-card {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 22px; position: relative;
+  }
+  .variant-card h3 {
+    font-size: 15px; font-weight: 700; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .variant-card .var-sub {
+    font-size: 12px; color: #64748b; margin-bottom: 14px; line-height: 1.5;
+  }
+  .variant-card table {
+    width: 100%; border-collapse: collapse; font-size: 11px;
+  }
+  .variant-card th {
+    text-align: left; font-weight: 600; color: #94a3b8; padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .variant-card td {
+    padding: 6px 0; color: #e2e8f0; border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .variant-card td:first-child { color: #94a3b8; }
+  .variant-card td code {
+    font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 10px;
+    background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;
+  }
+
+  /* Product legend */
+  .product-legend {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
+    margin-top: 24px;
+  }
+  .pl-item {
+    display: flex; gap: 10px; padding: 12px; border-radius: 8px;
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+  }
+  .pl-item .pl-icon { font-size: 20px; flex-shrink: 0; }
+  .pl-item .pl-name { font-size: 12px; font-weight: 700; color: #e2e8f0; }
+  .pl-item .pl-desc { font-size: 10px; color: #64748b; line-height: 1.4; margin-top: 2px; }
+  .pl-item .pl-url { font-size: 9px; color: #475569; margin-top: 3px; }
+  .pl-item .pl-url a { color: #60a5fa; text-decoration: none; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .comparison { grid-template-columns: 1fr; gap: 24px; }
+    .arrow-col { display: none; }
+    .deploy-grid { grid-template-columns: 1fr; }
+    .plane-row { grid-template-columns: 1fr; }
+    .variant-grid { grid-template-columns: 1fr; }
+    .pods-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="tag">Architecture Evolution</div>
+    <h1>Catalyst: From Services to Environment</h1>
+    <p>Catalyst is evolving from an SDK-driven service mesh into a transparent network environment — a QUIC-backed overlay you route through, not code against.</p>
+  </div>
+
+  <!-- Side-by-side comparison -->
+  <div class="comparison">
+
+    <!-- BEFORE -->
+    <div class="arch-card before">
+      <div class="arch-label">Today</div>
+      <div class="arch-title">2 Planes · SDK Model</div>
+      <div class="arch-subtitle">Clients use capnweb RPC to register routes & allocate ports</div>
+
+      <div class="plane control">
+        <div class="plane-label"><span class="dot"></span> Control Plane</div>
+        <div class="services">
+          <span class="svc">Orchestrator</span>
+          <span class="svc">Auth (PKI)</span>
+          <span class="svc">Auth (Token)</span>
+          <span class="svc">Cedar</span>
+          <span class="svc">Gateway (GQL)</span>
+        </div>
+      </div>
+
+      <div class="plane data">
+        <div class="plane-label"><span class="dot"></span> Data Plane</div>
+        <div class="services">
+          <span class="svc">Envoy (xDS)</span>
+          <span class="svc">Port Allocator</span>
+          <span class="svc">capnweb RPC</span>
+        </div>
+      </div>
+
+      <div class="interaction">
+        <strong>Integration model:</strong> Applications import an SDK, open a capnweb WebSocket session, call <code>getDataChannelClient()</code>, and register routes with allocated ports. Tight coupling.
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arrow-col">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <path d="M8 20h20m0 0l-6-6m6 6l-6 6" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+
+    <!-- AFTER -->
+    <div class="arch-card after">
+      <div class="arch-label">Next</div>
+      <div class="arch-title">3 Planes · Network Model</div>
+      <div class="arch-subtitle">Applications use DNS + standard networking — no SDK required</div>
+
+      <div class="plane control">
+        <div class="plane-label"><span class="dot"></span> Management Plane</div>
+        <div class="services">
+          <span class="svc">Orchestrator</span>
+          <span class="svc">PKI</span>
+          <span class="svc">Token</span>
+          <span class="svc">Cedar</span>
+        </div>
+      </div>
+
+      <div class="plane data">
+        <div class="plane-label"><span class="dot"></span> Data Plane</div>
+        <div class="services">
+          <span class="svc public">Envoy (QUIC mesh)</span>
+          <del><span class="svc new">PIK (ACME + API)</span></del>
+          <del><span class="svc new">Token API</span></del>
+          <span class="svc public">DNS Server</span>
+          <span class="svc new">DHCP / NAT</span>
+        </div>
+      </div>
+
+      <div class="plane app">
+        <div class="plane-label"><span class="dot"></span> Application Plane <span style="font-weight:400;color:#64748b;letter-spacing:0"> — new</span></div>
+        <div class="services">
+          <span class="svc moved">Zenoh</span>
+          <span class="svc moved">GraphQL</span>
+          <span class="svc moved">MediaMTX</span>
+        </div>
+      </div>
+
+      <div class="interaction">
+        <strong>Integration model:</strong> Applications resolve FQDNs via DNS, traffic routes through Envoy using SNI / domain filtering. Catalyst is the network — like a web proxy or NAT gateway.
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed architecture -->
+  <div class="detail-section">
+    <h2>New Architecture — Detail View</h2>
+
+    <div class="legend">
+      <div class="legend-item"><div class="chip pub"></div> Public (core)</div>
+      <div class="legend-item"><div class="chip priv"></div> Private</div>
+      <div class="legend-item"><div class="chip new-c"></div> New service</div>
+    </div>
+
+    <div class="planes-stack" style="margin-top:16px;">
+
+      <!-- Management Plane -->
+      <div class="plane-row mgmt">
+        <div>
+          <div class="plane-name">Management</div>
+          <div class="plane-desc">Private. Policy, identity, and orchestration. Not exposed to application traffic.</div>
+        </div>
+        <div class="plane-services">
+          <div class="svc-block">
+            <div class="svc-name">Orchestrator</div>
+            <div class="svc-detail">BGP-like route exchange, peer state, DNS zone + xDS file writes</div>
+          </div>
+          <div class="svc-block">
+            <div class="svc-name">PKI</div>
+            <div class="svc-detail">Certificate authority, key rotation, mTLS identity</div>
+          </div>
+          <div class="svc-block">
+            <div class="svc-name">Token</div>
+            <div class="svc-detail">JWT issuance, revocation, JWKS distribution</div>
+          </div>
+          <div class="svc-block">
+            <div class="svc-name">Cedar</div>
+            <div class="svc-detail">RBAC / ABAC policy engine, authorization decisions</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-row"><span class="line"></span> xDS files · policy · certs <span class="line"></span></div>
+
+      <!-- Data Plane -->
+      <div class="plane-row data2">
+        <div>
+          <div class="plane-name">Data</div>
+          <div class="plane-desc">Public core. Carries all traffic. Envoy, DNS, and Orchestrator are the public surface.</div>
+        </div>
+        <div class="plane-services">
+          <div class="svc-block pub-svc">
+            <div class="svc-name">Envoy (QUIC Mesh)</div>
+            <div class="svc-detail">Peer-to-peer cluster via PKI + QUIC. SNI / domain routing replaces port allocation. Watches filesystem xDS from orchestrator via shared volume.</div>
+          </div>
+          <div class="svc-block pub-svc">
+            <div class="svc-name">DNS Server</div>
+            <div class="svc-detail">Resolves propagated FQDNs. Proxy mode for internet-facing services.</div>
+          </div>
+          <div class="svc-block redline-block-del">
+            <div class="svc-name">PIK</div>
+            <div class="svc-detail">ACME + direct API (capnweb). Certificate lifecycle for data channels.</div>
+          </div>
+          <div class="svc-block redline-block-del">
+            <div class="svc-name">Token API</div>
+            <div class="svc-detail">Validation + minting via capnweb. Data-plane token operations.</div>
+          </div>
+          <div class="redline-note">PIK and Token API removed — Envoy-native approach: token validation via Cedar ext_authz, JWKS served by orchestrator at <code>/.well-known/jwks.json</code>, ACME handled by step-ca directly (management plane).</div>
+          <div class="svc-block">
+            <div class="svc-name">DHCP / NAT</div>
+            <div class="svc-detail">Default-route gateway for peered services. Network address translation.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-row"><span class="line"></span> DNS · SNI routing · QUIC tunnels <span class="line"></span></div>
+
+      <!-- Application Plane -->
+      <div class="plane-row app2">
+        <div>
+          <div class="plane-name">Application</div>
+          <div class="plane-desc">Private. Opt-in services that ride the data plane. No longer in the core.</div>
+        </div>
+        <div class="plane-services">
+          <div class="svc-block">
+            <div class="svc-name">Zenoh</div>
+            <div class="svc-detail">Pub/sub data distribution, edge compute messaging</div>
+          </div>
+          <div class="svc-block">
+            <div class="svc-name">GraphQL</div>
+            <div class="svc-detail">Federated query gateway for application data</div>
+          </div>
+          <div class="svc-block">
+            <div class="svc-name">MediaMTX</div>
+            <div class="svc-detail">Real-time media streaming (RTSP, WebRTC, HLS)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Network Flow -->
+    <div class="network-flow">
+      <h3>Traffic Flow — No SDK Required</h3>
+      <div class="flow-diagram">
+        <div class="flow-node client">
+          App / Service<br><span style="font-size:10px;font-weight:400;color:#94a3b8">any language, no SDK</span>
+        </div>
+        <div class="flow-arrow">
+          <span class="lbl">resolves FQDN</span>
+          <span class="arr">→</span>
+        </div>
+        <div class="flow-node dns">
+          DNS<br><span style="font-size:10px;font-weight:400;color:#94a3b8">Catalyst resolver</span>
+        </div>
+        <div class="flow-arrow">
+          <span class="lbl">routes via SNI</span>
+          <span class="arr">→</span>
+        </div>
+        <div class="flow-node envoy">
+          Envoy<br><span style="font-size:10px;font-weight:400;color:#94a3b8">QUIC peer mesh</span>
+        </div>
+        <div class="flow-arrow">
+          <span class="lbl">QUIC tunnel</span>
+          <span class="arr">→</span>
+        </div>
+        <div class="flow-node peer">
+          Peer Envoy<br><span style="font-size:10px;font-weight:400;color:#94a3b8">remote node</span>
+        </div>
+        <div class="flow-arrow">
+          <span class="lbl">delivers</span>
+          <span class="arr">→</span>
+        </div>
+        <div class="flow-node service-node">
+          Target Service<br><span style="font-size:10px;font-weight:400;color:#94a3b8">any protocol</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deployment models -->
+    <div class="deploy-grid">
+      <div class="deploy-card">
+        <h3><span class="icon">📡</span> Appliance Mode</h3>
+        <p>Deployed via K8s onto hardware or virtual appliance. Acts as a <strong>web proxy / NAT gateway</strong> on the network — configured as the default route for a site. Services behind it reach peered destinations transparently. Think squid proxy, but for your entire Catalyst mesh.</p>
+      </div>
+      <div class="deploy-card">
+        <h3><span class="icon">☸️</span> K8s Sidecar Mode</h3>
+        <p>Deployed alongside workloads in an existing cluster. Hooks into the <strong>K8s ecosystem</strong> — takes over CoreDNS for mesh-aware resolution, integrates with service mesh primitives. No separate appliance needed; Catalyst becomes part of the cluster's network fabric.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== ADDENDUM: K8s DEPLOYMENT ==================== -->
+  <div class="addendum-header">
+    <div class="tag">Addendum — Implementation Map</div>
+    <h2>Deployed on Kubernetes</h2>
+    <p>Every function in the 3-plane architecture mapped to a real product or project, diagrammed as K8s workloads. Two deployment variants: a slim k3s appliance and a full k8s sidecar integration.</p>
+  </div>
+
+  <!-- Product Legend -->
+  <div style="margin-bottom: 32px;">
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">Product & Project Map</h3>
+    <div class="product-legend">
+      <div class="pl-item">
+        <div class="pl-icon">🔐</div>
+        <div>
+          <div class="pl-name">Smallstep step-ca <span class="prod-badge oss">OSS</span></div>
+          <div class="pl-desc">Private ACME CA with HTTP-01 challenges. Pluggable key storage: local filesystem, YubiKey PIV, GCP Cloud KMS, AWS KMS, Azure Key Vault via step-kms-plugin.</div>
+          <div class="pl-url"><a href="https://smallstep.com/docs/step-ca/">smallstep.com/docs/step-ca</a></div>
+        </div>
+      </div>
+      <div class="pl-item">
+        <div class="pl-icon">📡</div>
+        <div>
+          <div class="pl-name">CoreDNS <span class="prod-badge cncf">CNCF</span></div>
+          <div class="pl-desc">Plugin-based DNS server. Uses <code>file</code>/<code>auto</code> plugin on k3s (orchestrator writes zone files), <code>etcd</code> plugin or cluster integration on full k8s. Handles mesh FQDN resolution + internet forwarding.</div>
+          <div class="pl-url"><a href="https://coredns.io">coredns.io</a></div>
+        </div>
+      </div>
+      <div class="pl-item">
+        <div class="pl-icon">🛡️</div>
+        <div>
+          <div class="pl-name">Envoy Proxy <span class="prod-badge cncf">CNCF</span></div>
+          <div class="pl-desc">L4/L7 proxy. QUIC upstream for peer cluster. SNI filter chains for per-service TLS termination. ext_authz filter for Cedar policy enforcement at every hop.</div>
+          <div class="pl-url"><a href="https://www.envoyproxy.io">envoyproxy.io</a></div>
+        </div>
+      </div>
+      <div class="pl-item">
+        <div class="pl-icon">🧠</div>
+        <div>
+          <div class="pl-name">Catalyst Orchestrator <span class="prod-badge custom">CUSTOM</span></div>
+          <div class="pl-desc">BGP-like route exchange, peer management, DNS zone file writes, xDS JSON file writes (LDS, CDS, SDS). The brain of the mesh — Envoy and CoreDNS both watch orchestrator output via inotify. Existing codebase — TypeScript / Node.js.</div>
+        </div>
+      </div>
+      <div class="pl-item">
+        <div class="pl-icon">🌲</div>
+        <div>
+          <div class="pl-name">Cedar (AWS) <span class="prod-badge oss">OSS</span></div>
+          <div class="pl-desc">Policy language and evaluation engine for RBAC/ABAC. Integrated as Envoy ext_authz backend. Existing implementation in auth service (ADR 0015).</div>
+          <div class="pl-url"><a href="https://www.cedarpolicy.com">cedarpolicy.com</a></div>
+        </div>
+      </div>
+      <div class="pl-item">
+        <div class="pl-icon">🎫</div>
+        <div>
+          <div class="pl-name">Catalyst Token Service <span class="prod-badge custom">CUSTOM</span></div>
+          <div class="pl-desc">JWT issuance with certificate-bound tokens (RFC 8705). JWKS distribution. Existing implementation — PersistentLocalKeyManager with ES384.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- K8s Deployment Diagram -->
+  <div class="k8s-diagram">
+    <h3>Kubernetes Deployment — Full View</h3>
+    <div class="k8s-sub">All workloads deployed as K8s Deployments or DaemonSets. Namespaces map 1:1 to the 3-plane model. Shown as it would appear in either k3s or full k8s.</div>
+
+    <!-- Namespace: catalyst-system (management) -->
+    <div class="ns-block ns-mgmt">
+      <div class="ns-label">
+        Management Plane
+        <code>namespace: catalyst-system</code>
+      </div>
+      <div class="pods-grid">
+
+        <div class="pod-card">
+          <div class="pod-name">orchestrator</div>
+          <div class="pod-product" style="color:#c4b5fd;"><span class="prod-badge custom">CUSTOM</span> Catalyst Orchestrator</div>
+          <div class="pod-detail">
+            Deployment (1 replica per node)<br>
+            BGP route exchange, peer state machine, capnweb RPC server. Writes DNS zone files + xDS JSON (LDS, CDS, SDS) to shared volumes. Envoy and CoreDNS watch via inotify.<br>
+            <code>ports: 3000 (rpc), 8080 (metrics)</code><br>
+            <code>volumes: /zones (→ coredns), /xds (→ envoy)</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">step-ca</div>
+          <div class="pod-product" style="color:#86efac;"><span class="prod-badge oss">OSS</span> Smallstep step-ca</div>
+          <div class="pod-detail">
+            Deployment (1 replica)<br>
+            ACME CA with HTTP-01 provisioner. Signs X.509 certs for services + clients. Certificate-bound token minting.<br>
+            <code>ports: 9000 (acme+api)</code><br>
+            <code>kms: yubikey | cloudkms | awskms | file</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">token-service</div>
+          <div class="pod-product" style="color:#c4b5fd;"><span class="prod-badge custom">CUSTOM</span> Catalyst Token</div>
+          <div class="pod-detail">
+            Deployment (1 replica)<br>
+            JWT minting with <code>cnf.x5t#S256</code> binding (RFC 8705). JWKS endpoint. Revocation list. capnweb API.<br>
+            <code>ports: 3001 (rpc), /.well-known/jwks.json</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">cedar-engine</div>
+          <div class="pod-product" style="color:#86efac;"><span class="prod-badge oss">OSS</span> Cedar Policy</div>
+          <div class="pod-detail">
+            Deployment (1 replica)<br>
+            Policy evaluation engine. Serves Envoy ext_authz gRPC. Policies synced from orchestrator via BGP route attributes.<br>
+            <code>ports: 3002 (grpc ext_authz)</code>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Namespace: catalyst-data (data plane) -->
+    <div class="ns-block ns-data">
+      <div class="ns-label">
+        Data Plane
+        <code>namespace: catalyst-data</code>
+      </div>
+      <div class="pods-grid">
+
+        <div class="pod-card">
+          <div class="pod-name">envoy</div>
+          <div class="pod-product" style="color:#93c5fd;"><span class="prod-badge cncf">CNCF</span> Envoy Proxy</div>
+          <div class="pod-detail">
+            DaemonSet (every node)<br>
+            TLS termination at every hop. SNI filter chains via filesystem xDS. QUIC upstream for peer cluster. ext_authz → Cedar engine.<br>
+            <code>ports: 443 (ingress), 8443 (quic-peer)</code><br>
+            <code>volume: /xds (shared w/ orchestrator, inotify watch)</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">coredns</div>
+          <div class="pod-product" style="color:#93c5fd;"><span class="prod-badge cncf">CNCF</span> CoreDNS</div>
+          <div class="pod-detail">
+            Deployment (1–2 replicas)<br>
+            Authoritative for mesh zone. <code>auto</code> plugin watches zone files from orchestrator. <code>forward</code> plugin proxies non-mesh queries upstream.<br>
+            <code>ports: 53/udp, 53/tcp</code><br>
+            <code>volume: /zones (shared w/ orchestrator)</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">dhcp-nat</div>
+          <div class="pod-product" style="color:#c4b5fd;"><span class="prod-badge custom">CUSTOM</span> Catalyst NAT Gateway</div>
+          <div class="pod-detail">
+            DaemonSet (appliance mode only)<br>
+            Default route for site network. Mesh FQDNs → Envoy. Everything else → upstream internet. Not needed in k8s sidecar mode.<br>
+            <code>mode: appliance only</code>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Namespace: catalyst-apps (application plane) -->
+    <div class="ns-block ns-app">
+      <div class="ns-label">
+        Application Plane
+        <code>namespace: catalyst-apps</code>
+      </div>
+      <div class="pods-grid">
+
+        <div class="pod-card">
+          <div class="pod-name">zenoh-router</div>
+          <div class="pod-product" style="color:#86efac;"><span class="prod-badge oss">OSS</span> Eclipse Zenoh</div>
+          <div class="pod-detail">
+            Deployment (optional)<br>
+            Pub/sub data distribution, edge compute messaging. Rides the Envoy data plane like any other service.<br>
+            <code>ports: 7447 (zenoh)</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">graphql-gateway</div>
+          <div class="pod-product" style="color:#c4b5fd;"><span class="prod-badge custom">CUSTOM</span> Catalyst GQL</div>
+          <div class="pod-detail">
+            Deployment (optional)<br>
+            Federated GraphQL gateway. Schema stitching from mesh services. Reachable via Envoy SNI like any webapp.<br>
+            <code>ports: 4000 (graphql)</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">mediamtx</div>
+          <div class="pod-product" style="color:#86efac;"><span class="prod-badge oss">OSS</span> MediaMTX</div>
+          <div class="pod-detail">
+            Deployment (optional)<br>
+            Real-time media streaming (RTSP, WebRTC, HLS). Routes through Envoy for mTLS + Cedar policy.<br>
+            <code>ports: 8554 (rtsp), 8889 (webrtc)</code>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Infrastructure -->
+    <div class="ns-block ns-infra">
+      <div class="ns-label">
+        Infrastructure
+        <code>namespace: kube-system (or host)</code>
+      </div>
+      <div class="pods-grid">
+
+        <div class="pod-card">
+          <div class="pod-name">k3s / k8s</div>
+          <div class="pod-product" style="color:#fdba74;"><span class="prod-badge oss">OSS</span> K3s or K8s</div>
+          <div class="pod-detail">
+            k3s for appliance (single node, SQLite datastore, ~512MB RAM). Full k8s for sidecar mode (existing cluster, etcd available).<br>
+            <code>k3s: v1.31+ | k8s: v1.28+</code>
+          </div>
+        </div>
+
+        <div class="pod-card">
+          <div class="pod-name">otel-collector</div>
+          <div class="pod-product" style="color:#86efac;"><span class="prod-badge cncf">CNCF</span> OpenTelemetry</div>
+          <div class="pod-detail">
+            DaemonSet<br>
+            Metrics + traces + logs aggregation from all planes. Existing implementation (ADR 0001).<br>
+            <code>ports: 4317 (otlp-grpc), 4318 (otlp-http)</code>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Deployment Variants -->
+  <div style="margin-bottom: 48px;">
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">Deployment Variants</h3>
+    <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">Same images, same config schema. The variant determines the runtime, key storage, and DNS strategy.</p>
+
+    <div class="variant-grid">
+
+      <div class="variant-card" style="border-color: rgba(251,146,60,0.2);">
+        <h3><span style="font-size:18px;">📡</span> k3s Appliance</h3>
+        <div class="var-sub">Single-node k3s on hardware or VM. Acts as a network appliance — web proxy / NAT gateway for a site. Minimal footprint.</div>
+        <table>
+          <tr><th style="width:40%;">Function</th><th>Implementation</th></tr>
+          <tr><td>Runtime</td><td><code>k3s</code> (single server, SQLite datastore)</td></tr>
+          <tr><td>PKI (step-ca)</td><td><code>--kms yubikey</code> (hardware) or <code>--kms softkms</code> (local FS)</td></tr>
+          <tr><td>DNS (CoreDNS)</td><td><code>auto</code> plugin — orchestrator writes zone files to shared volume</td></tr>
+          <tr><td>Envoy cluster</td><td>QUIC upstream to remote peers. Single listener :443</td></tr>
+          <tr><td>DHCP/NAT</td><td>Active — default route for site network</td></tr>
+          <tr><td>etcd</td><td>Not present — not needed</td></tr>
+          <tr><td>Footprint</td><td>~512MB RAM, 1 CPU, ARM64 or AMD64</td></tr>
+        </table>
+      </div>
+
+      <div class="variant-card" style="border-color: rgba(59,130,246,0.2);">
+        <h3><span style="font-size:18px;">☸️</span> k8s Sidecar</h3>
+        <div class="var-sub">Deployed into an existing k8s cluster alongside other workloads. Hooks into cluster networking and CoreDNS. Cloud KMS for key storage.</div>
+        <table>
+          <tr><th style="width:40%;">Function</th><th>Implementation</th></tr>
+          <tr><td>Runtime</td><td><code>k8s</code> (existing cluster, etcd available)</td></tr>
+          <tr><td>PKI (step-ca)</td><td><code>--kms cloudkms</code> (GCP) or <code>--kms awskms</code> (AWS)</td></tr>
+          <tr><td>DNS (CoreDNS)</td><td>Custom server block in cluster CoreDNS, or <code>etcd</code> plugin</td></tr>
+          <tr><td>Envoy cluster</td><td>QUIC upstream to remote peers. Integrates with cluster ingress</td></tr>
+          <tr><td>DHCP/NAT</td><td>Not deployed — cluster networking handles routing</td></tr>
+          <tr><td>etcd</td><td>Available — can be used for CoreDNS records</td></tr>
+          <tr><td>Footprint</td><td>Scales with cluster. ~256MB base per Catalyst pod</td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== ADDENDUM: WORK TO BE DONE ==================== -->
+  <div class="addendum-header">
+    <div class="tag" style="background: rgba(139,92,246,0.12); color: #a78bfa;">Addendum — Work To Be Done</div>
+    <h2 style="background: linear-gradient(135deg, #e2e8f0, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Implementation Roadmap</h2>
+    <p>Adoption work required to move from the current codebase to the 3-plane network architecture. Each item identifies the component, what changes, and how it differs between the k3s appliance and k8s cloud deployment.</p>
+  </div>
+
+  <!-- Work items -->
+  <div style="margin-bottom: 48px;">
+
+    <!-- Work Item 1: step-ca adoption -->
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: rgba(34,197,94,0.15); color: #4ade80; padding: 3px 8px; border-radius: 4px;">NEW ADOPTION</span>
+        <span style="font-size: 16px; font-weight: 700; color: #e2e8f0;">Smallstep step-ca — Private ACME CA</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+        Replace the existing custom PKI implementation with step-ca as the private Certificate Authority. step-ca provides an ACME HTTP-01 provisioner so services can request certificates using standard ACME clients — no custom cert-issuance code needed. <del>The orchestrator's PIK endpoint proxies ACME challenges through the data plane.</del> <ins>step-ca handles ACME HTTP-01 challenges directly in the management plane. The orchestrator provisions DNS records first (data-channel-first flow), enabling the HTTP-01 challenge to resolve.</ins>
+      </p>
+      <div class="variant-grid" style="margin-top: 0;">
+        <div style="background: rgba(251,146,60,0.04); border: 1px solid rgba(251,146,60,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #fb923c; margin-bottom: 8px;">📡 k3s / Standalone Appliance</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">--kms yubikey</code> for hardware key storage (YubiKey PIV via step-kms-plugin) or <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">--kms softkms</code> for local filesystem keys. Single replica Deployment in <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">catalyst-system</code>. Root CA key never leaves the hardware token.
+          </div>
+        </div>
+        <div style="background: rgba(59,130,246,0.04); border: 1px solid rgba(59,130,246,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px;">☸️ k8s / Cloud Environment</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">--kms cloudkms</code> (GCP) or <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">--kms awskms</code> (AWS) for cloud-managed key storage. Root CA key managed by provider HSM. Can run HA with multiple replicas if backed by shared storage.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 12px; font-size: 11px; color: #64748b; line-height: 1.5;">
+        <strong style="color: #94a3b8;">Work involved:</strong> Deploy step-ca container with ACME provisioner config. Write provisioner templates for service certs (short-lived, auto-renew) and client certs (CLI-issued, certificate-bound tokens). <del>Wire PIK to proxy HTTP-01 challenges.</del> <ins>Orchestrator provisions DNS + xDS on data channel registration; step-ca validates HTTP-01 against the live DNS record. Token validation is Envoy-native via Cedar ext_authz — no separate Token API service.</ins> Remove existing custom CA code from auth service.
+      </div>
+    </div>
+
+    <!-- Work Item 2: CoreDNS adoption -->
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: rgba(34,197,94,0.15); color: #4ade80; padding: 3px 8px; border-radius: 4px;">NEW ADOPTION</span>
+        <span style="font-size: 16px; font-weight: 700; color: #e2e8f0;">CoreDNS — Mesh DNS Resolution</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+        Deploy CoreDNS as the authoritative DNS server for mesh FQDNs. The orchestrator writes zone files as peers announce routes via BGP-like UPDATE messages — CoreDNS watches those files and serves the records. Non-mesh queries forward upstream. This replaces any custom DNS resolution and gives every application standard DNS-based service discovery.
+      </p>
+      <div class="variant-grid" style="margin-top: 0;">
+        <div style="background: rgba(251,146,60,0.04); border: 1px solid rgba(251,146,60,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #fb923c; margin-bottom: 8px;">📡 k3s / Standalone Appliance</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">file</code> / <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">auto</code> plugin — orchestrator writes standard zone files to a shared volume (<code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">/zones</code>). CoreDNS watches via inotify. No etcd dependency (k3s uses SQLite). Standalone deployment in <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">catalyst-data</code>.
+          </div>
+        </div>
+        <div style="background: rgba(59,130,246,0.04); border: 1px solid rgba(59,130,246,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px;">☸️ k8s / Cloud Environment</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Two options: <strong style="color: #e2e8f0;">(a)</strong> Add a custom server block to the existing cluster CoreDNS — mesh zone delegates to Catalyst CoreDNS, everything else stays default. <strong style="color: #e2e8f0;">(b)</strong> Use the <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">etcd</code> plugin — orchestrator writes records directly to cluster etcd instead of zone files. Option (b) avoids a second CoreDNS but couples to etcd availability.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 12px; font-size: 11px; color: #64748b; line-height: 1.5;">
+        <strong style="color: #94a3b8;">Work involved:</strong> Add zone-file writer to orchestrator (triggered on BGP route table changes). Define mesh zone format (e.g., <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">*.mesh.catalyst.local</code>). Deploy CoreDNS with Corefile configuring <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">auto</code> + <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">forward</code> plugins. For k8s: write etcd adapter as alternative to file plugin. Configure DHCP/NAT to hand out CoreDNS as the resolver for appliance-mode clients.
+      </div>
+    </div>
+
+    <!-- Work Item 3: Envoy filesystem xDS -->
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: rgba(251,191,36,0.15); color: #fcd34d; padding: 3px 8px; border-radius: 4px;">REFACTOR</span>
+        <span style="font-size: 16px; font-weight: 700; color: #e2e8f0;">Envoy — Filesystem xDS (replace gRPC ADS)</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+        Replace the custom gRPC xDS control plane (<code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">envoy-service</code>) with filesystem-based xDS. The orchestrator writes xDS JSON files (LDS, CDS, SDS) to a shared volume — Envoy watches via <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">path_config_source</code> + inotify and hot-reloads. This eliminates a standalone service, a gRPC server, and all connection lifecycle management. Same pattern as the CoreDNS zone file approach — the orchestrator is the single writer, everything else watches.
+      </p>
+      <div class="variant-grid" style="margin-top: 0;">
+        <div style="background: rgba(251,146,60,0.04); border: 1px solid rgba(251,146,60,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #fb923c; margin-bottom: 8px;">📡 k3s / Standalone Appliance</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Shared <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">emptyDir</code> volume between orchestrator and Envoy DaemonSet. Orchestrator writes <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">lds.json</code>, <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">cds.json</code>, <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">sds.json</code> on every route table change. Single node — volume locality is trivial. Envoy bootstrap uses <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">path_config_source</code> with <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">watched_directory</code>.
+          </div>
+        </div>
+        <div style="background: rgba(59,130,246,0.04); border: 1px solid rgba(59,130,246,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px;">☸️ k8s / Cloud Environment</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Same filesystem approach. For multi-node clusters, orchestrator runs as a DaemonSet (one per node) and writes xDS locally. Alternatively, a central orchestrator can write to a PersistentVolume with ReadWriteMany (NFS/EFS) or push via a lightweight config-sync sidecar. The volume strategy depends on cluster topology — single-writer-per-node is simplest.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 12px; font-size: 11px; color: #64748b; line-height: 1.5;">
+        <strong style="color: #94a3b8;">Work involved:</strong> Refactor orchestrator's xDS generation to write JSON files instead of building in-memory snapshots. Remove <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">apps/envoy/src/xds/control-plane.ts</code> (gRPC ADS server) and <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">apps/envoy/src/xds/resources.ts</code> (snapshot builder). Write new <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">xds-writer</code> module in orchestrator. Create Envoy bootstrap config template with <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">path_config_source</code>. Add health check: orchestrator watches Envoy admin <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">/config_dump</code> to detect rejected configs (replaces gRPC ACK/NACK).
+      </div>
+    </div>
+
+    <!-- Work Item 4: SNI filter chains -->
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: rgba(251,191,36,0.15); color: #fcd34d; padding: 3px 8px; border-radius: 4px;">REFACTOR</span>
+        <span style="font-size: 16px; font-weight: 700; color: #e2e8f0;">Envoy — SNI Filter Chains (replace port allocation)</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+        Replace the current port-per-channel model with a single listener on <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">:443</code> using SNI-based <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">filter_chain_match.server_names</code> for per-service routing. Each service gets a unique FQDN; Envoy matches the TLS SNI to the right filter chain, terminates TLS, applies Cedar ext_authz, and forwards to the local upstream. No more port allocator, no more port pool exhaustion.
+      </p>
+      <div class="variant-grid" style="margin-top: 0;">
+        <div style="background: rgba(251,146,60,0.04); border: 1px solid rgba(251,146,60,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #fb923c; margin-bottom: 8px;">📡 k3s / Standalone Appliance</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Single Envoy listener on <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">:443</code>. DHCP/NAT directs all site HTTPS traffic here. Each registered service gets a filter chain matched by SNI. Wildcard chain for QUIC peer-to-peer upstream on <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">:8443</code>.
+          </div>
+        </div>
+        <div style="background: rgba(59,130,246,0.04); border: 1px solid rgba(59,130,246,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px;">☸️ k8s / Cloud Environment</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Same SNI model. Envoy sits behind a cloud LoadBalancer (NLB/GLB) or k8s Ingress. SNI passthrough at the LB layer lets Envoy handle TLS termination and Cedar policy. Integrates with existing cluster ingress without conflicting.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 12px; font-size: 11px; color: #64748b; line-height: 1.5;">
+        <strong style="color: #94a3b8;">Work involved:</strong> Remove <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">apps/envoy/src/port-allocator.ts</code> and port pool logic from orchestrator bus. Update xDS writer to generate LDS with SNI filter chain match entries instead of per-port listeners. Update route propagation BGP messages to carry FQDNs (already partially implemented). Wire SDS entries for per-service TLS contexts (cert + key from step-ca).
+      </div>
+    </div>
+
+    <!-- Work Item 5: Cedar ext_authz -->
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: rgba(59,130,246,0.15); color: #93c5fd; padding: 3px 8px; border-radius: 4px;">INTEGRATION</span>
+        <span style="font-size: 16px; font-weight: 700; color: #e2e8f0;">Cedar ext_authz — Policy at Every Hop</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+        Wire Cedar as an Envoy <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">ext_authz</code> gRPC filter on every filter chain. Every TLS termination point — local Envoy and remote Envoy — independently evaluates Cedar policy before forwarding traffic. No trust delegation, no passthrough. Cedar policies are synced from the orchestrator via BGP route attributes.
+      </p>
+      <div class="variant-grid" style="margin-top: 0;">
+        <div style="background: rgba(251,146,60,0.04); border: 1px solid rgba(251,146,60,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #fb923c; margin-bottom: 8px;">📡 k3s / Standalone Appliance</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Cedar engine runs as a single-replica Deployment in <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">catalyst-system</code>. Envoy's ext_authz filter points to Cedar via cluster-internal DNS. Low latency — same node, same network namespace.
+          </div>
+        </div>
+        <div style="background: rgba(59,130,246,0.04); border: 1px solid rgba(59,130,246,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px;">☸️ k8s / Cloud Environment</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Same architecture. Cedar can scale horizontally if policy evaluation becomes a bottleneck (stateless evaluator, policies loaded from orchestrator). Consider sidecar deployment alongside Envoy for latency-sensitive paths.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 12px; font-size: 11px; color: #64748b; line-height: 1.5;">
+        <strong style="color: #94a3b8;">Work involved:</strong> Existing Cedar implementation (ADR 0015) needs a gRPC ext_authz adapter. Define policy schema for SNI-based routing decisions (principal = client cert identity, resource = target FQDN, action = protocol/method). Add policy distribution to BGP UPDATE messages. Add ext_authz filter to every generated LDS filter chain in the xDS writer.
+      </div>
+    </div>
+
+    <!-- Work Item 6: QUIC peer mesh -->
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: rgba(59,130,246,0.15); color: #93c5fd; padding: 3px 8px; border-radius: 4px;">INTEGRATION</span>
+        <span style="font-size: 16px; font-weight: 700; color: #e2e8f0;">Envoy QUIC Cluster — Peer-to-Peer Transit</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+        Catalyst peers form an Envoy cluster connected via QUIC transport. Traffic between peers flows as QUIC streams within the cluster — not individual tunnels. Each peer's Envoy terminates TLS independently and applies Cedar policy before forwarding to local services. The orchestrator's BGP-like route exchange drives cluster membership.
+      </p>
+      <div class="variant-grid" style="margin-top: 0;">
+        <div style="background: rgba(251,146,60,0.04); border: 1px solid rgba(251,146,60,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #fb923c; margin-bottom: 8px;">📡 k3s / Standalone Appliance</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            QUIC upstream on <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">:8443</code>. Peers discovered via orchestrator route exchange. CDS entries generated per-peer with QUIC transport socket. mTLS between peers using step-ca issued node certificates.
+          </div>
+        </div>
+        <div style="background: rgba(59,130,246,0.04); border: 1px solid rgba(59,130,246,0.15); border-radius: 10px; padding: 16px;">
+          <div style="font-size: 12px; font-weight: 700; color: #60a5fa; margin-bottom: 8px;">☸️ k8s / Cloud Environment</div>
+          <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+            Same QUIC mesh. Cloud LB must allow UDP for QUIC (NLB on AWS, external passthrough on GCP). For cross-region peers, QUIC's built-in connection migration handles path changes gracefully.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 12px; font-size: 11px; color: #64748b; line-height: 1.5;">
+        <strong style="color: #94a3b8;">Work involved:</strong> Configure Envoy QUIC upstream transport socket in CDS entries. Generate per-peer cluster definitions in xDS writer (triggered by BGP peer state changes). Test QUIC connection establishment with mTLS. Verify Cedar policy enforcement on both sides of the QUIC hop. Benchmark QUIC vs TCP for Catalyst traffic patterns.
+      </div>
+    </div>
+
+    <!-- Work Item 7: Orchestrator as single writer -->
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: rgba(251,191,36,0.15); color: #fcd34d; padding: 3px 8px; border-radius: 4px;">REFACTOR</span>
+        <span style="font-size: 16px; font-weight: 700; color: #e2e8f0;">Orchestrator — Single Writer Pattern</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+        The orchestrator becomes the single source of truth that drives both DNS and Envoy configuration. On every route table change (peer join, service registration, route withdrawal), it atomically writes two sets of files to shared volumes: zone files for CoreDNS and xDS JSON for Envoy. Both consumers watch via inotify. This pattern eliminates the need for separate xDS and DNS translation services.
+      </p>
+      <div style="background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.12); border-radius: 10px; padding: 16px;">
+        <div style="font-size: 12px; font-weight: 700; color: #a78bfa; margin-bottom: 8px;">Applies to both environments</div>
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+          Route table change → orchestrator writes <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">/zones/*.db</code> (CoreDNS) + <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">/xds/{lds,cds,sds}.json</code> (Envoy) → consumers hot-reload via inotify. Atomic writes via rename to prevent partial reads. On k3s, volumes are <code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">emptyDir</code>. On k8s, volume strategy depends on topology (emptyDir for per-node, PVC/NFS for centralized).
+        </div>
+      </div>
+      <div style="margin-top: 12px; font-size: 11px; color: #64748b; line-height: 1.5;">
+        <strong style="color: #94a3b8;">Work involved:</strong> Refactor orchestrator bus (<code style="font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 2px;">apps/orchestrator/src/v2/bus.ts</code>) to emit file writes instead of in-process Envoy sync calls. Implement atomic write-then-rename for both zone files and xDS JSON. Add file-write health metrics. Remove direct Envoy gRPC sync from orchestrator. Integration test: route change → file written → Envoy/CoreDNS pick up within &lt;1s.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== PROTOCOL FLOWS ==================== -->
+  <div class="addendum-header" style="margin-top: 48px;">
+    <div class="tag" style="background: rgba(59,130,246,0.12); color: #60a5fa;">Addendum — Protocol Flows</div>
+    <h2 style="background: linear-gradient(135deg, #e2e8f0, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">How It All Comes Together</h2>
+    <p>Three sequences showing the lifecycle: system bootstrap, first service onboarding, and first client connection. Each step identifies the component responsible and what must be in place.</p>
+  </div>
+
+  <style>
+    .proto-section { margin-bottom: 48px; }
+    .proto-section h3 {
+      font-size: 18px; font-weight: 700; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .proto-section .proto-sub {
+      font-size: 13px; color: #64748b; margin-bottom: 20px; line-height: 1.5;
+    }
+    .proto-tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 4px;
+    }
+    .flow-steps {
+      position: relative; padding-left: 32px;
+    }
+    .flow-steps::before {
+      content: ''; position: absolute; left: 11px; top: 12px; bottom: 12px;
+      width: 2px; background: rgba(255,255,255,0.06); border-radius: 1px;
+    }
+    .flow-step {
+      position: relative; margin-bottom: 4px; padding: 14px 18px;
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+    }
+    .flow-step:last-child { margin-bottom: 0; }
+    .flow-step::before {
+      content: ''; position: absolute; left: -25px; top: 20px;
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.15); background: #0a0e1a;
+    }
+    .flow-step.done::before { border-color: #4ade80; background: rgba(34,197,94,0.3); }
+    .flow-step.active::before { border-color: #60a5fa; background: rgba(59,130,246,0.3); }
+    .flow-step.key::before { border-color: #fbbf24; background: rgba(251,191,36,0.3); }
+
+    .step-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;
+    }
+    .step-num {
+      font-size: 10px; font-weight: 700; color: #475569;
+      background: rgba(255,255,255,0.06); padding: 2px 7px; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .step-actor {
+      font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+    }
+    .actor-mgmt { background: rgba(139,92,246,0.15); color: #c4b5fd; }
+    .actor-data { background: rgba(59,130,246,0.15); color: #93c5fd; }
+    .actor-infra { background: rgba(251,146,60,0.15); color: #fdba74; }
+    .actor-app { background: rgba(34,197,94,0.15); color: #86efac; }
+    .actor-client { background: rgba(244,114,182,0.15); color: #f9a8d4; }
+    .actor-ext { background: rgba(148,163,184,0.15); color: #cbd5e1; }
+
+    .step-title {
+      font-size: 13px; font-weight: 600; color: #e2e8f0;
+    }
+    .step-detail {
+      font-size: 11px; color: #94a3b8; line-height: 1.6; margin-top: 2px;
+    }
+    .step-detail code {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
+    }
+    .step-arrow {
+      font-size: 10px; color: #475569; font-weight: 600; margin: 0 4px;
+    }
+    .step-prereq {
+      margin-top: 6px; font-size: 10px; color: #64748b;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .step-prereq::before {
+      content: '⚠'; font-size: 10px;
+    }
+
+    .phase-break {
+      position: relative; margin: 12px 0; padding: 8px 0 8px 18px;
+    }
+    .phase-break .phase-name {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+      padding: 4px 12px; border-radius: 6px; display: inline-block;
+    }
+    .phase-break .phase-name.p-mgmt { background: rgba(139,92,246,0.1); color: #a78bfa; border: 1px solid rgba(139,92,246,0.2); }
+    .phase-break .phase-name.p-data { background: rgba(59,130,246,0.1); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+    .phase-break .phase-name.p-app { background: rgba(34,197,94,0.1); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+    .phase-break .phase-name.p-mesh { background: rgba(251,191,36,0.1); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+    .phase-break .phase-name.p-client { background: rgba(244,114,182,0.1); color: #f472b6; border: 1px solid rgba(244,114,182,0.2); }
+  </style>
+
+  <!-- ============ FLOW A: SYSTEM STARTUP ============ -->
+  <div class="proto-section">
+    <h3>
+      <span class="proto-tag" style="background: rgba(139,92,246,0.15); color: #a78bfa;">Flow A</span>
+      System Bootstrap — Cold Start to Ready
+    </h3>
+    <div class="proto-sub">
+      A fresh Catalyst node boots on K8s. This sequence shows the dependency chain: what starts first, what waits for what, and when the system is ready to accept services and clients. The orchestrator is the last to become ready because it depends on everything else.
+    </div>
+
+    <div class="flow-steps">
+
+      <div class="phase-break"><span class="phase-name p-mgmt">Phase 1 — Infrastructure &amp; PKI Bootstrap</span></div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">A1</span>
+          <span class="step-actor actor-infra">k3s / k8s</span>
+          <span class="step-title">Kubernetes runtime starts</span>
+        </div>
+        <div class="step-detail">
+          k3s server initializes (SQLite datastore on appliance) or k8s node joins existing cluster. Kubelet begins scheduling pods. Network CNI ready.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">A2</span>
+          <span class="step-actor actor-mgmt">step-ca</span>
+          <span class="step-title">Private CA initializes</span>
+        </div>
+        <div class="step-detail">
+          step-ca pod starts in <code>catalyst-system</code>. Loads root CA key from KMS backend (<code>yubikey</code> on appliance, <code>cloudkms</code> on cloud). Initializes ACME HTTP-01 provisioner. Exposes <code>:9000</code> for ACME + API. <strong style="color:#e2e8f0;">Everything else depends on this — no certs, no TLS, no mesh.</strong>
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">A3</span>
+          <span class="step-actor actor-mgmt">step-ca</span>
+          <span class="step-title">Node identity cert issued</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator requests a node identity certificate from step-ca via ACME. This cert identifies the node in peer-to-peer mTLS and signs BGP route messages. FQDN: <code>node-{id}.mesh.catalyst.local</code>.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">A4</span>
+          <span class="step-actor actor-mgmt">token-service</span>
+          <span class="step-title">Token service starts</span>
+        </div>
+        <div class="step-detail">
+          Obtains its own service cert from step-ca. Generates ES384 signing key (or loads from persistent storage). Exposes JWKS at <code>/.well-known/jwks.json</code>. Ready to mint JWTs with <code>cnf.x5t#S256</code> certificate binding.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">A5</span>
+          <span class="step-actor actor-mgmt">cedar-engine</span>
+          <span class="step-title">Cedar policy engine starts</span>
+        </div>
+        <div class="step-detail">
+          Loads default policy set (deny-all baseline + system policies). Exposes gRPC ext_authz on <code>:3002</code>. Waits for orchestrator to push service-specific policies via BGP route attributes.
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-data">Phase 2 — Data Plane Boot</span></div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">A6</span>
+          <span class="step-actor actor-data">CoreDNS</span>
+          <span class="step-title">DNS server starts (empty zone)</span>
+        </div>
+        <div class="step-detail">
+          CoreDNS pod starts in <code>catalyst-data</code>. Loads Corefile with <code>auto</code> plugin watching <code>/zones</code> directory. Zone dir is empty — no mesh records yet. <code>forward</code> plugin proxies non-mesh queries upstream. Listening on <code>53/udp</code>, <code>53/tcp</code>.
+        </div>
+      </div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">A7</span>
+          <span class="step-actor actor-data">Envoy</span>
+          <span class="step-title">Envoy starts (minimal bootstrap)</span>
+        </div>
+        <div class="step-detail">
+          Envoy DaemonSet pod starts in <code>catalyst-data</code>. Loads bootstrap config with <code>path_config_source</code> watching <code>/xds</code> directory. xDS files don't exist yet — Envoy runs with static admin listener only. ext_authz filter points to Cedar engine. Listening on <code>:443</code> (no filter chains yet) and <code>:8443</code> (QUIC peer, no clusters yet).
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-mgmt">Phase 3 — Orchestrator Brings It All Together</span></div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">A8</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Orchestrator starts — writes initial config</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator pod starts in <code>catalyst-system</code>. Verifies step-ca reachable, token-service healthy, Cedar responding. Initializes empty route table (RIB). Writes initial zone file to <code>/zones/mesh.catalyst.local.db</code> (SOA + NS only). Writes initial xDS files to <code>/xds/{lds,cds,sds}.json</code> (base listener on :443, no filter chains). <strong style="color:#e2e8f0;">CoreDNS and Envoy hot-reload via inotify.</strong>
+        </div>
+      </div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">A9</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Peer discovery &amp; BGP session establishment</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator announces itself to configured peers via BGP OPEN using node identity cert (mTLS). If peers exist: exchanges KEEPALIVE, receives UPDATE messages with remote FQDNs, nodePaths, CA thumbprints. On first boot with no peers: skips — node is the first in the mesh.
+        </div>
+      </div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">A10</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Route table → DNS zones + xDS files (peer routes)</span>
+        </div>
+        <div class="step-detail">
+          For each peer route received: adds A/AAAA record to zone file (FQDN → local Envoy), adds CDS entry for peer Envoy cluster (QUIC upstream), adds SDS entry with peer CA trust bundle. Writes atomically (rename). Envoy now has QUIC clusters to peers. CoreDNS now resolves remote FQDNs. <strong style="color:#e2e8f0;">System is ready for services.</strong>
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">A11</span>
+          <span class="step-actor actor-data">DHCP/NAT</span>
+          <span class="step-arrow">appliance only</span>
+          <span class="step-title">NAT gateway activates</span>
+        </div>
+        <div class="step-detail">
+          DHCP/NAT DaemonSet configures iptables: mesh FQDNs → Envoy :443, DNS → CoreDNS :53, all other traffic → upstream internet. Hands out CoreDNS as resolver to DHCP clients. Site network is now routed through Catalyst.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ FLOW B: FIRST SERVICE ONBOARDING ============ -->
+  <div class="proto-section">
+    <h3>
+      <span class="proto-tag" style="background: rgba(34,197,94,0.15); color: #4ade80;">Flow B</span>
+      First Service Onboarding — <del>Webapp Gets a Certificate</del> <ins>Data Channel Registration</ins>
+    </h3>
+    <div class="proto-sub">
+      <del>A webapp deployed on the node obtains a TLS certificate via ACME HTTP-01, registers with the mesh, and becomes reachable from all peers via DNS + Envoy SNI routing. No SDK, no custom code — standard ACME client (certbot, lego, acme.sh, etc.).</del>
+      <ins>A service is registered as a data channel via the orchestrator API. The orchestrator provisions DNS, xDS, and a TLS certificate — making the service routable before it ever touches ACME. Optionally, the service can then request its own ACME cert using the already-live DNS record.</ins>
+    </div>
+
+    <!-- ═══ OLD FLOW (REDLINED) ═══ -->
+    <div style="margin-bottom: 16px;" class="redline-block-del">
+    <div class="flow-steps">
+
+      <div class="phase-break"><span class="phase-name p-app">Phase 1 — ACME Certificate Issuance</span></div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B1</span>
+          <span class="step-actor actor-app">webapp</span>
+          <span class="step-title">Webapp starts &amp; initiates ACME</span>
+        </div>
+        <div class="step-detail">
+          Webapp runs in <code>catalyst-apps</code> (or any namespace). Uses a standard ACME client library to contact step-ca's ACME directory at <code>https://step-ca.catalyst-system:9000/acme/acme/directory</code>. Requests a cert for its desired FQDN: <code>myapp.node-a.mesh.catalyst.local</code>.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B2</span>
+          <span class="step-actor actor-mgmt">step-ca</span>
+          <span class="step-title">ACME order created — HTTP-01 challenge issued</span>
+        </div>
+        <div class="step-detail">
+          step-ca creates a new ACME order and returns an HTTP-01 challenge. Provides a <code>token</code> value. Webapp must prove domain control by serving <code>keyAuthorization</code> at <code>http://myapp:port/.well-known/acme-challenge/&lt;token&gt;</code>.
+        </div>
+      </div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">B3</span>
+          <span class="step-actor actor-app">webapp</span>
+          <span class="step-title">Webapp serves challenge token</span>
+        </div>
+        <div class="step-detail">
+          ACME client starts a temporary HTTP listener (or hooks into existing server) to serve the <code>keyAuthorization</code> value at the well-known path. This is standard ACME — no Catalyst-specific code.
+        </div>
+      </div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">B4</span>
+          <span class="step-actor actor-mgmt">step-ca</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-app">webapp</span>
+          <span class="step-title">PIK validates HTTP-01 challenge</span>
+        </div>
+        <div class="step-detail">
+          step-ca (via its HTTP-01 validation) makes a GET request to the webapp at <code>/.well-known/acme-challenge/&lt;token&gt;</code>. This goes over the cluster network (k8s service DNS). Webapp returns <code>keyAuthorization</code> — challenge passes.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B5</span>
+          <span class="step-actor actor-mgmt">step-ca</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-app">webapp</span>
+          <span class="step-title">Certificate issued</span>
+        </div>
+        <div class="step-detail">
+          step-ca signs the certificate for <code>myapp.node-a.mesh.catalyst.local</code>. Webapp downloads cert + chain via ACME finalize. Webapp now has a valid TLS cert signed by the mesh CA. Short-lived (e.g. 24h), auto-renews via ACME.
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-mgmt">Phase 2 — Mesh Registration</span></div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">B6</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Orchestrator detects new certificate</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator watches step-ca's certificate transparency log (or receives a webhook/event from step-ca). Sees new cert for <code>myapp.node-a.mesh.catalyst.local</code>. Adds route to local RIB: FQDN → local upstream (webapp's cluster IP + port).
+        </div>
+      </div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">B7</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Writes xDS — SNI filter chain for service</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator updates <code>/xds/lds.json</code>: adds a new <code>filter_chain</code> on the :443 listener with <code>server_names: ["myapp.node-a.mesh.catalyst.local"]</code>. Updates <code>/xds/sds.json</code>: adds TLS context with webapp's cert + key (or a reference). Updates <code>/xds/cds.json</code>: adds upstream cluster pointing to webapp's local address. Envoy hot-reloads — <strong style="color:#e2e8f0;">service is now routable locally.</strong>
+        </div>
+      </div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">B8</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Writes DNS zone record</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator updates <code>/zones/mesh.catalyst.local.db</code>: adds <code>myapp.node-a  IN  A  &lt;envoy-cluster-ip&gt;</code>. CoreDNS picks up the change via inotify — <strong style="color:#e2e8f0;">service is now DNS-resolvable locally.</strong>
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-mesh">Phase 3 — Mesh Propagation</span></div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">B9</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-ext">peers</span>
+          <span class="step-title">BGP UPDATE to all peers</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator sends BGP UPDATE message to all established peer sessions. Payload includes: FQDN (<code>myapp.node-a.mesh.catalyst.local</code>), nodePath (routing path), CA thumbprint (trust anchor), Cedar policy hints (allowed principals). Peers ACK.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B10</span>
+          <span class="step-actor actor-ext">peer orchestrators</span>
+          <span class="step-title">Remote nodes update DNS + Envoy</span>
+        </div>
+        <div class="step-detail">
+          Each peer's orchestrator receives the UPDATE, adds route to its RIB, writes zone file (FQDN → local Envoy, which will proxy via QUIC to originating node), writes xDS (CDS cluster for the QUIC upstream to node-a, LDS filter chain for SNI match). <strong style="color:#e2e8f0;">Service is now reachable mesh-wide.</strong>
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B11</span>
+          <span class="step-actor actor-mgmt">cedar-engine</span>
+          <span class="step-title">Cedar policies updated</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator pushes service-specific Cedar policies to the policy engine (both local and via BGP to peers). Default policy: deny all except principals with valid cert-bound tokens and matching FQDN scope. Envoy's ext_authz will evaluate these on every request.
+        </div>
+      </div>
+
+    </div>
+    </div>
+
+    <!-- ═══ NEW FLOW (INSERTED) ═══ -->
+    <div style="margin-bottom: 16px;" class="redline-block-ins">
+    <div class="flow-steps">
+
+      <div class="phase-break"><span class="phase-name p-mgmt">Phase 1 — Data Channel Registration</span></div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">B1</span>
+          <span class="step-actor actor-app">webapp / CLI</span>
+          <span class="step-title">Register data channel via orchestrator API</span>
+        </div>
+        <div class="step-detail">
+          User or webapp calls the orchestrator's capnweb API: <code>registerService({ fqdn: "myapp.node-a.mesh.catalyst.local", channel: { type: "http", upstream: "http://myapp:8080" } })</code>. Route is added to the local RIB. <strong style="color:#e2e8f0;">This is the trigger — everything else follows.</strong>
+        </div>
+      </div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">B2</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Provisions DNS + xDS + TLS cert</span>
+        </div>
+        <div class="step-detail">
+          On <code>route_added</code> event, orchestrator atomically: <strong style="color:#e2e8f0;">(1)</strong> writes DNS zone record (<code>myapp.node-a IN A &lt;envoy-ip&gt;</code>) — CoreDNS hot-reloads. <strong style="color:#e2e8f0;">(2)</strong> writes xDS (LDS filter chain with SNI match, CDS upstream cluster, SDS with node-managed cert). Envoy hot-reloads. <strong style="color:#e2e8f0;">(3)</strong> requests TLS cert from step-ca for the FQDN via <code>IStepCaClient.issueCert()</code>. Cert stored in CertCache. <strong style="color:#e2e8f0;">Service is now DNS-resolvable and routable locally.</strong>
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-app">Phase 2 — Service ACME Certificate (optional)</span></div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">B3</span>
+          <span class="step-actor actor-app">webapp</span>
+          <span class="step-title">Webapp requests own ACME cert (optional)</span>
+        </div>
+        <div class="step-detail">
+          Webapp uses a standard ACME client to contact step-ca's ACME directory. Requests a cert for <code>myapp.node-a.mesh.catalyst.local</code>. The FQDN already resolves (DNS was provisioned in B2), so the HTTP-01 challenge can complete. This step is optional — the node-managed cert from B2 is sufficient for mesh routing.
+        </div>
+      </div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">B4</span>
+          <span class="step-actor actor-mgmt">step-ca</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-app">webapp</span>
+          <span class="step-title">step-ca validates HTTP-01 challenge</span>
+        </div>
+        <div class="step-detail">
+          step-ca makes a GET request to the webapp at <code>/.well-known/acme-challenge/&lt;token&gt;</code>. DNS resolves because the orchestrator already provisioned the record. Challenge passes. step-ca signs the certificate. Webapp downloads cert + chain via ACME finalize.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B5</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-title">Orchestrator updates SDS with service cert</span>
+        </div>
+        <div class="step-detail">
+          If the webapp obtained its own cert, orchestrator updates <code>/xds/sds.json</code> to replace the node-managed cert with the service-managed cert. Envoy hot-reloads. Service now terminates TLS with its own identity.
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-mesh">Phase 3 — Mesh Propagation</span></div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">B6</span>
+          <span class="step-actor actor-mgmt">orchestrator</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-ext">peers</span>
+          <span class="step-title">BGP UPDATE to all peers</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator sends BGP UPDATE message to all established peer sessions. Payload includes: FQDN (<code>myapp.node-a.mesh.catalyst.local</code>), nodePath (routing path), CA thumbprint (trust anchor), Cedar policy hints (allowed principals). Peers ACK.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B7</span>
+          <span class="step-actor actor-ext">peer orchestrators</span>
+          <span class="step-title">Remote nodes update DNS + Envoy</span>
+        </div>
+        <div class="step-detail">
+          Each peer's orchestrator receives the UPDATE, adds route to its RIB, writes zone file (FQDN → local Envoy, which will proxy via QUIC to originating node), writes xDS (CDS cluster for the QUIC upstream to node-a, LDS filter chain for SNI match). <strong style="color:#e2e8f0;">Service is now reachable mesh-wide.</strong>
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">B8</span>
+          <span class="step-actor actor-mgmt">cedar-engine</span>
+          <span class="step-title">Cedar policies updated</span>
+        </div>
+        <div class="step-detail">
+          Orchestrator pushes service-specific Cedar policies to the policy engine (both local and via BGP to peers). Default policy: deny all except principals with valid cert-bound tokens and matching FQDN scope. Envoy's ext_authz will evaluate these on every request.
+        </div>
+      </div>
+
+    </div>
+    </div>
+
+    </div>
+  </div>
+
+  <!-- ============ FLOW C: FIRST CLIENT CONNECTION ============ -->
+  <div class="proto-section">
+    <h3>
+      <span class="proto-tag" style="background: rgba(244,114,182,0.15); color: #f472b6;">Flow C</span>
+      First Client Connection — CLI Cert &amp; mTLS to Service
+    </h3>
+    <div class="proto-sub">
+      A user on a remote node uses the Catalyst CLI to create a client certificate, obtains a certificate-bound JWT, then connects to the webapp via DNS resolution and mTLS through the Envoy mesh. Cedar policy evaluated at every hop.
+    </div>
+
+    <div class="flow-steps">
+
+      <div class="phase-break"><span class="phase-name p-client">Phase 1 — Client Identity</span></div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">C1</span>
+          <span class="step-actor actor-client">CLI</span>
+          <span class="step-title">User generates key pair</span>
+        </div>
+        <div class="step-detail">
+          User runs <code>catalyst cert create --name alice</code>. CLI generates an ECDSA P-256 key pair locally. Private key stays on disk (e.g. <code>~/.catalyst/alice.key</code>). Creates a CSR with subject <code>CN=alice</code>.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">C2</span>
+          <span class="step-actor actor-client">CLI</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-mgmt">step-ca</span>
+          <span class="step-title">Certificate signing request via ACME</span>
+        </div>
+        <div class="step-detail">
+          CLI uses ACME (or step-ca's direct API) to submit the CSR. step-ca signs a short-lived client cert: <code>CN=alice, O=catalyst-mesh</code>. Cert includes the public key thumbprint that will bind to tokens. CLI stores cert at <code>~/.catalyst/alice.crt</code>.
+        </div>
+      </div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">C3</span>
+          <span class="step-actor actor-client">CLI</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-mgmt">token-service</span>
+          <span class="step-title">Request certificate-bound JWT</span>
+        </div>
+        <div class="step-detail">
+          CLI requests a JWT from the token service, presenting the client cert via mTLS. Token service verifies cert chain (signed by step-ca). Mints a JWT with <code>cnf.x5t#S256</code> claim set to the SHA-256 thumbprint of alice's cert (RFC 8705). JWT includes scopes: <code>["myapp.node-a.mesh.catalyst.local"]</code>.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">C4</span>
+          <span class="step-actor actor-client">CLI</span>
+          <span class="step-title">Client identity ready</span>
+        </div>
+        <div class="step-detail">
+          Alice now has: <strong style="color:#e2e8f0;">(1)</strong> private key, <strong style="color:#e2e8f0;">(2)</strong> client cert signed by mesh CA, <strong style="color:#e2e8f0;">(3)</strong> JWT bound to that cert. These three together prove identity to any Envoy in the mesh.
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-data">Phase 2 — DNS Resolution</span></div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">C5</span>
+          <span class="step-actor actor-client">client app</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-data">CoreDNS</span>
+          <span class="step-title">Resolve service FQDN</span>
+        </div>
+        <div class="step-detail">
+          Client (curl, browser, any app) resolves <code>myapp.node-a.mesh.catalyst.local</code>. DNS query goes to local CoreDNS (either configured directly or via DHCP on appliance). CoreDNS returns the local Envoy's IP (the mesh routes everything through Envoy).
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-data">Phase 3 — Local Envoy — TLS + Cedar Policy</span></div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">C6</span>
+          <span class="step-actor actor-client">client app</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-data">local Envoy</span>
+          <span class="step-title">mTLS handshake with local Envoy</span>
+        </div>
+        <div class="step-detail">
+          Client connects to Envoy :443 with SNI = <code>myapp.node-a.mesh.catalyst.local</code>. Presents alice's client cert. Envoy matches SNI to filter chain. TLS handshake completes — Envoy has the client's cert identity + the target FQDN.
+        </div>
+      </div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">C7</span>
+          <span class="step-actor actor-data">local Envoy</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-mgmt">Cedar</span>
+          <span class="step-title">Cedar policy evaluation (local hop)</span>
+        </div>
+        <div class="step-detail">
+          Envoy calls ext_authz with: <code>principal=CN:alice</code>, <code>resource=myapp.node-a.mesh.catalyst.local</code>, <code>action=CONNECT</code>, <code>token=&lt;JWT&gt;</code>. Cedar verifies: JWT signature valid, <code>cnf.x5t#S256</code> matches presented cert, principal is allowed to access resource. <span style="color:#4ade80;font-weight:600;">ALLOW</span> — connection proceeds.
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-mesh">Phase 4 — QUIC Transit to Remote Node</span></div>
+
+      <div class="flow-step active">
+        <div class="step-header">
+          <span class="step-num">C8</span>
+          <span class="step-actor actor-data">local Envoy</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-ext">remote Envoy</span>
+          <span class="step-title">QUIC stream to peer cluster</span>
+        </div>
+        <div class="step-detail">
+          Local Envoy looks up the CDS cluster for node-a. Opens (or reuses) a QUIC connection to remote Envoy on :8443. Traffic flows as a QUIC stream within the peer cluster. mTLS between Envoys using node identity certs. SNI + identity headers forwarded in the stream.
+        </div>
+      </div>
+
+      <div class="phase-break"><span class="phase-name p-data">Phase 5 — Remote Envoy — TLS + Cedar Policy</span></div>
+
+      <div class="flow-step key">
+        <div class="step-header">
+          <span class="step-num">C9</span>
+          <span class="step-actor actor-ext">remote Envoy</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-mgmt">Cedar</span>
+          <span class="step-title">Cedar policy evaluation (remote hop)</span>
+        </div>
+        <div class="step-detail">
+          Remote Envoy terminates TLS <strong style="color:#e2e8f0;">(independently — not trusting the local Envoy's decision)</strong>. Extracts client identity from forwarded headers/nested token. Calls Cedar ext_authz again with same principal + resource. Cedar evaluates remote-side policy. <span style="color:#4ade80;font-weight:600;">ALLOW</span> — request forwarded to webapp.
+        </div>
+      </div>
+
+      <div class="flow-step done">
+        <div class="step-header">
+          <span class="step-num">C10</span>
+          <span class="step-actor actor-ext">remote Envoy</span>
+          <span class="step-arrow">→</span>
+          <span class="step-actor actor-app">webapp</span>
+          <span class="step-title">Request delivered to webapp</span>
+        </div>
+        <div class="step-detail">
+          Remote Envoy forwards the request to the webapp's local cluster address. Webapp receives a plain HTTP request (Envoy terminated TLS). Identity available via <code>x-forwarded-client-cert</code> header if needed. <strong style="color:#e2e8f0;">End-to-end: DNS lookup → local Envoy (TLS + Cedar) → QUIC cluster → remote Envoy (TLS + Cedar) → webapp.</strong>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Summary callout -->
+  <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 24px; margin-bottom: 48px;">
+    <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: #e2e8f0;">Dependency Chain Summary</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+      <div style="padding: 14px; border-radius: 10px; background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.12);">
+        <div style="font-size: 11px; font-weight: 700; color: #a78bfa; margin-bottom: 6px;">System Ready requires</div>
+        <div style="font-size: 11px; color: #94a3b8; line-height: 1.6;">
+          step-ca (root of trust) → token-service → Cedar → CoreDNS + Envoy (watchers) → orchestrator (writes config) → DHCP/NAT (appliance)
+        </div>
+      </div>
+      <div style="padding: 14px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.12);">
+        <div style="font-size: 11px; font-weight: 700; color: #4ade80; margin-bottom: 6px;">Service Onboarding requires</div>
+        <div style="font-size: 11px; color: #94a3b8; line-height: 1.6;">
+          <del>System ready + ACME client in webapp → step-ca issues cert → orchestrator detects → writes xDS + DNS → BGP propagates to peers</del>
+          <ins>System ready + data channel registration via orchestrator API → orchestrator writes DNS + xDS + issues cert → (optional) webapp ACME using live DNS → BGP propagates to peers</ins>
+        </div>
+      </div>
+      <div style="padding: 14px; border-radius: 10px; background: rgba(244,114,182,0.06); border: 1px solid rgba(244,114,182,0.12);">
+        <div style="font-size: 11px; font-weight: 700; color: #f472b6; margin-bottom: 6px;">Client Connection requires</div>
+        <div style="font-size: 11px; color: #94a3b8; line-height: 1.6;">
+          Service onboarded + CLI cert from step-ca + JWT from token-service → DNS resolves → Envoy mTLS + Cedar at every hop → QUIC to remote → delivered
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blurb -->
+  <div class="blurb">
+    <h2>What's Changing</h2>
+    <p><strong>Catalyst is moving from a service you code against to an environment you route through.</strong> Today, applications integrate via an SDK — they open a WebSocket, call capnweb RPCs, and register data channels on allocated ports. That works, but it couples every consumer to our protocol and makes Catalyst a dependency in your code.</p>
+    <p>The new model flips this. We use <strong>PKI + QUIC to build a peer-to-peer Envoy mesh</strong>, then layer <strong>SNI and domain-based routing</strong> on top — no port allocation needed. Since we already propagate FQDNs across the mesh, we now populate a <strong>DNS service</strong> (with proxy capabilities for internet-facing services) that any application can resolve against. Catalyst becomes a <strong>web proxy or NAT gateway</strong>: configure it as your default route, and traffic flows to peered services transparently.</p>
+    <p>Architecturally, we split from 2 planes into 3. The <strong>management plane</strong> (orchestrator, PKI, token, Cedar) stays private and handles policy. The <strong>data plane</strong> (Envoy, DNS, <del>PIK,</del> DHCP/NAT) carries traffic and is the public core. <ins>Token validation is Envoy-native via Cedar ext_authz; JWKS is served directly by the orchestrator. ACME is handled by step-ca in the management plane — no separate data-plane services needed.</ins> The new <strong>application plane</strong> (Zenoh, GraphQL, MediaMTX) holds opt-in services that ride the data plane but are no longer part of the core — they're just applications like any other.</p>
+    <p>Deployment simplifies too. K8s manages either an <strong>appliance</strong> (hardware or virtual, dropped onto a network like a proxy) or a <strong>sidecar</strong> (embedded in an existing cluster, hooking into CoreDNS and the K8s networking stack). Both modes use the same images and config — the difference is where you point the default route.</p>
+  </div>
+
+</div>
+</body>
+</html>
