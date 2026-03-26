@@ -179,9 +179,9 @@ export function tokenCommands(): Command {
         console.table(
           result.data.tokens.map((t) => ({
             JTI: t.jti,
-            Subject: t.sub,
-            IssuedAt: new Date(t.iat * 1000).toISOString(),
-            ExpiresAt: new Date(t.exp * 1000).toISOString(),
+            Entity: `${t.entityName} (${t.entityId})`,
+            Type: t.entityType,
+            ExpiresAt: new Date(t.expiry).toISOString(),
             Revoked: t.revoked ? 'Yes' : 'No',
           }))
         )

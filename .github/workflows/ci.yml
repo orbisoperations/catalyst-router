@@ -45,8 +45,6 @@ jobs:
       - uses: ./.github/actions/setup-repo
 
       - run: pnpm exec turbo run test:integration
-        env:
-          CATALYST_CONTAINER_TESTS_ENABLED: 'true'
 
   docker-validate:
     name: Docker Build (Bake)

@@ -19,15 +19,13 @@ const isDockerRunning = () => {
   }
 }
 
-const skipTests = !isDockerRunning() || !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+const skipTests = !isDockerRunning()
 if (skipTests) {
-  console.warn(
-    'Skipping route container tests: Docker not running or CATALYST_CONTAINER_TESTS_ENABLED not set'
-  )
+  console.warn('Skipping route container tests: Docker not running')
 }
 
 describe.skipIf(skipTests)('Route Commands Container Tests', () => {
-  const TIMEOUT = 300000 // 5 minutes
+  const TIMEOUT = 600000 // 10 minutes
   const orchestratorImage = 'catalyst-node:next-topology-e2e'
   const authImage = 'catalyst-auth:next-topology-e2e'
   const repoRoot = path.resolve(__dirname, '../../../../')
@@ -64,6 +62,7 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
 
     // Start auth service
     console.log('Starting auth service...')
+    const authLogs: string[] = []
     auth = await new GenericContainer(authImage)
       .withNetwork(network)
       .withNetworkAliases('auth')
@@ -75,20 +74,24 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
         CATALYST_BOOTSTRAP_TTL: '3600000',
         CATALYST_NODE_ID: 'test-node',
       })
-      .withWaitStrategy(Wait.forLogMessage('Auth service started'))
+      .withWaitStrategy(Wait.forLogMessage('System Admin Token minted:'))
+      .withLogConsumer((stream: NodeJS.ReadableStream) => {
+        stream.on('data', (chunk: Buffer) => authLogs.push(chunk.toString()))
+      })
       .start()
 
-    // Extract system token from logs
-    const authLogs = await auth.logs()
-    let logsData = ''
-    for await (const chunk of authLogs) {
-      logsData += chunk.toString()
+    // Extract system token from captured logs
+    for (let i = 0; i < 20; i++) {
+      const tokenMatch = authLogs.join('').match(/System Admin Token minted: (eyJ[^\s]+)/)
+      if (tokenMatch) {
+        systemToken = tokenMatch[1]
+        break
+      }
+      await new Promise((r) => setTimeout(r, 100))
     }
-    const tokenMatch = logsData.match(/System Admin Token minted: (eyJ[^\s]+)/)
-    if (!tokenMatch) {
+    if (!systemToken) {
       throw new Error('Failed to extract system token from auth logs')
     }
-    systemToken = tokenMatch[1]
     console.log('Extracted system token:', systemToken.substring(0, 20) + '...')
 
     // Start orchestrator
@@ -99,11 +102,12 @@ describe.skipIf(skipTests)('Route Commands Container Tests', () => {
       .withExposedPorts(3000)
       .withEnvironment({
         CATALYST_NODE_ID: 'test-node',
+        CATALYST_PEERING_ENDPOINT: 'ws://orchestrator:3000/rpc',
         CATALYST_DOMAINS: 'test.local',
-        CATALYST_ORCHESTRATOR_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
-        CATALYST_ORCHESTRATOR_AUTH_SYSTEM_TOKEN: systemToken,
+        CATALYST_AUTH_ENDPOINT: 'ws://auth:5000/rpc',
+        CATALYST_SYSTEM_TOKEN: systemToken,
       })
-      .withWaitStrategy(Wait.forLogMessage('Orchestrator (Next) running'))
+      .withWaitStrategy(Wait.forLogMessage('Orchestrator v2 running as'))
       .start()
 
     console.log('Containers started successfully')

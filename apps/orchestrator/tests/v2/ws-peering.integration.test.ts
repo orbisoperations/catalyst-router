@@ -143,6 +143,7 @@ async function peerNodes(a: TestNode, b: TestNode): Promise<void> {
     {
       ...peerBOnA,
       connectionStatus: 'initializing',
+      lastConnected: 0,
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
@@ -167,6 +168,7 @@ async function peerNodes(a: TestNode, b: TestNode): Promise<void> {
     {
       ...peerAOnB,
       connectionStatus: 'initializing',
+      lastConnected: 0,
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
@@ -220,6 +222,7 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
       endpoint: serverNode.endpoint,
       domains: ['ws-test.local'],
       connectionStatus: 'initializing' as const,
+      lastConnected: 0,
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
@@ -246,6 +249,7 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
       endpoint: 'ws://localhost:19999/rpc',
       domains: ['ws-test.local'],
       connectionStatus: 'initializing' as const,
+      lastConnected: 0,
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
