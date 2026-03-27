@@ -18,11 +18,16 @@ export type PublicRouteTable = {
   peers: PublicPeer[]
 }
 
-/** Returns peer data safe for API exposure (credentials + bookkeeping stripped). */
+/** Returns peer data safe for API exposure — explicit allowlist, no credentials leak. */
 export function peerToPublic(peer: PeerRecord): PublicPeer {
-  const { peerToken: _token, holdTime: _hold, lastSent: _sent, lastReceived: _recv, ...rest } =
-    peer
-  return rest
+  return {
+    name: peer.name,
+    domains: peer.domains,
+    endpoint: peer.endpoint,
+    labels: peer.labels,
+    connectionStatus: peer.connectionStatus,
+    lastConnected: peer.lastConnected,
+  }
 }
 
 /** Returns route safe for API exposure (peer credentials + isStale stripped). */
