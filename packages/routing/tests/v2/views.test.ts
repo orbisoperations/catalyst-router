@@ -12,6 +12,7 @@ function makePeerRecord(overrides: Partial<PeerRecord> = {}): PeerRecord {
     name: 'peer-1',
     domains: ['example.com'],
     connectionStatus: 'connected',
+    lastConnected: 0,
     holdTime: 90_000,
     lastSent: 0,
     lastReceived: 1000,
