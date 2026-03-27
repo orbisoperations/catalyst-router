@@ -60,17 +60,17 @@ describe('adapter health propagation', () => {
         endpoint: 'http://svc-alpha:8080',
         healthStatus: 'up',
         responseTimeMs: 42,
-        lastChecked: now,
+        lastCheckedAt: now,
       },
     })
 
     const snapshot = bus.getStateSnapshot()
-    const route = snapshot.local.routes.find((r) => r.name === 'svc-alpha')
+    const route = snapshot.local.routes.get('svc-alpha')
 
     expect(route).toBeDefined()
     expect(route?.healthStatus).toBe('up')
     expect(route?.responseTimeMs).toBe(42)
-    expect(route?.lastChecked).toBe(now)
+    expect(route?.lastCheckedAt).toBe(now)
   })
 
   it('health fields propagate to peer via iBGP update', async () => {
@@ -87,7 +87,7 @@ describe('adapter health propagation', () => {
         endpoint: 'http://svc-beta:8080',
         healthStatus: 'down',
         responseTimeMs: null,
-        lastChecked: now,
+        lastCheckedAt: now,
       },
     })
 
@@ -102,7 +102,7 @@ describe('adapter health propagation', () => {
     expect(update.route.name).toBe('svc-beta')
     expect(update.route.healthStatus).toBe('down')
     expect(update.route.responseTimeMs).toBeNull()
-    expect(update.route.lastChecked).toBe(now)
+    expect(update.route.lastCheckedAt).toBe(now)
   })
 
   it('route without health fields defaults to undefined (backward compat)', async () => {
@@ -116,12 +116,12 @@ describe('adapter health propagation', () => {
     })
 
     const snapshot = bus.getStateSnapshot()
-    const route = snapshot.local.routes.find((r) => r.name === 'svc-legacy')
+    const route = snapshot.local.routes.get('svc-legacy')
 
     expect(route).toBeDefined()
     expect(route?.healthStatus).toBeUndefined()
     expect(route?.responseTimeMs).toBeUndefined()
-    expect(route?.lastChecked).toBeUndefined()
+    expect(route?.lastCheckedAt).toBeUndefined()
   })
 
   it('health status update propagates to connected peer', async () => {
@@ -146,13 +146,13 @@ describe('adapter health propagation', () => {
         name: 'books',
         healthStatus: 'down' as const,
         responseTimeMs: null,
-        lastChecked: '2026-03-17T02:20:00Z',
+        lastCheckedAt: '2026-03-17T02:20:00Z',
       },
     })
 
     // Verify the local state reflects the health update
     const state = bus.getStateSnapshot()
-    expect(state.local.routes[0].healthStatus).toBe('down')
+    expect(state.local.routes.get('books')?.healthStatus).toBe('down')
 
     // Verify the peer received the health update via iBGP
     const updateCalls = transport.getCallsFor('sendUpdate')
@@ -166,6 +166,6 @@ describe('adapter health propagation', () => {
     expect(update.route.name).toBe('books')
     expect(update.route.healthStatus).toBe('down')
     expect(update.route.responseTimeMs).toBeNull()
-    expect(update.route.lastChecked).toBe('2026-03-17T02:20:00Z')
+    expect(update.route.lastCheckedAt).toBe('2026-03-17T02:20:00Z')
   })
 })

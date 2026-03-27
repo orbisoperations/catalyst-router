@@ -8,39 +8,46 @@ import type { RouteTable } from '@catalyst/routing/v2'
 // ---------------------------------------------------------------------------
 
 function makeRouteTable(): RouteTable {
+  const localRoutes = new Map([
+    ['local-svc', { name: 'local-svc', protocol: 'http' as const, endpoint: 'http://local:8080' }],
+  ])
+
+  const peers = new Map([
+    [
+      'peer-1',
+      {
+        name: 'peer-1',
+        endpoint: 'ws://peer-1:4000',
+        domains: ['example.local'],
+        connectionStatus: 'connected' as const,
+        peerToken: 'secret-token-1',
+        holdTime: 90_000,
+        lastSent: 100,
+        lastReceived: 200,
+      },
+    ],
+  ])
+
+  const internalRoute = {
+    name: 'remote-svc',
+    protocol: 'http' as const,
+    endpoint: 'http://remote:8080',
+    peer: {
+      name: 'peer-1',
+      domains: ['example.local'],
+      peerToken: 'secret-peer-token',
+    },
+    nodePath: ['peer-1'],
+    originNode: 'peer-1',
+    isStale: false,
+  }
+  const internalRoutes = new Map([
+    ['peer-1', new Map([['remote-svc:peer-1', internalRoute]])],
+  ])
+
   return {
-    local: {
-      routes: [{ name: 'local-svc', protocol: 'http' as const, endpoint: 'http://local:8080' }],
-    },
-    internal: {
-      peers: [
-        {
-          name: 'peer-1',
-          endpoint: 'ws://peer-1:4000',
-          domains: ['example.local'],
-          connectionStatus: 'connected' as const,
-          peerToken: 'secret-token-1',
-          holdTime: 90_000,
-          lastSent: 100,
-          lastReceived: 200,
-        },
-      ],
-      routes: [
-        {
-          name: 'remote-svc',
-          protocol: 'http' as const,
-          endpoint: 'http://remote:8080',
-          peer: {
-            name: 'peer-1',
-            domains: ['example.local'],
-            peerToken: 'secret-peer-token',
-          },
-          nodePath: ['peer-1'],
-          originNode: 'peer-1',
-          isStale: false,
-        },
-      ],
-    },
+    local: { routes: localRoutes },
+    internal: { peers, routes: internalRoutes },
   }
 }
 

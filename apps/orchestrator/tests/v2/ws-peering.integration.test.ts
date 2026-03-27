@@ -152,7 +152,7 @@ async function peerNodes(a: TestNode, b: TestNode): Promise<void> {
 
   // Wait for B to see A as connected (via InternalProtocolOpen from A's dial)
   await waitFor(() => {
-    const p = b.bus.state.internal.peers.find((pp) => pp.name === a.name)
+    const p = b.bus.state.internal.peers.get(a.name)
     return p?.connectionStatus === 'connected'
   })
 
@@ -176,7 +176,7 @@ async function peerNodes(a: TestNode, b: TestNode): Promise<void> {
 
   // Wait for A to see B's inbound dial
   await waitFor(() => {
-    const p = a.bus.state.internal.peers.find((pp) => pp.name === b.name)
+    const p = a.bus.state.internal.peers.get(b.name)
     return p?.connectionStatus === 'connected'
   })
 
@@ -228,11 +228,11 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
     await transportA.openPeer(peerRecord, tokenA)
 
     await waitFor(() => {
-      const peer = serverNode.bus.state.internal.peers.find((p) => p.name === 'node-a')
+      const peer = serverNode.bus.state.internal.peers.get('node-a')
       return peer?.connectionStatus === 'connected'
     })
 
-    const peerOnB = serverNode.bus.state.internal.peers.find((p) => p.name === 'node-a')
+    const peerOnB = serverNode.bus.state.internal.peers.get('node-a')
     expect(peerOnB?.connectionStatus).toBe('connected')
   })
 
@@ -289,23 +289,23 @@ describe('Two-node WebSocket peering', () => {
 
     // Wait for routes to propagate via delta fan-out (post-commit side effect)
     await waitFor(() => {
-      const bHasA = nodeB.bus.state.internal.routes.some((r) => r.name === 'service-alpha')
-      const aHasB = nodeA.bus.state.internal.routes.some((r) => r.name === 'service-beta')
+      const bHasA = [...nodeB.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-alpha')
+      const aHasB = [...nodeA.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-beta')
       return bHasA && aHasB
     })
 
-    expect(nodeB.bus.state.internal.routes.some((r) => r.name === 'service-alpha')).toBe(true)
-    expect(nodeA.bus.state.internal.routes.some((r) => r.name === 'service-beta')).toBe(true)
+    expect([...nodeB.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-alpha')).toBe(true)
+    expect([...nodeA.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-beta')).toBe(true)
 
     // Verify route attribution
-    const routeOnB = nodeB.bus.state.internal.routes.find((r) => r.name === 'service-alpha')!
+    const routeOnB = [...nodeB.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).find((r) => r.name === 'service-alpha')!
     expect(routeOnB.originNode).toBe('node-alpha')
     expect(routeOnB.nodePath).toContain('node-alpha')
   })
 
   it('route withdrawal propagates over WebSocket — no zombie routes', async () => {
     // Verify service-alpha exists on B
-    expect(nodeB.bus.state.internal.routes.some((r) => r.name === 'service-alpha')).toBe(true)
+    expect([...nodeB.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-alpha')).toBe(true)
 
     // Delete service-alpha from node-alpha
     await nodeA.bus.dispatch({
@@ -315,17 +315,17 @@ describe('Two-node WebSocket peering', () => {
 
     // Wait for withdrawal to reach node-beta
     await waitFor(() => {
-      return !nodeB.bus.state.internal.routes.some((r) => r.name === 'service-alpha')
+      return ![...nodeB.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-alpha')
     })
 
-    expect(nodeB.bus.state.internal.routes.some((r) => r.name === 'service-alpha')).toBe(false)
+    expect([...nodeB.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-alpha')).toBe(false)
     // node-beta's own route should still be there
-    expect(nodeA.bus.state.internal.routes.some((r) => r.name === 'service-beta')).toBe(true)
+    expect([...nodeA.bus.state.internal.routes.values()].flatMap((m) => [...m.values()]).some((r) => r.name === 'service-beta')).toBe(true)
   })
 
   it('sendKeepalive succeeds over WebSocket and updates lastReceived', async () => {
     // Get B's peer record for alpha on beta
-    const peerOnB = nodeB.bus.state.internal.peers.find((p) => p.name === 'node-alpha')!
+    const peerOnB = nodeB.bus.state.internal.peers.get('node-alpha')!
     const beforeKeepalive = peerOnB.lastReceived
 
     // Small delay to ensure Date.now() advances
@@ -333,16 +333,16 @@ describe('Two-node WebSocket peering', () => {
 
     // Node-alpha sends keepalive to node-beta
     // Need the peer record from alpha's side WITH peerToken
-    const peerBetaOnAlpha = nodeA.bus.state.internal.peers.find((p) => p.name === 'node-beta')!
+    const peerBetaOnAlpha = nodeA.bus.state.internal.peers.get('node-beta')!
     await nodeA.transport.sendKeepalive(peerBetaOnAlpha)
 
     // Wait for lastReceived to update on beta's side
     await waitFor(() => {
-      const p = nodeB.bus.state.internal.peers.find((pp) => pp.name === 'node-alpha')
+      const p = nodeB.bus.state.internal.peers.get('node-alpha')
       return p !== undefined && p.lastReceived > beforeKeepalive
     })
 
-    const peerAfter = nodeB.bus.state.internal.peers.find((p) => p.name === 'node-alpha')!
+    const peerAfter = nodeB.bus.state.internal.peers.get('node-alpha')!
     expect(peerAfter.lastReceived).toBeGreaterThan(beforeKeepalive)
   })
 }, 15_000)

@@ -56,8 +56,8 @@ describe('OrchestratorServiceV2', () => {
   it('starts with empty state on a fresh journal', () => {
     const svc = new OrchestratorServiceV2({ config, transport })
 
-    expect(svc.bus.state.local.routes).toHaveLength(0)
-    expect(svc.bus.state.internal.peers).toHaveLength(0)
+    expect(svc.bus.state.local.routes.size).toBe(0)
+    expect(svc.bus.state.internal.peers.size).toBe(0)
   })
 
   it('start() begins tick dispatch', async () => {
@@ -126,7 +126,7 @@ describe('OrchestratorServiceV2', () => {
     await svc.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
     // Bus holds the token internally — we can't directly inspect it, but the
     // setNodeToken call should not throw and the bus should function correctly.
-    expect(svc.bus.state.internal.peers).toHaveLength(1)
+    expect(svc.bus.state.internal.peers.size).toBe(1)
 
     await svc.stop()
   })
@@ -187,9 +187,9 @@ describe('OrchestratorServiceV2', () => {
         initialState: tempRib.state,
       })
 
-      expect(restoredBus.state.local.routes).toHaveLength(2)
-      expect(restoredBus.state.local.routes.map((r) => r.name)).toContain('alpha')
-      expect(restoredBus.state.local.routes.map((r) => r.name)).toContain('beta')
+      expect(restoredBus.state.local.routes.size).toBe(2)
+      expect([...restoredBus.state.local.routes.values()].map((r) => r.name)).toContain('alpha')
+      expect([...restoredBus.state.local.routes.values()].map((r) => r.name)).toContain('beta')
 
       // Cleanup
       void svc1.stop()

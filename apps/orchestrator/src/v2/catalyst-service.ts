@@ -165,7 +165,7 @@ export class OrchestratorService extends CatalystService {
       // Health checks read a snapshot of routes (safe). Status changes are
       // dispatched into the bus via dispatchFn, which updates the RIB and
       // triggers iBGP propagation to peers.
-      this._healthChecker.start(() => this._v2.bus.getStateSnapshot().local.routes)
+      this._healthChecker.start(() => [...this._v2.bus.getStateSnapshot().local.routes.values()])
     }
 
     // Build the token validator
@@ -194,7 +194,7 @@ export class OrchestratorService extends CatalystService {
     this.handler.get('/api/state', (c) => {
       const snapshot = bus.getStateSnapshot()
       if (this._healthChecker) {
-        this._healthChecker.applyHealth(snapshot.local.routes)
+        this._healthChecker.applyHealth([...snapshot.local.routes.values()])
       }
       return c.json(routeTableToPublic(snapshot))
     })

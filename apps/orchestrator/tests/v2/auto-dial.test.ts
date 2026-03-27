@@ -71,7 +71,7 @@ describe('auto-dial on LocalPeerCreate', () => {
 
     await svc.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
 
-    const peer = svc.bus.state.internal.peers.find((p) => p.name === 'node-b')
+    const peer = svc.bus.state.internal.peers.get('node-b')
     expect(peer).toBeDefined()
     expect(peer!.connectionStatus).toBe('connected')
   })
@@ -153,7 +153,7 @@ describe('auto-dial on LocalPeerCreate', () => {
     })
 
     // The peer is in state from replay
-    expect(bus.state.internal.peers.find((p) => p.name === 'node-b')).toBeDefined()
+    expect(bus.state.internal.peers.get('node-b')).toBeDefined()
 
     // But no openPeer call was made — replay does not trigger auto-dial
     const openCalls = transport2.getCallsFor('openPeer')

@@ -104,7 +104,7 @@ describe('SQLite journal: durability and restart reconstruction', () => {
     await svc1.bus.dispatch({ action: Actions.LocalRouteCreate, data: routeAlpha })
     await svc1.bus.dispatch({ action: Actions.LocalRouteCreate, data: routeBeta })
 
-    expect(svc1.bus.state.local.routes).toHaveLength(2)
+    expect(svc1.bus.state.local.routes.size).toBe(2)
     await svc1.stop()
 
     // Session 2: fresh service with same journal
@@ -114,8 +114,8 @@ describe('SQLite journal: durability and restart reconstruction', () => {
       journalPath: jp,
     })
 
-    expect(svc2.bus.state.local.routes).toHaveLength(2)
-    const names = svc2.bus.state.local.routes.map((r) => r.name).sort()
+    expect(svc2.bus.state.local.routes.size).toBe(2)
+    const names = [...svc2.bus.state.local.routes.values()].map((r) => r.name).sort()
     expect(names).toEqual(['alpha', 'beta'])
 
     await svc2.stop()
@@ -132,7 +132,7 @@ describe('SQLite journal: durability and restart reconstruction', () => {
     })
 
     await svc1.bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
-    expect(svc1.bus.state.internal.peers).toHaveLength(1)
+    expect(svc1.bus.state.internal.peers.size).toBe(1)
     await svc1.stop()
 
     // Session 2: peer should be restored
@@ -142,10 +142,10 @@ describe('SQLite journal: durability and restart reconstruction', () => {
       journalPath: jp,
     })
 
-    expect(svc2.bus.state.internal.peers).toHaveLength(1)
-    expect(svc2.bus.state.internal.peers[0].name).toBe('node-b')
+    expect(svc2.bus.state.internal.peers.size).toBe(1)
+    expect(svc2.bus.state.internal.peers.get('node-b')?.name).toBe('node-b')
     // After journal replay, auto-dial fires (GAP-001) and connects the peer
-    expect(svc2.bus.state.internal.peers[0].connectionStatus).toBe('connected')
+    expect(svc2.bus.state.internal.peers.get("node-b")?.connectionStatus).toBe('connected')
 
     await svc2.stop()
   })
@@ -168,9 +168,9 @@ describe('SQLite journal: durability and restart reconstruction', () => {
       transport: new MockPeerTransport(),
       journalPath: jp,
     })
-    expect(svc2.bus.state.local.routes).toHaveLength(1)
+    expect(svc2.bus.state.local.routes.size).toBe(1)
     await svc2.bus.dispatch({ action: Actions.LocalRouteCreate, data: routeBeta })
-    expect(svc2.bus.state.local.routes).toHaveLength(2)
+    expect(svc2.bus.state.local.routes.size).toBe(2)
     await svc2.stop()
 
     // Session 3: should have exactly 2 routes (not 3+ from double-appended alpha)
@@ -179,7 +179,7 @@ describe('SQLite journal: durability and restart reconstruction', () => {
       transport: new MockPeerTransport(),
       journalPath: jp,
     })
-    expect(svc3.bus.state.local.routes).toHaveLength(2)
+    expect(svc3.bus.state.local.routes.size).toBe(2)
     await svc3.stop()
   })
 
@@ -194,7 +194,7 @@ describe('SQLite journal: durability and restart reconstruction', () => {
     })
     await svc1.bus.dispatch({ action: Actions.LocalRouteCreate, data: routeAlpha })
     await svc1.bus.dispatch({ action: Actions.LocalRouteDelete, data: routeAlpha })
-    expect(svc1.bus.state.local.routes).toHaveLength(0)
+    expect(svc1.bus.state.local.routes.size).toBe(0)
     await svc1.stop()
 
     // Session 2: replay should produce empty state
@@ -203,7 +203,7 @@ describe('SQLite journal: durability and restart reconstruction', () => {
       transport: new MockPeerTransport(),
       journalPath: jp,
     })
-    expect(svc2.bus.state.local.routes).toHaveLength(0)
+    expect(svc2.bus.state.local.routes.size).toBe(0)
     await svc2.stop()
   })
 })

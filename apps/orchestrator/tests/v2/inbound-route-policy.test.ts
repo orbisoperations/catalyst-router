@@ -69,7 +69,7 @@ describe('Inbound route policy', () => {
 
     expect(result.success).toBe(true)
     if (!result.success) return
-    expect(result.state.internal.routes).toHaveLength(2)
+    expect([...result.state.internal.routes.values()].flatMap((m) => [...m.values()])).toHaveLength(2)
   })
 
   it('rejects all routes when canReceive returns empty', async () => {
@@ -136,8 +136,8 @@ describe('Inbound route policy', () => {
 
     expect(result.success).toBe(true)
     if (!result.success) return
-    expect(result.state.internal.routes).toHaveLength(1)
-    expect(result.state.internal.routes[0].name).toBe('svc-alpha')
+    expect([...result.state.internal.routes.values()].flatMap((m) => [...m.values()])).toHaveLength(1)
+    expect([...result.state.internal.routes.values()].flatMap((m) => [...m.values()])[0].name).toBe('svc-alpha')
   })
 
   it('does not filter non-update actions', async () => {
@@ -182,6 +182,6 @@ describe('Inbound route policy', () => {
 
     expect(result.success).toBe(true)
     if (!result.success) return
-    expect(result.state.internal.routes).toHaveLength(1)
+    expect([...result.state.internal.routes.values()].flatMap((m) => [...m.values()])).toHaveLength(1)
   })
 })

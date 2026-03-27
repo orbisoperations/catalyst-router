@@ -180,7 +180,7 @@ export class OrchestratorServiceV2 {
       }
       // GAP-001: auto-dial on LocalPeerCreate
       if (result.success && action.action === Actions.LocalPeerCreate) {
-        const peerRecord = result.state.internal.peers.find((p) => p.name === action.data.name)
+        const peerRecord = result.state.internal.peers.get(action.data.name)
         if (peerRecord) {
           await this.dialPeer(peerRecord)
         }
@@ -208,7 +208,7 @@ export class OrchestratorServiceV2 {
    * the minimum negotiated holdTime per BGP spec (keepalive = holdTime / 3).
    */
   recalculateTickInterval(): void {
-    const holdTimes = this.bus.state.internal.peers.map((p) => p.holdTime)
+    const holdTimes = [...this.bus.state.internal.peers.values()].map((p) => p.holdTime)
     this.tickManager.recalculate(holdTimes)
   }
 

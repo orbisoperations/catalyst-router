@@ -180,7 +180,7 @@ export class OrchestratorBus {
           'catalyst.orchestrator.action.state_changed': true,
           'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
           'catalyst.orchestrator.route.total':
-            committed.local.routes.length + committed.internal.routes.length,
+            committed.local.routes.size + [...committed.internal.routes.values()].reduce((n, m) => n + m.size, 0),
         })
 
         if (plan.routeChanges.length > 0) {
@@ -202,7 +202,7 @@ export class OrchestratorBus {
             'catalyst.orchestrator.route.modified': counts.modified,
             'catalyst.orchestrator.route.trigger': action.action,
             'catalyst.orchestrator.route.total':
-              committed.local.routes.length + committed.internal.routes.length,
+              committed.local.routes.size + [...committed.internal.routes.values()].reduce((n, m) => n + m.size, 0),
           })
         }
 
@@ -227,7 +227,7 @@ export class OrchestratorBus {
     if (action.action !== Actions.InternalProtocolUpdate) return action
     if (this.routePolicy === undefined) return action
 
-    const peer = this.rib.state.internal.peers.find((p) => p.name === action.data.peerInfo.name)
+    const peer = this.rib.state.internal.peers.get(action.data.peerInfo.name)
     if (peer === undefined) return action
 
     const updates = action.data.update.updates
@@ -284,7 +284,9 @@ export class OrchestratorBus {
     plan: PlanResult,
     state: RouteTable
   ): Promise<void> {
-    const connectedPeers = state.internal.peers.filter((p) => p.connectionStatus === 'connected')
+    const connectedPeers = [...state.internal.peers.values()].filter(
+      (p) => p.connectionStatus === 'connected'
+    )
 
     // Initial sync: when a peer connects (outbound dial succeeded), send all
     // known routes so the session starts with a full table dump.
@@ -310,7 +312,7 @@ export class OrchestratorBus {
     // Close notification: when a peer is deleted, notify it before withdrawals.
     // Uses prevState because the peer is already removed from committed state.
     if (action.action === Actions.LocalPeerDelete) {
-      const deletedPeer = plan.prevState.internal.peers.find((p) => p.name === action.data.name)
+      const deletedPeer = plan.prevState.internal.peers.get(action.data.name)
       if (deletedPeer !== undefined) {
         try {
           await this.transport.closePeer(deletedPeer, CloseCodes.NORMAL, 'Peer removed')
@@ -364,7 +366,11 @@ export class OrchestratorBus {
     const client = this.gatewayClient
     if (client === undefined) return
 
-    const graphqlRoutes = [...state.local.routes, ...state.internal.routes].filter(
+    const allRoutes = [
+      ...state.local.routes.values(),
+      ...[...state.internal.routes.values()].flatMap((m) => [...m.values()]),
+    ]
+    const graphqlRoutes = allRoutes.filter(
       (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
     )
 
@@ -438,27 +444,42 @@ export class OrchestratorBus {
     // Phase 2 — Allocate local: assign ingress ports to local routes.
     //          Builds a lookup map for Phase 5 (routeChange stamping).
     const localPortMap = new Map<string, number>()
-    const localRoutes = plan.newState.local.routes.map((route) => {
-      if (route.envoyPort) return route
+    const localRoutes = new Map<string, DataChannelDefinition>()
+    for (const [key, route] of plan.newState.local.routes) {
+      if (route.envoyPort) {
+        localRoutes.set(key, route)
+        continue
+      }
       const result = this.portAllocator!.allocate(route.name)
-      if (!result.success) return route
+      if (!result.success) {
+        localRoutes.set(key, route)
+        continue
+      }
       portOps.push({ type: 'allocate', routeKey: route.name, port: result.port })
       localPortMap.set(route.name, result.port)
-      return { ...route, envoyPort: result.port }
-    })
+      localRoutes.set(key, { ...route, envoyPort: result.port })
+    }
 
     // Phase 3 — Allocate egress: assign egress ports to internal routes.
     const egressPortMap = new Map<string, number>()
-    const internalRoutes = plan.newState.internal.routes.map((route) => {
-      const egressKey = `egress_${route.name}_via_${route.peer.name}`
-      const result = this.portAllocator!.allocate(egressKey)
-      if (!result.success) return route
-      if (route.envoyPort !== result.port) {
-        portOps.push({ type: 'allocate', routeKey: egressKey, port: result.port })
+    const internalRoutes = new Map<string, Map<string, InternalRoute>>()
+    for (const [peerName, innerMap] of plan.newState.internal.routes) {
+      const newInner = new Map<string, InternalRoute>()
+      for (const [irKey, route] of innerMap) {
+        const egressKey = `egress_${route.name}_via_${route.peer.name}`
+        const result = this.portAllocator!.allocate(egressKey)
+        if (!result.success) {
+          newInner.set(irKey, route)
+          continue
+        }
+        if (route.envoyPort !== result.port) {
+          portOps.push({ type: 'allocate', routeKey: egressKey, port: result.port })
+        }
+        egressPortMap.set(egressKey, result.port)
+        newInner.set(irKey, { ...route, envoyPort: result.port })
       }
-      egressPortMap.set(egressKey, result.port)
-      return { ...route, envoyPort: result.port }
-    })
+      internalRoutes.set(peerName, newInner)
+    }
 
     // Phase 4 — Stamp: build enriched state with ports applied.
     const newState: RouteTable = {
@@ -509,13 +530,14 @@ export class OrchestratorBus {
 
     try {
       await withWideEvent('orchestrator.envoy_sync', logger, async (event) => {
+        const allInternalRoutes = [...state.internal.routes.values()].flatMap((m) => [...m.values()])
         event.set({
-          'catalyst.orchestrator.envoy.local_count': state.local.routes.length,
-          'catalyst.orchestrator.envoy.internal_count': state.internal.routes.length,
+          'catalyst.orchestrator.envoy.local_count': state.local.routes.size,
+          'catalyst.orchestrator.envoy.internal_count': allInternalRoutes.length,
         })
         await client.updateRoutes({
-          local: state.local.routes,
-          internal: state.internal.routes,
+          local: [...state.local.routes.values()],
+          internal: allInternalRoutes,
           portAllocations: this.portAllocator
             ? Object.fromEntries(this.portAllocator.getAllocations())
             : undefined,
@@ -536,7 +558,7 @@ export class OrchestratorBus {
     const localEnvoyAddress = this.config.node.envoyAddress
 
     // Advertise all local routes to the new peer.
-    for (const route of state.local.routes) {
+    for (const route of state.local.routes.values()) {
       updates.push({
         action: 'add',
         route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
@@ -546,28 +568,30 @@ export class OrchestratorBus {
     }
 
     // Advertise internal routes the peer doesn't already know.
-    for (const route of state.internal.routes) {
-      // Exclude stale routes — they may no longer be valid.
-      if (route.isStale === true) continue
-      // Don't reflect a peer's own routes back at them.
-      if (route.peer.name === peer.name) continue
-      // Loop guard: don't advertise paths that already pass through this peer.
-      if (route.nodePath.includes(peer.name)) continue
+    for (const innerMap of state.internal.routes.values()) {
+      for (const route of innerMap.values()) {
+        // Exclude stale routes — they may no longer be valid.
+        if (route.isStale === true) continue
+        // Don't reflect a peer's own routes back at them.
+        if (route.peer.name === peer.name) continue
+        // Loop guard: don't advertise paths that already pass through this peer.
+        if (route.nodePath.includes(peer.name)) continue
 
-      // Apply route policy if configured.
-      if (this.routePolicy !== undefined) {
-        const allowed = this.routePolicy.canSend(peer, [route])
-        if (allowed.length === 0) continue
+        // Apply route policy if configured.
+        if (this.routePolicy !== undefined) {
+          const allowed = this.routePolicy.canSend(peer, [route])
+          if (allowed.length === 0) continue
+        }
+
+        // Multi-hop: envoyPort is already stamped by planPortAllocations.
+        // Rewrite envoyAddress to this node's envoy so downstream peers route through us.
+        updates.push({
+          action: 'add',
+          route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
+          nodePath: [this.config.node.name, ...route.nodePath],
+          originNode: route.originNode,
+        })
       }
-
-      // Multi-hop: envoyPort is already stamped by planPortAllocations.
-      // Rewrite envoyAddress to this node's envoy so downstream peers route through us.
-      updates.push({
-        action: 'add',
-        route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
-        nodePath: [this.config.node.name, ...route.nodePath],
-        originNode: route.originNode,
-      })
     }
 
     if (updates.length === 0) {
@@ -610,7 +634,7 @@ export class OrchestratorBus {
     now: number
   ): Promise<{ needed: number; sent: number }> {
     let sent = 0
-    const peersNeeding = state.internal.peers.filter((p) => {
+    const peersNeeding = [...state.internal.peers.values()].filter((p) => {
       if (p.connectionStatus !== 'connected' || p.holdTime <= 0) return false
       const lastSent = this.lastKeepaliveSent.get(p.name) ?? 0
       return now - lastSent > p.holdTime / 3
@@ -720,7 +744,7 @@ export const BusTransforms = {
       envoyAddress: overrides?.envoyAddress ?? route.envoyAddress,
       healthStatus: route.healthStatus,
       responseTimeMs: route.responseTimeMs,
-      lastChecked: route.lastChecked,
+      lastCheckedAt: route.lastCheckedAt,
     }
   },
 }

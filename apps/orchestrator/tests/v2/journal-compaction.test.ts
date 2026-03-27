@@ -11,16 +11,20 @@ import { CompactionManager } from '../../src/v2/compaction.js'
 const NODE_ID = 'node-a'
 
 function makeState(routeCount: number): RouteTable {
-  return {
-    local: {
-      routes: Array.from({ length: routeCount }, (_, i) => ({
+  const routes = new Map(
+    Array.from({ length: routeCount }, (_, i) => [
+      `route-${i}`,
+      {
         name: `route-${i}`,
         protocol: 'http' as const,
         endpoint: `http://route-${i}:8080`,
-      })),
-    },
-    internal: { peers: [], routes: [] },
-  } as unknown as RouteTable
+      },
+    ] as const)
+  )
+  return {
+    local: { routes },
+    internal: { peers: new Map(), routes: new Map() },
+  }
 }
 
 function appendN(journal: ActionLog, count: number): void {
@@ -67,9 +71,7 @@ describe('InMemoryActionLog snapshot', () => {
 
     const snap = journal.getSnapshot()
     expect(snap!.atSeq).toBe(10)
-    expect((snap!.state as unknown as { local: { routes: unknown[] } }).local.routes).toHaveLength(
-      2
-    )
+    expect((snap!.state as unknown as { local: { routes: Map<string, unknown> } }).local.routes.size).toBe(2)
   })
 
   it('prune removes entries before the given seq', () => {
