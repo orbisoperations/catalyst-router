@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Hono } from 'hono'
-import { RouteTableView } from '@catalyst/routing/v2'
+import { routeTableToPublic } from '@catalyst/routing/v2'
 import type { RouteTable } from '@catalyst/routing/v2'
 
 // ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ function makeRouteTable(): RouteTable {
 function buildApp(snapshot: RouteTable) {
   const app = new Hono()
   app.get('/api/state', (c) => {
-    return c.json(new RouteTableView(snapshot).toPublic())
+    return c.json(routeTableToPublic(snapshot))
   })
   return app
 }
