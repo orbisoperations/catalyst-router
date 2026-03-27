@@ -47,6 +47,6 @@ export const localRouteHealthUpdateMessageSchema = z.object({
     name: z.string(),
     healthStatus: z.enum(['up', 'down']),
     responseTimeMs: z.number().nullable(),
-    lastChecked: z.string(),
+    lastCheckedAt: z.string().datetime(),
   }),
 })
