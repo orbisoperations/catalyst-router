@@ -6,7 +6,14 @@ import prettierConfig from 'eslint-config-prettier'
 export default tseslint.config(
   // Global ignores
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.d.ts', 'pnpm-lock.yaml'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      '**/*.d.ts',
+      'pnpm-lock.yaml',
+      '**/vendor/**',
+    ],
   },
 
   // Base JS config
