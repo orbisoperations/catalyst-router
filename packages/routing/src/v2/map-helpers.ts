@@ -7,6 +7,7 @@ export function mapWith<K, V>(map: Map<K, V>, key: K, value: V): Map<K, V> {
 
 /** Returns a new Map without the entry. Never mutates the original. */
 export function mapWithout<K, V>(map: Map<K, V>, key: K): Map<K, V> {
+  if (!map.has(key)) return map
   const next = new Map(map)
   next.delete(key)
   return next
@@ -60,6 +61,7 @@ export function nestedMapDeleteOuter<K1, K2, V>(
   map: Map<K1, Map<K2, V>>,
   outerKey: K1
 ): Map<K1, Map<K2, V>> {
+  if (!map.has(outerKey)) return map
   const next = new Map(map)
   next.delete(outerKey)
   return next
