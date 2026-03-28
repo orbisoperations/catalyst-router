@@ -1,0 +1,303 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 880" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#080c14"/>
+      <stop offset="100%" style="stop-color:#0f172a"/>
+    </linearGradient>
+    <linearGradient id="islandGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0c1929;stop-opacity:0.95"/>
+      <stop offset="100%" style="stop-color:#061018;stop-opacity:0.95"/>
+    </linearGradient>
+    <linearGradient id="ribGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a0a2e"/>
+      <stop offset="100%" style="stop-color:#0f0620"/>
+    </linearGradient>
+    <linearGradient id="orchGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#5b21b6"/>
+    </linearGradient>
+    <linearGradient id="busGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4c1d95"/>
+      <stop offset="100%" style="stop-color:#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="gwGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="100%" style="stop-color:#047857"/>
+    </linearGradient>
+    <linearGradient id="authGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#d97706"/>
+      <stop offset="100%" style="stop-color:#b45309"/>
+    </linearGradient>
+    <linearGradient id="localGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af"/>
+      <stop offset="100%" style="stop-color:#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="internalGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0e4429"/>
+      <stop offset="100%" style="stop-color:#052e16"/>
+    </linearGradient>
+    <linearGradient id="infraGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e293b"/>
+      <stop offset="100%" style="stop-color:#0f172a"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="innerGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#a78bfa"/>
+    </marker>
+    <marker id="arrBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#60a5fa"/>
+    </marker>
+    <marker id="arrGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#34d399"/>
+    </marker>
+    <marker id="arrGray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="880" fill="url(#bgGrad)"/>
+
+  <!-- Title Block -->
+  <text x="550" y="38" text-anchor="middle" fill="#e2e8f0" font-size="24" font-weight="700">Catalyst Node — The Autonomous Island</text>
+  <text x="550" y="60" text-anchor="middle" fill="#64748b" font-size="12">Each node is a self-sovereign system. No central authority. No external dependency. Complete operational independence.</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- THE ISLAND: AS BOUNDARY                         -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="30" y="80" width="1040" height="720" rx="24" fill="url(#islandGrad)" stroke="#3b82f6" stroke-width="3" filter="url(#shadow)"/>
+  <!-- Double border to emphasize isolation -->
+  <rect x="38" y="88" width="1024" height="704" rx="20" fill="none" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="3,6"/>
+
+  <!-- AS Label -->
+  <rect x="55" y="100" width="320" height="50" rx="8" fill="#0c1929" stroke="#1d4ed8" stroke-width="1"/>
+  <text x="70" y="122" fill="#3b82f6" font-size="15" font-weight="800" letter-spacing="1">AS 65001</text>
+  <text x="70" y="140" fill="#60a5fa" font-size="10">AUTONOMOUS SYSTEM — SELF-SOVEREIGN NODE</text>
+
+  <!-- Island Properties -->
+  <text x="400" y="118" fill="#475569" font-size="10">No central controller</text>
+  <circle cx="390" cy="115" r="3" fill="#22c55e"/>
+  <text x="400" y="135" fill="#475569" font-size="10">No distributed consensus</text>
+  <circle cx="390" cy="132" r="3" fill="#22c55e"/>
+  <text x="560" y="118" fill="#475569" font-size="10">Own state machine (RIB)</text>
+  <circle cx="550" cy="115" r="3" fill="#22c55e"/>
+  <text x="560" y="135" fill="#475569" font-size="10">Own persistent journal</text>
+  <circle cx="550" cy="132" r="3" fill="#22c55e"/>
+  <text x="730" y="118" fill="#475569" font-size="10">Own port allocation</text>
+  <circle cx="720" cy="115" r="3" fill="#22c55e"/>
+  <text x="730" y="135" fill="#475569" font-size="10">Peer-to-peer only (iBGP)</text>
+  <circle cx="720" cy="132" r="3" fill="#22c55e"/>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ORCHESTRATOR BUS (CENTER)                       -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="310" y="170" width="480" height="200" rx="16" fill="url(#orchGrad)" filter="url(#shadow)"/>
+  <text x="550" y="200" text-anchor="middle" fill="#fff" font-size="18" font-weight="800">OrchestratorBus</text>
+  <text x="550" y="220" text-anchor="middle" fill="#ddd6fe" font-size="11">CONTROL PLANE — The Decision Engine</text>
+
+  <!-- Pipeline: plan → commit → notify -->
+  <rect x="340" y="238" width="420" height="44" rx="8" fill="url(#busGrad)" stroke="#7c3aed" stroke-width="1"/>
+  <text x="370" y="256" fill="#c4b5fd" font-size="10" font-weight="700">DISPATCH PIPELINE</text>
+  <text x="360" y="274" fill="#e9d5ff" font-size="10">Action → Validate → Filter (RoutePolicy) → Plan (RIB) → Commit → Notify (Peers/GW/Envoy)</text>
+
+  <!-- ActionQueue -->
+  <rect x="340" y="295" width="130" height="55" rx="8" fill="#1e1045" stroke="#6d28d9" stroke-width="1"/>
+  <text x="405" y="315" text-anchor="middle" fill="#c4b5fd" font-size="11" font-weight="600">ActionQueue</text>
+  <text x="405" y="332" text-anchor="middle" fill="#8b5cf6" font-size="9">Serial execution</text>
+  <text x="405" y="345" text-anchor="middle" fill="#6d28d9" font-size="8">No TOCTOU races</text>
+
+  <!-- TickManager -->
+  <rect x="485" y="295" width="130" height="55" rx="8" fill="#1e1045" stroke="#6d28d9" stroke-width="1"/>
+  <text x="550" y="315" text-anchor="middle" fill="#c4b5fd" font-size="11" font-weight="600">TickManager</text>
+  <text x="550" y="332" text-anchor="middle" fill="#8b5cf6" font-size="9">holdTime / 3</text>
+  <text x="550" y="345" text-anchor="middle" fill="#6d28d9" font-size="8">Keepalive + Expiry</text>
+
+  <!-- ReconnectManager -->
+  <rect x="630" y="295" width="140" height="55" rx="8" fill="#1e1045" stroke="#6d28d9" stroke-width="1"/>
+  <text x="700" y="315" text-anchor="middle" fill="#c4b5fd" font-size="11" font-weight="600">ReconnectMgr</text>
+  <text x="700" y="332" text-anchor="middle" fill="#8b5cf6" font-size="9">Exp. backoff</text>
+  <text x="700" y="345" text-anchor="middle" fill="#6d28d9" font-size="8">1s → 2s → ... → 60s</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- RIB (ROUTING INFORMATION BASE)                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="55" y="170" width="230" height="280" rx="14" fill="url(#ribGrad)" stroke="#7c3aed" stroke-width="2" filter="url(#shadow)"/>
+  <text x="170" y="198" text-anchor="middle" fill="#e9d5ff" font-size="16" font-weight="800">RIB</text>
+  <text x="170" y="215" text-anchor="middle" fill="#a78bfa" font-size="10">Routing Information Base</text>
+  <text x="170" y="232" text-anchor="middle" fill="#6d28d9" font-size="9">Pure state machine — zero side effects</text>
+
+  <!-- LOCAL partition -->
+  <rect x="70" y="248" width="200" height="85" rx="8" fill="url(#localGrad)" stroke="#3b82f6" stroke-width="1"/>
+  <text x="85" y="268" fill="#93c5fd" font-size="11" font-weight="700">LOCAL ROUTES</text>
+  <text x="85" y="283" fill="#60a5fa" font-size="9">Services originating on THIS node</text>
+  <line x1="80" y1="290" x2="260" y2="290" stroke="#1e40af" stroke-width="0.5"/>
+  <text x="85" y="305" fill="#94a3b8" font-size="9">users-api      http:graphql</text>
+  <text x="85" y="320" fill="#94a3b8" font-size="9">auth-svc       http:grpc</text>
+
+  <!-- INTERNAL partition -->
+  <rect x="70" y="342" width="200" height="95" rx="8" fill="url(#internalGrad)" stroke="#22c55e" stroke-width="1"/>
+  <text x="85" y="362" fill="#6ee7b7" font-size="11" font-weight="700">INTERNAL ROUTES</text>
+  <text x="85" y="377" fill="#34d399" font-size="9">Learned from peers via iBGP</text>
+  <line x1="80" y1="384" x2="260" y2="384" stroke="#052e16" stroke-width="0.5"/>
+  <text x="85" y="399" fill="#94a3b8" font-size="9">orders-api   via Node-B  [B]</text>
+  <text x="85" y="414" fill="#94a3b8" font-size="9">billing-svc  via Node-C  [C]</text>
+  <text x="85" y="429" fill="#94a3b8" font-size="9">search-api   via Node-B  [D,B]</text>
+
+  <!-- V2 callout: NO external -->
+  <rect x="70" y="445" width="200" height="22" rx="4" fill="#1c1917" stroke="#78350f" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="170" y="460" text-anchor="middle" fill="#92400e" font-size="9" font-weight="600">V2: No external routes — local + internal only</text>
+
+  <!-- Arrow: RIB -> Bus -->
+  <line x1="285" y1="300" x2="310" y2="280" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrPurple)"/>
+  <text x="288" y="275" fill="#8b5cf6" font-size="8">plan()</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- JOURNAL (PERSISTENCE)                           -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="55" y="480" width="230" height="100" rx="12" fill="url(#infraGrad)" stroke="#475569" stroke-width="1" filter="url(#shadow)"/>
+  <text x="170" y="507" text-anchor="middle" fill="#cbd5e1" font-size="14" font-weight="700">SQLite Journal</text>
+  <text x="170" y="524" text-anchor="middle" fill="#64748b" font-size="10">Persistent Action Log</text>
+  <line x1="75" y1="533" x2="265" y2="533" stroke="#334155" stroke-width="0.5"/>
+  <text x="80" y="550" fill="#94a3b8" font-size="9">Snapshot + Replay tail on startup</text>
+  <text x="80" y="567" fill="#94a3b8" font-size="9">CompactionMgr: snapshot + truncate</text>
+
+  <!-- Arrow: Journal <-> RIB -->
+  <line x1="170" y1="470" x2="170" y2="480" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrGray)"/>
+  <text x="180" y="476" fill="#64748b" font-size="8">commit()</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- PORT ALLOCATOR                                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="55" y="600" width="230" height="60" rx="10" fill="url(#infraGrad)" stroke="#475569" stroke-width="1"/>
+  <text x="170" y="625" text-anchor="middle" fill="#cbd5e1" font-size="13" font-weight="600">BusPortAllocator</text>
+  <text x="170" y="645" text-anchor="middle" fill="#64748b" font-size="9">Envoy ingress/egress port assignment</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TRANSPORT LAYER (RIGHT SIDE)                    -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="815" y="170" width="240" height="200" rx="14" fill="url(#infraGrad)" stroke="#0ea5e9" stroke-width="2" filter="url(#shadow)"/>
+  <text x="935" y="198" text-anchor="middle" fill="#7dd3fc" font-size="15" font-weight="700">PeerTransport</text>
+  <text x="935" y="215" text-anchor="middle" fill="#0ea5e9" font-size="10">iBGP Communication Layer</text>
+  <line x1="835" y1="225" x2="1035" y2="225" stroke="#0c4a6e" stroke-width="0.5"/>
+
+  <!-- Transport methods -->
+  <text x="835" y="248" fill="#7dd3fc" font-size="10" font-weight="600">WebSocket RPC Stubs</text>
+  <text x="835" y="268" fill="#94a3b8" font-size="9">openPeer(peer, token)</text>
+  <text x="835" y="284" fill="#94a3b8" font-size="9">sendUpdate(peer, msg)</text>
+  <text x="835" y="300" fill="#94a3b8" font-size="9">sendKeepalive(peer)</text>
+  <text x="835" y="316" fill="#94a3b8" font-size="9">closePeer(peer, code, reason)</text>
+
+  <!-- Update Message format -->
+  <rect x="835" y="328" width="200" height="32" rx="6" fill="#0c4a6e" opacity="0.5"/>
+  <text x="935" y="348" text-anchor="middle" fill="#7dd3fc" font-size="9">UpdateMsg: { updates: [{ action, route, nodePath, originNode }] }</text>
+
+  <!-- Arrow: Bus -> Transport -->
+  <line x1="790" y1="260" x2="815" y2="260" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrBlue)"/>
+  <text x="790" y="248" fill="#7dd3fc" font-size="8">notify</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- EXTERNAL WORLD (peer connections going out)     -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- Peer indicators on the right edge -->
+  <rect x="1008" y="195" width="50" height="35" rx="6" fill="#0f172a" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="1033" y="216" text-anchor="middle" fill="#7dd3fc" font-size="9" font-weight="600">Node B</text>
+  <line x1="1058" y1="212" x2="1080" y2="212" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrBlue)"/>
+
+  <rect x="1008" y="245" width="50" height="35" rx="6" fill="#0f172a" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="1033" y="266" text-anchor="middle" fill="#7dd3fc" font-size="9" font-weight="600">Node C</text>
+  <line x1="1058" y1="262" x2="1080" y2="262" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrBlue)"/>
+
+  <rect x="1008" y="295" width="50" height="35" rx="6" fill="#0f172a" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="1033" y="316" text-anchor="middle" fill="#7dd3fc" font-size="9" font-weight="600">Node D</text>
+  <line x1="1058" y1="312" x2="1080" y2="312" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrBlue)"/>
+
+  <!-- "ISLAND BOUNDARY" label on the edge -->
+  <text x="1075" y="185" fill="#1e3a5f" font-size="8" font-weight="700" transform="rotate(90, 1075, 185)" letter-spacing="2">ISLAND BOUNDARY</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- SIDECARS (BOTTOM)                               -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Gateway -->
+  <rect x="310" y="420" width="210" height="130" rx="12" fill="url(#gwGrad)" filter="url(#shadow)"/>
+  <text x="415" y="452" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">GraphQL Gateway</text>
+  <text x="415" y="470" text-anchor="middle" fill="#d1fae5" font-size="10">DATA PLANE</text>
+  <line x1="330" y1="480" x2="500" y2="480" stroke="#34d399" stroke-width="0.5"/>
+  <text x="330" y="498" fill="#ecfdf5" font-size="9">Federation / Supergraph</text>
+  <text x="330" y="514" fill="#ecfdf5" font-size="9">Local + Internal routes merged</text>
+  <text x="330" y="530" fill="#ecfdf5" font-size="9">Hot-reload on config push</text>
+
+  <!-- Auth -->
+  <rect x="545" y="420" width="210" height="130" rx="12" fill="url(#authGrad)" filter="url(#shadow)"/>
+  <text x="650" y="452" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">Auth Service</text>
+  <text x="650" y="470" text-anchor="middle" fill="#fef3c7" font-size="10">SECURITY AUTHORITY</text>
+  <line x1="565" y1="480" x2="735" y2="480" stroke="#fbbf24" stroke-width="0.5"/>
+  <text x="565" y="498" fill="#fffbeb" font-size="9">JWT signing / JWKS endpoint</text>
+  <text x="565" y="514" fill="#fffbeb" font-size="9">Key rotation (asymmetric)</text>
+  <text x="565" y="530" fill="#fffbeb" font-size="9">Peer token authentication</text>
+
+  <!-- OTEL -->
+  <rect x="815" y="420" width="240" height="70" rx="10" fill="url(#infraGrad)" stroke="#6b7280" stroke-width="1"/>
+  <text x="935" y="450" text-anchor="middle" fill="#e5e7eb" font-size="13" font-weight="600">OTEL Collector</text>
+  <text x="935" y="470" text-anchor="middle" fill="#64748b" font-size="10">Traces / Metrics / Logs / WideEvents</text>
+
+  <!-- Envoy -->
+  <rect x="815" y="505" width="240" height="45" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="935" y="533" text-anchor="middle" fill="#475569" font-size="11" font-style="italic">Envoy Proxy (Milestone 4)</text>
+
+  <!-- Connections: Bus -> Gateway -->
+  <line x1="450" y1="370" x2="415" y2="420" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrPurple)"/>
+  <text x="410" y="398" fill="#c4b5fd" font-size="9">RPC: updateConfig</text>
+
+  <!-- Connections: Bus -> Auth -->
+  <line x1="600" y1="370" x2="650" y2="420" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrPurple)"/>
+  <text x="635" y="398" fill="#c4b5fd" font-size="9">RPC: sign/verify</text>
+
+  <!-- Connections: Bus -> OTEL -->
+  <line x1="750" y1="370" x2="870" y2="420" stroke="#6b7280" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- LOCAL SERVICES (INPUT)                          -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="310" y="580" width="445" height="95" rx="12" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
+  <text x="532" y="605" text-anchor="middle" fill="#93c5fd" font-size="13" font-weight="700">Local Services (Registered on this Node)</text>
+  <line x1="330" y1="614" x2="735" y2="614" stroke="#1e3a5f" stroke-width="0.5"/>
+  <rect x="330" y="625" width="120" height="35" rx="6" fill="#1e3a8a" opacity="0.5"/>
+  <text x="390" y="647" text-anchor="middle" fill="#93c5fd" font-size="10">users-api</text>
+  <rect x="465" y="625" width="120" height="35" rx="6" fill="#1e3a8a" opacity="0.5"/>
+  <text x="525" y="647" text-anchor="middle" fill="#93c5fd" font-size="10">auth-svc</text>
+  <rect x="600" y="625" width="130" height="35" rx="6" fill="#1e3a8a" opacity="0.5"/>
+  <text x="665" y="647" text-anchor="middle" fill="#93c5fd" font-size="10">payments-api</text>
+
+  <!-- Arrow: Services -> Bus (local:route:create) -->
+  <line x1="532" y1="580" x2="532" y2="370" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrBlue)"/>
+  <text x="540" y="560" fill="#93c5fd" font-size="8">local:route:create</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- CLIENT TRAFFIC (INPUT TO GATEWAY)               -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="310" y="700" width="210" height="35" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1"/>
+  <text x="415" y="723" text-anchor="middle" fill="#6ee7b7" font-size="11" font-weight="600">Client Traffic (GraphQL)</text>
+  <line x1="415" y1="700" x2="415" y2="555" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arrGreen)"/>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- 12 ACTIONS REFERENCE                            -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="55" y="695" width="230" height="85" rx="10" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="170" y="715" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="700">12 ACTION TYPES</text>
+  <line x1="70" y1="722" x2="270" y2="722" stroke="#1e293b" stroke-width="0.5"/>
+  <text x="70" y="738" fill="#60a5fa" font-size="8">local:peer:{create,update,delete}</text>
+  <text x="70" y="752" fill="#60a5fa" font-size="8">local:route:{create,delete,health-update}</text>
+  <text x="70" y="766" fill="#34d399" font-size="8">internal:protocol:{open,close,connected,update,keepalive}</text>
+  <text x="70" y="778" fill="#6b7280" font-size="8">system:tick</text>
+</svg>
