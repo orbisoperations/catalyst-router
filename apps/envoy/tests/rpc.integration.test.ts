@@ -4,6 +4,8 @@ import { catalystHonoServer } from '@catalyst/service'
 import type { UpdateResult } from '../src/rpc/server.js'
 import { EnvoyRpcServer, createRpcHandler } from '../src/rpc/server.js'
 
+const TEST_HOST = '127.0.0.1'
+
 describe('Envoy RPC Integration', () => {
   let server: ReturnType<typeof catalystHonoServer>
   let port: number
@@ -12,7 +14,7 @@ describe('Envoy RPC Integration', () => {
     const rpcServer = new EnvoyRpcServer()
     const app = createRpcHandler(rpcServer)
 
-    server = catalystHonoServer(app, { port: 0 })
+    server = catalystHonoServer(app, { port: 0, hostname: TEST_HOST })
     await server.start()
     port = server.port
   })
@@ -26,7 +28,7 @@ describe('Envoy RPC Integration', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rpc: any
   }> {
-    const ws = new WebSocket(`ws://localhost:${port}/`)
+    const ws = new WebSocket(`ws://${TEST_HOST}:${port}/`)
     await new Promise<void>((resolve, reject) => {
       ws.addEventListener('open', () => resolve())
       ws.addEventListener('error', (e) => reject(e))
@@ -244,11 +246,11 @@ describe('Envoy RPC Integration', () => {
       // Fresh RPC server for this test
       const freshRpc = new EnvoyRpcServer()
       const freshApp = createRpcHandler(freshRpc)
-      const freshServer = catalystHonoServer(freshApp, { port: 0 })
+      const freshServer = catalystHonoServer(freshApp, { port: 0, hostname: TEST_HOST })
       await freshServer.start()
       const freshPort = freshServer.port
 
-      const ws = new WebSocket(`ws://localhost:${freshPort}/`)
+      const ws = new WebSocket(`ws://${TEST_HOST}:${freshPort}/`)
       await new Promise<void>((resolve) => ws.addEventListener('open', () => resolve()))
       const rpc = newWebSocketRpcSession(ws as unknown as WebSocket)
 

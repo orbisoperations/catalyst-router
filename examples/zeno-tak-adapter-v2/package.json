@@ -8,10 +8,11 @@
     "start": "node dist/index.js",
     "dev": "node build.mjs && node dist/index.js",
     "test": "pnpm run test:unit && pnpm run test:integration",
-    "test:unit": "vitest run --exclude '**/*{integration,container}*' --passWithNoTests",
+    "test:unit": "vitest run unit.test.ts --passWithNoTests",
     "build:tests": "node build-tests.mjs",
-    "test:integration": "vitest run --passWithNoTests container integration",
-    "test:all": "pnpm run test:unit && pnpm run test:integration"
+    "test:integration": "vitest run integration.test.ts --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000",
+    "test:all": "pnpm run test:unit && pnpm run test:integration",
+    "test:container": "vitest run container.test.ts --passWithNoTests --no-file-parallelism --maxWorkers=1 --testTimeout=300000 --hookTimeout=300000"
   },
   "dependencies": {
     "@eclipse-zenoh/zenoh-ts": "^1.7.2",
