@@ -10,6 +10,9 @@ import { describe, it, expect } from 'vitest'
 import { OrchestratorBus, BusTransforms } from '../../src/v2/bus.js'
 import type { BusPortAllocator } from '../../src/v2/bus.js'
 import { MockPeerTransport } from '../../src/v2/transport.js'
+import type { TransportCall } from '../../src/v2/transport.js'
+
+type SendUpdateCall = Extract<TransportCall, { method: 'sendUpdate' }>
 import { Actions } from '@catalyst/routing/v2'
 import type { OrchestratorConfig } from '../../src/v1/types.js'
 import type { PeerInfo, DataChannelDefinition } from '@catalyst/routing/v2'
@@ -113,11 +116,11 @@ describe('Multi-hop envoyAddress forwarding', () => {
 
     // The initial sync should include envoyAddress from node-a's config
     const sendCalls = transport.calls.filter(
-      (c) => c.method === 'sendUpdate' && c.peer.name === 'node-c'
+      (c): c is SendUpdateCall => c.method === 'sendUpdate' && c.peer.name === 'node-c'
     )
     expect(sendCalls).toHaveLength(1)
 
-    const updates = sendCalls[0].message!.updates
+    const updates = sendCalls[0].message.updates
     expect(updates).toHaveLength(1)
     expect(updates[0].route.envoyAddress).toBe('envoy-a.test.local:8443')
   })
@@ -164,11 +167,11 @@ describe('Multi-hop envoyAddress forwarding', () => {
 
     // The route should be forwarded to peer C with A's envoyAddress and A's egress port
     const sendCalls = transport.calls.filter(
-      (c) => c.method === 'sendUpdate' && c.peer.name === 'node-c'
+      (c): c is SendUpdateCall => c.method === 'sendUpdate' && c.peer.name === 'node-c'
     )
     expect(sendCalls).toHaveLength(1)
 
-    const updates = sendCalls[0].message!.updates
+    const updates = sendCalls[0].message.updates
     expect(updates).toHaveLength(1)
 
     // envoyAddress should be rewritten to node-a's address (transit node)
@@ -202,10 +205,10 @@ describe('Multi-hop envoyAddress forwarding', () => {
     })
 
     const sendCalls = transport.calls.filter(
-      (c) => c.method === 'sendUpdate' && c.peer.name === 'node-c'
+      (c): c is SendUpdateCall => c.method === 'sendUpdate' && c.peer.name === 'node-c'
     )
     expect(sendCalls).toHaveLength(1)
-    expect(sendCalls[0].message!.updates[0].route.envoyAddress).toBeUndefined()
+    expect(sendCalls[0].message.updates[0].route.envoyAddress).toBeUndefined()
   })
 
   it('preserves envoyAddress through BusTransforms.toDataChannel', () => {
@@ -258,13 +261,17 @@ describe('Multi-hop envoyAddress forwarding', () => {
       data: { name: 'svc-delta', protocol: 'http', endpoint: 'http://delta:8080' },
     })
 
-    const toB = transport.calls.find((c) => c.method === 'sendUpdate' && c.peer.name === 'node-b')
-    const toC = transport.calls.find((c) => c.method === 'sendUpdate' && c.peer.name === 'node-c')
+    const toB = transport.calls.find(
+      (c): c is SendUpdateCall => c.method === 'sendUpdate' && c.peer.name === 'node-b'
+    )
+    const toC = transport.calls.find(
+      (c): c is SendUpdateCall => c.method === 'sendUpdate' && c.peer.name === 'node-c'
+    )
 
     expect(toB).toBeDefined()
     expect(toC).toBeDefined()
-    expect(toB!.message!.updates[0].route.envoyAddress).toBe('envoy-a.test.local:8443')
-    expect(toC!.message!.updates[0].route.envoyAddress).toBe('envoy-a.test.local:8443')
+    expect(toB!.message.updates[0].route.envoyAddress).toBe('envoy-a.test.local:8443')
+    expect(toC!.message.updates[0].route.envoyAddress).toBe('envoy-a.test.local:8443')
   })
 
   it('removal updates still include envoyAddress rewriting', async () => {
@@ -295,11 +302,11 @@ describe('Multi-hop envoyAddress forwarding', () => {
     })
 
     const sendCalls = transport.calls.filter(
-      (c) => c.method === 'sendUpdate' && c.peer.name === 'node-c'
+      (c): c is SendUpdateCall => c.method === 'sendUpdate' && c.peer.name === 'node-c'
     )
     expect(sendCalls).toHaveLength(1)
-    expect(sendCalls[0].message!.updates[0].action).toBe('remove')
+    expect(sendCalls[0].message.updates[0].action).toBe('remove')
     // Even removals carry envoyAddress for identification
-    expect(sendCalls[0].message!.updates[0].route.envoyAddress).toBe('envoy-a.test.local:8443')
+    expect(sendCalls[0].message.updates[0].route.envoyAddress).toBe('envoy-a.test.local:8443')
   })
 })

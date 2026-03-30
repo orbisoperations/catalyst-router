@@ -1,24 +1,132 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import type { Hono } from 'hono'
+import { spawn, spawnSync } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import type { StartedTestContainer } from 'testcontainers'
 import { GenericContainer, Wait } from 'testcontainers'
+import { newWebSocketRpcSession } from 'capnweb'
 import path from 'path'
-import type { GatewayGraphqlServer } from '../src/graphql/server.ts'
-import { createGatewayHandler } from '../src/graphql/server.ts'
 
-const skipTests = !process.env.CATALYST_CONTAINER_TESTS_ENABLED
+const isDockerRunning = () => {
+  try {
+    return spawnSync('docker', ['info']).status === 0
+  } catch {
+    return false
+  }
+}
+
+const skipTests = !isDockerRunning()
+if (skipTests) {
+  console.warn('Skipping gateway integration test: Docker is not running')
+}
 
 describe.skipIf(skipTests)('Gateway Integration', () => {
-  const TIMEOUT = 120000
+  const TIMEOUT = 300000
+  const debugGatewayLogs = Boolean(process.env.DEBUG_GATEWAY_TESTS)
   let booksContainer: StartedTestContainer
   let moviesContainer: StartedTestContainer
-  let gatewayServer: GatewayGraphqlServer
-  let gatewayApp: Hono
+  let gatewayProcess: ChildProcess
+  let gatewayPort: number
+  let gatewayLogs = ''
+
+  const connectRpcClient = async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${gatewayPort}/api`)
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener('open', () => resolve())
+      ws.addEventListener('error', (event) => reject(event))
+    })
+
+    return {
+      ws,
+      client: newWebSocketRpcSession(ws as unknown as WebSocket) as unknown as {
+        updateConfig(config: unknown): Promise<{ success: boolean; error?: string }>
+      },
+    }
+  }
+
+  const startGatewayProcess = async (repoRoot: string) => {
+    const gatewayCwd = path.join(repoRoot, 'apps/gateway')
+
+    return new Promise<number>((resolve, reject) => {
+      let settled = false
+      let stdout = ''
+      let stderr = ''
+
+      gatewayProcess = spawn('pnpm', ['exec', 'tsx', 'tests/helpers/gateway-process.ts'], {
+        cwd: gatewayCwd,
+        env: {
+          ...process.env,
+          CATALYST_NODE_ID: 'gateway-test',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      const rejectWithContext = (message: string) => {
+        if (settled) return
+        settled = true
+        reject(new Error(`${message}\nstdout:\n${stdout}\nstderr:\n${stderr}`))
+      }
+
+      gatewayProcess.on('error', (error) => {
+        rejectWithContext(`Gateway process failed to start: ${String(error)}`)
+      })
+
+      gatewayProcess.on('exit', (code, signal) => {
+        if (!settled) {
+          rejectWithContext(
+            `Gateway process exited before startup (code=${code}, signal=${signal})`
+          )
+        }
+      })
+
+      gatewayProcess.stdout!.on('data', (chunk: Buffer | string) => {
+        const text = chunk.toString()
+        stdout += text
+        gatewayLogs += text
+        if (debugGatewayLogs) {
+          process.stdout.write(`[gateway] ${text}`)
+        }
+
+        const match = stdout.match(/GATEWAY_TEST_PORT=(\d+)/)
+        if (match && !settled) {
+          settled = true
+          resolve(Number(match[1]))
+        }
+      })
+
+      gatewayProcess.stderr!.on('data', (chunk: Buffer | string) => {
+        const text = chunk.toString()
+        stderr += text
+        gatewayLogs += text
+        if (debugGatewayLogs) {
+          process.stderr.write(`[gateway:err] ${text}`)
+        }
+      })
+    })
+  }
+
+  const stopGatewayProcess = async () => {
+    if (!gatewayProcess || gatewayProcess.killed || gatewayProcess.exitCode !== null) {
+      return
+    }
+
+    gatewayProcess.kill('SIGTERM')
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        gatewayProcess.kill('SIGKILL')
+      }, 5000)
+
+      gatewayProcess.once('exit', () => {
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+  }
 
   beforeAll(async () => {
     console.log('Starting Gateway Integration Test')
     const repoRoot = path.resolve(__dirname, '../../..')
     console.log('Repo root:', repoRoot)
+    gatewayLogs = ''
 
     // 1. Start Books Service
     {
@@ -42,14 +150,12 @@ describe.skipIf(skipTests)('Gateway Integration', () => {
         .start()
     }
 
-    // 3. Start Gateway (in-process)
-    // We use createGatewayHandler to get the app and the server instance
-    const result = createGatewayHandler()
-    gatewayApp = result.app as unknown as Hono
-    gatewayServer = result.server
+    console.log('Starting Gateway Process')
+    gatewayPort = await startGatewayProcess(repoRoot)
   }, TIMEOUT)
 
   afterAll(async () => {
+    await stopGatewayProcess()
     if (booksContainer) await booksContainer.stop()
     if (moviesContainer) await moviesContainer.stop()
   })
@@ -76,8 +182,15 @@ describe.skipIf(skipTests)('Gateway Integration', () => {
         ],
       }
 
-      const updateResult = await gatewayServer.reload(config)
-      expect(updateResult.success).toBe(true)
+      const { ws, client } = await connectRpcClient()
+      const updateResult = await client.updateConfig(config)
+      ws.close()
+
+      if (!updateResult.success) {
+        throw new Error(
+          `Gateway config update failed: ${updateResult.error ?? 'unknown error'}\nGateway logs:\n${gatewayLogs}`
+        )
+      }
 
       // 5. Query Gateway
       const query = `
@@ -93,7 +206,7 @@ describe.skipIf(skipTests)('Gateway Integration', () => {
             }
         `
 
-      const response = await gatewayApp.request('http://localhost/graphql', {
+      const response = await fetch(`http://127.0.0.1:${gatewayPort}/graphql`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),

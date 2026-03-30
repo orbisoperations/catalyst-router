@@ -27,7 +27,13 @@ const peerB: PeerInfo = {
   peerToken: 'token-b',
 }
 
-function makeUpdate(routes: Array<{ name: string; protocol: string; endpoint: string }>) {
+function makeUpdate(
+  routes: Array<{
+    name: string
+    protocol: 'http' | 'http:graphql' | 'http:gql' | 'http:grpc' | 'tcp'
+    endpoint: string
+  }>
+) {
   return {
     updates: routes.map((r) => ({
       action: 'add' as const,

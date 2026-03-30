@@ -60,7 +60,8 @@ RUN apk add --no-cache su-exec
 
 COPY --from=build /deploy/node_modules ./node_modules
 COPY --from=build /app/dist/server.mjs ./server.mjs
-COPY --chmod=755 apps/auth/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY apps/auth/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 ENV PORT=5000
 EXPOSE 5000
