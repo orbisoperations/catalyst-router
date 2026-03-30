@@ -380,16 +380,18 @@ services:
       # Subscribe to CoT data published by the emulators on Node A
       - ZENOH_SUBSCRIPTIONS=[{"topic":"tak/cot","transform":"identity"}]
       # TAK server connection (optional — uncomment for real TAK integration)
-      # - TAK_HEARTBEAT_INTERVAL=5000
-      # - TAK_HEARTBEAT_CALLSIGN=redweek-tak-publisher
-      # - TAK_HEARTBEAT_CALLSIGN_UID=redweek-zeno-publisher-callsign-1234
-      # - TAK_HEARTBEAT_GROUP_ROLE=Team Member
-      # - TAK_HEARTBEAT_GROUP_NAME=Green Team
-      # - TAK_HOST=tak-server-feb-demo.fly.dev
-      # - TAK_PORT=8089
-      # - TAK_TLS_CERT=/app/certs/catalyst.cert.pem
-      # - TAK_TLS_KEY=/app/certs/catalyst.key.pem
+      - TAK_HEARTBEAT_INTERVAL=5000
+      - TAK_HEARTBEAT_CALLSIGN=redweek-tak-publisher
+      - TAK_HEARTBEAT_CALLSIGN_UID=hackathon-zeno-publisher-callsign-1234
+      - TAK_HEARTBEAT_GROUP_ROLE=Team Member
+      - TAK_HEARTBEAT_GROUP_NAME=Green Team
+      - TAK_HOST=tak-server-feb-demo.fly.dev
+      - TAK_PORT=8089
+      - TAK_TLS_CERT=/app/certs/catalyst.cert.pem
+      - TAK_TLS_KEY=/app/certs/catalyst.key.pem
       - LOG_LEVEL=info
+    volumes:
+      - ./:/app/certs:ro
     labels:
       catalyst.stack: c
     depends_on:
