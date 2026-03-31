@@ -1,9 +1,16 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-# Install dependencies
+# Strip devDependencies that use pnpm catalog references (catalog:testing)
+# which require the workspace root. We only need runtime deps + build tools.
 COPY package.json ./
-RUN corepack enable && pnpm install
+RUN corepack enable && \
+    node -e " \
+    const pkg = JSON.parse(require('fs').readFileSync('package.json','utf8')); \
+    delete pkg.devDependencies; \
+    require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));" && \
+    pnpm install --no-frozen-lockfile && \
+    pnpm add -D esbuild esbuild-plugin-wasm typescript
 
 # Copy source, build script, and Zenoh configs
 COPY src ./src
@@ -59,7 +66,11 @@ RUN ARCH=$(uname -m) && \
 # Install Node.js runtime dependencies for the bundled app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
+RUN node -e " \
+    const pkg = JSON.parse(require('fs').readFileSync('package.json','utf8')); \
+    delete pkg.devDependencies; \
+    require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));" && \
+    pnpm install --prod --no-frozen-lockfile
 
 COPY --from=builder /app/dist /app/dist
 
