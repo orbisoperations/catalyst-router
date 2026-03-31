@@ -7,7 +7,7 @@
  * - listRoutes strips peerToken from internal route peer records
  */
 import { describe, it, expect, beforeEach } from 'vitest'
-import { SignJWT } from 'jose'
+
 import { OrchestratorBus } from '../../src/v2/bus.js'
 import { MockPeerTransport } from '../../src/v2/transport.js'
 import { createNetworkClient, createDataChannelClient } from '../../src/v2/rpc.js'
@@ -47,12 +47,6 @@ const allowAllValidator: TokenValidator = {
   },
 }
 
-const TEST_SECRET = new TextEncoder().encode('test-secret-for-jwt-signing')
-
-async function makeJwt(sub: string): Promise<string> {
-  return new SignJWT({ sub }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().sign(TEST_SECRET)
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -69,11 +63,10 @@ describe('RPC security: peerToken not leaked', () => {
     // Add peer via LocalPeerCreate
     await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerInfo })
 
-    // Open with a peerToken (set via InternalProtocolOpen which stores the token)
-    const peerJwt = await makeJwt('node-b')
+    // Open the iBGP session via InternalProtocolOpen
     await bus.dispatch({
       action: Actions.InternalProtocolOpen,
-      data: { peerInfo, peerToken: peerJwt },
+      data: { peerInfo },
     })
   })
 
