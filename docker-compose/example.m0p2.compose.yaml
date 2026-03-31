@@ -7,6 +7,8 @@ services:
       - '5000:5000'
     environment:
       - PORT=5000
+      - CATALYST_NODE_ID=auth.dev.catalyst.local
+      - CATALYST_DOMAINS=dev.catalyst.local
       - CATALYST_BOOTSTRAP_TOKEN=dev-bootstrap-token
       - CATALYST_AUTH_KEYS_DB=/data/keys.db
       - CATALYST_AUTH_TOKENS_DB=/data/tokens.db
@@ -25,6 +27,9 @@ services:
     ports:
       - '3000:3000'
     environment:
+      - CATALYST_NODE_ID=node-a.dev.catalyst.local
+      - CATALYST_DOMAINS=dev.catalyst.local
+      - CATALYST_PEERING_ENDPOINT=ws://orchestrator:3000/rpc
       - CATALYST_GQL_GATEWAY_ENDPOINT=ws://gateway:4000/api
       - CATALYST_AUTH_ENDPOINT=ws://auth:5000/rpc
       - CATALYST_SYSTEM_TOKEN=${CATALYST_SYSTEM_TOKEN}
@@ -52,6 +57,8 @@ services:
       - '4000:4000'
     environment:
       - PORT=4000
+      - CATALYST_NODE_ID=gateway.dev.catalyst.local
+      - CATALYST_DOMAINS=dev.catalyst.local
     healthcheck:
       test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
       interval: 10s

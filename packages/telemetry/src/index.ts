@@ -51,6 +51,23 @@ export type { InstrumentUpgradeOptions } from './middleware/capnweb-transport.js
 export { WideEvent } from './wide-event.js'
 
 // ---------------------------------------------------------------------------
+// Trace context helpers
+// ---------------------------------------------------------------------------
+
+import { trace, context } from '@opentelemetry/api'
+
+/**
+ * Get the trace ID from the currently active span, if any.
+ * Returns undefined when no span is active (e.g., no OTel configured).
+ */
+export function getActiveTraceId(): string | undefined {
+  const span = trace.getSpan(context.active())
+  if (!span) return undefined
+  const ctx = span.spanContext()
+  return ctx.traceId
+}
+
+// ---------------------------------------------------------------------------
 // Builder + DI
 // ---------------------------------------------------------------------------
 export { TelemetryBuilder } from './builder.js'

@@ -10,7 +10,12 @@ import { OrchestratorServiceV2 } from './service.js'
 import { WebSocketPeerTransport } from './ws-transport.js'
 import { HttpPeerTransport } from './http-transport.js'
 import type { PeerTransport } from './transport.js'
-import { createNetworkClient, createDataChannelClient, createIBGPClient } from './rpc.js'
+import {
+  createNetworkClient,
+  createDataChannelClient,
+  createIBGPClient,
+  createLogClient,
+} from './rpc.js'
 import type { TokenValidator } from './rpc.js'
 import { RouteTableView } from '@catalyst/routing/v2'
 
@@ -161,6 +166,11 @@ export class OrchestratorService extends CatalystService {
           getDataChannelClient: (token: string) =>
             createDataChannelClient(this._v2.bus, token, validator),
           getIBGPClient: (token: string) => createIBGPClient(this._v2.bus, token, validator),
+          getLogClient: (token: string) =>
+            createLogClient(this._v2.actionLog, token, validator, {
+              nodeId: orchestratorConfig.node.name,
+              getStateSnapshot: () => this._v2.bus.getStateSnapshot(),
+            }),
         },
         {
           upgradeWebSocket: getUpgradeWebSocket(c),

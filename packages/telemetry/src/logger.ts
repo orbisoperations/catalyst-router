@@ -118,8 +118,10 @@ function createPrettySink(): Sink {
     const props = Object.keys(record.properties).length
       ? ` ${safeStringify(record.properties)}`
       : ''
-    console.log(
-      `${ANSI.dim}${time}${ANSI.reset} ${color}${level}${ANSI.reset} ${ANSI.blue}${category}${ANSI.reset}: ${msg}${props}`
+    // Write to stderr so structured output (--output json/jsonl) on stdout
+    // remains parseable by jq and other tools.
+    process.stderr.write(
+      `${ANSI.dim}${time}${ANSI.reset} ${color}${level}${ANSI.reset} ${ANSI.blue}${category}${ANSI.reset}: ${msg}${props}\n`
     )
   }
 }

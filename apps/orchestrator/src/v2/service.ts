@@ -212,6 +212,11 @@ export class OrchestratorServiceV2 {
   }
 
   /** Propagate a refreshed node token to the bus and reconnect manager. */
+  /** Expose journal for the log client RPC endpoint. */
+  get actionLog(): ActionLog {
+    return this.journal
+  }
+
   setNodeToken(token: string): void {
     this.nodeToken = token
     this.bus.setNodeToken(token)

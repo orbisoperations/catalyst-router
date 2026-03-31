@@ -140,6 +140,11 @@ namespace CATALYST {
         resource: [Gateway, AdminPanel]
     };
 
+    action LOG_READ appliesTo {
+        principal: [ADMIN, NODE_CUSTODIAN],
+        resource: AdminPanel
+    };
+
     action MANAGE appliesTo {
         principal: [ADMIN, NODE, DATA_CUSTODIAN, NODE_CUSTODIAN, USER],
         resource: AdminPanel
