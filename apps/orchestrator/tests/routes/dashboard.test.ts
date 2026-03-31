@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CatalystConfig } from '@catalyst/config'
+import type { CatalystConfig, OrchestratorConfig } from '@catalyst/config'
 import type { DashboardStateProvider } from '../../src/routes/dashboard.js'
 
 import { createDashboardRoutes } from '../../src/routes/dashboard.js'
@@ -13,7 +13,23 @@ const defaultEnvoyConfig = {
   portRange: [[10000, 10100]] as [number, number][],
 }
 
-function makeConfig(overrides: Partial<CatalystConfig> = {}): CatalystConfig {
+const defaultOrchestratorConfig = {
+  envoyConfig: defaultEnvoyConfig,
+  allowNoAuth: false,
+  journal: {
+    mode: 'memory' as const,
+    compactionIntervalMs: 86_400_000,
+    minEntries: 1000,
+    tailSize: 100,
+  },
+}
+
+function makeConfig(
+  overrides: Omit<Partial<CatalystConfig>, 'orchestrator'> & {
+    orchestrator?: Partial<OrchestratorConfig>
+  } = {}
+): CatalystConfig {
+  const { orchestrator: orchOverrides, ...rest } = overrides
   return {
     node: {
       name: 'test-node',
@@ -22,10 +38,10 @@ function makeConfig(overrides: Partial<CatalystConfig> = {}): CatalystConfig {
     },
     port: 3000,
     orchestrator: {
-      envoyConfig: defaultEnvoyConfig,
-      ...(overrides.orchestrator ?? {}),
+      ...defaultOrchestratorConfig,
+      ...(orchOverrides ?? {}),
     },
-    ...overrides,
+    ...rest,
   }
 }
 
