@@ -1,14 +1,14 @@
-import { Actions, PeerView, InternalRouteView } from '@catalyst/routing/v2'
 import type {
-  PeerInfo,
-  PeerRecord,
   DataChannelDefinition,
   InternalRoute,
+  PeerInfo,
+  PublicPeer,
   UpdateMessageSchema,
 } from '@catalyst/routing/v2'
-import type { z } from 'zod'
-import { decodeJwt } from 'jose'
+import { Actions, InternalRouteView, PeerView } from '@catalyst/routing/v2'
 import { getLogger, withWideEvent } from '@catalyst/telemetry'
+import { decodeJwt } from 'jose'
+import type { z } from 'zod'
 import type { OrchestratorBus } from './bus.js'
 
 const logger = getLogger(['catalyst', 'orchestrator', 'rpc'])
@@ -35,7 +35,7 @@ export interface NetworkClient {
   removePeer(
     peer: Pick<PeerInfo, 'name'>
   ): Promise<{ success: true } | { success: false; error: string }>
-  listPeers(): Promise<PeerRecord[]>
+  listPeers(): Promise<PublicPeer[]>
 }
 
 export interface DataChannel {
