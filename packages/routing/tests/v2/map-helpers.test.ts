@@ -38,11 +38,10 @@ describe('mapWithout', () => {
     expect(result).not.toBe(original)
   })
 
-  it('returns a new Map unchanged if key not present', () => {
+  it('returns same reference when key does not exist', () => {
     const original = new Map([['a', 1]])
     const result = mapWithout(original, 'z')
-    expect(result.size).toBe(1)
-    expect(result).not.toBe(original)
+    expect(result).toBe(original)
   })
 })
 
@@ -108,6 +107,19 @@ describe('nestedMapDelete', () => {
     const result = nestedMapDelete(outer, 'a', 'x')
     expect(result.has('a')).toBe(false)
   })
+
+  it('returns same reference when outer key is missing', () => {
+    const outer = new Map<string, Map<string, number>>()
+    const result = nestedMapDelete(outer, 'a', 'x')
+    expect(result).toBe(outer)
+  })
+
+  it('returns same reference when inner key is missing', () => {
+    const inner = new Map([['x', 10]])
+    const outer = new Map([['a', inner]])
+    const result = nestedMapDelete(outer, 'a', 'nonexistent')
+    expect(result).toBe(outer)
+  })
 })
 
 describe('nestedMapDeleteOuter', () => {
@@ -120,5 +132,11 @@ describe('nestedMapDeleteOuter', () => {
     const result = nestedMapDeleteOuter(outer, 'a')
     expect(result.has('a')).toBe(false)
     expect(result.has('b')).toBe(true)
+  })
+
+  it('returns same reference when outer key does not exist', () => {
+    const outer = new Map([['a', new Map([['x', 10]])]])
+    const result = nestedMapDeleteOuter(outer, 'z')
+    expect(result).toBe(outer)
   })
 })
