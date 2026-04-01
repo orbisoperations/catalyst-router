@@ -253,6 +253,20 @@ function isTcpProtocol(protocol?: DataChannelProtocol): boolean {
   return protocol === 'tcp'
 }
 
+/**
+ * Returns true if the protocol should be excluded from Envoy entirely.
+ *
+ * Media routes use direct MediaMTX-to-MediaMTX RTSP relay and are intentionally
+ * excluded from Envoy because: (1) Envoy TCP drain has no GOAWAY equivalent and
+ * would interrupt long-lived camera streams on config reload, (2) without this
+ * filter, media routes fall into the HTTP Connection Manager path (since
+ * isTcpProtocol() only matches 'tcp'), which breaks RTSP. Envoy tcp_proxy
+ * passthrough for media is a future consideration — see spec Non-Goals.
+ */
+function isEnvoyExcludedProtocol(protocol?: DataChannelProtocol): boolean {
+  return protocol === 'media'
+}
+
 export function buildTcpProxyIngressListener(opts: {
   channelName: string
   port: number
@@ -445,6 +459,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
 
   // Local routes -> ingress listeners + local clusters
   for (const route of input.local) {
+    if (isEnvoyExcludedProtocol(route.protocol)) continue
     if (!route.endpoint) continue
     const allocatedPort = input.portAllocations[route.name]
     if (!allocatedPort) continue
@@ -482,6 +497,7 @@ export function buildXdsSnapshot(input: BuildXdsSnapshotInput): XdsSnapshot {
 
   // Internal routes -> egress listeners + remote clusters
   for (const route of input.internal) {
+    if (isEnvoyExcludedProtocol(route.protocol)) continue
     if (!route.envoyPort) continue
     const peerAddress = route.peer.envoyAddress
     if (!peerAddress) continue
