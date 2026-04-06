@@ -206,6 +206,25 @@ export class OrchestratorBus {
           })
         }
 
+        // --- Max prefix warning at 80% threshold ---
+        if (action.action === Actions.InternalProtocolUpdate) {
+          const peerName = action.data.peerInfo.name
+          const peer = committed.internal.peers.find((p) => p.name === peerName)
+          if (peer?.maxPrefixes && peer.maxPrefixes > 0) {
+            const count = committed.internal.routes.filter((r) => r.peer.name === peerName).length
+            const warnAt = Math.floor(peer.maxPrefixes * 0.8)
+            if (count >= warnAt) {
+              logger.warn('Peer {peerName} at {count}/{limit} prefixes ({pct}%)', {
+                'event.name': 'peer.prefix_limit.warning',
+                peerName,
+                count,
+                limit: peer.maxPrefixes,
+                pct: Math.round((count / peer.maxPrefixes) * 100),
+              })
+            }
+          }
+        }
+
         await this.handlePostCommit(action, plan, committed, event)
 
         return { success: true, state: committed, action }
