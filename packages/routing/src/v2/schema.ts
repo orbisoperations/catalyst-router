@@ -14,7 +14,11 @@ import {
   InternalProtocolConnectedMessageSchema,
   InternalProtocolKeepaliveMessageSchema,
 } from './internal/actions.js'
-import { TickMessageSchema } from './system/actions.js'
+import {
+  TickMessageSchema,
+  AdminGracefulShutdownMessageSchema,
+  AdminCancelShutdownMessageSchema,
+} from './system/actions.js'
 
 /**
  * Unified Action Schema — V2.
@@ -33,6 +37,8 @@ export const ActionSchema = z.discriminatedUnion('action', [
   InternalProtocolConnectedMessageSchema,
   InternalProtocolKeepaliveMessageSchema,
   TickMessageSchema,
+  AdminGracefulShutdownMessageSchema,
+  AdminCancelShutdownMessageSchema,
 ])
 
 export type Action = z.infer<typeof ActionSchema>

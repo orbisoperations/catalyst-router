@@ -7,3 +7,13 @@ export const TickMessageSchema = z.object({
     now: z.number(),
   }),
 })
+
+export const AdminGracefulShutdownMessageSchema = z.object({
+  action: z.literal(Actions.AdminGracefulShutdown),
+  data: z.object({}),
+})
+
+export const AdminCancelShutdownMessageSchema = z.object({
+  action: z.literal(Actions.AdminCancelShutdown),
+  data: z.object({}),
+})

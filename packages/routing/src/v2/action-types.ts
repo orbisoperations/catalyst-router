@@ -22,6 +22,8 @@ export const Actions = {
 
   // System
   Tick: 'system:tick',
+  AdminGracefulShutdown: 'admin:graceful-shutdown',
+  AdminCancelShutdown: 'admin:cancel-shutdown',
 } as const
 
 export type ActionType = (typeof Actions)[keyof typeof Actions]
