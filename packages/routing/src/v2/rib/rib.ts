@@ -44,6 +44,14 @@ type InternalProtocolKeepaliveData = Extract<
   { action: typeof Actions.InternalProtocolKeepalive }
 >['data']
 type TickData = Extract<Action, { action: typeof Actions.Tick }>['data']
+type AdminGracefulShutdownData = Extract<
+  Action,
+  { action: typeof Actions.AdminGracefulShutdown }
+>['data']
+type AdminCancelShutdownData = Extract<
+  Action,
+  { action: typeof Actions.AdminCancelShutdown }
+>['data']
 
 // ---------------------------------------------------------------------------
 // Flap damping constants (RFC 2439 / RFC 7196 / RIPE-580)
@@ -165,6 +173,10 @@ export class RoutingInformationBase {
         return this.planInternalProtocolKeepalive(action.data, state, timestamp)
       case Actions.Tick:
         return this.planTick(action.data, state)
+      case Actions.AdminGracefulShutdown:
+        return this.planAdminGracefulShutdown(action.data, state)
+      case Actions.AdminCancelShutdown:
+        return this.planAdminCancelShutdown(action.data, state)
       default:
         return noChange(state)
     }
@@ -542,7 +554,13 @@ export class RoutingInformationBase {
           // Best-path selection: prefer shorter path, or replace a stale route
           const betterPath = item.nodePath.length < existing.nodePath.length
           const replacingStale = existing.isStale === true
-          if (betterPath || replacingStale) {
+          const existingDrained = existing.draining === true
+          const newDrained = newRoute.draining === true
+          // Non-drained always beats drained, regardless of path length
+          const drainingAdvantage = existingDrained && !newDrained
+          // Don't replace healthy route with a draining one
+          const drainingDisadvantage = !existingDrained && newDrained
+          if (!drainingDisadvantage && (betterPath || replacingStale || drainingAdvantage)) {
             routes = routes.map((r, i) => (i === existingIdx ? newRoute : r))
             routeChanges.push({ type: 'updated', route: newRoute })
           }
@@ -749,5 +767,35 @@ export class RoutingInformationBase {
       internal: { peers, routes },
     }
     return { prevState: state, newState, portOps, routeChanges, flapStateChanges: flapChanges }
+  }
+
+  private planAdminGracefulShutdown(
+    _data: AdminGracefulShutdownData,
+    state: RouteTable
+  ): PlanResult {
+    if (state.local.routes.length === 0) return noChange(state)
+
+    const routes = state.local.routes.map((r) => ({ ...r, draining: true }))
+    const routeChanges: RouteChange[] = routes.map((r) => ({ type: 'updated' as const, route: r }))
+
+    const newState: RouteTable = {
+      ...state,
+      local: { ...state.local, routes },
+    }
+    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges }
+  }
+
+  private planAdminCancelShutdown(_data: AdminCancelShutdownData, state: RouteTable): PlanResult {
+    const hasDraining = state.local.routes.some((r) => r.draining === true)
+    if (!hasDraining) return noChange(state)
+
+    const routes = state.local.routes.map(({ draining: _draining, ...rest }) => rest)
+    const routeChanges: RouteChange[] = routes.map((r) => ({ type: 'updated' as const, route: r }))
+
+    const newState: RouteTable = {
+      ...state,
+      local: { ...state.local, routes },
+    }
+    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges }
   }
 }
