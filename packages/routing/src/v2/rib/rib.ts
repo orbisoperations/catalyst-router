@@ -46,6 +46,22 @@ type InternalProtocolKeepaliveData = Extract<
 type TickData = Extract<Action, { action: typeof Actions.Tick }>['data']
 
 // ---------------------------------------------------------------------------
+// Flap damping constants (RFC 2439 / RFC 7196 / RIPE-580)
+// ---------------------------------------------------------------------------
+export const FLAP_PENALTY_INCREMENT = 1000
+export const FLAP_SUPPRESS_THRESHOLD = 6000
+export const FLAP_REUSE_THRESHOLD = 750
+export const FLAP_HALF_LIFE_MS = 300_000 // 5 minutes
+export const FLAP_MAX_SUPPRESS_MS = 1_800_000 // 30 minutes
+
+export type FlapEntry = {
+  penalty: number
+  suppressed: boolean
+  suppressedAt: number | null
+  lastUpdated: number
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -88,6 +104,23 @@ export class RoutingInformationBase {
 
   get nodeId(): string {
     return this._nodeId
+  }
+
+  /** Ephemeral flap damping state — does not survive restart. */
+  private _flapState = new Map<string, FlapEntry>()
+
+  get flapState(): ReadonlyMap<string, FlapEntry> {
+    return this._flapState
+  }
+
+  private flapKey(rKey: string, originNode: string): string {
+    return `${rKey}:${originNode}`
+  }
+
+  private decayPenalty(entry: FlapEntry, now: number): number {
+    const elapsed = now - entry.lastUpdated
+    if (elapsed <= 0) return entry.penalty
+    return entry.penalty * Math.pow(0.5, elapsed / FLAP_HALF_LIFE_MS)
   }
 
   /**
@@ -460,6 +493,22 @@ export class RoutingInformationBase {
           routeChanges.push({ type: 'added', route: newRoute })
           if (hasLimit) currentPeerRouteCount++
         }
+
+        // --- Flap damping: track add-after-remove ---
+        const fk = this.flapKey(routeKey(item.route), item.originNode)
+        const flapEntry = this._flapState.get(fk)
+        if (flapEntry && flapEntry.penalty > 0) {
+          const now = Date.now()
+          const decayed = this.decayPenalty(flapEntry, now)
+          const newPenalty = decayed + FLAP_PENALTY_INCREMENT
+          const shouldSuppress = newPenalty >= FLAP_SUPPRESS_THRESHOLD
+          this._flapState.set(fk, {
+            penalty: newPenalty,
+            suppressed: shouldSuppress,
+            suppressedAt: shouldSuppress && !flapEntry.suppressed ? now : flapEntry.suppressedAt,
+            lastUpdated: now,
+          })
+        }
       } else {
         // action === 'remove'
         const key = routeKey(item.route)
@@ -470,6 +519,26 @@ export class RoutingInformationBase {
           if (hasLimit) currentPeerRouteCount--
           if (removed.envoyPort != null) {
             portOps.push({ type: 'release', routeKey: key, port: removed.envoyPort })
+          }
+
+          // --- Flap damping: mark as recently withdrawn ---
+          const fk = this.flapKey(routeKey(item.route), item.originNode)
+          const flapExisting = this._flapState.get(fk)
+          const now = Date.now()
+          if (!flapExisting) {
+            this._flapState.set(fk, {
+              penalty: FLAP_PENALTY_INCREMENT,
+              suppressed: false,
+              suppressedAt: null,
+              lastUpdated: now,
+            })
+          } else {
+            const decayed = this.decayPenalty(flapExisting, now)
+            this._flapState.set(fk, {
+              ...flapExisting,
+              penalty: decayed + FLAP_PENALTY_INCREMENT,
+              lastUpdated: now,
+            })
           }
         }
       }
