@@ -587,6 +587,36 @@ export class RoutingInformationBase {
   // -------------------------------------------------------------------------
 
   private planTick(data: TickData, state: RouteTable): PlanResult {
+    // --- Flap damping decay ---
+    let flapStateChanged = false
+    for (const [key, entry] of this._flapState) {
+      const decayed = this.decayPenalty(entry, data.now)
+
+      if (decayed < 1) {
+        // Penalty negligible — clean up
+        if (entry.suppressed) flapStateChanged = true
+        this._flapState.delete(key)
+        continue
+      }
+
+      const shouldUnsuppress =
+        entry.suppressed &&
+        (decayed < FLAP_REUSE_THRESHOLD ||
+          (entry.suppressedAt != null && data.now - entry.suppressedAt > FLAP_MAX_SUPPRESS_MS))
+
+      if (shouldUnsuppress) {
+        this._flapState.set(key, {
+          penalty: decayed,
+          suppressed: false,
+          suppressedAt: null,
+          lastUpdated: data.now,
+        })
+        flapStateChanged = true
+      } else if (Math.abs(decayed - entry.penalty) > 0.1) {
+        this._flapState.set(key, { ...entry, penalty: decayed, lastUpdated: data.now })
+      }
+    }
+
     // Find connected peers whose hold timer has expired
     const expiredPeerNames = new Set<string>()
     const peers = state.internal.peers.map((p) => {
@@ -617,7 +647,12 @@ export class RoutingInformationBase {
     }
 
     const purgedPeerNames = new Set([...expiredPeerNames, ...stalePeerNames])
-    if (purgedPeerNames.size === 0) return noChange(state)
+    if (purgedPeerNames.size === 0 && !flapStateChanged) return noChange(state)
+
+    if (purgedPeerNames.size === 0 && flapStateChanged) {
+      const newState: RouteTable = { ...state }
+      return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+    }
 
     const removedRoutes = state.internal.routes.filter((r) => purgedPeerNames.has(r.peer.name))
     const routes = state.internal.routes.filter((r) => !purgedPeerNames.has(r.peer.name))
