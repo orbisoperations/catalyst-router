@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { RoutingInformationBase, Actions, newRouteTable } from '@catalyst/routing/v2'
-import type { RouteTable, PeerRecord, PeerInfo } from '@catalyst/routing/v2'
+import type { RouteTable, PeerRecord, PeerInfo, Action } from '@catalyst/routing/v2'
 import { OrchestratorBus } from '../../src/v2/bus.js'
 import { MockPeerTransport, type TransportCall } from '../../src/v2/transport.js'
 import type { OrchestratorConfig } from '../../src/v1/types.js'
@@ -31,14 +31,14 @@ function stateWithPeer(maxPrefixes?: number): RouteTable {
   return state
 }
 
-function makeUpdate(names: string[], action: 'add' | 'remove' = 'add') {
+function makeUpdate(names: string[], actionType: 'add' | 'remove' = 'add'): Action {
   return {
-    action: Actions.InternalProtocolUpdate as const,
+    action: Actions.InternalProtocolUpdate,
     data: {
       peerInfo: peerB,
       update: {
         updates: names.map((name) => ({
-          action,
+          action: actionType,
           route: makeRoute(name),
           nodePath: ['node-b'],
           originNode: 'node-b',
@@ -161,8 +161,8 @@ describe('max prefix limits (drop-excess model)', () => {
     expect(addedB).toHaveLength(2)
 
     // Peer C should still be able to add routes
-    const fillC = {
-      action: Actions.InternalProtocolUpdate as const,
+    const fillC: Action = {
+      action: Actions.InternalProtocolUpdate,
       data: {
         peerInfo: peerC,
         update: {
