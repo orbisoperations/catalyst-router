@@ -1,2 +1,14 @@
+# Skip lint/typecheck/tests for documentation-only changes
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -n "$STAGED_FILES" ]; then
+  NON_DOC_FILES=$(echo "$STAGED_FILES" | grep -vE '(\.md$|^docs/)')
+
+  if [ -z "$NON_DOC_FILES" ]; then
+    echo "Documentation-only changes detected — skipping lint/typecheck/tests."
+    exit 0
+  fi
+fi
+
 pnpm exec lint-staged
 pnpm run test:unit
