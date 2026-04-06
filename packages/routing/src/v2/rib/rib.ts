@@ -155,7 +155,10 @@ export class RoutingInformationBase {
   // Local peer handlers
   // -------------------------------------------------------------------------
 
-  private planLocalPeerCreate(data: PeerInfo, state: RouteTable): PlanResult {
+  private planLocalPeerCreate(
+    data: PeerInfo & { maxPrefixes?: number },
+    state: RouteTable
+  ): PlanResult {
     const exists = state.internal.peers.some((p) => p.name === data.name)
     if (exists) return noChange(state)
 
@@ -411,10 +414,23 @@ export class RoutingInformationBase {
     const portOps: PortOperation[] = []
     const routeChanges: RouteChange[] = []
 
+    // --- Max prefix limit setup ---
+    const limitPeer = state.internal.peers.find((p) => p.name === data.peerInfo.name)
+    const prefixLimit = limitPeer?.maxPrefixes
+    const hasLimit = prefixLimit != null && prefixLimit > 0
+    let currentPeerRouteCount = hasLimit
+      ? routes.filter((r) => r.peer.name === data.peerInfo.name).length
+      : 0
+
     for (const item of data.update.updates) {
       if (item.action === 'add') {
         // Loop detection — discard advertisements that already include this node
         if (item.nodePath.includes(this._nodeId)) continue
+
+        // --- Max prefix limit check ---
+        if (hasLimit && currentPeerRouteCount >= prefixLimit!) {
+          continue // Drop excess route (Juniper drop-excess model)
+        }
 
         const key = routeKey(item.route)
         const existingIdx = routes.findIndex(
@@ -442,6 +458,7 @@ export class RoutingInformationBase {
         } else {
           routes = [...routes, newRoute]
           routeChanges.push({ type: 'added', route: newRoute })
+          if (hasLimit) currentPeerRouteCount++
         }
       } else {
         // action === 'remove'
@@ -450,6 +467,7 @@ export class RoutingInformationBase {
         if (removed !== undefined) {
           routes = routes.filter((r) => !(routeKey(r) === key && r.originNode === item.originNode))
           routeChanges.push({ type: 'removed', route: removed })
+          if (hasLimit) currentPeerRouteCount--
           if (removed.envoyPort != null) {
             portOps.push({ type: 'release', routeKey: key, port: removed.envoyPort })
           }

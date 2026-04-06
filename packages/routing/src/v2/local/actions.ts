@@ -12,7 +12,7 @@ export const localRouteDeleteAction = z.literal(Actions.LocalRouteDelete)
 
 export const localPeerCreateMessageSchema = z.object({
   action: z.literal(Actions.LocalPeerCreate),
-  data: PeerInfoSchema,
+  data: PeerInfoSchema.extend({ maxPrefixes: z.number().int().min(0).optional() }),
 })
 
 export const localPeerUpdateMessageSchema = z.object({
