@@ -11,4 +11,5 @@ if [ -n "$STAGED_FILES" ]; then
 fi
 
 pnpm exec lint-staged
+pnpm exec turbo run typecheck
 pnpm run test:unit
