@@ -9,7 +9,7 @@ import {
   FLAP_HALF_LIFE_MS,
   FLAP_MAX_SUPPRESS_MS,
 } from '@catalyst/routing/v2'
-import type { RouteTable, PeerRecord, PeerInfo } from '@catalyst/routing/v2'
+import type { RouteTable, PeerRecord, PeerInfo, Action } from '@catalyst/routing/v2'
 import { OrchestratorBus } from '../../src/v2/bus.js'
 import { MockPeerTransport, type TransportCall } from '../../src/v2/transport.js'
 import type { OrchestratorConfig } from '../../src/v1/types.js'
@@ -37,9 +37,9 @@ function connectedState(): RouteTable {
   return state
 }
 
-function addAction(route: typeof route1) {
+function addAction(route: typeof route1): Action {
   return {
-    action: Actions.InternalProtocolUpdate as const,
+    action: Actions.InternalProtocolUpdate,
     data: {
       peerInfo: peerB,
       update: {
@@ -49,9 +49,9 @@ function addAction(route: typeof route1) {
   }
 }
 
-function removeAction(route: typeof route1) {
+function removeAction(route: typeof route1): Action {
   return {
-    action: Actions.InternalProtocolUpdate as const,
+    action: Actions.InternalProtocolUpdate,
     data: {
       peerInfo: peerB,
       update: {
@@ -192,8 +192,8 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
 
     // Dispatch Tick far enough in the future: penalty is ~12000 after 6 flap cycles.
     // 5 half-lives => 12000 * 0.5^5 = 375 < 750 reuse threshold.
-    const tickAction = {
-      action: Actions.Tick as const,
+    const tickAction: Action = {
+      action: Actions.Tick,
       data: { now: Date.now() + FLAP_HALF_LIFE_MS * 5 },
     }
     const tickPlan = rib.plan(tickAction, currentState)
@@ -232,8 +232,8 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
     expect(rib.flapState.get(fk)?.suppressed).toBe(true)
 
     // Dispatch Tick just past the max suppress duration (30 min + 1 sec)
-    const tickAction = {
-      action: Actions.Tick as const,
+    const tickAction: Action = {
+      action: Actions.Tick,
       data: { now: Date.now() + FLAP_MAX_SUPPRESS_MS + 1000 },
     }
     const tickPlan = rib.plan(tickAction, currentState)
