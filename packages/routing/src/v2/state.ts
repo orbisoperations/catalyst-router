@@ -14,6 +14,7 @@ export const PeerRecordSchema = PeerInfoSchema.extend({
   holdTime: z.number().default(90_000),
   lastSent: z.number().default(0),
   lastReceived: z.number().default(0),
+  maxPrefixes: z.number().int().min(0).optional(),
 })
 export type PeerRecord = z.infer<typeof PeerRecordSchema>
 
