@@ -6,6 +6,8 @@ import {
   routeKey,
   FLAP_PENALTY_INCREMENT,
   FLAP_SUPPRESS_THRESHOLD,
+  FLAP_HALF_LIFE_MS,
+  FLAP_MAX_SUPPRESS_MS,
 } from '@catalyst/routing/v2'
 import type { RouteTable, PeerRecord, PeerInfo } from '@catalyst/routing/v2'
 
@@ -156,5 +158,87 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
     // route2 should have no flap entry (never withdrawn)
     const entry2 = rib.flapState.get(fk2)
     expect(entry2).toBeUndefined()
+  })
+
+  it('tick decays penalty — suppressed route becomes reusable after 4 half-lives', () => {
+    const rib = new RoutingInformationBase({ nodeId })
+    const state = connectedState()
+
+    // Flap route1 six times to suppress it
+    let currentState = state
+    for (let i = 0; i < 6; i++) {
+      const add = addAction(route1)
+      const ap = rib.plan(add, currentState)
+      rib.commit(ap, add)
+      currentState = rib.state
+
+      const rm = removeAction(route1)
+      const rp = rib.plan(rm, currentState)
+      rib.commit(rp, rm)
+      currentState = rib.state
+    }
+
+    // Final add
+    const finalAdd = addAction(route1)
+    const fp = rib.plan(finalAdd, currentState)
+    rib.commit(fp, finalAdd)
+    currentState = rib.state
+
+    const fk = routeKey(route1) + ':node-b'
+    expect(rib.flapState.get(fk)?.suppressed).toBe(true)
+
+    // Dispatch Tick far enough in the future: penalty is ~12000 after 6 flap cycles.
+    // 5 half-lives => 12000 * 0.5^5 = 375 < 750 reuse threshold.
+    const tickAction = {
+      action: Actions.Tick as const,
+      data: { now: Date.now() + FLAP_HALF_LIFE_MS * 5 },
+    }
+    const tickPlan = rib.plan(tickAction, currentState)
+    rib.commit(tickPlan, tickAction)
+
+    const entry = rib.flapState.get(fk)
+    expect(entry).toBeDefined()
+    expect(entry!.suppressed).toBe(false)
+  })
+
+  it('max suppress time cap — unsuppressed after 30 minutes despite high penalty', () => {
+    const rib = new RoutingInformationBase({ nodeId })
+    const state = connectedState()
+
+    // Flap route1 twenty times to get very high penalty
+    let currentState = state
+    for (let i = 0; i < 20; i++) {
+      const add = addAction(route1)
+      const ap = rib.plan(add, currentState)
+      rib.commit(ap, add)
+      currentState = rib.state
+
+      const rm = removeAction(route1)
+      const rp = rib.plan(rm, currentState)
+      rib.commit(rp, rm)
+      currentState = rib.state
+    }
+
+    // Final add
+    const finalAdd = addAction(route1)
+    const fp = rib.plan(finalAdd, currentState)
+    rib.commit(fp, finalAdd)
+    currentState = rib.state
+
+    const fk = routeKey(route1) + ':node-b'
+    expect(rib.flapState.get(fk)?.suppressed).toBe(true)
+
+    // Dispatch Tick just past the max suppress duration (30 min + 1 sec)
+    const tickAction = {
+      action: Actions.Tick as const,
+      data: { now: Date.now() + FLAP_MAX_SUPPRESS_MS + 1000 },
+    }
+    const tickPlan = rib.plan(tickAction, currentState)
+    rib.commit(tickPlan, tickAction)
+
+    const entry = rib.flapState.get(fk)
+    // Should be unsuppressed even though penalty may still be above reuse threshold
+    expect(entry).toBeDefined()
+    expect(entry!.suppressed).toBe(false)
   })
 })

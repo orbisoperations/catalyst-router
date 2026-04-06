@@ -3,6 +3,7 @@ import {
   ActionQueue,
   Actions,
   CloseCodes,
+  routeKey,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -662,6 +663,13 @@ export class OrchestratorBus {
         if (change.type !== 'removed' && this.routePolicy !== undefined) {
           const allowed = this.routePolicy.canSend(peer, [route])
           if (allowed.length === 0) continue
+        }
+
+        // --- Flap damping: skip suppressed routes ---
+        if (change.type !== 'removed') {
+          const fk = `${routeKey(route)}:${route.originNode}`
+          const flapEntry = this.rib.flapState.get(fk)
+          if (flapEntry?.suppressed) continue
         }
 
         // Multi-hop: envoyPort is already stamped by planPortAllocations.
