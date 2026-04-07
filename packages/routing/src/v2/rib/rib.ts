@@ -208,19 +208,36 @@ export class RoutingInformationBase {
     if (!state.internal.peers.has(data.name)) return noChange(state)
     const peerRouteMap = state.internal.routes.get(data.name)
     const removedRoutes = peerRouteMap ? [...peerRouteMap.values()] : []
+
+    const routes = nestedMapDeleteOuter(state.internal.routes, data.name)
+    let locRib = state.internal.locRib
+    const routeChanges: RouteChange[] = []
+
+    // Update Loc-RIB: fallback or remove for each irKey this peer owned
+    for (const [irKey, winnerPeer] of state.internal.locRib) {
+      if (winnerPeer !== data.name) continue
+      const fallback = selectBestPeer(routes, irKey)
+      if (fallback !== undefined) {
+        locRib = mapWith(locRib, irKey, fallback)
+        const fallbackRoute = routes.get(fallback)?.get(irKey)
+        if (fallbackRoute) routeChanges.push({ type: 'updated', route: fallbackRoute })
+      } else {
+        locRib = mapWithout(locRib, irKey)
+        const removed = removedRoutes.find((r) => internalRouteKey(r) === irKey)
+        if (removed) routeChanges.push({ type: 'removed', route: removed })
+      }
+    }
+
     const portOps: PortOperation[] = removedRoutes
       .filter((r) => r.envoyPort != null)
       .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
-    const routeChanges: RouteChange[] = removedRoutes.map((r) => ({
-      type: 'removed' as const,
-      route: r,
-    }))
+
     const newState: RouteTable = {
       ...state,
       internal: {
         peers: mapWithout(state.internal.peers, data.name),
-        routes: nestedMapDeleteOuter(state.internal.routes, data.name),
-        locRib: state.internal.locRib,
+        routes,
+        locRib,
       },
     }
     return { prevState: state, newState, portOps, routeChanges }
@@ -361,10 +378,12 @@ export class RoutingInformationBase {
     const peerRoutes = peerRouteMap ? [...peerRouteMap.values()] : []
 
     let routes: RouteTable['internal']['routes']
-    let routeChanges: RouteChange[]
+    let locRib = state.internal.locRib
+    const routeChanges: RouteChange[] = []
     let portOps: PortOperation[]
 
     if (isTransportError) {
+      // Graceful restart: mark stale, keep locRib pointers
       if (peerRouteMap && peerRouteMap.size > 0) {
         const staleInner = new Map<string, InternalRoute>()
         for (const [key, r] of peerRouteMap) {
@@ -374,27 +393,53 @@ export class RoutingInformationBase {
       } else {
         routes = state.internal.routes
       }
-      routeChanges = peerRoutes.map((r) => ({
-        type: 'updated' as const,
-        route: { ...r, isStale: true },
-      }))
+      for (const r of peerRoutes) {
+        routeChanges.push({ type: 'updated' as const, route: { ...r, isStale: true } })
+      }
       portOps = NO_PORT_OPS
+
+      // Re-evaluate locRib: stale routes may now lose to fresh alternatives
+      for (const [irKey, winnerPeer] of state.internal.locRib) {
+        if (winnerPeer !== data.peerInfo.name) continue
+        const fallback = selectBestPeer(routes, irKey)
+        if (fallback !== undefined && fallback !== data.peerInfo.name) {
+          locRib = mapWith(locRib, irKey, fallback)
+          const fallbackRoute = routes.get(fallback)?.get(irKey)
+          if (fallbackRoute) {
+            routeChanges.push({ type: 'updated', route: fallbackRoute })
+          }
+        }
+        // else: no better alternative, stale route stays as winner (locRib unchanged)
+      }
     } else {
+      // Hard close: remove routes, update locRib with fallbacks
       routes = nestedMapDeleteOuter(state.internal.routes, data.peerInfo.name)
-      routeChanges = peerRoutes.map((r) => ({ type: 'removed' as const, route: r }))
       portOps = peerRoutes
         .filter((r) => r.envoyPort != null)
         .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
+
+      for (const [irKey, winnerPeer] of state.internal.locRib) {
+        if (winnerPeer !== data.peerInfo.name) continue
+        const fallback = selectBestPeer(routes, irKey)
+        if (fallback !== undefined) {
+          locRib = mapWith(locRib, irKey, fallback)
+          const fallbackRoute = routes.get(fallback)?.get(irKey)
+          if (fallbackRoute) {
+            routeChanges.push({ type: 'updated', route: fallbackRoute })
+          }
+        } else {
+          locRib = mapWithout(locRib, irKey)
+          const removed = peerRoutes.find((r) => internalRouteKey(r) === irKey)
+          if (removed) routeChanges.push({ type: 'removed', route: removed })
+        }
+      }
     }
 
     const peers = mapWith(state.internal.peers, data.peerInfo.name, {
       ...existing,
       connectionStatus: 'closed' as const,
     })
-    const newState: RouteTable = {
-      ...state,
-      internal: { peers, routes, locRib: state.internal.locRib },
-    }
+    const newState: RouteTable = { ...state, internal: { peers, routes, locRib } }
     return { prevState: state, newState, portOps, routeChanges }
   }
 

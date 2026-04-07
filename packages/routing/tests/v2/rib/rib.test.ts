@@ -1366,4 +1366,173 @@ describe('Loc-RIB index', () => {
     const svcXChanges = plan.routeChanges.filter((c) => c.route.name === 'svc-x')
     expect(svcXChanges).toHaveLength(0)
   })
+
+  it('best-path peer disconnects — second-best promoted', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerA = makePeer('peer-a')
+    const peerB = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peerA))
+    apply(rib, makeLocalPeerCreate(peerB))
+    apply(rib, makeProtocolOpen(peerA))
+    apply(rib, makeProtocolOpen(peerB))
+
+    apply(
+      rib,
+      makeProtocolUpdate(peerA, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-a'],
+          originNode: 'origin',
+        },
+      ])
+    )
+    apply(
+      rib,
+      makeProtocolUpdate(peerB, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-b', 'origin'],
+          originNode: 'origin',
+        },
+      ])
+    )
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-a')
+
+    const plan = apply(rib, makeProtocolClose(peerA, CloseCodes.NORMAL))
+
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-b')
+    expect(plan.routeChanges).toContainEqual(
+      expect.objectContaining({
+        type: 'updated',
+        route: expect.objectContaining({ peer: expect.objectContaining({ name: 'peer-b' }) }),
+      })
+    )
+  })
+
+  it('only peer disconnects — route removed from Loc-RIB', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerA = makePeer('peer-a')
+    apply(rib, makeLocalPeerCreate(peerA))
+    apply(rib, makeProtocolOpen(peerA))
+
+    apply(
+      rib,
+      makeProtocolUpdate(peerA, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-a'],
+          originNode: 'origin',
+        },
+      ])
+    )
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-a')
+
+    apply(rib, makeProtocolClose(peerA, CloseCodes.NORMAL))
+
+    expect(rib.state.internal.locRib.has('svc-x:origin')).toBe(false)
+  })
+
+  it('transport error keeps Loc-RIB pointer (graceful restart)', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerA = makePeer('peer-a')
+    apply(rib, makeLocalPeerCreate(peerA))
+    apply(rib, makeProtocolOpen(peerA))
+
+    apply(
+      rib,
+      makeProtocolUpdate(peerA, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-a'],
+          originNode: 'origin',
+        },
+      ])
+    )
+
+    apply(rib, makeProtocolClose(peerA, CloseCodes.TRANSPORT_ERROR))
+
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-a')
+    const route = rib.state.internal.routes.get('peer-a')?.get('svc-x:origin')
+    expect(route?.isStale).toBe(true)
+  })
+
+  it('stale route loses to fresh from another peer after transport error', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerA = makePeer('peer-a')
+    const peerB = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peerA))
+    apply(rib, makeLocalPeerCreate(peerB))
+    apply(rib, makeProtocolOpen(peerA))
+    apply(rib, makeProtocolOpen(peerB))
+
+    // peer-a has route, goes stale via transport error
+    apply(
+      rib,
+      makeProtocolUpdate(peerA, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-a'],
+          originNode: 'origin',
+        },
+      ])
+    )
+    // peer-b also has the route (backup, longer path)
+    apply(
+      rib,
+      makeProtocolUpdate(peerB, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-b', 'origin'],
+          originNode: 'origin',
+        },
+      ])
+    )
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-a')
+
+    // peer-a goes stale — locRib should switch to peer-b (fresh beats stale)
+    apply(rib, makeProtocolClose(peerA, CloseCodes.TRANSPORT_ERROR))
+
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-b')
+  })
+
+  it('equal path length — lowest peer name wins', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerAlpha = makePeer('alpha')
+    const peerBravo = makePeer('bravo')
+    apply(rib, makeLocalPeerCreate(peerAlpha))
+    apply(rib, makeLocalPeerCreate(peerBravo))
+    apply(rib, makeProtocolOpen(peerAlpha))
+    apply(rib, makeProtocolOpen(peerBravo))
+
+    apply(
+      rib,
+      makeProtocolUpdate(peerBravo, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['bravo'],
+          originNode: 'origin',
+        },
+      ])
+    )
+    apply(
+      rib,
+      makeProtocolUpdate(peerAlpha, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['alpha'],
+          originNode: 'origin',
+        },
+      ])
+    )
+
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('alpha')
+  })
 })
