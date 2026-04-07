@@ -330,7 +330,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     const plan = apply(
       rib,
       makeProtocolUpdate(peer, [
-        { action: 'add', route, nodePath: ['node-a', 'peer-b'], originNode: 'peer-b' },
+        { action: 'add', route, nodePath: ['peer-b', 'node-a'], originNode: 'peer-b' },
       ])
     )
 
@@ -409,26 +409,26 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
     const route = makeRoute('svc-1')
 
-    // First: longer path (2 hops)
+    // First: longer path (3 hops)
     apply(
       rib,
       makeProtocolUpdate(peer, [
-        { action: 'add', route, nodePath: ['peer-c', 'peer-b'], originNode: 'peer-c' },
+        { action: 'add', route, nodePath: ['peer-b', 'peer-c', 'peer-d'], originNode: 'peer-b' },
       ])
     )
     const first = rib.state.internal.routes.find((r) => r.name === 'svc-1')
-    expect(first!.nodePath).toHaveLength(2)
+    expect(first!.nodePath).toHaveLength(3)
 
-    // Second: shorter path (1 hop) — should replace
+    // Second: shorter path (2 hops) — should replace
     const plan = apply(
       rib,
       makeProtocolUpdate(peer, [
-        { action: 'add', route, nodePath: ['peer-b'], originNode: 'peer-c' },
+        { action: 'add', route, nodePath: ['peer-b', 'peer-c'], originNode: 'peer-b' },
       ])
     )
 
     const updated = rib.state.internal.routes.find((r) => r.name === 'svc-1')
-    expect(updated!.nodePath).toHaveLength(1)
+    expect(updated!.nodePath).toHaveLength(2)
     expect(plan.routeChanges.some((c) => c.type === 'updated')).toBe(true)
   })
 
@@ -448,7 +448,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     const plan = apply(
       rib,
       makeProtocolUpdate(peer, [
-        { action: 'add', route, nodePath: ['peer-c', 'peer-b'], originNode: 'peer-b' },
+        { action: 'add', route, nodePath: ['peer-b', 'peer-c'], originNode: 'peer-b' },
       ])
     )
 
@@ -532,7 +532,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
       {
         action: 'add' as const,
         route: makeRoute('looped'),
-        nodePath: ['node-a', 'peer-b'],
+        nodePath: ['peer-b', 'node-a'],
         originNode: 'peer-b',
       },
       {
@@ -569,7 +569,7 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
     const plan = apply(
       rib,
       makeProtocolUpdate(peer, [
-        { action: 'add', route, nodePath: ['peer-c', 'peer-b'], originNode: 'peer-b' },
+        { action: 'add', route, nodePath: ['peer-b', 'peer-c'], originNode: 'peer-b' },
       ])
     )
 

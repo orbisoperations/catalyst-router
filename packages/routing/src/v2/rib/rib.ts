@@ -563,6 +563,11 @@ export class RoutingInformationBase {
       : 0
 
     for (const item of data.update.updates) {
+      // --- enforce-first-as: nodePath[0] must match authenticated peer (RFC 4271 §6.3) ---
+      if (item.nodePath[0] !== data.peerInfo.name) continue
+      // For single-hop routes, originNode must also match the direct sender
+      if (item.nodePath.length === 1 && item.originNode !== data.peerInfo.name) continue
+
       if (item.action === 'add') {
         // Loop detection — discard advertisements that already include this node
         if (item.nodePath.includes(this._nodeId)) continue
