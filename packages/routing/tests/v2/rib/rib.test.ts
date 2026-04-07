@@ -1288,4 +1288,82 @@ describe('Loc-RIB index', () => {
     expect(rib.state.internal.locRib).toBeInstanceOf(Map)
     expect(rib.state.internal.locRib.size).toBe(0)
   })
+
+  it('two peers advertise same route — shorter path wins Loc-RIB', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerA = makePeer('peer-a')
+    const peerB = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peerA))
+    apply(rib, makeLocalPeerCreate(peerB))
+    apply(rib, makeProtocolOpen(peerA))
+    apply(rib, makeProtocolOpen(peerB))
+
+    // peer-b advertises svc-x via 2-hop path
+    apply(
+      rib,
+      makeProtocolUpdate(peerB, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-b', 'origin'],
+          originNode: 'origin',
+        },
+      ])
+    )
+
+    // peer-a advertises same route via 1-hop path
+    apply(
+      rib,
+      makeProtocolUpdate(peerA, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-a'],
+          originNode: 'origin',
+        },
+      ])
+    )
+
+    // Loc-RIB should point to peer-a (shorter path)
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-a')
+  })
+
+  it('second-best route arriving does not emit routeChange', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerA = makePeer('peer-a')
+    const peerB = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peerA))
+    apply(rib, makeLocalPeerCreate(peerB))
+    apply(rib, makeProtocolOpen(peerA))
+    apply(rib, makeProtocolOpen(peerB))
+
+    // peer-a advertises svc-x via 1-hop (wins)
+    apply(
+      rib,
+      makeProtocolUpdate(peerA, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-a'],
+          originNode: 'origin',
+        },
+      ])
+    )
+
+    // peer-b advertises same route via 2-hop (loses)
+    const action = makeProtocolUpdate(peerB, [
+      {
+        action: 'add',
+        route: makeRoute('svc-x'),
+        nodePath: ['peer-b', 'origin'],
+        originNode: 'origin',
+      },
+    ])
+    const plan = rib.plan(action, rib.state)
+    rib.commit(plan, action)
+
+    // No routeChange for svc-x — Loc-RIB winner didn't change
+    const svcXChanges = plan.routeChanges.filter((c) => c.route.name === 'svc-x')
+    expect(svcXChanges).toHaveLength(0)
+  })
 })

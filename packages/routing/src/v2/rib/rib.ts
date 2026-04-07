@@ -9,6 +9,7 @@ import {
   nestedMapDelete,
   nestedMapDeleteOuter,
 } from '../map-helpers.js'
+import { comparePaths, selectBestPeer } from '../best-path.js'
 import type { Action } from '../schema.js'
 import type { ActionLog } from '../journal/action-log.js'
 import {
@@ -402,6 +403,7 @@ export class RoutingInformationBase {
     state: RouteTable
   ): PlanResult {
     let routes = state.internal.routes
+    let locRib = state.internal.locRib
     const portOps: PortOperation[] = []
     const routeChanges: RouteChange[] = []
 
@@ -410,7 +412,6 @@ export class RoutingInformationBase {
         if (item.nodePath.includes(this._nodeId)) continue
 
         const irKey = internalRouteKey({ name: item.route.name, originNode: item.originNode })
-        const existing = nestedMapGet(routes, data.peerInfo.name, irKey)
 
         const newRoute: InternalRoute = {
           ...item.route,
@@ -420,16 +421,36 @@ export class RoutingInformationBase {
           isStale: false,
         }
 
-        if (existing !== undefined) {
-          const betterPath = item.nodePath.length < existing.nodePath.length
-          const replacingStale = existing.isStale === true
-          if (betterPath || replacingStale) {
-            routes = nestedMapSet(routes, data.peerInfo.name, irKey, newRoute)
+        // Store in Adj-RIB-In (always, regardless of best-path outcome)
+        const existingInPeer = nestedMapGet(routes, data.peerInfo.name, irKey)
+        if (existingInPeer !== undefined) {
+          const betterThanSelf = item.nodePath.length < existingInPeer.nodePath.length
+          const replacingStale = existingInPeer.isStale === true
+          if (!betterThanSelf && !replacingStale) {
+            // Same peer, not better and not replacing stale — skip
+            // But still accept same-length refreshes (metadata updates)
+            if (item.nodePath.length !== existingInPeer.nodePath.length) continue
+          }
+        }
+        routes = nestedMapSet(routes, data.peerInfo.name, irKey, newRoute)
+
+        // Update Loc-RIB
+        const currentWinnerPeer = locRib.get(irKey)
+        if (currentWinnerPeer === undefined) {
+          // First route for this destination — new Loc-RIB entry
+          locRib = mapWith(locRib, irKey, data.peerInfo.name)
+          routeChanges.push({ type: 'added', route: newRoute })
+        } else if (currentWinnerPeer === data.peerInfo.name) {
+          // Same peer re-advertising — always accept (authoritative refresh)
+          routeChanges.push({ type: 'updated', route: newRoute })
+        } else {
+          // Cross-peer comparison: is the new route better than current winner?
+          const currentWinnerRoute = nestedMapGet(routes, currentWinnerPeer, irKey)
+          if (currentWinnerRoute === undefined || comparePaths(newRoute, currentWinnerRoute) < 0) {
+            locRib = mapWith(locRib, irKey, data.peerInfo.name)
             routeChanges.push({ type: 'updated', route: newRoute })
           }
-        } else {
-          routes = nestedMapSet(routes, data.peerInfo.name, irKey, newRoute)
-          routeChanges.push({ type: 'added', route: newRoute })
+          // else: current winner is still better — no routeChange
         }
       } else {
         // action === 'remove'
@@ -437,10 +458,24 @@ export class RoutingInformationBase {
         const removed = nestedMapGet(routes, data.peerInfo.name, irKey)
         if (removed !== undefined) {
           routes = nestedMapDelete(routes, data.peerInfo.name, irKey)
-          routeChanges.push({ type: 'removed', route: removed })
+
           if (removed.envoyPort != null) {
             portOps.push({ type: 'release', routeKey: routeKey(removed), port: removed.envoyPort })
           }
+
+          // Update Loc-RIB: if this peer was the winner, find a fallback
+          if (locRib.get(irKey) === data.peerInfo.name) {
+            const fallback = selectBestPeer(routes, irKey)
+            if (fallback !== undefined) {
+              locRib = mapWith(locRib, irKey, fallback)
+              const fallbackRoute = nestedMapGet(routes, fallback, irKey)!
+              routeChanges.push({ type: 'updated', route: fallbackRoute })
+            } else {
+              locRib = mapWithout(locRib, irKey)
+              routeChanges.push({ type: 'removed', route: removed })
+            }
+          }
+          // else: non-winner removed — no routeChange
         }
       }
     }
@@ -459,10 +494,7 @@ export class RoutingInformationBase {
       return noChange(state)
     }
 
-    const newState: RouteTable = {
-      ...state,
-      internal: { peers, routes, locRib: state.internal.locRib },
-    }
+    const newState: RouteTable = { ...state, internal: { peers, routes, locRib } }
     return { prevState: state, newState, portOps, routeChanges }
   }
 
