@@ -7,7 +7,7 @@
  *   - Stale routes are excluded from initial sync to newly connecting peers
  *   - NORMAL close immediately withdraws routes (no stale path)
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { OrchestratorBus } from '../../src/v2/bus.js'
 import { MockPeerTransport } from '../../src/v2/transport.js'
 import { Actions, CloseCodes } from '@catalyst/routing/v2'
@@ -286,5 +286,179 @@ describe('Graceful restart: stale routes excluded from initial sync', () => {
     )
     expect(routeNames).not.toContain('service-x') // stale — excluded
     expect(routeNames).toContain('service-y') // fresh — included
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: Hold-timer purge of stale routes
+// ---------------------------------------------------------------------------
+
+describe('Graceful restart: hold-timer purge of stale routes', () => {
+  const BASE_NOW = 1_700_000_000_000
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('stale routes are purged after holdTime elapses, and withdrawal is sent to peers', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(BASE_NOW)
+
+    const transport = new MockPeerTransport()
+    const bus = new OrchestratorBus({ config: makeConfig('node-a'), transport })
+
+    // Connect peers B and C
+    await connectPeer(bus, makePeer('node-b'))
+    await connectPeer(bus, makePeer('node-c'))
+
+    // B advertises service-x
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: makePeer('node-b'),
+        update: {
+          updates: [{ action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' }],
+        },
+      },
+    })
+
+    // Verify route exists
+    expect(bus.state.internal.routes.some((r) => r.name === 'service-x')).toBe(true)
+
+    // Transport error on B — routes go stale
+    await bus.dispatch({
+      action: Actions.InternalProtocolClose,
+      data: { peerInfo: makePeer('node-b'), code: CloseCodes.TRANSPORT_ERROR },
+    })
+
+    const staleRoute = bus.state.internal.routes.find((r) => r.name === 'service-x')
+    expect(staleRoute).toBeDefined()
+    expect(staleRoute?.isStale).toBe(true)
+
+    // Keep node-c alive: send a keepalive from C right before the Tick
+    // so its hold timer doesn't also expire.
+    const peerB = bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const tickTime = peerB.lastReceived + peerB.holdTime + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(tickTime - 1_000)
+    await bus.dispatch({
+      action: Actions.InternalProtocolKeepalive,
+      data: { peerInfo: makePeer('node-c') },
+    })
+
+    // Reset transport to track only the withdrawal
+    transport.reset()
+
+    // Dispatch Tick past B's holdTime — B is closed with stale routes, so they are purged
+    await bus.dispatch({ action: Actions.Tick, data: { now: tickTime } })
+
+    // Route must be purged
+    expect(bus.state.internal.routes.some((r) => r.name === 'service-x')).toBe(false)
+
+    // Withdrawal must have been sent to node-c
+    const updateCalls = transport
+      .getCallsFor('sendUpdate')
+      .filter((c) => c.method === 'sendUpdate' && c.peer.name === 'node-c')
+    const removals = updateCalls.flatMap((c) =>
+      c.method === 'sendUpdate'
+        ? c.message.updates.filter((u) => u.action === 'remove' && u.route.name === 'service-x')
+        : []
+    )
+    expect(removals.length).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: Partial refresh — only re-advertised routes survive
+// ---------------------------------------------------------------------------
+
+describe('Graceful restart: partial refresh — only re-advertised routes survive', () => {
+  const BASE_NOW = 1_700_000_000_000
+  const routeY = { name: 'service-y', protocol: 'http' as const, endpoint: 'http://svc-y:8080' }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('re-advertised routes are refreshed, non-re-advertised routes remain stale and are purged on next disconnect', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(BASE_NOW)
+
+    const transport = new MockPeerTransport()
+    const bus = new OrchestratorBus({ config: makeConfig('node-a'), transport })
+
+    // Connect peer B
+    await connectPeer(bus, makePeer('node-b'))
+
+    // B advertises both service-x and service-y
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: makePeer('node-b'),
+        update: {
+          updates: [
+            { action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' },
+            { action: 'add', route: routeY, nodePath: ['node-b'], originNode: 'node-b' },
+          ],
+        },
+      },
+    })
+
+    expect(bus.state.internal.routes.filter((r) => r.peer.name === 'node-b')).toHaveLength(2)
+
+    // Transport error on B — both routes go stale
+    await bus.dispatch({
+      action: Actions.InternalProtocolClose,
+      data: { peerInfo: makePeer('node-b'), code: CloseCodes.TRANSPORT_ERROR },
+    })
+
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')?.isStale).toBe(true)
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-y')?.isStale).toBe(true)
+
+    // B reconnects
+    const reconnectTime = BASE_NOW + 5_000
+    vi.spyOn(Date, 'now').mockReturnValue(reconnectTime)
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: makePeer('node-b') })
+    await bus.dispatch({
+      action: Actions.InternalProtocolConnected,
+      data: { peerInfo: makePeer('node-b') },
+    })
+
+    // B re-advertises ONLY service-x (not service-y)
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: makePeer('node-b'),
+        update: {
+          updates: [{ action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' }],
+        },
+      },
+    })
+
+    // service-x is refreshed (stale cleared), service-y is still stale
+    const refreshedX = bus.state.internal.routes.find((r) => r.name === 'service-x')
+    expect(refreshedX).toBeDefined()
+    expect(refreshedX?.isStale).toBe(false)
+
+    const stillStaleY = bus.state.internal.routes.find((r) => r.name === 'service-y')
+    expect(stillStaleY).toBeDefined()
+    expect(stillStaleY?.isStale).toBe(true)
+
+    // B drops again with TRANSPORT_ERROR.
+    // service-x (fresh) becomes stale, service-y was already stale and stays stale.
+    await bus.dispatch({
+      action: Actions.InternalProtocolClose,
+      data: { peerInfo: makePeer('node-b'), code: CloseCodes.TRANSPORT_ERROR },
+    })
+
+    // Both routes are stale now, peer is closed.
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')?.isStale).toBe(true)
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-y')?.isStale).toBe(true)
+
+    // Dispatch Tick past holdTime — peer is closed, stale routes are purged
+    const peer = bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    const tickTime = peer.lastReceived + peer.holdTime + 1_000
+    await bus.dispatch({ action: Actions.Tick, data: { now: tickTime } })
+
+    // Both stale routes from the closed peer are purged
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-y')).toBeUndefined()
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')).toBeUndefined()
   })
 })
