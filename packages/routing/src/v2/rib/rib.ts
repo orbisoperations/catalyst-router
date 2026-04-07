@@ -219,6 +219,7 @@ export class RoutingInformationBase {
       internal: {
         peers: mapWithout(state.internal.peers, data.name),
         routes: nestedMapDeleteOuter(state.internal.routes, data.name),
+        locRib: state.internal.locRib,
       },
     }
     return { prevState: state, newState, portOps, routeChanges }
@@ -389,7 +390,10 @@ export class RoutingInformationBase {
       ...existing,
       connectionStatus: 'closed' as const,
     })
-    const newState: RouteTable = { ...state, internal: { peers, routes } }
+    const newState: RouteTable = {
+      ...state,
+      internal: { peers, routes, locRib: state.internal.locRib },
+    }
     return { prevState: state, newState, portOps, routeChanges }
   }
 
@@ -455,7 +459,10 @@ export class RoutingInformationBase {
       return noChange(state)
     }
 
-    const newState: RouteTable = { ...state, internal: { peers, routes } }
+    const newState: RouteTable = {
+      ...state,
+      internal: { peers, routes, locRib: state.internal.locRib },
+    }
     return { prevState: state, newState, portOps, routeChanges }
   }
 
@@ -526,7 +533,10 @@ export class RoutingInformationBase {
       route: r,
     }))
 
-    const newState: RouteTable = { ...state, internal: { peers, routes } }
+    const newState: RouteTable = {
+      ...state,
+      internal: { peers, routes, locRib: state.internal.locRib },
+    }
     return { prevState: state, newState, portOps, routeChanges }
   }
 }

@@ -32,13 +32,14 @@ export type RouteTable = {
   internal: {
     peers: Map<string, PeerRecord>
     routes: Map<string, Map<string, InternalRoute>>
+    locRib: Map<string, string> // irKey -> peerName (best-path index)
   }
 }
 
 export function newRouteTable(): RouteTable {
   return {
     local: { routes: new Map() },
-    internal: { peers: new Map(), routes: new Map() },
+    internal: { peers: new Map(), routes: new Map(), locRib: new Map() },
   }
 }
 

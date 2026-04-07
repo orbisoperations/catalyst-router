@@ -556,7 +556,11 @@ describe('BGP propagation via InternalProtocolUpdate', () => {
 
     // Only 2 valid routes installed, looped one skipped
     expect(allInternalRoutes(rib.state)).toHaveLength(2)
-    expect(allInternalRoutes(rib.state).map((r) => r.name).sort()).toEqual(['valid-1', 'valid-2'])
+    expect(
+      allInternalRoutes(rib.state)
+        .map((r) => r.name)
+        .sort()
+    ).toEqual(['valid-1', 'valid-2'])
     expect(plan.routeChanges).toHaveLength(2)
   })
 
@@ -710,9 +714,7 @@ describe('Peer connection', () => {
     apply(rib, makeProtocolClose(peer, CloseCodes.NORMAL))
 
     expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')).toBeUndefined()
-    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
   })
 
   it('InternalProtocolClose with TRANSPORT_ERROR marks routes isStale=true', () => {
@@ -840,9 +842,7 @@ describe('Tick', () => {
 
     expect(plan.prevState).not.toBe(plan.newState)
     expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')).toBeUndefined()
-    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
   })
 
   it('Tick generates port release ops for expired peer routes', () => {
@@ -907,9 +907,7 @@ describe('Tick', () => {
     const { rib, peer } = ribWithConnectedPeer('node-a', 'peer-b')
     // Close the peer normally — routes are removed, not stale
     apply(rib, makeProtocolClose(peer, CloseCodes.NORMAL))
-    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
 
     vi.restoreAllMocks()
 
@@ -938,9 +936,7 @@ describe('Tick', () => {
     // Transport error — routes become stale, peer set to closed
     apply(rib, makeProtocolClose(peer, CloseCodes.TRANSPORT_ERROR))
     expect(allInternalRoutes(rib.state).find((r) => r.name === 'svc-1')?.isStale).toBe(true)
-    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe(
-      'closed'
-    )
+    expect(rib.state.internal.peers.get('peer-b')!.connectionStatus).toBe('closed')
 
     vi.restoreAllMocks()
 
@@ -1283,5 +1279,13 @@ describe('initialState option', () => {
 
     expect(rib.state.local.routes.size).toBe(1)
     expect(rib.state.local.routes.get('pre-existing')?.name).toBe('pre-existing')
+  })
+})
+
+describe('Loc-RIB index', () => {
+  it('newRouteTable includes an empty locRib Map', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-a' })
+    expect(rib.state.internal.locRib).toBeInstanceOf(Map)
+    expect(rib.state.internal.locRib.size).toBe(0)
   })
 })
