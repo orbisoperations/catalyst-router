@@ -665,7 +665,7 @@ export class RoutingInformationBase {
 
       if (decayed < 1) {
         // Penalty negligible — clean up
-        if (entry.suppressed) flapStateChanged = true
+        flapStateChanged = true
         flapChanges.push({ key, entry: null })
         continue
       }
