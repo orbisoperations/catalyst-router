@@ -752,6 +752,7 @@ export const BusTransforms = {
       healthStatus: route.healthStatus,
       responseTimeMs: route.responseTimeMs,
       lastChecked: route.lastChecked,
+      draining: route.draining,
     }
   },
 }

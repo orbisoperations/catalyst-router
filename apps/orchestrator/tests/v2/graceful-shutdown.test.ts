@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { RoutingInformationBase, Actions, newRouteTable } from '@catalyst/routing/v2'
 import type { RouteTable, PeerRecord, PeerInfo, Action } from '@catalyst/routing/v2'
+import { OrchestratorBus } from '../../src/v2/bus.js'
+import { MockPeerTransport, type TransportCall } from '../../src/v2/transport.js'
+import type { OrchestratorConfig } from '../../src/v1/types.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -120,7 +123,7 @@ describe('graceful shutdown — drain signal', () => {
     expect(rib.state.internal.routes[0].draining).toBeUndefined()
   })
 
-  it('drained route does NOT replace a healthy route', () => {
+  it('same-peer drain update is accepted (authoritative)', () => {
     const rib = new RoutingInformationBase({ nodeId })
     const state = connectedState()
 
@@ -147,7 +150,7 @@ describe('graceful shutdown — drain signal', () => {
     expect(rib.state.internal.routes).toHaveLength(1)
     expect(rib.state.internal.routes[0].draining).toBeUndefined()
 
-    // Now receive the same route but with draining — should NOT replace
+    // Same peer sends a drain update — should be accepted (same peer is authoritative)
     const addDrained: Action = {
       action: Actions.InternalProtocolUpdate,
       data: {
@@ -166,7 +169,84 @@ describe('graceful shutdown — drain signal', () => {
     }
     const p2 = rib.plan(addDrained, rib.state)
 
-    // No route changes — the healthy route is kept
+    // The route should be updated (same peer announcing drain)
+    const updated = p2.routeChanges.filter((c) => c.type === 'updated')
+    expect(updated).toHaveLength(1)
+    expect(updated[0].route.draining).toBe(true)
+
+    // After commit, the route should be draining
+    rib.commit(p2, addDrained)
+    expect(rib.state.internal.routes).toHaveLength(1)
+    expect(rib.state.internal.routes[0].draining).toBe(true)
+  })
+
+  it('drained route via different peer does NOT replace healthy route', () => {
+    const rib = new RoutingInformationBase({ nodeId })
+
+    // Set up state with two peers
+    const peerC: PeerInfo = { name: 'node-c', endpoint: 'ws://c:4000', domains: ['test.local'] }
+    const state = newRouteTable()
+    const peerBRecord: PeerRecord = {
+      ...peerB,
+      connectionStatus: 'connected',
+      lastConnected: 1000,
+      holdTime: 90_000,
+      lastSent: 0,
+      lastReceived: 1000,
+    }
+    const peerCRecord: PeerRecord = {
+      ...peerC,
+      connectionStatus: 'connected',
+      lastConnected: 1000,
+      holdTime: 90_000,
+      lastSent: 0,
+      lastReceived: 1000,
+    }
+    state.internal.peers = [peerBRecord, peerCRecord]
+
+    // Receive healthy route from peer-B (origin: node-x)
+    const addHealthy: Action = {
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            {
+              action: 'add' as const,
+              route: makeRoute('svc-1'),
+              nodePath: ['node-b', 'node-x'],
+              originNode: 'node-x',
+            },
+          ],
+        },
+      },
+    }
+    const p1 = rib.plan(addHealthy, state)
+    rib.commit(p1, addHealthy)
+
+    expect(rib.state.internal.routes).toHaveLength(1)
+    expect(rib.state.internal.routes[0].draining).toBeUndefined()
+
+    // Receive drained version of same route from different peer-C (same origin: node-x)
+    const addDrained: Action = {
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerC,
+        update: {
+          updates: [
+            {
+              action: 'add' as const,
+              route: { ...makeRoute('svc-1'), draining: true },
+              nodePath: ['node-c', 'node-x'],
+              originNode: 'node-x',
+            },
+          ],
+        },
+      },
+    }
+    const p2 = rib.plan(addDrained, rib.state)
+
+    // No route changes — the healthy route from the other peer path is kept
     const updated = p2.routeChanges.filter((c) => c.type === 'updated')
     expect(updated).toHaveLength(0)
 
@@ -214,5 +294,200 @@ describe('graceful shutdown — drain signal', () => {
       expect(route.draining).toBeUndefined()
     }
     expect(rib.state.local.routes).toHaveLength(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Topology helpers (copied from max-prefix.test.ts / orchestrator.topology.test.ts)
+// ---------------------------------------------------------------------------
+
+function topoMakeConfig(name: string): OrchestratorConfig {
+  return {
+    node: { name, endpoint: `ws://${name}:4000`, domains: ['topo.local'] },
+  }
+}
+
+function topoMakePeerInfo(name: string): PeerInfo {
+  return {
+    name,
+    endpoint: `ws://${name}:4000`,
+    domains: ['topo.local'],
+    peerToken: `token-${name}`,
+  }
+}
+
+interface BusEntry {
+  name: string
+  bus: OrchestratorBus
+  transport: MockPeerTransport
+  peerInfo: PeerInfo
+}
+
+class TopologyHelper {
+  private nodes = new Map<string, BusEntry>()
+
+  addNode(name: string): BusEntry {
+    const transport = new MockPeerTransport()
+    const config = topoMakeConfig(name)
+    const bus = new OrchestratorBus({ config, transport })
+    const entry: BusEntry = { name, bus, transport, peerInfo: topoMakePeerInfo(name) }
+    this.nodes.set(name, entry)
+    return entry
+  }
+
+  get(name: string): BusEntry {
+    const entry = this.nodes.get(name)
+    if (entry === undefined) throw new Error(`Unknown node: ${name}`)
+    return entry
+  }
+
+  async peer(nameA: string, nameB: string): Promise<void> {
+    const a = this.get(nameA)
+    const b = this.get(nameB)
+
+    await a.bus.dispatch({ action: Actions.LocalPeerCreate, data: b.peerInfo })
+    await b.bus.dispatch({ action: Actions.LocalPeerCreate, data: a.peerInfo })
+
+    await a.bus.dispatch({
+      action: Actions.InternalProtocolConnected,
+      data: { peerInfo: b.peerInfo },
+    })
+    await b.bus.dispatch({
+      action: Actions.InternalProtocolConnected,
+      data: { peerInfo: a.peerInfo },
+    })
+  }
+
+  async propagate(fromName: string, toName: string): Promise<void> {
+    const from = this.get(fromName)
+    const to = this.get(toName)
+
+    const consumed: TransportCall[] = []
+    const remaining: TransportCall[] = []
+    for (const call of from.transport.calls) {
+      if (call.method === 'sendUpdate' && call.peer.name === toName) {
+        consumed.push(call)
+      } else {
+        remaining.push(call)
+      }
+    }
+
+    from.transport.calls.length = 0
+    for (const c of remaining) {
+      from.transport.calls.push(c)
+    }
+
+    for (const call of consumed) {
+      if (call.method !== 'sendUpdate') continue
+      await to.bus.dispatch({
+        action: Actions.InternalProtocolUpdate,
+        data: { peerInfo: from.peerInfo, update: call.message },
+      })
+    }
+  }
+
+  resetAll(): void {
+    for (const entry of this.nodes.values()) {
+      entry.transport.reset()
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Topology tests for graceful shutdown
+// ---------------------------------------------------------------------------
+
+describe('Graceful shutdown topology', () => {
+  it('A drains -> C prefers B; A cancels -> C accepts A again', async () => {
+    const topo = new TopologyHelper()
+    topo.addNode('node-a')
+    topo.addNode('node-b')
+    topo.addNode('node-c')
+
+    // Setup: A<->C and B<->C (no direct A<->B link)
+    await topo.peer('node-a', 'node-c')
+    await topo.peer('node-b', 'node-c')
+    topo.resetAll()
+
+    // Both A and B create the same local route 'shared-svc'
+    await topo.get('node-a').bus.dispatch({
+      action: Actions.LocalRouteCreate,
+      data: makeRoute('shared-svc'),
+    })
+    await topo.get('node-b').bus.dispatch({
+      action: Actions.LocalRouteCreate,
+      data: makeRoute('shared-svc'),
+    })
+
+    // Propagate A->C and B->C. C should have the route from both peers.
+    await topo.propagate('node-a', 'node-c')
+    await topo.propagate('node-b', 'node-c')
+
+    const cRoutes = topo.get('node-c').bus.state.internal.routes
+    expect(cRoutes).toHaveLength(2)
+
+    const fromA = cRoutes.find((r) => r.originNode === 'node-a')
+    const fromB = cRoutes.find((r) => r.originNode === 'node-b')
+    expect(fromA).toBeDefined()
+    expect(fromB).toBeDefined()
+    expect(fromA!.draining).toBeUndefined()
+    expect(fromB!.draining).toBeUndefined()
+    topo.resetAll()
+
+    // ---------------------------------------------------------------
+    // Phase 1: A dispatches AdminGracefulShutdown
+    // ---------------------------------------------------------------
+    await topo.get('node-a').bus.dispatch({
+      action: Actions.AdminGracefulShutdown,
+      data: {},
+    })
+
+    // A's local routes should be draining
+    expect(topo.get('node-a').bus.state.local.routes[0].draining).toBe(true)
+
+    // Propagate the drained update A->C
+    await topo.propagate('node-a', 'node-c')
+
+    const cRoutesAfterDrain = topo.get('node-c').bus.state.internal.routes
+    expect(cRoutesAfterDrain).toHaveLength(2)
+
+    const fromADrained = cRoutesAfterDrain.find((r) => r.originNode === 'node-a')
+    const fromBHealthy = cRoutesAfterDrain.find((r) => r.originNode === 'node-b')
+    expect(fromADrained).toBeDefined()
+    expect(fromBHealthy).toBeDefined()
+
+    // A's route on C should now be draining
+    expect(fromADrained!.draining).toBe(true)
+    // B's route on C should remain healthy
+    expect(fromBHealthy!.draining).toBeUndefined()
+
+    topo.resetAll()
+
+    // ---------------------------------------------------------------
+    // Phase 2: A dispatches AdminCancelShutdown
+    // ---------------------------------------------------------------
+    await topo.get('node-a').bus.dispatch({
+      action: Actions.AdminCancelShutdown,
+      data: {},
+    })
+
+    // A's local routes should no longer be draining
+    expect(topo.get('node-a').bus.state.local.routes[0].draining).toBeUndefined()
+
+    // Propagate the undrained update A->C
+    await topo.propagate('node-a', 'node-c')
+
+    const cRoutesAfterCancel = topo.get('node-c').bus.state.internal.routes
+    expect(cRoutesAfterCancel).toHaveLength(2)
+
+    const fromARestored = cRoutesAfterCancel.find((r) => r.originNode === 'node-a')
+    const fromBStillHealthy = cRoutesAfterCancel.find((r) => r.originNode === 'node-b')
+    expect(fromARestored).toBeDefined()
+    expect(fromBStillHealthy).toBeDefined()
+
+    // A's route on C should no longer be draining
+    expect(fromARestored!.draining).toBeUndefined()
+    // B's route on C should still be healthy
+    expect(fromBStillHealthy!.draining).toBeUndefined()
   })
 })

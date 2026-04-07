@@ -553,14 +553,24 @@ export class RoutingInformationBase {
           const existing = routes[existingIdx]
           // Best-path selection: prefer shorter path, or replace a stale route
           const betterPath = item.nodePath.length < existing.nodePath.length
+          const equalPath = item.nodePath.length === existing.nodePath.length
           const replacingStale = existing.isStale === true
           const existingDrained = existing.draining === true
           const newDrained = newRoute.draining === true
           // Non-drained always beats drained, regardless of path length
           const drainingAdvantage = existingDrained && !newDrained
-          // Don't replace healthy route with a draining one
-          const drainingDisadvantage = !existingDrained && newDrained
-          if (!drainingDisadvantage && (betterPath || replacingStale || drainingAdvantage)) {
+          // Don't replace healthy route with a draining one — but only when received
+          // from a different peer (multi-path). Same-peer updates are authoritative
+          // (e.g. the origin announcing its own drain).
+          const samePeer = existing.peer.name === data.peerInfo.name
+          const drainingDisadvantage = !samePeer && !existingDrained && newDrained
+          // Same-peer equal-path: accept metadata changes (drain/undrain) from
+          // the authoritative source without requiring a strictly better path.
+          const samePeerRefresh = samePeer && equalPath
+          if (
+            !drainingDisadvantage &&
+            (betterPath || replacingStale || drainingAdvantage || samePeerRefresh)
+          ) {
             routes = routes.map((r, i) => (i === existingIdx ? newRoute : r))
             routeChanges.push({ type: 'updated', route: newRoute })
           }
