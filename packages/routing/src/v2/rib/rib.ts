@@ -43,6 +43,10 @@ type InternalProtocolKeepaliveData = Extract<
   Action,
   { action: typeof Actions.InternalProtocolKeepalive }
 >['data']
+type InternalProtocolEndOfRibData = Extract<
+  Action,
+  { action: typeof Actions.InternalProtocolEndOfRib }
+>['data']
 type TickData = Extract<Action, { action: typeof Actions.Tick }>['data']
 type AdminGracefulShutdownData = Extract<
   Action,
@@ -178,6 +182,8 @@ export class RoutingInformationBase {
         return this.planInternalProtocolUpdate(action.data, state, timestamp)
       case Actions.InternalProtocolKeepalive:
         return this.planInternalProtocolKeepalive(action.data, state, timestamp)
+      case Actions.InternalProtocolEndOfRib:
+        return this.planInternalProtocolEndOfRib(action.data, state)
       case Actions.Tick:
         return this.planTick(action.data, state)
       case Actions.AdminGracefulShutdown:
@@ -705,6 +711,40 @@ export class RoutingInformationBase {
       routeChanges: NO_ROUTE_CHANGES,
       flapStateChanges: NO_FLAP_CHANGES,
     }
+  }
+
+  private planInternalProtocolEndOfRib(
+    data: InternalProtocolEndOfRibData,
+    state: RouteTable
+  ): PlanResult {
+    // Purge any remaining stale routes from this peer.
+    // After the peer finishes its initial sync, routes still marked stale
+    // were not re-advertised and should be withdrawn immediately rather than
+    // waiting for the full holdTime grace period.
+    const peerName = data.peerInfo.name
+    const staleRoutes = state.internal.routes.filter(
+      (r) => r.peer.name === peerName && r.isStale === true
+    )
+    if (staleRoutes.length === 0) return noChange(state)
+
+    const routes = state.internal.routes.filter(
+      (r) => !(r.peer.name === peerName && r.isStale === true)
+    )
+
+    const portOps: PortOperation[] = staleRoutes
+      .filter((r) => r.envoyPort != null)
+      .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
+
+    const routeChanges: RouteChange[] = staleRoutes.map((r) => ({
+      type: 'removed' as const,
+      route: r,
+    }))
+
+    const newState: RouteTable = {
+      ...state,
+      internal: { ...state.internal, routes },
+    }
+    return { prevState: state, newState, portOps, routeChanges, flapStateChanges: NO_FLAP_CHANGES }
   }
 
   // -------------------------------------------------------------------------

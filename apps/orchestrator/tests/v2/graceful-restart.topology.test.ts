@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { OrchestratorBus } from '../../src/v2/bus.js'
 import { MockPeerTransport } from '../../src/v2/transport.js'
 import { Actions, CloseCodes } from '@catalyst/routing/v2'
+import type { Action } from '@catalyst/routing/v2'
 import type { OrchestratorConfig } from '../../src/v1/types.js'
 import type { PeerInfo } from '@catalyst/routing/v2'
 
@@ -460,5 +461,271 @@ describe('Graceful restart: partial refresh — only re-advertised routes surviv
     // Both stale routes from the closed peer are purged
     expect(bus.state.internal.routes.find((r) => r.name === 'service-y')).toBeUndefined()
     expect(bus.state.internal.routes.find((r) => r.name === 'service-x')).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: End-of-RIB purges remaining stale routes
+// ---------------------------------------------------------------------------
+
+describe('Graceful restart: End-of-RIB purges remaining stale routes', () => {
+  const routeY = { name: 'service-y', protocol: 'http' as const, endpoint: 'http://svc-y:8080' }
+  let transport: MockPeerTransport
+  let bus: OrchestratorBus
+
+  beforeEach(async () => {
+    transport = new MockPeerTransport()
+    bus = new OrchestratorBus({ config: makeConfig('node-a'), transport })
+  })
+
+  it('EoR purges remaining stale routes from reconnected peer', async () => {
+    const peerB = makePeer('node-b')
+    await connectPeer(bus, peerB)
+
+    // B advertises route-x and route-y
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            { action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' },
+            { action: 'add', route: routeY, nodePath: ['node-b'], originNode: 'node-b' },
+          ],
+        },
+      },
+    })
+
+    expect(bus.state.internal.routes).toHaveLength(2)
+
+    // Transport error — both routes go stale
+    await bus.dispatch({
+      action: Actions.InternalProtocolClose,
+      data: { peerInfo: peerB, code: CloseCodes.TRANSPORT_ERROR },
+    })
+
+    expect(bus.state.internal.routes.every((r) => r.isStale === true)).toBe(true)
+
+    // B reconnects
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    await bus.dispatch({
+      action: Actions.InternalProtocolConnected,
+      data: { peerInfo: peerB },
+    })
+
+    // B re-advertises ONLY route-x (route-y is gone from B)
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [{ action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' }],
+        },
+      },
+    })
+
+    // route-x refreshed, route-y still stale
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')?.isStale).toBe(false)
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-y')?.isStale).toBe(true)
+
+    // Dispatch End-of-RIB for B
+    const eorAction: Action = {
+      action: Actions.InternalProtocolEndOfRib,
+      data: { peerInfo: peerB },
+    }
+    await bus.dispatch(eorAction)
+
+    // route-x exists (fresh), route-y is purged
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')).toBeDefined()
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')?.isStale).toBe(false)
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-y')).toBeUndefined()
+  })
+
+  it('EoR with no stale routes is a no-op', async () => {
+    const peerB = makePeer('node-b')
+    await connectPeer(bus, peerB)
+
+    // B advertises route-x (fresh, no stale routes)
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [{ action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' }],
+        },
+      },
+    })
+
+    const routeBefore = bus.state.internal.routes.find((r) => r.name === 'service-x')
+    expect(routeBefore?.isStale).toBe(false)
+
+    // Dispatch End-of-RIB — nothing stale, should be no-op
+    const eorAction: Action = {
+      action: Actions.InternalProtocolEndOfRib,
+      data: { peerInfo: peerB },
+    }
+    const result = await bus.dispatch(eorAction)
+
+    // No state change
+    expect(result.success).toBe(false)
+    // Route still exists unchanged
+    expect(bus.state.internal.routes.find((r) => r.name === 'service-x')).toBeDefined()
+  })
+
+  it('EoR withdrawal is propagated to other connected peers', async () => {
+    const peerB = makePeer('node-b')
+    const peerC = makePeer('node-c')
+    await connectPeer(bus, peerB)
+    await connectPeer(bus, peerC)
+
+    // B advertises route-x and route-y
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            { action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' },
+            { action: 'add', route: routeY, nodePath: ['node-b'], originNode: 'node-b' },
+          ],
+        },
+      },
+    })
+
+    // Transport error on B
+    await bus.dispatch({
+      action: Actions.InternalProtocolClose,
+      data: { peerInfo: peerB, code: CloseCodes.TRANSPORT_ERROR },
+    })
+
+    // B reconnects, re-advertises only route-x
+    await bus.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+    await bus.dispatch({
+      action: Actions.InternalProtocolConnected,
+      data: { peerInfo: peerB },
+    })
+    await bus.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [{ action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' }],
+        },
+      },
+    })
+
+    transport.reset()
+
+    // Dispatch End-of-RIB for B — route-y should be purged and withdrawal sent to C
+    const eorAction: Action = {
+      action: Actions.InternalProtocolEndOfRib,
+      data: { peerInfo: peerB },
+    }
+    await bus.dispatch(eorAction)
+
+    // Withdrawal of route-y must have been sent to node-c
+    const updateCalls = transport
+      .getCallsFor('sendUpdate')
+      .filter((c) => c.method === 'sendUpdate' && c.peer.name === 'node-c')
+    const removals = updateCalls.flatMap((c) =>
+      c.method === 'sendUpdate'
+        ? c.message.updates.filter((u) => u.action === 'remove' && u.route.name === 'service-y')
+        : []
+    )
+    expect(removals.length).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: InternalProtocolConnected auto-dispatches EoR after sync
+// ---------------------------------------------------------------------------
+
+describe('Graceful restart: InternalProtocolConnected auto-dispatches EoR', () => {
+  const routeY = { name: 'service-y', protocol: 'http' as const, endpoint: 'http://svc-y:8080' }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('reconnect auto-purges stale routes that were not re-advertised during sync', async () => {
+    const BASE_NOW = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(BASE_NOW)
+
+    const transport = new MockPeerTransport()
+    const busA = new OrchestratorBus({ config: makeConfig('node-a'), transport })
+    const peerB = makePeer('node-b')
+
+    // Connect B, B advertises route-x and route-y
+    await connectPeer(busA, peerB)
+    await busA.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [
+            { action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' },
+            { action: 'add', route: routeY, nodePath: ['node-b'], originNode: 'node-b' },
+          ],
+        },
+      },
+    })
+
+    expect(busA.state.internal.routes).toHaveLength(2)
+
+    // B disconnects with transport error (consecutiveFailures becomes 1)
+    await busA.dispatch({
+      action: Actions.InternalProtocolClose,
+      data: { peerInfo: peerB, code: CloseCodes.TRANSPORT_ERROR },
+    })
+    expect(busA.state.internal.routes.every((r) => r.isStale === true)).toBe(true)
+
+    // B reconnects — advance time far enough for B's refresh before
+    // InternalProtocolConnected, then use an incrementing clock so that
+    // by the time handleBGPNotify checks syncDeferredUntil, Date.now()
+    // has advanced past it. planInternalProtocolConnected computes
+    // syncDeferredUntil = now + 5000 (base delay for 1 failure), so we
+    // need Date.now() to return > T+5000 during the post-commit phase.
+    const reconnectTime = BASE_NOW + 10_000
+    vi.spyOn(Date, 'now').mockReturnValue(reconnectTime)
+
+    await busA.dispatch({ action: Actions.LocalPeerCreate, data: peerB })
+
+    // B sends its refreshed route before InternalProtocolConnected
+    await busA.dispatch({
+      action: Actions.InternalProtocolUpdate,
+      data: {
+        peerInfo: peerB,
+        update: {
+          updates: [{ action: 'add', route: routeX, nodePath: ['node-b'], originNode: 'node-b' }],
+        },
+      },
+    })
+
+    // Use an incrementing clock: the plan phase of InternalProtocolConnected
+    // uses Date.now() once to set syncDeferredUntil = T + 5000. The post-commit
+    // handleBGPNotify also calls Date.now() once to check the deferral. By
+    // returning a later time on the second call, the sync proceeds and EoR fires.
+    let callCount = 0
+    vi.spyOn(Date, 'now').mockImplementation(() => {
+      callCount++
+      // Call 1 (plan phase): sets syncDeferredUntil = reconnectTime + 5000
+      // Call 2+ (post-commit): returns past syncDeferredUntil so sync fires
+      return callCount <= 1 ? reconnectTime : reconnectTime + 10_000
+    })
+
+    // InternalProtocolConnected triggers auto-EoR dispatch (queued, not awaited).
+    await busA.dispatch({
+      action: Actions.InternalProtocolConnected,
+      data: { peerInfo: peerB },
+    })
+
+    // Allow the queued EoR dispatch to execute (it runs on the next microtask
+    // after the ActionQueue drains the InternalProtocolConnected dispatch)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // route-x should be fresh, route-y should be purged by auto-EoR
+    expect(busA.state.internal.routes.find((r) => r.name === 'service-x')).toBeDefined()
+    expect(busA.state.internal.routes.find((r) => r.name === 'service-x')?.isStale).toBe(false)
+    expect(busA.state.internal.routes.find((r) => r.name === 'service-y')).toBeUndefined()
   })
 })

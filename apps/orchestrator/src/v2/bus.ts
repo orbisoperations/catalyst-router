@@ -347,6 +347,16 @@ export class OrchestratorBus {
             })
             await this.syncRoutesToPeer(peer, state)
           })
+
+          // After the initial sync completes, dispatch End-of-RIB to purge any
+          // remaining stale routes from this peer that were not refreshed.
+          // Scheduled (not awaited) because the ActionQueue would deadlock if we
+          // awaited a nested dispatch from within an in-flight dispatch.
+          const eorAction: Action = {
+            action: Actions.InternalProtocolEndOfRib,
+            data: { peerInfo: action.data.peerInfo },
+          }
+          void this.dispatch(eorAction)
         }
       }
       return

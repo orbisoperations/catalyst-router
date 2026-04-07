@@ -78,3 +78,10 @@ export const InternalProtocolKeepaliveMessageSchema = z.object({
     peerInfo: PeerInfoSchema,
   }),
 })
+
+export const InternalProtocolEndOfRibMessageSchema = z.object({
+  action: z.literal(Actions.InternalProtocolEndOfRib),
+  data: z.object({
+    peerInfo: PeerInfoSchema,
+  }),
+})
