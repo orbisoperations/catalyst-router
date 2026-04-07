@@ -416,8 +416,8 @@ export class RoutingInformationBase {
 
     // --- Max prefix limit setup ---
     const limitPeer = state.internal.peers.find((p) => p.name === data.peerInfo.name)
-    const prefixLimit = limitPeer?.maxPrefixes
-    const hasLimit = prefixLimit != null && prefixLimit > 0
+    const prefixLimit = limitPeer?.maxPrefixes ?? 0
+    const hasLimit = prefixLimit > 0
     let currentPeerRouteCount = hasLimit
       ? routes.filter((r) => r.peer.name === data.peerInfo.name).length
       : 0
@@ -428,7 +428,7 @@ export class RoutingInformationBase {
         if (item.nodePath.includes(this._nodeId)) continue
 
         // --- Max prefix limit check ---
-        if (hasLimit && currentPeerRouteCount >= prefixLimit!) {
+        if (hasLimit && currentPeerRouteCount >= prefixLimit) {
           continue // Drop excess route (Juniper drop-excess model)
         }
 

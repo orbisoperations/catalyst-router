@@ -34,6 +34,9 @@ export interface GatewayClient {
 }
 
 const logger = getLogger(['catalyst', 'orchestrator', 'bus'])
+
+/** Fraction of maxPrefixes at which a warning is emitted (80%). */
+const PREFIX_WARN_THRESHOLD_PCT = 0.8
 // ---------------------------------------------------------------------------
 // Envoy client interface (for Envoy config sync)
 // ---------------------------------------------------------------------------
@@ -212,7 +215,7 @@ export class OrchestratorBus {
           const peer = committed.internal.peers.find((p) => p.name === peerName)
           if (peer?.maxPrefixes && peer.maxPrefixes > 0) {
             const count = committed.internal.routes.filter((r) => r.peer.name === peerName).length
-            const warnAt = Math.floor(peer.maxPrefixes * 0.8)
+            const warnAt = Math.max(1, Math.floor(peer.maxPrefixes * PREFIX_WARN_THRESHOLD_PCT))
             if (count >= warnAt) {
               logger.warn('Peer {peerName} at {count}/{limit} prefixes ({pct}%)', {
                 'event.name': 'peer.prefix_limit.warning',
