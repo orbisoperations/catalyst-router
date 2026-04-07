@@ -785,6 +785,9 @@ export class RoutingInformationBase {
   ): PlanResult {
     if (state.local.routes.length === 0) return noChange(state)
 
+    const allAlreadyDraining = state.local.routes.every((r) => r.draining === true)
+    if (allAlreadyDraining) return noChange(state)
+
     const routes = state.local.routes.map((r) => ({ ...r, draining: true }))
     const routeChanges: RouteChange[] = routes.map((r) => ({ type: 'updated' as const, route: r }))
 
@@ -792,7 +795,13 @@ export class RoutingInformationBase {
       ...state,
       local: { ...state.local, routes },
     }
-    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges,
+      flapStateChanges: NO_FLAP_CHANGES,
+    }
   }
 
   private planAdminCancelShutdown(_data: AdminCancelShutdownData, state: RouteTable): PlanResult {
@@ -806,6 +815,12 @@ export class RoutingInformationBase {
       ...state,
       local: { ...state.local, routes },
     }
-    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges,
+      flapStateChanges: NO_FLAP_CHANGES,
+    }
   }
 }

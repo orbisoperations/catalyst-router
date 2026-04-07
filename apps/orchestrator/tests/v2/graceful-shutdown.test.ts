@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { RoutingInformationBase, Actions, newRouteTable } from '@catalyst/routing/v2'
 import type { RouteTable, PeerRecord, PeerInfo, Action } from '@catalyst/routing/v2'
-import { OrchestratorBus } from '../../src/v2/bus.js'
-import { MockPeerTransport, type TransportCall } from '../../src/v2/transport.js'
-import type { OrchestratorConfig } from '../../src/v1/types.js'
+import { TopologyHelper } from './helpers/topology-helper.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -295,103 +293,41 @@ describe('graceful shutdown — drain signal', () => {
     }
     expect(rib.state.local.routes).toHaveLength(2)
   })
+
+  it('shutdown is idempotent — second dispatch is a no-op', () => {
+    const rib = new RoutingInformationBase({ nodeId })
+
+    // Create a local route
+    const create: Action = { action: Actions.LocalRouteCreate, data: makeRoute('svc-1') }
+    const p1 = rib.plan(create, rib.state)
+    rib.commit(p1, create)
+
+    // First shutdown — should produce route changes
+    const shutdown: Action = { action: Actions.AdminGracefulShutdown, data: {} }
+    const plan1 = rib.plan(shutdown, rib.state)
+    expect(rib.stateChanged(plan1)).toBe(true)
+    expect(plan1.routeChanges).toHaveLength(1)
+    rib.commit(plan1, shutdown)
+
+    // Second shutdown — already draining, should be a no-op
+    const plan2 = rib.plan(shutdown, rib.state)
+    expect(rib.stateChanged(plan2)).toBe(false)
+    expect(plan2.routeChanges).toHaveLength(0)
+  })
+
+  it('shutdown with zero local routes is a no-op', () => {
+    const rib = new RoutingInformationBase({ nodeId })
+
+    // No local routes — shutdown should be a no-op
+    expect(rib.state.local.routes).toHaveLength(0)
+
+    const shutdown: Action = { action: Actions.AdminGracefulShutdown, data: {} }
+    const plan = rib.plan(shutdown, rib.state)
+    expect(rib.stateChanged(plan)).toBe(false)
+    expect(plan.routeChanges).toHaveLength(0)
+    expect(plan.portOps).toHaveLength(0)
+  })
 })
-
-// ---------------------------------------------------------------------------
-// Topology helpers (copied from max-prefix.test.ts / orchestrator.topology.test.ts)
-// ---------------------------------------------------------------------------
-
-function topoMakeConfig(name: string): OrchestratorConfig {
-  return {
-    node: { name, endpoint: `ws://${name}:4000`, domains: ['topo.local'] },
-  }
-}
-
-function topoMakePeerInfo(name: string): PeerInfo {
-  return {
-    name,
-    endpoint: `ws://${name}:4000`,
-    domains: ['topo.local'],
-    peerToken: `token-${name}`,
-  }
-}
-
-interface BusEntry {
-  name: string
-  bus: OrchestratorBus
-  transport: MockPeerTransport
-  peerInfo: PeerInfo
-}
-
-class TopologyHelper {
-  private nodes = new Map<string, BusEntry>()
-
-  addNode(name: string): BusEntry {
-    const transport = new MockPeerTransport()
-    const config = topoMakeConfig(name)
-    const bus = new OrchestratorBus({ config, transport })
-    const entry: BusEntry = { name, bus, transport, peerInfo: topoMakePeerInfo(name) }
-    this.nodes.set(name, entry)
-    return entry
-  }
-
-  get(name: string): BusEntry {
-    const entry = this.nodes.get(name)
-    if (entry === undefined) throw new Error(`Unknown node: ${name}`)
-    return entry
-  }
-
-  async peer(nameA: string, nameB: string): Promise<void> {
-    const a = this.get(nameA)
-    const b = this.get(nameB)
-
-    await a.bus.dispatch({ action: Actions.LocalPeerCreate, data: b.peerInfo })
-    await b.bus.dispatch({ action: Actions.LocalPeerCreate, data: a.peerInfo })
-
-    await a.bus.dispatch({
-      action: Actions.InternalProtocolConnected,
-      data: { peerInfo: b.peerInfo },
-    })
-    await b.bus.dispatch({
-      action: Actions.InternalProtocolConnected,
-      data: { peerInfo: a.peerInfo },
-    })
-  }
-
-  async propagate(fromName: string, toName: string): Promise<void> {
-    const from = this.get(fromName)
-    const to = this.get(toName)
-
-    const consumed: TransportCall[] = []
-    const remaining: TransportCall[] = []
-    for (const call of from.transport.calls) {
-      if (call.method === 'sendUpdate' && call.peer.name === toName) {
-        consumed.push(call)
-      } else {
-        remaining.push(call)
-      }
-    }
-
-    from.transport.calls.length = 0
-    for (const c of remaining) {
-      from.transport.calls.push(c)
-    }
-
-    for (const call of consumed) {
-      if (call.method !== 'sendUpdate') continue
-      await to.bus.dispatch({
-        action: Actions.InternalProtocolUpdate,
-        data: { peerInfo: from.peerInfo, update: call.message },
-      })
-    }
-  }
-
-  resetAll(): void {
-    for (const entry of this.nodes.values()) {
-      entry.transport.reset()
-    }
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Topology tests for graceful shutdown
