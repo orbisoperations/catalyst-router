@@ -300,6 +300,18 @@ export class OrchestratorBus {
         'catalyst.orchestrator.keepalive.needed': ka.needed,
         'catalyst.orchestrator.keepalive.sent': ka.sent,
       })
+
+      // Deferred sync retry: when planTick clears syncDeferredUntil for a
+      // connected peer whose backoff window has expired, sync routes now.
+      const connectedPeers = committedState.internal.peers.filter(
+        (p) => p.connectionStatus === 'connected'
+      )
+      for (const peer of connectedPeers) {
+        const prevPeer = plan.prevState.internal.peers.find((p) => p.name === peer.name)
+        if (prevPeer && prevPeer.syncDeferredUntil > 0 && peer.syncDeferredUntil === 0) {
+          await this.syncRoutesToPeer(peer, committedState)
+        }
+      }
     }
   }
 

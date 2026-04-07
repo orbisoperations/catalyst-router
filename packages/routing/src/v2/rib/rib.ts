@@ -747,14 +747,27 @@ export class RoutingInformationBase {
     // --- Session flap stability reset ---
     let sessionFlapReset = false
     const peersAfterStabilityReset = state.internal.peers.map((p) => {
+      // Use lastConnected (set once at session establishment) rather than
+      // lastReceived (refreshed on every keepalive) so the stability window
+      // measures actual session uptime.
       if (
         p.connectionStatus === 'connected' &&
         (p.consecutiveFailures ?? 0) > 0 &&
-        p.lastReceived > 0 &&
-        data.now - p.lastReceived > SESSION_FLAP_STABILITY_MS
+        p.lastConnected > 0 &&
+        data.now - p.lastConnected > SESSION_FLAP_STABILITY_MS
       ) {
         sessionFlapReset = true
         return { ...p, consecutiveFailures: 0, lastFailure: 0, syncDeferredUntil: 0 }
+      }
+      // Deferred sync retry: clear deferral for connected peers whose
+      // backoff window has expired, so post-commit can trigger the sync.
+      if (
+        p.syncDeferredUntil > 0 &&
+        p.connectionStatus === 'connected' &&
+        data.now >= p.syncDeferredUntil
+      ) {
+        sessionFlapReset = true
+        return { ...p, syncDeferredUntil: 0 }
       }
       return p
     })
