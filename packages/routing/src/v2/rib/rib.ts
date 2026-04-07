@@ -103,6 +103,20 @@ function noChange(state: RouteTable): PlanResult {
   }
 }
 
+function buildRemovalOps(routes: InternalRoute[]): {
+  portOps: PortOperation[]
+  routeChanges: RouteChange[]
+} {
+  const portOps: PortOperation[] = routes
+    .filter((r) => r.envoyPort != null)
+    .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
+  const routeChanges: RouteChange[] = routes.map((r) => ({
+    type: 'removed' as const,
+    route: r,
+  }))
+  return { portOps, routeChanges }
+}
+
 // ---------------------------------------------------------------------------
 // RoutingInformationBase
 // ---------------------------------------------------------------------------
@@ -300,15 +314,7 @@ export class RoutingInformationBase {
 
     const removedRoutes = state.internal.routes.filter((r) => r.peer.name === data.name)
     const routes = state.internal.routes.filter((r) => r.peer.name !== data.name)
-
-    const portOps: PortOperation[] = removedRoutes
-      .filter((r) => r.envoyPort != null)
-      .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
-
-    const routeChanges: RouteChange[] = removedRoutes.map((r) => ({
-      type: 'removed' as const,
-      route: r,
-    }))
+    const { portOps, routeChanges } = buildRemovalOps(removedRoutes)
 
     const newState: RouteTable = {
       ...state,
@@ -509,10 +515,7 @@ export class RoutingInformationBase {
       // Hard close (normal, hold-expired, admin-shutdown, protocol-error):
       // withdraw routes and release any allocated envoy ports.
       routes = state.internal.routes.filter((r) => r.peer.name !== data.peerInfo.name)
-      routeChanges = peerRoutes.map((r) => ({ type: 'removed' as const, route: r }))
-      portOps = peerRoutes
-        .filter((r) => r.envoyPort != null)
-        .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
+      ;({ portOps, routeChanges } = buildRemovalOps(peerRoutes))
     }
 
     const peers = state.internal.peers.map((p, i) =>
@@ -731,14 +734,7 @@ export class RoutingInformationBase {
       (r) => !(r.peer.name === peerName && r.isStale === true)
     )
 
-    const portOps: PortOperation[] = staleRoutes
-      .filter((r) => r.envoyPort != null)
-      .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
-
-    const routeChanges: RouteChange[] = staleRoutes.map((r) => ({
-      type: 'removed' as const,
-      route: r,
-    }))
+    const { portOps, routeChanges } = buildRemovalOps(staleRoutes)
 
     const newState: RouteTable = {
       ...state,
@@ -861,15 +857,7 @@ export class RoutingInformationBase {
 
     const removedRoutes = state.internal.routes.filter((r) => purgedPeerNames.has(r.peer.name))
     const routes = state.internal.routes.filter((r) => !purgedPeerNames.has(r.peer.name))
-
-    const portOps: PortOperation[] = removedRoutes
-      .filter((r) => r.envoyPort != null)
-      .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
-
-    const routeChanges: RouteChange[] = removedRoutes.map((r) => ({
-      type: 'removed' as const,
-      route: r,
-    }))
+    const { portOps, routeChanges } = buildRemovalOps(removedRoutes)
 
     const newState: RouteTable = {
       ...state,
