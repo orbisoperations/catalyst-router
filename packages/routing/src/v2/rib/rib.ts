@@ -10,7 +10,7 @@ import {
   type InternalRoute,
   type PeerInfo,
 } from '../state.js'
-import type { PlanResult, PortOperation, RouteChange } from '../port-operation.js'
+import type { FlapStateChange, PlanResult, PortOperation, RouteChange } from '../port-operation.js'
 
 // ---------------------------------------------------------------------------
 // Derived action data types — extracted from schema discriminated union members
@@ -67,9 +67,21 @@ export type FlapEntry = {
 
 const NO_ROUTE_CHANGES: RouteChange[] = []
 const NO_PORT_OPS: PortOperation[] = []
+const NO_FLAP_CHANGES: FlapStateChange[] = []
+
+/** Canonical key for flap-damping state entries: `routeKey:originNode`. */
+export function flapKey(rKey: string, originNode: string): string {
+  return `${rKey}:${originNode}`
+}
 
 function noChange(state: RouteTable): PlanResult {
-  return { prevState: state, newState: state, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+  return {
+    prevState: state,
+    newState: state,
+    portOps: NO_PORT_OPS,
+    routeChanges: NO_ROUTE_CHANGES,
+    flapStateChanges: NO_FLAP_CHANGES,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -113,10 +125,6 @@ export class RoutingInformationBase {
     return this._flapState
   }
 
-  private flapKey(rKey: string, originNode: string): string {
-    return `${rKey}:${originNode}`
-  }
-
   private decayPenalty(entry: FlapEntry, now: number): number {
     const elapsed = now - entry.lastUpdated
     if (elapsed <= 0) return entry.penalty
@@ -130,7 +138,8 @@ export class RoutingInformationBase {
    * never mutated. If the action is a no-op (peer not found, duplicate, etc.)
    * `prevState === newState` (same object reference).
    */
-  plan(action: Action, state: RouteTable): PlanResult {
+  plan(action: Action, state: RouteTable, now?: number): PlanResult {
+    const timestamp = now ?? Date.now()
     switch (action.action) {
       case Actions.LocalPeerCreate:
         return this.planLocalPeerCreate(action.data, state)
@@ -145,15 +154,15 @@ export class RoutingInformationBase {
       case Actions.LocalRouteHealthUpdate:
         return this.planLocalRouteHealthUpdate(action.data, state)
       case Actions.InternalProtocolOpen:
-        return this.planInternalProtocolOpen(action.data, state)
+        return this.planInternalProtocolOpen(action.data, state, timestamp)
       case Actions.InternalProtocolConnected:
-        return this.planInternalProtocolConnected(action.data, state)
+        return this.planInternalProtocolConnected(action.data, state, timestamp)
       case Actions.InternalProtocolClose:
         return this.planInternalProtocolClose(action.data, state)
       case Actions.InternalProtocolUpdate:
-        return this.planInternalProtocolUpdate(action.data, state)
+        return this.planInternalProtocolUpdate(action.data, state, timestamp)
       case Actions.InternalProtocolKeepalive:
-        return this.planInternalProtocolKeepalive(action.data, state)
+        return this.planInternalProtocolKeepalive(action.data, state, timestamp)
       case Actions.Tick:
         return this.planTick(action.data, state)
       default:
@@ -170,6 +179,14 @@ export class RoutingInformationBase {
    */
   commit(plan: PlanResult, action: Action): RouteTable {
     this._state = plan.newState
+    // Apply deferred flap state mutations (collected during plan, applied here)
+    for (const change of plan.flapStateChanges) {
+      if (change.entry === null) {
+        this._flapState.delete(change.key)
+      } else {
+        this._flapState.set(change.key, change.entry)
+      }
+    }
     if (this.stateChanged(plan) && this._journal !== undefined) {
       this._journal.append(action, this._nodeId)
     }
@@ -210,7 +227,13 @@ export class RoutingInformationBase {
         peers: [...state.internal.peers, newPeer],
       },
     }
-    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges: NO_ROUTE_CHANGES,
+      flapStateChanges: NO_FLAP_CHANGES,
+    }
   }
 
   private planLocalPeerUpdate(data: PeerInfo, state: RouteTable): PlanResult {
@@ -234,7 +257,13 @@ export class RoutingInformationBase {
       ...state,
       internal: { ...state.internal, peers },
     }
-    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges: NO_ROUTE_CHANGES,
+      flapStateChanges: NO_FLAP_CHANGES,
+    }
   }
 
   private planLocalPeerDelete(data: LocalPeerDeleteData, state: RouteTable): PlanResult {
@@ -257,7 +286,7 @@ export class RoutingInformationBase {
       ...state,
       internal: { peers, routes },
     }
-    return { prevState: state, newState, portOps, routeChanges }
+    return { prevState: state, newState, portOps, routeChanges, flapStateChanges: NO_FLAP_CHANGES }
   }
 
   // -------------------------------------------------------------------------
@@ -277,6 +306,7 @@ export class RoutingInformationBase {
       newState,
       portOps: NO_PORT_OPS,
       routeChanges: [{ type: 'added', route: data }],
+      flapStateChanges: NO_FLAP_CHANGES,
     }
   }
 
@@ -299,6 +329,7 @@ export class RoutingInformationBase {
       newState,
       portOps,
       routeChanges: [{ type: 'removed', route }],
+      flapStateChanges: NO_FLAP_CHANGES,
     }
   }
 
@@ -336,6 +367,7 @@ export class RoutingInformationBase {
       newState,
       portOps: NO_PORT_OPS,
       routeChanges: [{ type: 'updated', route: updated }],
+      flapStateChanges: NO_FLAP_CHANGES,
     }
   }
 
@@ -343,7 +375,11 @@ export class RoutingInformationBase {
   // Internal protocol handlers
   // -------------------------------------------------------------------------
 
-  private planInternalProtocolOpen(data: InternalProtocolOpenData, state: RouteTable): PlanResult {
+  private planInternalProtocolOpen(
+    data: InternalProtocolOpenData,
+    state: RouteTable,
+    timestamp: number
+  ): PlanResult {
     const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
     // Unknown peer — we only accept opens for pre-configured peers
     if (idx === -1) return noChange(state)
@@ -356,19 +392,26 @@ export class RoutingInformationBase {
       ...existing,
       connectionStatus: 'connected',
       holdTime: negotiatedHoldTime,
-      lastReceived: Date.now(),
+      lastReceived: timestamp,
     }
     const peers = state.internal.peers.map((p, i) => (i === idx ? updated : p))
     const newState: RouteTable = {
       ...state,
       internal: { ...state.internal, peers },
     }
-    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges: NO_ROUTE_CHANGES,
+      flapStateChanges: NO_FLAP_CHANGES,
+    }
   }
 
   private planInternalProtocolConnected(
     data: InternalProtocolConnectedData,
-    state: RouteTable
+    state: RouteTable,
+    timestamp: number
   ): PlanResult {
     const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
     if (idx === -1) return noChange(state)
@@ -376,12 +419,11 @@ export class RoutingInformationBase {
     const existing = state.internal.peers[idx]
     // Reset holdTime to default on reconnect so it can be re-negotiated
     // via the subsequent InternalProtocolOpen exchange.
-    const now = Date.now()
     const updated: PeerRecord = {
       ...existing,
       connectionStatus: 'connected',
-      lastConnected: now,
-      lastReceived: now,
+      lastConnected: timestamp,
+      lastReceived: timestamp,
       holdTime: 90_000,
       lastSent: 0,
     }
@@ -390,7 +432,13 @@ export class RoutingInformationBase {
       ...state,
       internal: { ...state.internal, peers },
     }
-    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges: NO_ROUTE_CHANGES,
+      flapStateChanges: NO_FLAP_CHANGES,
+    }
   }
 
   private planInternalProtocolClose(
@@ -436,16 +484,27 @@ export class RoutingInformationBase {
       ...state,
       internal: { peers, routes },
     }
-    return { prevState: state, newState, portOps, routeChanges }
+    return { prevState: state, newState, portOps, routeChanges, flapStateChanges: NO_FLAP_CHANGES }
   }
 
   private planInternalProtocolUpdate(
     data: InternalProtocolUpdateData,
-    state: RouteTable
+    state: RouteTable,
+    timestamp: number
   ): PlanResult {
     let routes = [...state.internal.routes]
     const portOps: PortOperation[] = []
     const routeChanges: RouteChange[] = []
+    const flapChanges: FlapStateChange[] = []
+
+    // Build a transient view of flap state that includes pending changes from
+    // this plan, so that multiple updates in the same action see each other's
+    // mutations without touching the real _flapState.
+    const pendingFlapState = new Map<string, FlapEntry>()
+
+    const getFlapEntry = (key: string): FlapEntry | undefined => {
+      return pendingFlapState.get(key) ?? this._flapState.get(key)
+    }
 
     // --- Max prefix limit setup ---
     const limitPeer = state.internal.peers.find((p) => p.name === data.peerInfo.name)
@@ -495,19 +554,21 @@ export class RoutingInformationBase {
         }
 
         // --- Flap damping: track add-after-remove ---
-        const fk = this.flapKey(routeKey(item.route), item.originNode)
-        const flapEntry = this._flapState.get(fk)
+        const fk = flapKey(routeKey(item.route), item.originNode)
+        const flapEntry = getFlapEntry(fk)
         if (flapEntry && flapEntry.penalty > 0) {
-          const now = Date.now()
-          const decayed = this.decayPenalty(flapEntry, now)
+          const decayed = this.decayPenalty(flapEntry, timestamp)
           const newPenalty = decayed + FLAP_PENALTY_INCREMENT
           const shouldSuppress = newPenalty >= FLAP_SUPPRESS_THRESHOLD
-          this._flapState.set(fk, {
+          const newEntry: FlapEntry = {
             penalty: newPenalty,
             suppressed: shouldSuppress,
-            suppressedAt: shouldSuppress && !flapEntry.suppressed ? now : flapEntry.suppressedAt,
-            lastUpdated: now,
-          })
+            suppressedAt:
+              shouldSuppress && !flapEntry.suppressed ? timestamp : flapEntry.suppressedAt,
+            lastUpdated: timestamp,
+          }
+          pendingFlapState.set(fk, newEntry)
+          flapChanges.push({ key: fk, entry: newEntry })
         }
       } else {
         // action === 'remove'
@@ -522,24 +583,26 @@ export class RoutingInformationBase {
           }
 
           // --- Flap damping: mark as recently withdrawn ---
-          const fk = this.flapKey(routeKey(item.route), item.originNode)
-          const flapExisting = this._flapState.get(fk)
-          const now = Date.now()
+          const fk = flapKey(routeKey(item.route), item.originNode)
+          const flapExisting = getFlapEntry(fk)
+          let newEntry: FlapEntry
           if (!flapExisting) {
-            this._flapState.set(fk, {
+            newEntry = {
               penalty: FLAP_PENALTY_INCREMENT,
               suppressed: false,
               suppressedAt: null,
-              lastUpdated: now,
-            })
+              lastUpdated: timestamp,
+            }
           } else {
-            const decayed = this.decayPenalty(flapExisting, now)
-            this._flapState.set(fk, {
+            const decayed = this.decayPenalty(flapExisting, timestamp)
+            newEntry = {
               ...flapExisting,
               penalty: decayed + FLAP_PENALTY_INCREMENT,
-              lastUpdated: now,
-            })
+              lastUpdated: timestamp,
+            }
           }
+          pendingFlapState.set(fk, newEntry)
+          flapChanges.push({ key: fk, entry: newEntry })
         }
       }
     }
@@ -549,7 +612,7 @@ export class RoutingInformationBase {
     const peers =
       peerIdx !== -1
         ? state.internal.peers.map((p, i) =>
-            i === peerIdx ? { ...p, lastReceived: Date.now() } : p
+            i === peerIdx ? { ...p, lastReceived: timestamp } : p
           )
         : state.internal.peers
 
@@ -562,24 +625,31 @@ export class RoutingInformationBase {
       ...state,
       internal: { peers, routes },
     }
-    return { prevState: state, newState, portOps, routeChanges }
+    return { prevState: state, newState, portOps, routeChanges, flapStateChanges: flapChanges }
   }
 
   private planInternalProtocolKeepalive(
     data: InternalProtocolKeepaliveData,
-    state: RouteTable
+    state: RouteTable,
+    timestamp: number
   ): PlanResult {
     const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
     if (idx === -1) return noChange(state)
 
     const peers = state.internal.peers.map((p, i) =>
-      i === idx ? { ...p, lastReceived: Date.now() } : p
+      i === idx ? { ...p, lastReceived: timestamp } : p
     )
     const newState: RouteTable = {
       ...state,
       internal: { ...state.internal, peers },
     }
-    return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+    return {
+      prevState: state,
+      newState,
+      portOps: NO_PORT_OPS,
+      routeChanges: NO_ROUTE_CHANGES,
+      flapStateChanges: NO_FLAP_CHANGES,
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -589,13 +659,14 @@ export class RoutingInformationBase {
   private planTick(data: TickData, state: RouteTable): PlanResult {
     // --- Flap damping decay ---
     let flapStateChanged = false
+    const flapChanges: FlapStateChange[] = []
     for (const [key, entry] of this._flapState) {
       const decayed = this.decayPenalty(entry, data.now)
 
       if (decayed < 1) {
         // Penalty negligible — clean up
         if (entry.suppressed) flapStateChanged = true
-        this._flapState.delete(key)
+        flapChanges.push({ key, entry: null })
         continue
       }
 
@@ -605,15 +676,16 @@ export class RoutingInformationBase {
           (entry.suppressedAt != null && data.now - entry.suppressedAt > FLAP_MAX_SUPPRESS_MS))
 
       if (shouldUnsuppress) {
-        this._flapState.set(key, {
+        const newEntry: FlapEntry = {
           penalty: decayed,
           suppressed: false,
           suppressedAt: null,
           lastUpdated: data.now,
-        })
+        }
+        flapChanges.push({ key, entry: newEntry })
         flapStateChanged = true
       } else if (Math.abs(decayed - entry.penalty) > 0.1) {
-        this._flapState.set(key, { ...entry, penalty: decayed, lastUpdated: data.now })
+        flapChanges.push({ key, entry: { ...entry, penalty: decayed, lastUpdated: data.now } })
       }
     }
 
@@ -651,7 +723,13 @@ export class RoutingInformationBase {
 
     if (purgedPeerNames.size === 0 && flapStateChanged) {
       const newState: RouteTable = { ...state }
-      return { prevState: state, newState, portOps: NO_PORT_OPS, routeChanges: NO_ROUTE_CHANGES }
+      return {
+        prevState: state,
+        newState,
+        portOps: NO_PORT_OPS,
+        routeChanges: NO_ROUTE_CHANGES,
+        flapStateChanges: flapChanges,
+      }
     }
 
     const removedRoutes = state.internal.routes.filter((r) => purgedPeerNames.has(r.peer.name))
@@ -670,6 +748,6 @@ export class RoutingInformationBase {
       ...state,
       internal: { peers, routes },
     }
-    return { prevState: state, newState, portOps, routeChanges }
+    return { prevState: state, newState, portOps, routeChanges, flapStateChanges: flapChanges }
   }
 }

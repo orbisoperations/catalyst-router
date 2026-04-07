@@ -4,6 +4,7 @@ import {
   Actions,
   CloseCodes,
   routeKey,
+  flapKey,
   type Action,
   type RouteTable,
   type PlanResult,
@@ -146,7 +147,7 @@ export class OrchestratorBus {
         }
 
         // Step 2: Plan — pure state transition, no side effects.
-        const ribPlan = this.rib.plan(filteredAction, this.rib.state)
+        const ribPlan = this.rib.plan(filteredAction, this.rib.state, Date.now())
 
         if (!this.rib.stateChanged(ribPlan)) {
           // Tick with no expired peers: keepalives still need to fire.
@@ -689,7 +690,7 @@ export class OrchestratorBus {
 
         // --- Flap damping: skip suppressed routes ---
         if (change.type !== 'removed') {
-          const fk = `${routeKey(route)}:${route.originNode}`
+          const fk = flapKey(routeKey(route), route.originNode)
           const flapEntry = this.rib.flapState.get(fk)
           if (flapEntry?.suppressed) continue
         }

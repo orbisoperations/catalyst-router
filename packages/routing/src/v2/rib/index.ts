@@ -1,6 +1,7 @@
 export { ActionQueue } from './action-queue.js'
 export { RoutingInformationBase } from './rib.js'
 export {
+  flapKey,
   FLAP_PENALTY_INCREMENT,
   FLAP_SUPPRESS_THRESHOLD,
   FLAP_REUSE_THRESHOLD,

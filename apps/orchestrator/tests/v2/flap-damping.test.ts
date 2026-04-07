@@ -4,15 +4,14 @@ import {
   Actions,
   newRouteTable,
   routeKey,
+  flapKey,
   FLAP_PENALTY_INCREMENT,
   FLAP_SUPPRESS_THRESHOLD,
   FLAP_HALF_LIFE_MS,
   FLAP_MAX_SUPPRESS_MS,
 } from '@catalyst/routing/v2'
 import type { RouteTable, PeerRecord, PeerInfo, Action } from '@catalyst/routing/v2'
-import { OrchestratorBus } from '../../src/v2/bus.js'
-import { MockPeerTransport, type TransportCall } from '../../src/v2/transport.js'
-import type { OrchestratorConfig } from '../../src/v1/types.js'
+import { TopologyHelper } from './helpers/topology-helper.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,6 +64,8 @@ function removeAction(route: typeof route1): Action {
 // Tests
 // ---------------------------------------------------------------------------
 
+const T0 = 1_700_000_000_000 // deterministic base timestamp
+
 describe('route flap damping (RFC 7196 / RIPE-580)', () => {
   it('single withdraw/re-add below threshold — not suppressed', () => {
     const rib = new RoutingInformationBase({ nodeId })
@@ -72,20 +73,20 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
 
     // Add route
     const a1 = addAction(route1)
-    const p1 = rib.plan(a1, state)
+    const p1 = rib.plan(a1, state, T0)
     rib.commit(p1, a1)
 
     // Remove route
     const r1 = removeAction(route1)
-    const p2 = rib.plan(r1, rib.state)
+    const p2 = rib.plan(r1, rib.state, T0 + 1)
     rib.commit(p2, r1)
 
     // Re-add route
     const a2 = addAction(route1)
-    const p3 = rib.plan(a2, rib.state)
+    const p3 = rib.plan(a2, rib.state, T0 + 2)
     rib.commit(p3, a2)
 
-    const fk = routeKey(route1) + ':node-b'
+    const fk = flapKey(routeKey(route1), 'node-b')
     const entry = rib.flapState.get(fk)
     expect(entry).toBeDefined()
     // One remove (1000) + one add-after-remove (decayed ~1000 + 1000 ≈ 2000)
@@ -101,22 +102,22 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
     let currentState = state
     for (let i = 0; i < 6; i++) {
       const add = addAction(route1)
-      const ap = rib.plan(add, currentState)
+      const ap = rib.plan(add, currentState, T0 + i * 2)
       rib.commit(ap, add)
       currentState = rib.state
 
       const rm = removeAction(route1)
-      const rp = rib.plan(rm, currentState)
+      const rp = rib.plan(rm, currentState, T0 + i * 2 + 1)
       rib.commit(rp, rm)
       currentState = rib.state
     }
 
     // Final add
     const finalAdd = addAction(route1)
-    const fp = rib.plan(finalAdd, currentState)
+    const fp = rib.plan(finalAdd, currentState, T0 + 12)
     rib.commit(fp, finalAdd)
 
-    const fk = routeKey(route1) + ':node-b'
+    const fk = flapKey(routeKey(route1), 'node-b')
     const entry = rib.flapState.get(fk)
     expect(entry).toBeDefined()
     expect(entry!.suppressed).toBe(true)
@@ -131,28 +132,28 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
     let currentState = state
     for (let i = 0; i < 6; i++) {
       const add = addAction(route1)
-      const ap = rib.plan(add, currentState)
+      const ap = rib.plan(add, currentState, T0 + i * 2)
       rib.commit(ap, add)
       currentState = rib.state
 
       const rm = removeAction(route1)
-      const rp = rib.plan(rm, currentState)
+      const rp = rib.plan(rm, currentState, T0 + i * 2 + 1)
       rib.commit(rp, rm)
       currentState = rib.state
     }
     // Final add for route1
     const finalAdd1 = addAction(route1)
-    const fp1 = rib.plan(finalAdd1, currentState)
+    const fp1 = rib.plan(finalAdd1, currentState, T0 + 12)
     rib.commit(fp1, finalAdd1)
     currentState = rib.state
 
     // Add route2 normally (no flapping)
     const add2 = addAction(route2)
-    const ap2 = rib.plan(add2, currentState)
+    const ap2 = rib.plan(add2, currentState, T0 + 13)
     rib.commit(ap2, add2)
 
-    const fk1 = routeKey(route1) + ':node-b'
-    const fk2 = routeKey(route2) + ':node-b'
+    const fk1 = flapKey(routeKey(route1), 'node-b')
+    const fk2 = flapKey(routeKey(route2), 'node-b')
 
     const entry1 = rib.flapState.get(fk1)
     expect(entry1).toBeDefined()
@@ -171,30 +172,30 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
     let currentState = state
     for (let i = 0; i < 6; i++) {
       const add = addAction(route1)
-      const ap = rib.plan(add, currentState)
+      const ap = rib.plan(add, currentState, T0 + i * 2)
       rib.commit(ap, add)
       currentState = rib.state
 
       const rm = removeAction(route1)
-      const rp = rib.plan(rm, currentState)
+      const rp = rib.plan(rm, currentState, T0 + i * 2 + 1)
       rib.commit(rp, rm)
       currentState = rib.state
     }
 
     // Final add
     const finalAdd = addAction(route1)
-    const fp = rib.plan(finalAdd, currentState)
+    const fp = rib.plan(finalAdd, currentState, T0 + 12)
     rib.commit(fp, finalAdd)
     currentState = rib.state
 
-    const fk = routeKey(route1) + ':node-b'
+    const fk = flapKey(routeKey(route1), 'node-b')
     expect(rib.flapState.get(fk)?.suppressed).toBe(true)
 
     // Dispatch Tick far enough in the future: penalty is ~12000 after 6 flap cycles.
     // 5 half-lives => 12000 * 0.5^5 = 375 < 750 reuse threshold.
     const tickAction: Action = {
       action: Actions.Tick,
-      data: { now: Date.now() + FLAP_HALF_LIFE_MS * 5 },
+      data: { now: T0 + FLAP_HALF_LIFE_MS * 5 },
     }
     const tickPlan = rib.plan(tickAction, currentState)
     rib.commit(tickPlan, tickAction)
@@ -212,29 +213,29 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
     let currentState = state
     for (let i = 0; i < 20; i++) {
       const add = addAction(route1)
-      const ap = rib.plan(add, currentState)
+      const ap = rib.plan(add, currentState, T0 + i * 2)
       rib.commit(ap, add)
       currentState = rib.state
 
       const rm = removeAction(route1)
-      const rp = rib.plan(rm, currentState)
+      const rp = rib.plan(rm, currentState, T0 + i * 2 + 1)
       rib.commit(rp, rm)
       currentState = rib.state
     }
 
     // Final add
     const finalAdd = addAction(route1)
-    const fp = rib.plan(finalAdd, currentState)
+    const fp = rib.plan(finalAdd, currentState, T0 + 40)
     rib.commit(fp, finalAdd)
     currentState = rib.state
 
-    const fk = routeKey(route1) + ':node-b'
+    const fk = flapKey(routeKey(route1), 'node-b')
     expect(rib.flapState.get(fk)?.suppressed).toBe(true)
 
     // Dispatch Tick just past the max suppress duration (30 min + 1 sec)
     const tickAction: Action = {
       action: Actions.Tick,
-      data: { now: Date.now() + FLAP_MAX_SUPPRESS_MS + 1000 },
+      data: { now: T0 + FLAP_MAX_SUPPRESS_MS + 1000 },
     }
     const tickPlan = rib.plan(tickAction, currentState)
     rib.commit(tickPlan, tickAction)
@@ -247,103 +248,11 @@ describe('route flap damping (RFC 7196 / RIPE-580)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Topology helpers (copied from orchestrator.topology.test.ts)
+// Topology helpers
 // ---------------------------------------------------------------------------
-
-function topoMakeConfig(name: string): OrchestratorConfig {
-  return {
-    node: { name, endpoint: `ws://${name}:4000`, domains: ['topo.local'] },
-  }
-}
-
-function topoMakePeerInfo(name: string): PeerInfo {
-  return {
-    name,
-    endpoint: `ws://${name}:4000`,
-    domains: ['topo.local'],
-    peerToken: `token-${name}`,
-  }
-}
 
 function makeRoute(name: string) {
   return { name, protocol: 'http' as const, endpoint: `http://${name}:8080` }
-}
-
-interface BusEntry {
-  name: string
-  bus: OrchestratorBus
-  transport: MockPeerTransport
-  peerInfo: PeerInfo
-}
-
-class TopologyHelper {
-  private nodes = new Map<string, BusEntry>()
-
-  addNode(name: string): BusEntry {
-    const transport = new MockPeerTransport()
-    const config = topoMakeConfig(name)
-    const bus = new OrchestratorBus({ config, transport })
-    const entry: BusEntry = { name, bus, transport, peerInfo: topoMakePeerInfo(name) }
-    this.nodes.set(name, entry)
-    return entry
-  }
-
-  get(name: string): BusEntry {
-    const entry = this.nodes.get(name)
-    if (entry === undefined) throw new Error(`Unknown node: ${name}`)
-    return entry
-  }
-
-  async peer(nameA: string, nameB: string): Promise<void> {
-    const a = this.get(nameA)
-    const b = this.get(nameB)
-
-    await a.bus.dispatch({ action: Actions.LocalPeerCreate, data: b.peerInfo })
-    await b.bus.dispatch({ action: Actions.LocalPeerCreate, data: a.peerInfo })
-
-    await a.bus.dispatch({
-      action: Actions.InternalProtocolConnected,
-      data: { peerInfo: b.peerInfo },
-    })
-    await b.bus.dispatch({
-      action: Actions.InternalProtocolConnected,
-      data: { peerInfo: a.peerInfo },
-    })
-  }
-
-  async propagate(fromName: string, toName: string): Promise<void> {
-    const from = this.get(fromName)
-    const to = this.get(toName)
-
-    const consumed: TransportCall[] = []
-    const remaining: TransportCall[] = []
-    for (const call of from.transport.calls) {
-      if (call.method === 'sendUpdate' && call.peer.name === toName) {
-        consumed.push(call)
-      } else {
-        remaining.push(call)
-      }
-    }
-
-    from.transport.calls.length = 0
-    for (const c of remaining) {
-      from.transport.calls.push(c)
-    }
-
-    for (const call of consumed) {
-      if (call.method !== 'sendUpdate') continue
-      await to.bus.dispatch({
-        action: Actions.InternalProtocolUpdate,
-        data: { peerInfo: from.peerInfo, update: call.message },
-      })
-    }
-  }
-
-  resetAll(): void {
-    for (const entry of this.nodes.values()) {
-      entry.transport.reset()
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------

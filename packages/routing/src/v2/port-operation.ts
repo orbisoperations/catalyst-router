@@ -10,9 +10,20 @@ export type RouteChange =
   | { type: 'removed'; route: DataChannelDefinition | InternalRoute }
   | { type: 'updated'; route: DataChannelDefinition | InternalRoute }
 
+export type FlapStateChange = {
+  key: string
+  entry: {
+    penalty: number
+    suppressed: boolean
+    suppressedAt: number | null
+    lastUpdated: number
+  } | null // null means delete
+}
+
 export type PlanResult = {
   prevState: RouteTable
   newState: RouteTable
   portOps: PortOperation[]
   routeChanges: RouteChange[]
+  flapStateChanges: FlapStateChange[]
 }
