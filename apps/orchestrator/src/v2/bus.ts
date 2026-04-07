@@ -180,7 +180,7 @@ export class OrchestratorBus {
           'catalyst.orchestrator.action.state_changed': true,
           'catalyst.orchestrator.route.change_count': plan.routeChanges.length,
           'catalyst.orchestrator.route.total':
-            committed.local.routes.size + [...committed.internal.routes.values()].reduce((n, m) => n + m.size, 0),
+            committed.local.routes.size + committed.internal.locRib.size,
         })
 
         if (plan.routeChanges.length > 0) {
@@ -202,7 +202,7 @@ export class OrchestratorBus {
             'catalyst.orchestrator.route.modified': counts.modified,
             'catalyst.orchestrator.route.trigger': action.action,
             'catalyst.orchestrator.route.total':
-              committed.local.routes.size + [...committed.internal.routes.values()].reduce((n, m) => n + m.size, 0),
+              committed.local.routes.size + committed.internal.locRib.size,
           })
         }
 
@@ -366,10 +366,13 @@ export class OrchestratorBus {
     const client = this.gatewayClient
     if (client === undefined) return
 
-    const allRoutes = [
-      ...state.local.routes.values(),
-      ...[...state.internal.routes.values()].flatMap((m) => [...m.values()]),
-    ]
+    const localRoutes = [...state.local.routes.values()]
+    const internalRoutes: (typeof localRoutes)[number][] = []
+    for (const [irKey, winnerPeer] of state.internal.locRib) {
+      const route = state.internal.routes.get(winnerPeer)?.get(irKey)
+      if (route !== undefined) internalRoutes.push(route)
+    }
+    const allRoutes = [...localRoutes, ...internalRoutes]
     const graphqlRoutes = allRoutes.filter(
       (r) => r.protocol === 'http:graphql' || r.protocol === 'http:gql'
     )
@@ -530,14 +533,18 @@ export class OrchestratorBus {
 
     try {
       await withWideEvent('orchestrator.envoy_sync', logger, async (event) => {
-        const allInternalRoutes = [...state.internal.routes.values()].flatMap((m) => [...m.values()])
+        const internalRoutes: InternalRoute[] = []
+        for (const [irKey, winnerPeer] of state.internal.locRib) {
+          const route = state.internal.routes.get(winnerPeer)?.get(irKey)
+          if (route !== undefined) internalRoutes.push(route)
+        }
         event.set({
           'catalyst.orchestrator.envoy.local_count': state.local.routes.size,
-          'catalyst.orchestrator.envoy.internal_count': allInternalRoutes.length,
+          'catalyst.orchestrator.envoy.internal_count': internalRoutes.length,
         })
         await client.updateRoutes({
           local: [...state.local.routes.values()],
-          internal: allInternalRoutes,
+          internal: internalRoutes,
           portAllocations: this.portAllocator
             ? Object.fromEntries(this.portAllocator.getAllocations())
             : undefined,
@@ -567,31 +574,25 @@ export class OrchestratorBus {
       })
     }
 
-    // Advertise internal routes the peer doesn't already know.
-    for (const innerMap of state.internal.routes.values()) {
-      for (const route of innerMap.values()) {
-        // Exclude stale routes — they may no longer be valid.
-        if (route.isStale === true) continue
-        // Don't reflect a peer's own routes back at them.
-        if (route.peer.name === peer.name) continue
-        // Loop guard: don't advertise paths that already pass through this peer.
-        if (route.nodePath.includes(peer.name)) continue
+    // Advertise Loc-RIB winners (not all Adj-RIB-In entries)
+    for (const [irKey, winnerPeer] of state.internal.locRib) {
+      const route = state.internal.routes.get(winnerPeer)?.get(irKey)
+      if (route === undefined) continue
+      if (route.isStale === true) continue
+      if (route.peer.name === peer.name) continue
+      if (route.nodePath.includes(peer.name)) continue
 
-        // Apply route policy if configured.
-        if (this.routePolicy !== undefined) {
-          const allowed = this.routePolicy.canSend(peer, [route])
-          if (allowed.length === 0) continue
-        }
-
-        // Multi-hop: envoyPort is already stamped by planPortAllocations.
-        // Rewrite envoyAddress to this node's envoy so downstream peers route through us.
-        updates.push({
-          action: 'add',
-          route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
-          nodePath: [this.config.node.name, ...route.nodePath],
-          originNode: route.originNode,
-        })
+      if (this.routePolicy !== undefined) {
+        const allowed = this.routePolicy.canSend(peer, [route])
+        if (allowed.length === 0) continue
       }
+
+      updates.push({
+        action: 'add',
+        route: BusTransforms.toDataChannel(route, { envoyAddress: localEnvoyAddress }),
+        nodePath: [this.config.node.name, ...route.nodePath],
+        originNode: route.originNode,
+      })
     }
 
     if (updates.length === 0) {
