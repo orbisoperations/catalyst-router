@@ -605,14 +605,27 @@ export class RoutingInformationBase {
     const portOps: PortOperation[] = removedRoutes
       .filter((r) => r.envoyPort != null)
       .map((r) => ({ type: 'release' as const, routeKey: routeKey(r), port: r.envoyPort! }))
-    const routeChanges: RouteChange[] = removedRoutes.map((r) => ({
-      type: 'removed' as const,
-      route: r,
-    }))
+
+    // Loc-RIB fallback for purged peers
+    let locRib = state.internal.locRib
+    const routeChanges: RouteChange[] = []
+    for (const [irKey, winnerPeer] of state.internal.locRib) {
+      if (!purgedPeerNames.has(winnerPeer)) continue
+      const fallback = selectBestPeer(routes, irKey)
+      if (fallback !== undefined) {
+        locRib = mapWith(locRib, irKey, fallback)
+        const fallbackRoute = routes.get(fallback)?.get(irKey)
+        if (fallbackRoute) routeChanges.push({ type: 'updated', route: fallbackRoute })
+      } else {
+        locRib = mapWithout(locRib, irKey)
+        const removed = removedRoutes.find((r) => internalRouteKey(r) === irKey)
+        if (removed) routeChanges.push({ type: 'removed', route: removed })
+      }
+    }
 
     const newState: RouteTable = {
       ...state,
-      internal: { peers, routes, locRib: state.internal.locRib },
+      internal: { peers, routes, locRib },
     }
     return { prevState: state, newState, portOps, routeChanges }
   }

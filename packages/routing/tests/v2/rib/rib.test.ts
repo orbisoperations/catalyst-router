@@ -1501,6 +1501,54 @@ describe('Loc-RIB index', () => {
     expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-b')
   })
 
+  it('Tick purges stale route — alternative peer promoted', () => {
+    const rib = new RoutingInformationBase({ nodeId: 'node-x' })
+    const peerA = makePeer('peer-a')
+    const peerB = makePeer('peer-b')
+    apply(rib, makeLocalPeerCreate(peerA))
+    apply(rib, makeLocalPeerCreate(peerB))
+    // peer-a negotiates a short hold timer so tick can expire it without also
+    // expiring peer-b (which keeps the default 90s hold timer)
+    apply(rib, makeProtocolOpen(peerA, 1_000))
+    apply(rib, makeProtocolOpen(peerB))
+
+    // peer-a advertises 1-hop (wins)
+    apply(
+      rib,
+      makeProtocolUpdate(peerA, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-a'],
+          originNode: 'origin',
+        },
+      ])
+    )
+    // peer-b advertises 2-hop (backup)
+    apply(
+      rib,
+      makeProtocolUpdate(peerB, [
+        {
+          action: 'add',
+          route: makeRoute('svc-x'),
+          nodePath: ['peer-b', 'origin'],
+          originNode: 'origin',
+        },
+      ])
+    )
+
+    // peer-a drops (transport error → stale)
+    apply(rib, makeProtocolClose(peerA, CloseCodes.TRANSPORT_ERROR))
+
+    // Tick past peer-a's 1s hold timer — purges peer-a's stale routes.
+    // peer-b's 90s hold timer has not elapsed so peer-b stays connected.
+    const now = Date.now() + 2_000
+    apply(rib, makeTick(now))
+
+    // Loc-RIB should fall back to peer-b
+    expect(rib.state.internal.locRib.get('svc-x:origin')).toBe('peer-b')
+  })
+
   it('equal path length — lowest peer name wins', () => {
     const rib = new RoutingInformationBase({ nodeId: 'node-x' })
     const peerAlpha = makePeer('alpha')
