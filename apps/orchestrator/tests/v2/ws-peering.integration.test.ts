@@ -147,6 +147,9 @@ async function peerNodes(a: TestNode, b: TestNode): Promise<void> {
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     },
     a.token
   )
@@ -172,6 +175,9 @@ async function peerNodes(a: TestNode, b: TestNode): Promise<void> {
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     },
     b.token
   )
@@ -226,6 +232,9 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     }
 
     await transportA.openPeer(peerRecord, tokenA)
@@ -253,6 +262,9 @@ describe('WebSocketPeerTransport: connection lifecycle', () => {
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     }
 
     await expect(transport.openPeer(peerRecord, 'any-token')).rejects.toThrow()

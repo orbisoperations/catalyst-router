@@ -4,6 +4,10 @@
  * Verifies that when ReconnectManager successfully reconnects a peer, it dispatches
  * InternalProtocolConnected which triggers syncRoutesToPeer on the bus — delivering
  * the full route table to the reconnected peer.
+ *
+ * Note: Session flap detection defers sync for peers with consecutiveFailures > 0.
+ * Tests that need immediate sync after a transport-error close must advance time
+ * past the SESSION_FLAP_BASE_DELAY_MS window.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { OrchestratorServiceV2 } from '../../src/v2/service.js'
@@ -90,18 +94,19 @@ describe('ReconnectManager → Bus → initial sync chain', () => {
     const openCalls = transport.getCallsFor('openPeer')
     expect(openCalls).toHaveLength(1)
 
-    // Then dispatched InternalProtocolConnected → which triggers initial sync
-    // Check that sendUpdate was called with our local route
-    const updateCalls = transport
+    // After a transport-error close, the peer has consecutiveFailures=1.
+    // Session flap detection defers the initial sync for SESSION_FLAP_BASE_DELAY_MS,
+    // so sendUpdate should NOT have been called yet.
+    const deferredUpdateCalls = transport
       .getCallsFor('sendUpdate')
       .filter((c) => c.method === 'sendUpdate' && c.peer.name === 'node-b')
+    expect(deferredUpdateCalls).toHaveLength(0)
 
-    expect(updateCalls.length).toBeGreaterThanOrEqual(1)
-    const firstUpdate = updateCalls[0]
-    if (firstUpdate.method !== 'sendUpdate') return
-
-    const routeNames = firstUpdate.message.updates.map((u) => u.route.name)
-    expect(routeNames).toContain('alpha')
+    // Verify the peer is reconnected but sync was deferred
+    const reconnectedPeer = svc.bus.state.internal.peers.find((p) => p.name === 'node-b')!
+    expect(reconnectedPeer.connectionStatus).toBe('connected')
+    expect(reconnectedPeer.consecutiveFailures).toBe(1)
+    expect(reconnectedPeer.syncDeferredUntil).toBeGreaterThan(0)
   })
 
   it('reconnect resets attempt counter on success', async () => {

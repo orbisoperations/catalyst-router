@@ -24,6 +24,9 @@ function stateWithPeer(maxPrefixes?: number): RouteTable {
     lastSent: 0,
     lastReceived: 1000,
     maxPrefixes,
+    consecutiveFailures: 0,
+    lastFailure: 0,
+    syncDeferredUntil: 0,
   }
   state.internal.peers = [peer]
   return state
@@ -138,6 +141,9 @@ describe('max prefix limits (drop-excess model)', () => {
       lastSent: 0,
       lastReceived: 1000,
       maxPrefixes: 2,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     }
     const peerCRecord: PeerRecord = {
       ...peerC,
@@ -147,6 +153,9 @@ describe('max prefix limits (drop-excess model)', () => {
       lastSent: 0,
       lastReceived: 1000,
       maxPrefixes: 2,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     }
     state.internal.peers = [peerBRecord, peerCRecord]
 

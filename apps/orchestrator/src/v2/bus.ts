@@ -316,17 +316,26 @@ export class OrchestratorBus {
       const peerName = action.data.peerInfo.name
       const peer = connectedPeers.find((p) => p.name === peerName)
       if (peer !== undefined) {
-        await withWideEvent('orchestrator.peer_sync', logger, async (event) => {
-          event.set({
-            'catalyst.orchestrator.peer.name': peerName,
-            'catalyst.orchestrator.sync.type': 'full',
+        if (peer.syncDeferredUntil && peer.syncDeferredUntil > Date.now()) {
+          logger.warn('Deferring initial sync to flapping peer {peerName} until {deferUntil}', {
+            'event.name': 'peer.sync.deferred',
+            peerName,
+            deferUntil: new Date(peer.syncDeferredUntil).toISOString(),
+            consecutiveFailures: peer.consecutiveFailures,
           })
-          logger.info('Peer {peerName} connected, syncing full route table', {
-            'event.name': 'peer.sync.started',
-            'catalyst.orchestrator.peer.name': peerName,
+        } else {
+          await withWideEvent('orchestrator.peer_sync', logger, async (event) => {
+            event.set({
+              'catalyst.orchestrator.peer.name': peerName,
+              'catalyst.orchestrator.sync.type': 'full',
+            })
+            logger.info('Peer {peerName} connected, syncing full route table', {
+              'event.name': 'peer.sync.started',
+              'catalyst.orchestrator.peer.name': peerName,
+            })
+            await this.syncRoutesToPeer(peer, state)
           })
-          await this.syncRoutesToPeer(peer, state)
-        })
+        }
       }
       return
     }

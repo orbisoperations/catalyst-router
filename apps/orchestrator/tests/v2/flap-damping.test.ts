@@ -31,6 +31,9 @@ function connectedState(): RouteTable {
     holdTime: 90_000,
     lastSent: 0,
     lastReceived: 1000,
+    consecutiveFailures: 0,
+    lastFailure: 0,
+    syncDeferredUntil: 0,
   }
   state.internal.peers = [peer]
   return state

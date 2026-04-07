@@ -24,6 +24,9 @@ function makeRouteTable(): RouteTable {
           holdTime: 90_000,
           lastSent: 100,
           lastReceived: 200,
+          consecutiveFailures: 0,
+          lastFailure: 0,
+          syncDeferredUntil: 0,
         },
       ],
       routes: [

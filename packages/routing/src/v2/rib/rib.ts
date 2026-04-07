@@ -62,6 +62,13 @@ export const FLAP_REUSE_THRESHOLD = 750
 export const FLAP_HALF_LIFE_MS = 300_000 // 5 minutes
 export const FLAP_MAX_SUPPRESS_MS = 1_800_000 // 30 minutes
 
+// ---------------------------------------------------------------------------
+// Session flap detection constants (RFC 4271 §8 / BIRD error-wait model)
+// ---------------------------------------------------------------------------
+export const SESSION_FLAP_BASE_DELAY_MS = 5_000 // 5 seconds
+export const SESSION_FLAP_MAX_DELAY_MS = 300_000 // 5 minutes cap
+export const SESSION_FLAP_STABILITY_MS = 300_000 // 5 minutes stable = reset
+
 export type FlapEntry = {
   penalty: number
   suppressed: boolean
@@ -166,7 +173,7 @@ export class RoutingInformationBase {
       case Actions.InternalProtocolConnected:
         return this.planInternalProtocolConnected(action.data, state, timestamp)
       case Actions.InternalProtocolClose:
-        return this.planInternalProtocolClose(action.data, state)
+        return this.planInternalProtocolClose(action.data, state, timestamp)
       case Actions.InternalProtocolUpdate:
         return this.planInternalProtocolUpdate(action.data, state, timestamp)
       case Actions.InternalProtocolKeepalive:
@@ -231,6 +238,9 @@ export class RoutingInformationBase {
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     }
     const newState: RouteTable = {
       ...state,
@@ -431,6 +441,14 @@ export class RoutingInformationBase {
     const existing = state.internal.peers[idx]
     // Reset holdTime to default on reconnect so it can be re-negotiated
     // via the subsequent InternalProtocolOpen exchange.
+    const failures = existing.consecutiveFailures ?? 0
+    const syncDelay =
+      failures > 0
+        ? Math.min(
+            SESSION_FLAP_BASE_DELAY_MS * Math.pow(2, failures - 1),
+            SESSION_FLAP_MAX_DELAY_MS
+          )
+        : 0
     const updated: PeerRecord = {
       ...existing,
       connectionStatus: 'connected',
@@ -438,6 +456,7 @@ export class RoutingInformationBase {
       lastReceived: timestamp,
       holdTime: 90_000,
       lastSent: 0,
+      syncDeferredUntil: syncDelay > 0 ? timestamp + syncDelay : 0,
     }
     const peers = state.internal.peers.map((p, i) => (i === idx ? updated : p))
     const newState: RouteTable = {
@@ -455,7 +474,8 @@ export class RoutingInformationBase {
 
   private planInternalProtocolClose(
     data: InternalProtocolCloseData,
-    state: RouteTable
+    state: RouteTable,
+    timestamp: number
   ): PlanResult {
     const idx = state.internal.peers.findIndex((p) => p.name === data.peerInfo.name)
     if (idx === -1) return noChange(state)
@@ -490,7 +510,14 @@ export class RoutingInformationBase {
     }
 
     const peers = state.internal.peers.map((p, i) =>
-      i === idx ? { ...p, connectionStatus: 'closed' as const } : p
+      i === idx
+        ? {
+            ...p,
+            connectionStatus: 'closed' as const,
+            consecutiveFailures: (p.consecutiveFailures ?? 0) + 1,
+            lastFailure: timestamp,
+          }
+        : p
     )
     const newState: RouteTable = {
       ...state,
@@ -717,9 +744,24 @@ export class RoutingInformationBase {
       }
     }
 
+    // --- Session flap stability reset ---
+    let sessionFlapReset = false
+    const peersAfterStabilityReset = state.internal.peers.map((p) => {
+      if (
+        p.connectionStatus === 'connected' &&
+        (p.consecutiveFailures ?? 0) > 0 &&
+        p.lastReceived > 0 &&
+        data.now - p.lastReceived > SESSION_FLAP_STABILITY_MS
+      ) {
+        sessionFlapReset = true
+        return { ...p, consecutiveFailures: 0, lastFailure: 0, syncDeferredUntil: 0 }
+      }
+      return p
+    })
+
     // Find connected peers whose hold timer has expired
     const expiredPeerNames = new Set<string>()
-    const peers = state.internal.peers.map((p) => {
+    const peers = peersAfterStabilityReset.map((p) => {
       const timerActive = p.connectionStatus === 'connected' && p.holdTime > 0 && p.lastReceived > 0
       if (timerActive && data.now - p.lastReceived > p.holdTime) {
         expiredPeerNames.add(p.name)
@@ -747,10 +789,14 @@ export class RoutingInformationBase {
     }
 
     const purgedPeerNames = new Set([...expiredPeerNames, ...stalePeerNames])
-    if (purgedPeerNames.size === 0 && !flapStateChanged) return noChange(state)
+    const anyEphemeralChange = flapStateChanged || sessionFlapReset
+    if (purgedPeerNames.size === 0 && !anyEphemeralChange) return noChange(state)
 
-    if (purgedPeerNames.size === 0 && flapStateChanged) {
-      const newState: RouteTable = { ...state }
+    if (purgedPeerNames.size === 0 && anyEphemeralChange) {
+      const newState: RouteTable = {
+        ...state,
+        internal: { ...state.internal, peers },
+      }
       return {
         prevState: state,
         newState,

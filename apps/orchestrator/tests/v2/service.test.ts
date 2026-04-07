@@ -102,6 +102,9 @@ describe('OrchestratorServiceV2', () => {
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     }
 
     svc.reconnectManager.scheduleReconnect(peerRecord)
@@ -147,6 +150,9 @@ describe('OrchestratorServiceV2', () => {
       holdTime: 90_000,
       lastSent: 0,
       lastReceived: 0,
+      consecutiveFailures: 0,
+      lastFailure: 0,
+      syncDeferredUntil: 0,
     }
     svc.reconnectManager.scheduleReconnect(peerRecord)
     expect(svc.reconnectManager.pendingCount).toBe(1)
