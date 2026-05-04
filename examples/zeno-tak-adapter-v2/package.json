@@ -18,7 +18,7 @@
     "@tak-ps/node-cot": "latest",
     "@tak-ps/node-tak": "latest",
     "dotenv": "^16.4.5",
-    "uuid": "^13.0.0",
+    "uuid": "^14.0.0",
     "zod": "^4"
   },
   "devDependencies": {
