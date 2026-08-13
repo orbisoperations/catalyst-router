@@ -1,5 +1,8 @@
 # Catalyst Router
 
+> [!WARNING]
+> This project is retired. It is kept for posterity.
+
 **Catalyst Router** is a distributed control and data plane designed to bridge organizations, clouds, and disparate fabrics. It enables different organizations to "peer" and offer services to each other in a cloud-native, edge-compatible way.
 
 Modeled after BGP, Catalyst Router brings decentralized routing to Layers 4-7, allowing for service discovery and traffic propagation across trust boundaries without relying on centralized coordination like a single Kubernetes cluster or mesh.
